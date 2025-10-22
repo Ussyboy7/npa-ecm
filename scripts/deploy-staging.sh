@@ -154,7 +154,7 @@ run_health_checks() {
         fi
 
         # Check Frontend
-        if ! curl -f -s http://localhost:3001 >/dev/null 2>&1; then
+        if ! curl -f -s http://localhost:9090 >/dev/null 2>&1; then
             warning "Frontend is not healthy"
             healthy=false
         fi
@@ -245,7 +245,7 @@ main() {
         post_deployment_tasks
         success "🎉 Deployment completed successfully!"
         success "Application is available at:"
-        success "  Frontend: http://localhost:3001"
+        success "  Frontend: http://172.16.0.46:9090"
         success "  Backend API: http://localhost:8001/api/"
         success "  Admin: http://localhost:8001/admin/"
         success "  Grafana: http://localhost:3002 (admin/staging_admin_2024)"

@@ -49,7 +49,7 @@ services:
       - SECRET_KEY=django-insecure-staging-key-2024-npa-ecm
       - DEBUG=False
       - ALLOWED_HOSTS=localhost,127.0.0.1,staging.npa-ecm.com
-      - CORS_ALLOWED_ORIGINS=http://localhost:3001,https://staging.npa-ecm.com
+      - CORS_ALLOWED_ORIGINS=http://localhost:9090,http://172.16.0.46:9090
       - ENVIRONMENT=staging
     ports:
       - "8001:8000"
@@ -80,9 +80,9 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://backend_stag:8000/api
       - NEXT_PUBLIC_ENVIRONMENT=staging
-      - NEXT_PUBLIC_APP_URL=https://staging.npa-ecm.com
+      - NEXT_PUBLIC_APP_URL=http://172.16.0.46:9090
     ports:
-      - "3001:3000"
+      - "9090:3000"
     depends_on:
       backend_stag:
         condition: service_healthy
