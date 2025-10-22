@@ -178,7 +178,7 @@ export default function MarineVesselsPage() {
       position: {
         latitude: "6.4281°N",
         longitude: "3.4219°E",
-        heading: 045,
+        heading: 45,
         speed: 0
       },
       crew: {
@@ -321,7 +321,7 @@ export default function MarineVesselsPage() {
       position: {
         latitude: "6.4281°N",
         longitude: "3.4219°E",
-        heading: 090,
+        heading: 90,
         speed: 0
       },
       crew: {
@@ -393,7 +393,7 @@ export default function MarineVesselsPage() {
       position: {
         latitude: "6.3500°N",
         longitude: "3.3500°E",
-        heading: 000,
+        heading: 0,
         speed: 0
       },
       crew: {
