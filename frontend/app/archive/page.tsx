@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Document } from "@/types";
 import { 
   Archive, 
   Search, 
@@ -17,6 +18,12 @@ import {
   Building,
   Clock
 } from "lucide-react";
+
+interface ExpiryStatus {
+  status: "expired" | "expiring" | "active";
+  color: string;
+  text: string;
+}
 
 export default function ArchivePage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -251,7 +258,7 @@ export default function ArchivePage() {
   );
 }
 
-function ArchiveListItem({ document, statusColors, getExpiryStatus }: { document: any; statusColors: Record<string, string>; getExpiryStatus: (date: string) => any }) {
+function ArchiveListItem({ document, statusColors, getExpiryStatus }: { document: Document; statusColors: Record<string, string>; getExpiryStatus: (date: string) => ExpiryStatus }) {
   const expiryInfo = getExpiryStatus(document.retentionExpiry);
 
   return (
@@ -347,7 +354,7 @@ function ArchiveListItem({ document, statusColors, getExpiryStatus }: { document
   );
 }
 
-function ArchiveCard({ document, statusColors, getExpiryStatus }: { document: any; statusColors: Record<string, string>; getExpiryStatus: (date: string) => any }) {
+function ArchiveCard({ document, statusColors, getExpiryStatus }: { document: Document; statusColors: Record<string, string>; getExpiryStatus: (date: string) => ExpiryStatus }) {
   const expiryInfo = getExpiryStatus(document.retentionExpiry);
 
   return (
