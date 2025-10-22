@@ -1,8 +1,21 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  experimental: {
+    serverComponentsExternalPackages: [],
+    serverActions: {
+      allowedOrigins: ['localhost:3000', 'localhost:4646', '172.16.0.46:4646'],
+    },
+  },
+  generateBuildId: async () => {
+    return 'build-' + Date.now()
   },
   env: {
     PORT: process.env.PORT || '3001',

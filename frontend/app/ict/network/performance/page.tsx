@@ -30,6 +30,7 @@ import {
   Shield,
   Database,
   HardDrive,
+  Settings,
   Cpu,
   MemoryStick,
   Network,
