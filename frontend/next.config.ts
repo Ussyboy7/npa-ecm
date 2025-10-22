@@ -9,10 +9,11 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
-    serverComponentsExternalPackages: [],
     serverActions: {
       allowedOrigins: ['localhost:3000', 'localhost:4646', '172.16.0.46:4646'],
     },
+    optimizeCss: true,
+    scrollRestoration: true,
   },
   generateBuildId: async () => {
     return 'build-' + Date.now()
@@ -20,13 +21,6 @@ const nextConfig = {
   env: {
     PORT: process.env.PORT || '3001',
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
-  },
-
-  // Performance optimizations
-  swcMinify: true,
-  experimental: {
-    optimizeCss: true,
-    scrollRestoration: true,
   },
 
   // Image optimization
