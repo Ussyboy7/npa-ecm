@@ -45,7 +45,6 @@ import {
   Laptop,
   Printer,
   Camera,
-  Wrench,
   Router,
   Server,
   GitCommit,
