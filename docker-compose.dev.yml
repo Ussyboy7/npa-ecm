@@ -1,0 +1,160 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  dms-db:
+    image: postgres:15-alpine
+    container_name: dms-db-dev
+    environment:
+      POSTGRES_DB: dms_db
+      POSTGRES_USER: dmsadmin
+      POSTGRES_PASSWORD: dmsadmin
+    volumes:
+      - dms-postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - dms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dmsadmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  dms-redis:
+    image: redis:7-alpine
+    container_name: dms-redis-dev
+    ports:
+      - "6380:6379"
+    networks:
+      - dms-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Django Backend
+  dms-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dms-backend-dev
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn --bind 0.0.0.0:8000 --workers 3 --reload dms.wsgi:application"
+    volumes:
+      - ./backend:/app
+      - dms-media:/app/media
+      - dms-static:/app/staticfiles
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_ENV=dev
+      - DJANGO_DEBUG=True
+      - DB_HOST=dms-db
+      - DB_PORT=5432
+      - DB_NAME=dms_db
+      - DB_USER=dmsadmin
+      - DB_PASSWORD=dmsadmin
+      - REDIS_HOST=dms-redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://dms-redis:6379/0
+    depends_on:
+      dms-db:
+        condition: service_healthy
+      dms-redis:
+        condition: service_healthy
+    networks:
+      - dms-network
+
+  # Celery Worker
+  dms-celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dms-celery-dev
+    command: celery -A dms worker -l info
+    volumes:
+      - ./backend:/app
+      - dms-media:/app/media
+    environment:
+      - DJANGO_ENV=dev
+      - DB_HOST=dms-db
+      - DB_PORT=5432
+      - DB_NAME=dms_db
+      - DB_USER=dmsadmin
+      - DB_PASSWORD=dmsadmin
+      - REDIS_HOST=dms-redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://dms-redis:6379/0
+    depends_on:
+      - dms-db
+      - dms-redis
+      - dms-backend
+    networks:
+      - dms-network
+
+  # Celery Beat
+  dms-celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dms-celery-beat-dev
+    command: celery -A dms beat -l info
+    volumes:
+      - ./backend:/app
+    environment:
+      - DJANGO_ENV=dev
+      - DB_HOST=dms-db
+      - DB_PORT=5432
+      - DB_NAME=dms_db
+      - DB_USER=dmsadmin
+      - DB_PASSWORD=dmsadmin
+      - REDIS_HOST=dms-redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://dms-redis:6379/0
+    depends_on:
+      - dms-db
+      - dms-redis
+      - dms-backend
+    networks:
+      - dms-network
+
+  # Next.js Frontend
+  dms-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: dms-frontend-dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+    depends_on:
+      - dms-backend
+    networks:
+      - dms-network
+
+volumes:
+  dms-postgres-data:
+  dms-media:
+  dms-static:
+
+networks:
+  dms-network:
+    driver: bridge
+
+
+
+
+
+
+
