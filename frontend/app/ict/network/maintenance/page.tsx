@@ -45,7 +45,7 @@ import {
   Laptop,
   Printer,
   Camera,
-  Tool,
+  Wrench,
   Router,
   Server,
   GitCommit,
@@ -133,7 +133,7 @@ export default function ICTNetworkMaintenancePage() {
       value: "6",
       change: "0",
       changeType: "neutral",
-      icon: Tool,
+      icon: Wrench,
       description: "Monthly slots",
       status: "Optimal"
     }
@@ -867,7 +867,7 @@ export default function ICTNetworkMaintenancePage() {
           <div className="p-4 border border-gray-200 rounded-lg">
             <div className="flex items-center space-x-3 mb-3">
               <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                <Tool className="w-4 h-4 text-purple-600" />
+                <Wrench className="w-4 h-4 text-purple-600" />
               </div>
               <div>
                 <h3 className="font-medium text-sm">Average Duration</h3>

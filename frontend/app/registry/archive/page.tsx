@@ -19,7 +19,7 @@ import {
   RefreshCw,
   Plus,
   Trash2,
-  Restore
+  RotateCcw
 } from "lucide-react";
 import Link from "next/link";
 
@@ -324,7 +324,7 @@ export default function ArchiveManagementPage() {
                         <Eye className="w-4 h-4" />
                       </button>
                       <button className="text-green-600 hover:text-green-900">
-                        <Restore className="w-4 h-4" />
+                        <RotateCcw className="w-4 h-4" />
                       </button>
                       <button className="text-gray-600 hover:text-gray-900">
                         <Download className="w-4 h-4" />
