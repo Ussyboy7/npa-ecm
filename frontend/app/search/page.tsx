@@ -274,7 +274,7 @@ export default function SearchPage() {
                 Search Results ({searchResults.length})
               </h2>
               <p className="text-sm text-gray-600">
-                Results for "{searchQuery}"
+                Results for &quot;{searchQuery}&quot;
               </p>
             </div>
             <div className="divide-y divide-gray-200">

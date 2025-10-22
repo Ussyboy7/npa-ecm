@@ -1,7 +1,7 @@
 // Validation rules and utilities
 
 export interface ValidationRule {
-  validate: (value: any, formData?: Record<string, any>) => boolean;
+  validate: (value: unknown, formData?: Record<string, unknown>) => boolean;
   message: string;
   required?: boolean;
 }
@@ -80,7 +80,7 @@ export const validationRules = {
     message
   }),
 
-  oneOf: (options: any[], message?: string): ValidationRule => ({
+  oneOf: (options: unknown[], message?: string): ValidationRule => ({
     validate: (value) => {
       if (!value) return true;
       return options.includes(value);
@@ -138,14 +138,14 @@ export const validationRules = {
     message: message || "Fields do not match"
   }),
 
-  custom: (validator: (value: any, formData?: Record<string, any>) => boolean, message: string): ValidationRule => ({
+  custom: (validator: (value: unknown, formData?: Record<string, unknown>) => boolean, message: string): ValidationRule => ({
     validate: validator,
     message
   })
 };
 
 // Validation utilities
-export const validateField = (value: any, rules: ValidationRule[], formData?: Record<string, any>): string[] => {
+export const validateField = (value: unknown, rules: ValidationRule[], formData?: Record<string, unknown>): string[] => {
   const errors: string[] = [];
 
   for (const rule of rules) {

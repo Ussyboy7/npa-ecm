@@ -1,6 +1,6 @@
 "use client";
 
-import { useNotifications, NotificationType } from "./NotificationContext";
+import { useNotifications, Notification } from "./NotificationContext";
 
 // Hook for easy notification management
 export const useNotificationActions = () => {
@@ -109,7 +109,7 @@ export const notificationMessages = {
 
 // Helper function to show common notifications
 export const showCommonNotification = (
-  addNotification: (notification: any) => string,
+  addNotification: (notification: Omit<Notification, "id">) => string,
   type: "success" | "error" | "warning" | "info",
   key: keyof typeof notificationMessages,
   customMessage?: string
