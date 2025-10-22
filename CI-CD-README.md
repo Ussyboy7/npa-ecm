@@ -59,8 +59,8 @@ The staging environment includes:
 
 #### Frontend Service
 ```yaml
-- Port: 9090
-- External URL: http://172.16.0.46:9090
+- Port: 4646
+- External URL: http://172.16.0.46:4646
 - Health Check: /api/health
 - API URL: http://backend_stag:8000/api
 ```

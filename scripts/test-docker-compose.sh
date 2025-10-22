@@ -224,7 +224,7 @@ main() {
         log "Next steps:"
         log "1. Run './scripts/deploy-staging.sh' to deploy to staging"
         log "2. Run './scripts/health-check.sh' to verify deployment"
-        log "3. Access the application at http://172.16.0.46:9090"
+        log "3. Access the application at http://172.16.0.46:4646"
         exit 0
     else
         error "❌ Some validation tests failed!"
