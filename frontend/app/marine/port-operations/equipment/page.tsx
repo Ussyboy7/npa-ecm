@@ -913,7 +913,7 @@ export default function MarineEquipmentPage() {
             </div>
             <div className="text-sm text-gray-600">
               <p>Rate: {Math.round(equipmentUnits.filter(e => e.status === 'Operational').reduce((sum, e) => sum + e.utilization, 0) / equipmentUnits.filter(e => e.status === 'Operational').length)}%</p>
-              <p>Optimal: >70%</p>
+              <p>Optimal: &gt;70%</p>
             </div>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">

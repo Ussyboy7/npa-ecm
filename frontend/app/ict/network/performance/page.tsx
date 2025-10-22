@@ -699,7 +699,7 @@ export default function ICTNetworkPerformancePage() {
             </div>
             <div className="text-sm text-gray-600">
               <p>Current: {Math.round(networkMetrics.reduce((sum, m) => sum + parseFloat(m.metrics.latency), 0) / networkMetrics.length)}ms</p>
-              <p>Target: < 20ms</p>
+              <p>Target: &lt; 20ms</p>
             </div>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">

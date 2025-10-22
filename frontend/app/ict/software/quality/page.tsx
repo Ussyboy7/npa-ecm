@@ -700,7 +700,7 @@ export default function SoftwareQualityPage() {
             <div className="text-sm text-gray-600">
               <p>Current: 2.3</p>
               <p>Trend: -0.8 this month</p>
-              <p>Target: < 2.0</p>
+              <p>Target: &lt; 2.0</p>
             </div>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">
@@ -716,7 +716,7 @@ export default function SoftwareQualityPage() {
             <div className="text-sm text-gray-600">
               <p>Current: 15.2h</p>
               <p>Trend: -3.5h this month</p>
-              <p>Target: < 10h</p>
+              <p>Target: &lt; 10h</p>
             </div>
           </div>
         </div>

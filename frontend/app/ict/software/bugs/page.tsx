@@ -734,7 +734,7 @@ export default function SoftwareBugsPage() {
             </div>
             <div className="text-sm text-gray-600">
               <p>Current: 2.3 days</p>
-              <p>Target: < 2.0 days</p>
+              <p>Target: &lt; 2.0 days</p>
             </div>
           </div>
         </div>

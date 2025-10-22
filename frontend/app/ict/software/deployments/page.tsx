@@ -683,7 +683,7 @@ export default function SoftwareDeploymentsPage() {
             </div>
             <div className="text-sm text-gray-600">
               <p>Current: {deployments.reduce((sum, dep) => sum + parseFloat(dep.duration), 0) / deployments.length} min</p>
-              <p>Target: < 5.0 min</p>
+              <p>Target: &lt; 5.0 min</p>
             </div>
           </div>
           <div className="p-4 border border-gray-200 rounded-lg">
