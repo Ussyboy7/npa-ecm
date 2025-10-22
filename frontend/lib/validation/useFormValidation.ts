@@ -39,7 +39,7 @@ export const useFormValidation = (options: UseFormValidationOptions) => {
     return states;
   }, [validationSchema]);
 
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, string | number | boolean | Date | File | null>>({});
   const [fieldStates, setFieldStates] = useState<Record<string, FieldValidationResult>>({});
   const [formErrors, setFormErrors] = useState<Record<string, string[]>>({});
   const [isFormValid, setIsFormValid] = useState(false);
@@ -60,7 +60,7 @@ export const useFormValidation = (options: UseFormValidationOptions) => {
   }, [formData, validationSchema, onValidationChange]);
 
   // Validate single field
-  const validateField = useCallback((fieldName: string, value: any) => {
+  const validateField = useCallback((fieldName: string, value: string | number | boolean | Date | File | null) => {
     const rules = validationSchema[fieldName];
     if (!rules) return { errors: [], isValid: true };
 
@@ -84,7 +84,7 @@ export const useFormValidation = (options: UseFormValidationOptions) => {
   }, [formData, validationSchema, fieldStates]);
 
   // Handle field change
-  const handleFieldChange = useCallback((fieldName: string, value: any) => {
+  const handleFieldChange = useCallback((fieldName: string, value: string | number | boolean | Date | File | null) => {
     setFormData(prev => ({
       ...prev,
       [fieldName]: value

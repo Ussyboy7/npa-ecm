@@ -158,7 +158,7 @@ export const validateField = (value: unknown, rules: ValidationRule[], formData?
 };
 
 export const validateForm = (
-  formData: Record<string, any>,
+  formData: Record<string, unknown>,
   validationSchema: Record<string, ValidationRule[]>
 ): ValidationResult => {
   const errors: Record<string, string[]> = {};
