@@ -166,7 +166,7 @@ jobs:
 
       - name: Test Docker Compose Staging
         run: |
-          docker-compose -f docker-compose.stag.yml config --quiet
+          docker compose -f docker-compose.stag.yml config --quiet
           echo "Docker Compose staging configuration is valid"
 
   # Deploy to Staging
@@ -208,19 +208,19 @@ jobs:
             cd /opt/npa-ecm/staging
 
             echo '🛑 Stopping existing containers...'
-            docker-compose -f docker-compose.stag.yml down || true
+            docker compose -f docker-compose.stag.yml down || true
 
             echo '🧹 Cleaning up unused images...'
             docker image prune -f
 
             echo '🚀 Starting staging environment...'
-            docker-compose -f docker-compose.stag.yml up -d --build
+            docker compose -f docker-compose.stag.yml up -d --build
 
             echo '⏳ Waiting for services to be healthy...'
             sleep 60
 
             echo '🔍 Checking service health...'
-            docker-compose -f docker-compose.stag.yml ps
+            docker compose -f docker-compose.stag.yml ps
 
             echo '✅ Staging deployment completed successfully!'
           "
