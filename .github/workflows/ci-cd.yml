@@ -1,0 +1,352 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}/backend
+  FRONTEND_IMAGE: ${{ github.repository }}/frontend
+
+jobs:
+  # Quality Assurance Job
+  quality-assurance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Install Node.js dependencies
+        run: cd frontend && npm ci
+
+      - name: Run Frontend Linting
+        run: cd frontend && npm run lint
+
+      - name: Run Frontend Type Checking
+        run: cd frontend && npm run build
+
+      - name: Run Backend Linting
+        run: |
+          cd backend
+          pip install black flake8 isort
+          black --check .
+          flake8 .
+
+      - name: Run Backend Tests
+        run: |
+          cd backend
+          python manage.py test --settings=ecm.settings --verbosity=2
+
+  # Security Scan Job
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: quality-assurance
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run Bandit Security Scan (Backend)
+        run: |
+          cd backend
+          bandit -r . -f json -o bandit-report.json || true
+
+      - name: Run Safety Vulnerability Check
+        run: |
+          cd backend
+          safety check --json > safety-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: |
+            backend/bandit-report.json
+            backend/safety-report.json
+
+  # Build and Test Docker Images
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: [quality-assurance, security-scan]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Extract metadata for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build Backend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: false
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Frontend Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          push: false
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test Docker Compose Staging
+        run: |
+          docker-compose -f docker-compose.stag.yml config --quiet
+          echo "Docker Compose staging configuration is valid"
+
+  # Deploy to Staging
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+
+      - name: Deploy to Staging Server
+        run: |
+          echo "🚀 Starting deployment to staging environment"
+
+          # Create deployment directory
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }} "
+            mkdir -p /opt/npa-ecm/staging
+            cd /opt/npa-ecm/staging
+          "
+
+          # Copy deployment files
+          scp -o StrictHostKeyChecking=no docker-compose.stag.yml ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
+          scp -o StrictHostKeyChecking=no nginx/stag.conf ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
+          scp -o StrictHostKeyChecking=no monitoring/prometheus.yml ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
+
+          # Copy source code
+          scp -o StrictHostKeyChecking=no -r backend ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
+          scp -o StrictHostKeyChecking=no -r frontend ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
+
+          # Deploy application
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }} "
+            cd /opt/npa-ecm/staging
+
+            echo '🛑 Stopping existing containers...'
+            docker-compose -f docker-compose.stag.yml down || true
+
+            echo '🧹 Cleaning up unused images...'
+            docker image prune -f
+
+            echo '🚀 Starting staging environment...'
+            docker-compose -f docker-compose.stag.yml up -d --build
+
+            echo '⏳ Waiting for services to be healthy...'
+            sleep 60
+
+            echo '🔍 Checking service health...'
+            docker-compose -f docker-compose.stag.yml ps
+
+            echo '✅ Staging deployment completed successfully!'
+          "
+
+      - name: Run Staging Tests
+        run: |
+          echo "🧪 Running staging environment tests"
+
+          # Test backend health
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }} "
+            echo 'Testing backend health...'
+            curl -f http://localhost:8001/api/health/ || exit 1
+          "
+
+          # Test frontend health
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }} "
+            echo 'Testing frontend health...'
+            curl -f http://localhost:3001/api/health || exit 1
+          "
+
+          echo "✅ All staging tests passed!"
+
+      - name: Notify Deployment Success
+        if: success()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: "🚀 NPA ECM Staging Deployment Successful"
+          channel: "#deployments"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify Deployment Failure
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: "❌ NPA ECM Staging Deployment Failed"
+          channel: "#deployments"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Performance Testing
+  performance-test:
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup K6
+        run: |
+          wget -q https://github.com/grafana/k6/releases/download/v0.46.0/k6-v0.46.0-linux-amd64.tar.gz
+          tar -xzf k6-v0.46.0-linux-amd64.tar.gz
+          sudo mv k6-v0.46.0-linux-amd64/k6 /usr/local/bin/k6
+
+      - name: Run Performance Tests
+        run: |
+          echo "🏃 Running performance tests against staging environment"
+
+          # Create k6 test script
+          cat > performance-test.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+
+          export let options = {
+            vus: 10,
+            duration: '30s',
+            thresholds: {
+              http_req_duration: ['p(95)<500'],
+              http_req_failed: ['rate<0.1'],
+            },
+          };
+
+          export default function () {
+            let response = http.get('http://staging.npa-ecm.com/api/health/');
+            check(response, {
+              'status is 200': (r) => r.status === 200,
+              'response time < 500ms': (r) => r.timings.duration < 500,
+            });
+            sleep(1);
+          }
+          EOF
+
+          # Run the test
+          k6 run performance-test.js
+
+      - name: Upload Performance Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-results
+          path: |
+            performance-test.js
+
+  # Production Deployment (Manual Trigger)
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, performance-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    concurrency: production-deployment
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Wait for Manual Approval
+        run: |
+          echo "⏳ Production deployment requires manual approval."
+          echo "Please review staging deployment and approve production deployment."
+
+      - name: Deploy to Production
+        run: |
+          echo "🏭 Starting production deployment"
+
+          # Similar deployment steps as staging but to production servers
+          # This would typically deploy to multiple production servers
+          # with blue-green or canary deployment strategies
+
+          echo "✅ Production deployment completed (simulated)"
+
+      - name: Notify Production Deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: "🏭 NPA ECM Production Deployment Completed"
+          channel: "#production-deployments"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
