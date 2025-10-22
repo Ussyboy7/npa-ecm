@@ -14,11 +14,16 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_NAME="npa-ecm"
-STAGING_DIR="/opt/${PROJECT_NAME}/staging"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+STAGING_DIR="$PROJECT_ROOT"
 DOCKER_COMPOSE_FILE="docker-compose.stag.yml"
 
+# Create logs directory if it doesn't exist
+mkdir -p "${STAGING_DIR}/logs"
+
 # Logging
-LOG_FILE="${STAGING_DIR}/deploy_$(date +%Y%m%d_%H%M%S).log"
+LOG_FILE="${STAGING_DIR}/logs/deploy_$(date +%Y%m%d_%H%M%S).log"
 
 log() {
     echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1" | tee -a "$LOG_FILE"
