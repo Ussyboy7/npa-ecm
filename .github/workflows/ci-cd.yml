@@ -169,77 +169,51 @@ jobs:
           docker compose -f docker-compose.stag.yml config --quiet
           echo "Docker Compose staging configuration is valid"
 
-  # Deploy to Staging (Currently Disabled - Server not accessible from public internet)
+  # Deploy to Staging
   deploy-staging:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build-and-test
-    if: false  # Disabled until server is accessible or self-hosted runner is set up
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
-
       - name: Deploy to Staging Server
         run: |
           echo "🚀 Starting deployment to staging environment"
 
-          # Create deployment directory
-          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }} "
-            mkdir -p /opt/npa-ecm/staging
-            cd /opt/npa-ecm/staging
-          "
+          # Navigate to project directory
+          cd /srv/npa-ecm
 
-          # Copy deployment files
-          scp -o StrictHostKeyChecking=no docker-compose.stag.yml ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
-          scp -o StrictHostKeyChecking=no nginx/stag.conf ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
-          scp -o StrictHostKeyChecking=no monitoring/prometheus.yml ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
+          echo '🛑 Stopping existing containers...'
+          docker compose -f docker-compose.stag.yml down || true
 
-          # Copy source code
-          scp -o StrictHostKeyChecking=no -r backend ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
-          scp -o StrictHostKeyChecking=no -r frontend ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }}:/opt/npa-ecm/staging/
+          echo '🧹 Cleaning up unused images...'
+          docker image prune -f
 
-          # Deploy application
-          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }} "
-            cd /opt/npa-ecm/staging
+          echo '🚀 Starting staging environment...'
+          docker compose -f docker-compose.stag.yml up -d --build
 
-            echo '🛑 Stopping existing containers...'
-            docker compose -f docker-compose.stag.yml down || true
+          echo '⏳ Waiting for services to be healthy...'
+          sleep 60
 
-            echo '🧹 Cleaning up unused images...'
-            docker image prune -f
+          echo '🔍 Checking service health...'
+          docker compose -f docker-compose.stag.yml ps
 
-            echo '🚀 Starting staging environment...'
-            docker compose -f docker-compose.stag.yml up -d --build
-
-            echo '⏳ Waiting for services to be healthy...'
-            sleep 60
-
-            echo '🔍 Checking service health...'
-            docker compose -f docker-compose.stag.yml ps
-
-            echo '✅ Staging deployment completed successfully!'
-          "
+          echo '✅ Staging deployment completed successfully!'
 
       - name: Run Staging Tests
         run: |
           echo "🧪 Running staging environment tests"
 
           # Test backend health
-          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }} "
-            echo 'Testing backend health...'
-            curl -f http://localhost:8001/api/health/ || exit 1
-          "
+          echo 'Testing backend health...'
+          curl -f http://localhost:8001/api/health/ || exit 1
 
           # Test frontend health
-          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_HOST_USER }}@${{ secrets.STAGING_HOST }} "
-            echo 'Testing frontend health...'
-            curl -f http://localhost:4646/api/health || exit 1
-          "
+          echo 'Testing frontend health...'
+          curl -f http://localhost:4646/api/health || exit 1
 
           echo "✅ All staging tests passed!"
 
@@ -263,11 +237,11 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-  # Performance Testing (Disabled - deployment disabled)
+  # Performance Testing
   performance-test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: deploy-staging
-    if: false  # Disabled until deployment is re-enabled
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -297,7 +271,7 @@ jobs:
           };
 
           export default function () {
-            let response = http.get('http://staging.npa-ecm.com/api/health/');
+            let response = http.get('http://localhost:4646/api/health');
             check(response, {
               'status is 200': (r) => r.status === 200,
               'response time < 500ms': (r) => r.timings.duration < 500,
@@ -316,11 +290,11 @@ jobs:
           path: |
             performance-test.js
 
-  # Production Deployment (Manual Trigger - Disabled)
+  # Production Deployment (Manual Trigger)
   deploy-production:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [deploy-staging, performance-test]
-    if: false  # Disabled until staging deployment is working
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
     concurrency: production-deployment
     steps:
