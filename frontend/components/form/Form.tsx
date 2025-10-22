@@ -14,7 +14,7 @@ export interface FormFieldConfig extends Omit<FormFieldProps, "error" | "onChang
 export interface FormProps extends React.FormHTMLAttributes<HTMLFormElement> {
   fields: FormFieldConfig[];
   validationOptions: UseFormValidationOptions;
-  onSubmit: (data: Record<string, any>) => Promise<void> | void;
+  onSubmit: (data: Record<string, string | number | boolean | File | null>) => Promise<void> | void;
   submitLabel?: string;
   cancelLabel?: string;
   onCancel?: () => void;

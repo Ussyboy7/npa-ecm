@@ -289,7 +289,7 @@ export default function MDDashboard() {
               }`}
             >
               <List className="w-4 h-4 mr-2 inline" />
-              Secretary's Queue ({secretaryQueueItems.length})
+              Secretary&apos;s Queue ({secretaryQueueItems.length})
             </button>
           </nav>
         </div>

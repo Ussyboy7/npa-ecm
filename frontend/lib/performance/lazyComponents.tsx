@@ -17,7 +17,7 @@ function withLazyLoading<T extends object>(
   LoadingComponent?: React.ComponentType,
   fallback?: React.ReactNode
 ) {
-  return (props: T) => (
+  const LazyComponent = (props: T) => (
     <Suspense
       fallback={
         fallback ||
@@ -31,6 +31,9 @@ function withLazyLoading<T extends object>(
       <Component {...props} />
     </Suspense>
   );
+
+  LazyComponent.displayName = `withLazyLoading(${Component.displayName || Component.name || 'Component'})`;
+  return LazyComponent;
 }
 
 // Lazy loaded components with loading states

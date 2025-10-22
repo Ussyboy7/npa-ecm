@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "NPA Electronic Content Management",
-  description: "Enterprise document management and workflow system for NPA",
+  description: "Enterprise electronic content management system (ECM) and workflow system for NPA",
 };
 
 export default function RootLayout({

@@ -15,8 +15,8 @@ interface FormField {
 
 interface MobileFormProps {
   fields: FormField[];
-  onSubmit: (data: Record<string, any>) => void;
-  onChange?: (name: string, value: any) => void;
+  onSubmit: (data: Record<string, string | number | boolean | Date>) => void;
+  onChange?: (name: string, value: string | number | boolean | Date) => void;
   submitLabel?: string;
   cancelLabel?: string;
   onCancel?: () => void;

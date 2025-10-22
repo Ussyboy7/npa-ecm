@@ -1,6 +1,6 @@
-# NPA Document Management System (DMS)
+# NPA Electronic Content Management System (ECM)
 
-A modern, full-featured document management system built with Django REST Framework and Next.js.
+A modern, full-featured electronic content management system (ECM) built with Django REST Framework and Next.js.
 
 ## 🚀 Features
 

@@ -111,7 +111,7 @@ export default function NotificationWidget({
           <div className="flex flex-col items-center justify-center py-8 text-gray-500">
             <Bell className="w-8 h-8 text-gray-300 mb-2" />
             <p className="text-sm">No notifications</p>
-            <p className="text-xs">You're all caught up!</p>
+            <p className="text-xs">You&apos;re all caught up!</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">

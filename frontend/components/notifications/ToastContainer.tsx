@@ -2,9 +2,9 @@
 
 import React from "react";
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from "lucide-react";
-import { useNotifications } from "./NotificationContext";
+import { useNotifications, Notification } from "./NotificationContext";
 
-const Toast: React.FC<{ notification: any; onRemove: (id: string) => void }> = ({
+const Toast: React.FC<{ notification: Notification; onRemove: (id: string) => void }> = ({
   notification,
   onRemove
 }) => {

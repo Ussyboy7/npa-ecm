@@ -3,7 +3,7 @@
 import { useMemo, useCallback } from "react";
 
 // Deep comparison for objects
-const deepEqual = (a: any, b: any): boolean => {
+const deepEqual = (a: unknown, b: unknown): boolean => {
   if (a === b) return true;
 
   if (a == null || b == null) return a === b;

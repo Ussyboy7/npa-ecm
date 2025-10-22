@@ -30,6 +30,17 @@ import {
   Award
 } from "lucide-react";
 import Link from "next/link";
+import { LucideIcon } from "lucide-react";
+
+interface StatItem {
+  name: string;
+  value: string;
+  change: string;
+  changeType: "positive" | "negative" | "warning" | "neutral";
+  icon: LucideIcon;
+  description: string;
+  href: string;
+}
 
 export default function ICTDivisionDashboard() {
   const stats = [
@@ -525,8 +536,8 @@ export default function ICTDivisionDashboard() {
   );
 }
 
-function StatCard({ stat }: { stat: any }) {
-  const Icon = stat.icon;
+function StatCard({ stat }: { stat: StatItem }) {
+  const Icon = stat.icon as React.ComponentType<{ className?: string }>;
   const changeColorMap = {
     positive: "text-green-600",
     negative: "text-red-600",

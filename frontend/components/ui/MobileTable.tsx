@@ -2,22 +2,22 @@
 
 import React from "react";
 
-interface Column {
+interface Column<T = Record<string, unknown>> {
   key: string;
   label: string;
-  render?: (value: any, item: any) => React.ReactNode;
+  render?: (value: unknown, item: T) => React.ReactNode;
   className?: string;
 }
 
-interface MobileTableProps {
-  data: any[];
+interface MobileTableProps<T = Record<string, unknown>> {
+  data: T[];
   columns: Column[];
   keyField: string;
   className?: string;
   mobileCardClass?: string;
 }
 
-export const MobileTable: React.FC<MobileTableProps> = ({
+export const MobileTable = <T extends Record<string, unknown> = Record<string, unknown>>({
   data,
   columns,
   keyField,
