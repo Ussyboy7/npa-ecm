@@ -3,35 +3,14 @@
 import {
   DollarSign,
   TrendingUp,
-  TrendingDown,
   PieChart,
   BarChart3,
   Calculator,
   Receipt,
-  CreditCard,
-  Banknote,
   Target,
   AlertTriangle,
-  CheckCircle,
-  Clock,
-  Users,
-  Building,
-  FileText,
-  Download,
-  Upload,
-  Eye,
-  Settings,
   Activity,
-  Calendar,
-  Percent,
-  ArrowUpRight,
-  ArrowDownRight,
-  Minus,
-  Zap,
-  Shield,
-  Award,
-  Globe,
-  MapPin
+  Percent
 } from "lucide-react";
 import Link from "next/link";
 

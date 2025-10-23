@@ -36,9 +36,6 @@ export default function WorkflowStepper({ steps, currentStep, className = "" }: 
 
         <div className="space-y-8">
           {steps.map((step, index) => {
-            const stepNumber = index + 1;
-            const isLast = index === steps.length - 1;
-            
             let stepIcon, stepColor, stepBgColor;
             
             switch (step.status) {

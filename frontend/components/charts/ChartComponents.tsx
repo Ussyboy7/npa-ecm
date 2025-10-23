@@ -47,9 +47,40 @@ const commonOptions = {
   },
 };
 
+interface ChartData {
+  labels: string[];
+  datasets: {
+    label: string;
+    data: number[];
+    backgroundColor?: string | string[];
+    borderColor?: string | string[];
+    borderWidth?: number;
+    fill?: boolean;
+  }[];
+}
+
+interface ChartOptions {
+  responsive?: boolean;
+  plugins?: {
+    legend?: {
+      position?: 'top' | 'left' | 'right' | 'bottom';
+      display?: boolean;
+    };
+    title?: {
+      display?: boolean;
+      text?: string;
+    };
+  };
+  scales?: {
+    y?: {
+      beginAtZero?: boolean;
+    };
+  };
+}
+
 interface BaseChartProps {
-  data: any;
-  options?: any;
+  data: ChartData;
+  options?: ChartOptions;
   height?: number;
   className?: string;
 }
@@ -152,7 +183,7 @@ export const RadarChart: React.FC<BaseChartProps> = ({
 // Pre-built Charts for ECM Dashboard
 
 // Memo Status Distribution
-export const MemoStatusChart: React.FC<{ data: any }> = ({ data }) => {
+export const MemoStatusChart: React.FC<{ data: number[] }> = ({ data }) => {
   const chartData = {
     labels: ["Draft", "Pending", "In Review", "Approved", "Rejected"],
     datasets: [
@@ -182,7 +213,7 @@ export const MemoStatusChart: React.FC<{ data: any }> = ({ data }) => {
 };
 
 // Document Upload Trends
-export const DocumentTrendChart: React.FC<{ data: any }> = ({ data }) => {
+export const DocumentTrendChart: React.FC<{ data: { labels: string[]; values: number[] } }> = ({ data }) => {
   const chartData = {
     labels: data.labels,
     datasets: [
@@ -217,7 +248,7 @@ export const DocumentTrendChart: React.FC<{ data: any }> = ({ data }) => {
 };
 
 // Department Activity
-export const DepartmentActivityChart: React.FC<{ data: any }> = ({ data }) => {
+export const DepartmentActivityChart: React.FC<{ data: { labels: string[]; values: number[] } }> = ({ data }) => {
   const chartData = {
     labels: data.labels,
     datasets: [
@@ -246,7 +277,7 @@ export const DepartmentActivityChart: React.FC<{ data: any }> = ({ data }) => {
 };
 
 // Workflow Completion Rate
-export const WorkflowCompletionChart: React.FC<{ data: any }> = ({ data }) => {
+export const WorkflowCompletionChart: React.FC<{ data: { labels: string[]; completed: number[]; pending: number[] } }> = ({ data }) => {
   const chartData = {
     labels: data.labels,
     datasets: [
@@ -285,7 +316,7 @@ export const WorkflowCompletionChart: React.FC<{ data: any }> = ({ data }) => {
 };
 
 // User Activity Radar
-export const UserActivityRadar: React.FC<{ data: any }> = ({ data }) => {
+export const UserActivityRadar: React.FC<{ data: { labels: string[]; values: number[] } }> = ({ data }) => {
   const chartData = {
     labels: data.labels,
     datasets: [
@@ -325,7 +356,7 @@ export const UserActivityRadar: React.FC<{ data: any }> = ({ data }) => {
   return <RadarChart data={chartData} options={options} height={300} />;
 };
 
-export default {
+const ChartComponents = {
   LineChart,
   BarChart,
   DoughnutChart,
@@ -337,4 +368,6 @@ export default {
   WorkflowCompletionChart,
   UserActivityRadar,
 };
+
+export default ChartComponents;
 

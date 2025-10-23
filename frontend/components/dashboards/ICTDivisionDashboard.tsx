@@ -2,32 +2,12 @@
 
 import {
   Server,
-  Database,
   Shield,
-  Wifi,
   Code,
-  Monitor,
-  Smartphone,
-  Cloud,
-  Cpu,
-  HardDrive,
-  MemoryStick,
-  Zap,
   AlertTriangle,
-  CheckCircle,
-  TrendingUp,
   Users,
   BarChart3,
-  Settings,
-  Activity,
-  Globe,
-  Lock,
-  Download,
-  Upload,
-  Eye,
-  Clock,
-  Target,
-  Award
+  Activity
 } from "lucide-react";
 import Link from "next/link";
 import { LucideIcon } from "lucide-react";

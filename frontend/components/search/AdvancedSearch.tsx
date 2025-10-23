@@ -24,7 +24,7 @@ export interface SearchFilter {
   label: string;
   type: "text" | "select" | "date" | "multiselect";
   options?: { value: string; label: string }[];
-  value?: any;
+  value?: string | string[] | Date;
 }
 
 export interface SortOption {
@@ -37,11 +37,11 @@ export interface AdvancedSearchProps {
   placeholder?: string;
   filters?: SearchFilter[];
   sortOptions?: SortOption[];
-  onSearch: (query: string, filters: Record<string, any>, sort: SortOption | null) => void;
+  onSearch: (query: string, filters: Record<string, string | string[] | Date>, sort: SortOption | null) => void;
   onExport?: () => void;
   onSaveSearch?: (name: string) => void;
   searchHistory?: string[];
-  savedSearches?: { name: string; query: string; filters: Record<string, any> }[];
+  savedSearches?: { name: string; query: string; filters: Record<string, string | string[] | Date> }[];
   className?: string;
 }
 
@@ -57,7 +57,7 @@ export default function AdvancedSearch({
   className = ""
 }: AdvancedSearchProps) {
   const [query, setQuery] = useState("");
-  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
+  const [activeFilters, setActiveFilters] = useState<Record<string, string | string[] | Date>>({});
   const [sortBy, setSortBy] = useState<SortOption | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showSavedSearches, setShowSavedSearches] = useState(false);
@@ -75,7 +75,7 @@ export default function AdvancedSearch({
     return () => clearTimeout(timer);
   }, [query, activeFilters, sortBy]);
 
-  const handleFilterChange = (filterKey: string, value: any) => {
+  const handleFilterChange = (filterKey: string, value: string | string[] | Date) => {
     setActiveFilters(prev => ({
       ...prev,
       [filterKey]: value
@@ -104,7 +104,7 @@ export default function AdvancedSearch({
     }
   };
 
-  const loadSavedSearch = (saved: { name: string; query: string; filters: Record<string, any> }) => {
+  const loadSavedSearch = (saved: { name: string; query: string; filters: Record<string, string | string[] | Date> }) => {
     setQuery(saved.query);
     setActiveFilters(saved.filters);
     setShowSavedSearches(false);

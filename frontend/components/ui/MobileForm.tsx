@@ -36,9 +36,9 @@ export const MobileForm: React.FC<MobileFormProps> = ({
   className = "",
   layout = "stacked"
 }) => {
-  const [formData, setFormData] = React.useState<Record<string, any>>({});
+  const [formData, setFormData] = React.useState<Record<string, string | number | boolean | Date>>({});
 
-  const handleChange = (name: string, value: any) => {
+  const handleChange = (name: string, value: string | number | boolean | Date) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     onChange?.(name, value);
   };

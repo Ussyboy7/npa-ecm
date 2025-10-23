@@ -3,16 +3,16 @@
 import React from "react";
 
 interface Column<T = Record<string, unknown>> {
-  key: string;
+  key: keyof T;
   label: string;
-  render?: (value: unknown, item: T) => React.ReactNode;
+  render?: (value: T[keyof T], item: T) => React.ReactNode;
   className?: string;
 }
 
 interface MobileTableProps<T = Record<string, unknown>> {
   data: T[];
-  columns: Column[];
-  keyField: string;
+  columns: Column<T>[];
+  keyField: keyof T;
   className?: string;
   mobileCardClass?: string;
 }
@@ -32,7 +32,7 @@ export const MobileTable = <T extends Record<string, unknown> = Record<string, u
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {columns.map((column, index) => (
+                {columns.map((column) => (
                   <th
                     key={column.key}
                     className={`px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${column.className || ""}`}
