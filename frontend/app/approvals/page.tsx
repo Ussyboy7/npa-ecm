@@ -1,562 +1,323 @@
 "use client";
-
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { DashboardLayout } from '@/components/DashboardLayout';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  User, 
-  Calendar,
-  Eye,
-  MessageSquare,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  UserCheck,
+  Search,
+  Mail,
+  User as UserIcon,
   ArrowRight,
-  AlertTriangle,
-  FileText,
-  X
-} from "lucide-react";
-import { NPA_DEPARTMENTS, NPA_DOCUMENT_TYPES } from "@/lib/npa-structure";
+  AlertCircle
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { MOCK_USERS, type User as NPAUser, type Correspondence } from '@/lib/npa-structure';
+import { useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { formatDateShort } from '@/lib/correspondence-helpers';
 
-export default function ApprovalsPage() {
-  const [selectedApprovals, setSelectedApprovals] = useState<number[]>([]);
-  const [filter, setFilter] = useState("all");
-  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
-  const [currentApproval, setCurrentApproval] = useState<any>(null);
-  const [approvalAction, setApprovalAction] = useState<"approve" | "reject">("approve");
-  const [approvalComments, setApprovalComments] = useState("");
+const ApprovalsInbox = () => {
+  const router = useRouter();
+  const { correspondence } = useCorrespondence();
+  const [currentUser, setCurrentUser] = useState<NPAUser | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [pendingApprovals, setPendingApprovals] = useState<Correspondence[]>([]);
 
-  // Enhanced mock data with real NPA departments and comprehensive approval workflows
-  const approvals = [
-    {
-      id: 1,
-      documentTitle: "Q4 Financial Report 2024.pdf",
-      documentType: "Financial Report",
-      requester: "GM, Finance",
-      department: "Finance",
-      submittedDate: "2024-12-15",
-      dueDate: "2024-12-18",
-      priority: "high",
-      status: "pending",
-      currentStep: "Executive Director Review",
-      comments: "Please review the financial projections for Q4. This report includes revenue analysis, expenditure breakdown, and budget variance analysis.",
-      workflowStep: 2,
-      totalSteps: 4,
-      fileSize: "2.3 MB",
-      version: "1.0",
-      tags: ["finance", "quarterly", "report"],
-      approverRole: "ED",
-      approverName: "Executive Director",
-      estimatedTime: "2 hours",
-      attachments: ["Supporting Data.xlsx", "Charts.pdf"]
-    },
-    {
-      id: 2,
-      documentTitle: "HR Policy Guidelines 2025.docx",
-      documentType: "Policy Document",
-      requester: "GM, Human Resources",
-      department: "Human Resources",
-      submittedDate: "2024-12-14",
-      dueDate: "2024-12-20",
-      priority: "medium",
-      status: "pending",
-      currentStep: "Legal Services Review",
-      comments: "Updated policies for remote work arrangements, including new guidelines for hybrid work models and employee wellness programs.",
-      workflowStep: 1,
-      totalSteps: 3,
-      fileSize: "1.8 MB",
-      version: "2.1",
-      tags: ["hr", "policy", "guidelines"],
-      approverRole: "AGM",
-      approverName: "AGM, Legal",
-      estimatedTime: "1.5 hours",
-      attachments: ["Legal Review Notes.pdf"]
-    },
-    {
-      id: 3,
-      documentTitle: "ICT Infrastructure Upgrade Request.xlsx",
-      documentType: "Purchase Request",
-      requester: "AGM, Software",
-      department: "Information & Communication Technology",
-      submittedDate: "2024-12-13",
-      dueDate: "2024-12-15",
-      priority: "high",
-      status: "overdue",
-      currentStep: "Budget Approval",
-      comments: "Urgent requirement for server infrastructure upgrade to support increased data processing demands. Includes cost-benefit analysis and technical specifications.",
-      workflowStep: 1,
-      totalSteps: 5,
-      fileSize: "3.2 MB",
-      version: "1.3",
-      tags: ["ict", "infrastructure", "purchase"],
-      approverRole: "GM",
-      approverName: "GM, Finance",
-      estimatedTime: "3 hours",
-      attachments: ["Technical Specs.pdf", "Vendor Quotes.xlsx", "ROI Analysis.docx"]
-    },
-    {
-      id: 4,
-      documentTitle: "Security Incident Report - Dec 12.pdf",
-      documentType: "Incident Report",
-      requester: "GM, Security",
-      department: "Security",
-      submittedDate: "2024-12-12",
-      dueDate: "2024-12-16",
-      priority: "medium",
-      status: "pending",
-      currentStep: "Management Review",
-      comments: "Security breach investigation report detailing unauthorized access attempt, response actions taken, and recommendations for prevention.",
-      workflowStep: 2,
-      totalSteps: 3,
-      fileSize: "890 KB",
-      version: "1.0",
-      tags: ["security", "incident", "report"],
-      approverRole: "MD",
-      approverName: "Managing Director",
-      estimatedTime: "1 hour",
-      attachments: ["Security Logs.txt", "Response Timeline.pdf"]
-    },
-    {
-      id: 5,
-      documentTitle: "Marine Operations Manual Update.pdf",
-      documentType: "Operational Document",
-      requester: "AGM, Marine Operations",
-      department: "Marine & Operations",
-      submittedDate: "2024-12-11",
-      dueDate: "2024-12-19",
-      priority: "medium",
-      status: "pending",
-      currentStep: "Technical Review",
-      comments: "Updated marine operations procedures including new safety protocols, vessel management guidelines, and port operations standards.",
-      workflowStep: 1,
-      totalSteps: 4,
-      fileSize: "4.1 MB",
-      version: "3.0",
-      tags: ["marine", "operations", "manual"],
-      approverRole: "GM",
-      approverName: "GM, Marine & Operations",
-      estimatedTime: "2.5 hours",
-      attachments: ["Safety Guidelines.pdf", "Vessel Procedures.docx"]
-    },
-    {
-      id: 6,
-      documentTitle: "Port Expansion Feasibility Study.pdf",
-      documentType: "Technical Document",
-      requester: "GM, Engineering",
-      department: "Engineering & Technical Services",
-      submittedDate: "2024-12-10",
-      dueDate: "2024-12-22",
-      priority: "high",
-      status: "pending",
-      currentStep: "Executive Review",
-      comments: "Comprehensive feasibility study for port expansion project including environmental impact assessment, cost analysis, and timeline projections.",
-      workflowStep: 2,
-      totalSteps: 6,
-      fileSize: "5.7 MB",
-      version: "1.0",
-      tags: ["engineering", "expansion", "feasibility"],
-      approverRole: "ED",
-      approverName: "Executive Director",
-      estimatedTime: "4 hours",
-      attachments: ["Environmental Report.pdf", "Cost Analysis.xlsx", "Timeline Gantt.pdf"]
+  useEffect(() => {
+    const savedUserId = localStorage.getItem('npa_demo_user_id');
+    if (savedUserId) {
+      const user = MOCK_USERS.find(u => u.id === savedUserId);
+      if (user) {
+        setCurrentUser(user);
+        // Filter items pending this user's approval
+        const pending = correspondence.filter(
+          c => c.currentApproverId === user.id && c.status !== 'completed'
+        );
+        setPendingApprovals(pending);
+      }
     }
-  ];
+  }, [correspondence]);
 
-  const filters = [
-    { id: "all", label: "All Approvals", count: approvals.length },
-    { id: "pending", label: "Pending", count: approvals.filter(a => a.status === "pending").length },
-    { id: "overdue", label: "Overdue", count: approvals.filter(a => a.status === "overdue").length },
-    { id: "high", label: "High Priority", count: approvals.filter(a => a.priority === "high").length }
-  ];
+  const filteredItems = pendingApprovals.filter(c =>
+    c.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const filteredApprovals = filter === "all" 
-    ? approvals 
-    : approvals.filter(a => a.status === filter || a.priority === filter);
-
-  const priorityColors = {
-    high: "bg-red-100 text-red-800 border-red-200",
-    medium: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    low: "bg-green-100 text-green-800 border-green-200"
+  const handleApprove = (corrId: string) => {
+    toast.success('Item approved successfully', {
+      description: 'Forwarded to next approver in the chain'
+    });
+    setPendingApprovals(prev => prev.filter(c => c.id !== corrId));
   };
 
-  const statusColors = {
-    pending: "bg-blue-100 text-blue-800",
-    overdue: "bg-red-100 text-red-800",
-    approved: "bg-green-100 text-green-800",
-    rejected: "bg-gray-100 text-gray-800"
+  const handleReject = (corrId: string) => {
+    toast.error('Item rejected', {
+      description: 'Returned to sender for revision'
+    });
+    setPendingApprovals(prev => prev.filter(c => c.id !== corrId));
   };
 
-  const handleSelectAll = () => {
-    if (selectedApprovals.length === filteredApprovals.length) {
-      setSelectedApprovals([]);
-    } else {
-      setSelectedApprovals(filteredApprovals.map(a => a.id));
-    }
+  const handleDelegate = (corrId: string) => {
+    toast.info('Item delegated', {
+      description: 'Assigned to your assistant'
+    });
   };
 
-  const handleSelectApproval = (id: number) => {
-    setSelectedApprovals(prev => 
-      prev.includes(id) 
-        ? prev.filter(approvalId => approvalId !== id)
-        : [...prev, id]
-    );
-  };
-
-  const handleBatchAction = (action: string) => {
-    console.log(`Batch ${action} for approvals:`, selectedApprovals);
-    alert(`${action === "approve" ? "Approved" : "Rejected"} ${selectedApprovals.length} document(s) successfully!`);
-    setSelectedApprovals([]);
-  };
-
-  const handleSingleAction = (approval: any, action: "approve" | "reject") => {
-    setCurrentApproval(approval);
-    setApprovalAction(action);
-    setApprovalComments("");
-    setShowApprovalDialog(true);
-  };
-
-  const handleConfirmAction = () => {
-    alert(`Document "${currentApproval?.documentTitle}" ${approvalAction === "approve" ? "approved" : "rejected"} successfully!`);
-    setShowApprovalDialog(false);
-    setCurrentApproval(null);
-    setApprovalComments("");
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Approvals</h1>
-          <p className="text-gray-600">Review and approve documents in your workflow queue</p>
-        </div>
-        <div className="flex space-x-3">
-          {selectedApprovals.length > 0 && (
-            <>
-              <button
-                onClick={() => handleBatchAction("approve")}
-                className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Approve Selected ({selectedApprovals.length})
-              </button>
-              <button
-                onClick={() => handleBatchAction("reject")}
-                className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <XCircle className="w-4 h-4 mr-2" />
-                Reject Selected
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border p-4">
-        <div className="flex flex-wrap gap-2">
-          {filters.map((filterOption) => (
-            <button
-              key={filterOption.id}
-              onClick={() => setFilter(filterOption.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === filterOption.id
-                  ? "bg-blue-100 text-blue-700 border border-blue-200"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              {filterOption.label}
-              <span className="ml-2 bg-gray-200 text-gray-700 py-0.5 px-2 rounded-full text-xs">
-                {filterOption.count}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Approvals List */}
-      <div className="bg-white rounded-lg shadow-sm border">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <input
-                type="checkbox"
-                checked={selectedApprovals.length === filteredApprovals.length && filteredApprovals.length > 0}
-                onChange={handleSelectAll}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <h2 className="text-lg font-semibold text-gray-900">
-                Documents Awaiting Your Approval
-              </h2>
-            </div>
-            <div className="text-sm text-gray-500">
-              {filteredApprovals.length} item(s) to review
-            </div>
+  const ApprovalCard = ({ corr }: { corr: Correspondence }) => (
+    <div className="p-4 border border-border rounded-lg hover:bg-muted/50 transition-all">
+      <div className="flex items-start justify-between gap-4 mb-3">
+        <div className="flex-1">
+          <h4 className="font-semibold text-foreground mb-2">{corr.subject}</h4>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant={corr.priority === 'urgent' ? 'destructive' : 'secondary'}>
+              {corr.priority.toUpperCase()}
+            </Badge>
+            <Badge variant="outline" className="gap-1">
+              {corr.direction === 'downward' ? '↓ Downward' : '↑ Upward'}
+            </Badge>
+            <Badge variant="outline" className="gap-1 text-warning bg-warning/10">
+              <Clock className="h-3 w-3" />
+              Awaiting Your Action
+            </Badge>
           </div>
         </div>
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {formatDateShort(corr.receivedDate)}
+        </span>
+      </div>
 
-        <div className="divide-y divide-gray-200">
-          {filteredApprovals.map((approval) => (
-            <ApprovalCard
-              key={approval.id}
-              approval={approval}
-              isSelected={selectedApprovals.includes(approval.id)}
-              onSelect={() => handleSelectApproval(approval.id)}
-              onAction={handleSingleAction}
-              priorityColors={priorityColors}
-              statusColors={statusColors}
-            />
-          ))}
+      <div className="text-sm text-muted-foreground space-y-1 mb-4">
+        <div className="flex items-center gap-2">
+          <Mail className="h-3.5 w-3.5" />
+          <span>Ref: {corr.referenceNumber}</span>
         </div>
+        <div className="flex items-center gap-2">
+          <UserIcon className="h-3.5 w-3.5" />
+          <span>From: {corr.senderName}</span>
+        </div>
+      </div>
 
-        {filteredApprovals.length === 0 && (
-          <div className="p-8 text-center">
-            <CheckCircle className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">No approvals</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              No documents are currently awaiting your approval.
+      <div className="flex gap-2">
+        <Button 
+          size="sm" 
+          onClick={() => handleApprove(corr.id)}
+          className="flex-1 bg-gradient-primary"
+        >
+          <CheckCircle2 className="h-4 w-4 mr-2" />
+          Approve
+        </Button>
+        <Button 
+          size="sm" 
+          variant="outline"
+          onClick={() => handleReject(corr.id)}
+        >
+          <XCircle className="h-4 w-4 mr-2" />
+          Reject
+        </Button>
+        <Button 
+          size="sm" 
+          variant="outline"
+          onClick={() => handleDelegate(corr.id)}
+        >
+          <UserCheck className="h-4 w-4 mr-2" />
+          Delegate
+        </Button>
+        <Button 
+          size="sm" 
+          variant="ghost"
+          onClick={() => router.push(`/correspondence/${corr.id}`)}
+        >
+          View
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+              <CheckCircle2 className="h-8 w-8 text-primary" />
+              Approvals
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Review and approve items in your workflow
             </p>
           </div>
-        )}
-      </div>
-
-      {/* Approval Dialog */}
-      {showApprovalDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {approvalAction === "approve" ? "Approve Document" : "Reject Document"}
-              </h3>
-              <button
-                onClick={() => setShowApprovalDialog(false)}
-                className="text-gray-400 hover:text-gray-500"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <div className="mb-4">
-                <p className="text-sm font-medium text-gray-700 mb-2">Document:</p>
-                <p className="text-sm text-gray-900">{currentApproval?.documentTitle}</p>
-              </div>
-
-              <div className="mb-4">
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  {approvalAction === "approve" ? "Approval" : "Rejection"} Comments 
-                  {approvalAction === "reject" && <span className="text-red-600">*</span>}
-                </p>
-                <textarea
-                  value={approvalComments}
-                  onChange={(e) => setApprovalComments(e.target.value)}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={`Add your ${approvalAction === "approve" ? "approval" : "rejection"} comments...`}
-                  required={approvalAction === "reject"}
-                />
-              </div>
-
-              {approvalAction === "reject" && (
-                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-yellow-800">
-                    <AlertTriangle className="w-4 h-4 inline mr-1" />
-                    Please provide a reason for rejection.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
-              <button
-                onClick={() => setShowApprovalDialog(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmAction}
-                disabled={approvalAction === "reject" && !approvalComments.trim()}
-                className={`px-4 py-2 rounded-lg text-white transition-colors ${
-                  approvalAction === "approve"
-                    ? "bg-green-600 hover:bg-green-700"
-                    : "bg-red-600 hover:bg-red-700"
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-              >
-                {approvalAction === "approve" ? "Confirm Approval" : "Confirm Rejection"}
-              </button>
-            </div>
-          </div>
+          <ContextualHelp
+            title="Completing approvals"
+            description="Approve, reject, or delegate items assigned to you. Delegations notify assistants, while approvals push the correspondence to the next step."
+            steps={[
+              'Filter pending items with the search box.',
+              'Open an item to review the full routing chain.',
+              'Approve to move forward, reject to send back, or delegate to your assistant.'
+            ]}
+            placement={{ align: 'end', side: 'bottom' }}
+          />
         </div>
-      )}
-    </div>
-  );
-}
 
-function ApprovalCard({ 
-  approval, 
-  isSelected, 
-  onSelect,
-  onAction, 
-  priorityColors, 
-  statusColors 
-}: {
-  approval: any;
-  isSelected: boolean;
-  onSelect: () => void;
-  onAction: (approval: any, action: "approve" | "reject") => void;
-  priorityColors: Record<string, string>;
-  statusColors: Record<string, string>;
-}) {
-  const isOverdue = new Date(approval.dueDate) < new Date() && approval.status === "pending";
-
-  return (
-    <div className={`p-6 hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}>
-      <div className="flex items-start space-x-4">
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={onSelect}
-          className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        <HelpGuideCard
+          title="Guide to Approvals"
+          description="Use the status cards and tabs to prioritise urgent or overdue correspondence. Open a record to minute, apply digital signatures, distribute (CC), delegate to assistants, or send downward decisions."
+          links={[
+            { label: "Delegation Settings", href: "/settings" },
+            { label: "Help & Guides", href: "/help" },
+          ]}
         />
 
-        <div className="flex-1">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center space-x-3 mb-2">
-                <Link 
-                  href={`/documents/${approval.id}`}
-                  className="text-lg font-medium text-gray-900 hover:text-blue-600"
-                >
-                  {approval.documentTitle}
-                </Link>
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border ${priorityColors[approval.priority]}`}>
-                  {approval.priority}
-                </span>
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusColors[approval.status]}`}>
-                  {approval.status}
-                </span>
-                {isOverdue && (
-                  <span className="inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                    <AlertTriangle className="w-3 h-3 mr-1" />
-                    Overdue
-                  </span>
-                )}
-              </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
-                    <div className="flex items-center">
-                      <FileText className="w-4 h-4 mr-2 text-gray-400" />
-                      <span>{approval.documentType}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <User className="w-4 h-4 mr-2 text-gray-400" />
-                      <span>Requested by {approval.requester}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="mr-2">Department:</span>
-                      <span>{approval.department}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                      <span>Due: {new Date(approval.dueDate).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: '2-digit', 
-                        day: '2-digit' 
-                      })}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="mr-2">File Size:</span>
-                      <span>{approval.fileSize}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="mr-2">Version:</span>
-                      <span>{approval.version}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="mr-2">Approver:</span>
-                      <span>{approval.approverName}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <span className="mr-2">Est. Time:</span>
-                      <span>{approval.estimatedTime}</span>
-                    </div>
-                  </div>
-
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {approval.tags.map((tag: string) => (
-                      <span key={tag} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Attachments */}
-                  {approval.attachments && approval.attachments.length > 0 && (
-                    <div className="mb-4">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Attachments:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {approval.attachments.map((attachment: string, index: number) => (
-                          <span key={index} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded border">
-                            {attachment}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-              {approval.comments && (
-                <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                  <div className="flex items-start space-x-2">
-                    <MessageSquare className="w-4 h-4 text-gray-400 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700 mb-1">Comments:</p>
-                      <p className="text-sm text-gray-600">{approval.comments}</p>
-                    </div>
-                  </div>
+        {/* Stats */}
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-warning/10">
+                  <Clock className="h-6 w-6 text-warning" />
                 </div>
-              )}
-
-              {/* Progress */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                  <span>Current Step: {approval.currentStep}</span>
-                  <span>Step {approval.workflowStep} of {approval.totalSteps}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${(approval.workflowStep / approval.totalSteps) * 100}%` }}
-                  ></div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Pending</p>
+                  <p className="text-2xl font-bold">{pendingApprovals.length}</p>
                 </div>
               </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            <div className="flex items-center space-x-2 ml-4">
-              <Link 
-                href={`/documents/${approval.id}`}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-              >
-                <Eye className="w-5 h-5" />
-              </Link>
-              <button 
-                onClick={() => onAction(approval, "approve")}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-              >
-                <CheckCircle className="w-4 h-4 mr-2 inline" />
-                Approve
-              </button>
-              <button 
-                onClick={() => onAction(approval, "reject")}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
-              >
-                <XCircle className="w-4 h-4 mr-2 inline" />
-                Reject
-              </button>
-            </div>
-          </div>
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-success/10">
+                  <CheckCircle2 className="h-6 w-6 text-success" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Approved Today</p>
+                  <p className="text-2xl font-bold">8</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-destructive/10">
+                  <XCircle className="h-6 w-6 text-destructive" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Rejected</p>
+                  <p className="text-2xl font-bold">2</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-info/10">
+                  <UserCheck className="h-6 w-6 text-info" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Delegated</p>
+                  <p className="text-2xl font-bold">3</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Search */}
+        <div className="relative max-w-xl">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search approvals..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+
+        {/* Tabs */}
+        <Tabs defaultValue="pending" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="pending">
+              Pending ({filteredItems.length})
+            </TabsTrigger>
+            <TabsTrigger value="approved">
+              Approved
+            </TabsTrigger>
+            <TabsTrigger value="rejected">
+              Rejected
+            </TabsTrigger>
+            <TabsTrigger value="delegated">
+              Delegated
+            </TabsTrigger>
+            <TabsTrigger value="all">
+              All
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="pending" className="space-y-3">
+            {filteredItems.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-success" />
+                  <p className="text-muted-foreground">All caught up! No pending approvals.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              filteredItems.map(corr => (
+                <ApprovalCard key={corr.id} corr={corr} />
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="approved" className="space-y-3">
+            <Card>
+              <CardContent className="text-center py-12">
+                <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-success" />
+                <p className="text-muted-foreground">No approved items yet</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="rejected" className="space-y-3">
+            <Card>
+              <CardContent className="text-center py-12">
+                <XCircle className="h-12 w-12 mx-auto mb-3 text-destructive" />
+                <p className="text-muted-foreground">No rejected items yet</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="delegated" className="space-y-3">
+            <Card>
+              <CardContent className="text-center py-12">
+                <UserCheck className="h-12 w-12 mx-auto mb-3 text-info" />
+                <p className="text-muted-foreground">No delegated items yet</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="all" className="space-y-3">
+            {filteredItems.map(corr => (
+              <ApprovalCard key={corr.id} corr={corr} />
+            ))}
+          </TabsContent>
+        </Tabs>
       </div>
-    </div>
+    </DashboardLayout>
   );
-}
+};
+
+export default ApprovalsInbox;

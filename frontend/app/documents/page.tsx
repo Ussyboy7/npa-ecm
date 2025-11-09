@@ -1,445 +1,421 @@
 "use client";
-
-import { useState } from "react";
-import Link from "next/link";
-import { 
-  FileText, 
-  Upload, 
-  Search, 
-  Filter, 
-  MoreVertical,
-  Eye,
-  Download,
-  Edit,
-  Trash2,
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { DashboardLayout } from '@/components/DashboardLayout';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { ContextualHelp } from '@/components/help/ContextualHelp';
+import {
+  FileText,
+  Search,
+  Layers,
+  Filter,
   Calendar,
-  User,
-  Tag
-} from "lucide-react";
-import { NPA_DEPARTMENTS, NPA_DOCUMENT_TYPES } from "@/lib/npa-structure";
+  Hash,
+  User as UserIcon,
+  FilePlus,
+} from 'lucide-react';
+import {
+  initializeDmsDocuments,
+  loadDocuments,
+  getAccessibleDocumentsForUser,
+  type DocumentRecord,
+  type DocumentStatus,
+  type DocumentType,
+  getDivisionName,
+  getDepartmentName,
+  listWorkspaces,
+  type DocumentWorkspace,
+} from '@/lib/dms-storage';
+import { MOCK_USERS, DIVISIONS, DEPARTMENTS, type User as NPAUser } from '@/lib/npa-structure';
+import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 
-export default function DocumentsPage() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedFilters, setSelectedFilters] = useState({
-    type: "",
-    status: "",
-    department: "",
-    dateRange: ""
-  });
+const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'other'];
+const STATUS_FILTERS: { value: DocumentStatus | 'all'; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+  { value: 'archived', label: 'Archived' },
+];
 
-  // Enhanced mock data with comprehensive document information
-  const documents = [
-    {
-      id: 1,
-      title: "Q4 Financial Report 2024",
-      type: "Financial Report",
-      status: "approved",
-      department: "Finance",
-      author: "GM, Finance",
-      createdDate: "2024-12-15",
-      fileSize: "2.3 MB",
-      version: "1.0",
-      tags: ["finance", "quarterly", "report"],
-      lastModified: "2024-12-15 14:30",
-      modifiedBy: "GM, Finance",
-      accessLevel: "confidential",
-      downloadCount: 12,
-      viewCount: 45,
-      approvalStatus: "approved",
-      approvedBy: "Managing Director",
-      approvedDate: "2024-12-16 10:15"
-    },
-    {
-      id: 2,
-      title: "Port Operations Manual Update",
-      type: "Operational Document",
-      status: "pending_review",
-      department: "Marine & Operations",
-      author: "AGM, Marine Operations",
-      createdDate: "2024-12-14",
-      fileSize: "5.1 MB",
-      version: "2.1",
-      tags: ["operations", "manual", "update"],
-      lastModified: "2024-12-14 16:45",
-      modifiedBy: "AGM, Marine Operations",
-      accessLevel: "internal",
-      downloadCount: 8,
-      viewCount: 23,
-      approvalStatus: "pending",
-      currentApprover: "GM, Marine & Operations"
-    },
-    {
-      id: 3,
-      title: "HR Policy Guidelines 2025",
-      type: "Policy Document",
-      status: "draft",
-      department: "Human Resources",
-      author: "GM, Human Resources",
-      createdDate: "2024-12-13",
-      fileSize: "1.8 MB",
-      version: "1.2",
-      tags: ["hr", "policy", "guidelines"],
-      lastModified: "2024-12-13 11:20",
-      modifiedBy: "GM, Human Resources",
-      accessLevel: "internal",
-      downloadCount: 0,
-      viewCount: 3,
-      approvalStatus: "draft"
-    },
-    {
-      id: 4,
-      title: "Security Incident Report - Dec 12",
-      type: "Incident Report",
-      status: "approved",
-      department: "Security",
-      author: "GM, Security",
-      createdDate: "2024-12-12",
-      fileSize: "890 KB",
-      version: "1.0",
-      tags: ["security", "incident", "report"],
-      lastModified: "2024-12-12 09:15",
-      modifiedBy: "GM, Security",
-      accessLevel: "restricted",
-      downloadCount: 5,
-      viewCount: 18,
-      approvalStatus: "approved",
-      approvedBy: "Managing Director",
-      approvedDate: "2024-12-13 08:30"
-    },
-    {
-      id: 5,
-      title: "ICT Infrastructure Report",
-      type: "Technical Document",
-      status: "in_review",
-      department: "Information & Communication Technology",
-      author: "AGM, Software",
-      createdDate: "2024-12-11",
-      fileSize: "3.2 MB",
-      version: "1.5",
-      tags: ["ict", "infrastructure", "technical"],
-      lastModified: "2024-12-11 15:30",
-      modifiedBy: "AGM, Software",
-      accessLevel: "internal",
-      downloadCount: 3,
-      viewCount: 12,
-      approvalStatus: "in_review",
-      currentApprover: "GM, ICT"
-    },
-    {
-      id: 6,
-      title: "Marine Safety Procedures Manual",
-      type: "Operational Document",
-      status: "approved",
-      department: "Marine & Operations",
-      author: "AGM, Marine Operations",
-      createdDate: "2024-12-10",
-      fileSize: "4.2 MB",
-      version: "3.0",
-      tags: ["marine", "safety", "procedures"],
-      lastModified: "2024-12-10 13:45",
-      modifiedBy: "AGM, Marine Operations",
-      accessLevel: "internal",
-      downloadCount: 15,
-      viewCount: 67,
-      approvalStatus: "approved",
-      approvedBy: "GM, Marine & Operations",
-      approvedDate: "2024-12-11 14:20"
-    },
-    {
-      id: 7,
-      title: "Port Expansion Feasibility Study",
-      type: "Technical Document",
-      status: "pending_review",
-      department: "Engineering & Technical Services",
-      author: "GM, Engineering",
-      createdDate: "2024-12-09",
-      fileSize: "6.8 MB",
-      version: "1.0",
-      tags: ["engineering", "expansion", "feasibility"],
-      lastModified: "2024-12-09 17:00",
-      modifiedBy: "GM, Engineering",
-      accessLevel: "confidential",
-      downloadCount: 2,
-      viewCount: 8,
-      approvalStatus: "pending",
-      currentApprover: "Executive Director"
-    },
-    {
-      id: 8,
-      title: "Vendor Contract - ABC Corp",
-      type: "Contract",
-      status: "approved",
-      department: "Procurement",
-      author: "GM, Procurement",
-      createdDate: "2024-12-08",
-      fileSize: "1.2 MB",
-      version: "2.0",
-      tags: ["contract", "vendor", "procurement"],
-      lastModified: "2024-12-08 10:30",
-      modifiedBy: "GM, Procurement",
-      accessLevel: "restricted",
-      downloadCount: 4,
-      viewCount: 15,
-      approvalStatus: "approved",
-      approvedBy: "Managing Director",
-      approvedDate: "2024-12-09 16:45"
+const typeLabel = (type: DocumentType) => {
+  switch (type) {
+    case 'letter':
+      return 'Letter';
+    case 'memo':
+      return 'Memo';
+    case 'circular':
+      return 'Circular';
+    case 'policy':
+      return 'Policy';
+    case 'report':
+      return 'Report';
+    default:
+      return 'Other';
+  }
+};
+
+const statusVariant = (status: DocumentStatus): 'outline' | 'default' | 'secondary' => {
+  switch (status) {
+    case 'draft':
+      return 'outline';
+    case 'published':
+      return 'default';
+    case 'archived':
+      return 'secondary';
+    default:
+      return 'outline';
+  }
+};
+
+const sensitivityLabel = (value: DocumentRecord['sensitivity']) => {
+  switch (value) {
+    case 'public':
+      return 'Public';
+    case 'internal':
+      return 'Internal';
+    case 'confidential':
+      return 'Confidential';
+    case 'restricted':
+      return 'Restricted';
+    default:
+      return value;
+  }
+};
+
+const sensitivityBadgeVariant = (value: DocumentRecord['sensitivity']) => {
+  switch (value) {
+    case 'public':
+      return 'secondary';
+    case 'internal':
+      return 'outline';
+    case 'confidential':
+      return 'default';
+    case 'restricted':
+      return 'destructive';
+    default:
+      return 'outline';
+  }
+};
+
+const MyDocuments = () => {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<NPAUser | null>(null);
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<DocumentStatus | 'all'>('all');
+  const [typeFilter, setTypeFilter] = useState<DocumentType | 'all'>('all');
+  const [divisionFilter, setDivisionFilter] = useState<string>('all');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const workspaces = useMemo(() => listWorkspaces(), []);
+  const workspaceLookup = useMemo(() => {
+    const map = new Map<string, DocumentWorkspace>();
+    workspaces.forEach((workspace) => map.set(workspace.id, workspace));
+    return map;
+  }, [workspaces]);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    initializeDmsDocuments();
+    let savedUserId = localStorage.getItem('npa_demo_user_id');
+    if (!savedUserId) {
+      const md = MOCK_USERS.find((u) => u.gradeLevel === 'MDCS');
+      if (md) {
+        savedUserId = md.id;
+        localStorage.setItem('npa_demo_user_id', md.id);
+      }
     }
-  ];
 
-  const statusColors = {
-    approved: "bg-green-100 text-green-800",
-    pending_review: "bg-yellow-100 text-yellow-800",
-    in_review: "bg-blue-100 text-blue-800",
-    draft: "bg-gray-100 text-gray-800",
-    rejected: "bg-red-100 text-red-800"
+    if (savedUserId) {
+      const user = MOCK_USERS.find((u) => u.id === savedUserId) ?? null;
+      setCurrentUser(user);
+      if (user) {
+        const accessible = getAccessibleDocumentsForUser(user);
+        setDocuments(accessible);
+      } else {
+        setDocuments(loadDocuments());
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const filteredDocuments = useMemo(() => {
+    if (!currentUser || !mounted) return [];
+    return documents
+      .filter((doc) => {
+        if (statusFilter !== 'all' && doc.status !== statusFilter) return false;
+        if (typeFilter !== 'all' && doc.documentType !== typeFilter) return false;
+        if (divisionFilter !== 'all' && doc.divisionId !== divisionFilter) return false;
+        if (departmentFilter !== 'all' && doc.departmentId !== departmentFilter) return false;
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+          doc.title.toLowerCase().includes(query) ||
+          (doc.referenceNumber ?? '').toLowerCase().includes(query) ||
+          (doc.description ?? '').toLowerCase().includes(query) ||
+          doc.tags?.some((tag) => tag.toLowerCase().includes(query)) ||
+          doc.versions.some((version) => version.contentText?.toLowerCase().includes(query))
+        );
+      })
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }, [currentUser, mounted, documents, searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter]);
+
+  const draftDocuments = filteredDocuments.filter((doc) => doc.status === 'draft');
+  const publishedDocuments = filteredDocuments.filter((doc) => doc.status === 'published');
+  const archivedDocuments = filteredDocuments.filter((doc) => doc.status === 'archived');
+
+  if (!currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">Loading...</div>
+      </DashboardLayout>
+    );
+  }
+
+  const DocumentCard = ({ document }: { document: DocumentRecord }) => {
+    const latestVersion = document.versions[0];
+    const author = MOCK_USERS.find((u) => u.id === document.authorId);
+
+    return (
+      <div
+        onClick={() => router.push(`/dms/${document.id}`)}
+        className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer"
+      >
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-lg bg-primary/10">
+            <FileText className="h-5 w-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0 space-y-1">
+                <h4 className="font-semibold text-foreground truncate">{document.title}</h4>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="capitalize">
+                    {typeLabel(document.documentType)}
+                  </Badge>
+                  <Badge variant={statusVariant(document.status)} className="capitalize">
+                    {document.status}
+                  </Badge>
+                  <Badge variant={sensitivityBadgeVariant(document.sensitivity)} className="capitalize">
+                    {sensitivityLabel(document.sensitivity)}
+                  </Badge>
+                  {document.tags?.map((tag) => (
+                    <Badge key={tag} variant="secondary" className="text-xs">
+                      #{tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Updated {formatDate(document.updatedAt)}
+              </span>
+            </div>
+
+            {document.description && (
+              <p className="text-sm text-muted-foreground line-clamp-2">
+                {document.description}
+              </p>
+            )}
+            {!document.description && latestVersion?.contentText && (
+              <p className="text-sm text-muted-foreground line-clamp-2">
+                {latestVersion.contentText}
+              </p>
+            )}
+
+            {document.workspaceIds?.length ? (
+              <div className="flex flex-wrap gap-2">
+                {document.workspaceIds.map((workspaceId) => {
+                  const workspace = workspaceLookup.get(workspaceId);
+                  if (!workspace) return null;
+                  return (
+                    <Badge
+                      key={workspaceId}
+                      className="text-[10px] font-medium"
+                      style={{ backgroundColor: workspace.color, color: '#ffffff' }}
+                    >
+                      {workspace.name}
+                    </Badge>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Hash className="h-3 w-3" />
+                <span>{document.referenceNumber ?? 'No reference'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Layers className="h-3 w-3" />
+                <span>{getDivisionName(document.divisionId)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <UserIcon className="h-3 w-3" />
+                <span>{author ? author.name : 'Unknown author'}</span>
+              </div>
+            </div>
+
+            {latestVersion && (
+              <div className="text-xs text-muted-foreground">
+                Last version {latestVersion.versionNumber} uploaded {formatDateTime(latestVersion.uploadedAt)}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Documents</h1>
-          <p className="text-gray-600">Manage and organize your electronic content</p>
-        </div>
-        <div className="flex space-x-3">
-          <Link
-            href="/documents/upload-bulk"
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Bulk Upload
-          </Link>
-          <div className="flex space-x-3">
-            <Link
-              href="/documents/create"
-              className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              Create Document
-            </Link>
-            <Link
-              href="/documents/new"
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload Document
-            </Link>
-          </div>
-        </div>
-      </div>
+  const renderDocumentList = (list: DocumentRecord[]) => (
+    list.length === 0 ? (
+      <Card>
+        <CardContent className="py-10 text-center text-muted-foreground text-sm">
+          No documents match the current filter.
+        </CardContent>
+      </Card>
+    ) : (
+      list.map((doc) => <DocumentCard key={doc.id} document={doc} />)
+    )
+  );
 
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg shadow-sm border p-6">
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search documents, content, or metadata..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+  return (
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+              <FileText className="h-8 w-8 text-primary" />
+              My Documents
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Manage documents you own or have access to within your division and organisation.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => router.push('/dms')}
+              className="gap-2">
+              <FilePlus className="h-4 w-4" />
+              Open DMS
+            </Button>
+            <ContextualHelp
+              title="How to work with documents"
+              description="Search across metadata and full text, then open a record for version history, collaboration, and signature controls."
+              steps={[
+                'Use filters or tags to narrow documents.',
+                'Open a document to view versions and collaborate.',
+                'Create or upload new files from the DMS workspace.'
+              ]}
             />
           </div>
+        </div>
 
-          {/* Filters */}
-          <div className="flex gap-2">
-            <select
-              value={selectedFilters.type}
-              onChange={(e) => setSelectedFilters({...selectedFilters, type: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Types</option>
-              {NPA_DOCUMENT_TYPES.map((type) => (
-                <option key={type.code} value={type.code.toLowerCase()}>
-                  {type.name}
-                </option>
-              ))}
-            </select>
+        <HelpGuideCard
+          title="Manage Your Documents"
+          description="Review documents you authored, collaborate on, or have access to through divisional permissions. Filter by status, type, division, and workspace, then open the DMS for version history and collaboration."
+          links={[
+            { label: "Open DMS", href: "/dms" },
+            { label: "Help & Guides", href: "/help" },
+          ]}
+        />
 
-            <select
-              value={selectedFilters.status}
-              onChange={(e) => setSelectedFilters({...selectedFilters, status: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Status</option>
-              <option value="draft">Draft</option>
-              <option value="pending_review">Pending Review</option>
-              <option value="in_review">In Review</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
-
-            <select
-              value={selectedFilters.department}
-              onChange={(e) => setSelectedFilters({...selectedFilters, department: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Departments</option>
-              {NPA_DEPARTMENTS
-                .filter(dept => dept.parent === null)
-                .map((dept) => (
-                  <option key={dept.code} value={dept.code.toLowerCase()}>
-                    {dept.name}
-                  </option>
-                ))}
-            </select>
-
-            <button className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center">
-              <Filter className="w-4 h-4 mr-2" />
-              More Filters
-            </button>
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="md:col-span-2 relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search documents by title, reference, or tag..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
           </div>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="mt-4 flex gap-6 text-sm text-gray-600">
-          <span>Total: {documents.length}</span>
-          <span>Approved: {documents.filter(d => d.status === 'approved').length}</span>
-          <span>Pending: {documents.filter(d => ['pending_review', 'in_review'].includes(d.status)).length}</span>
-          <span>Draft: {documents.filter(d => d.status === 'draft').length}</span>
-        </div>
-      </div>
-
-      {/* Documents Table */}
-      <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Document Library</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Document
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Department
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Author
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {documents.map((doc) => (
-                <tr key={doc.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
-                        <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <FileText className="h-6 w-6 text-blue-600" />
-                        </div>
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          <Link href={`/documents/${doc.id}`} className="hover:text-blue-600">
-                            {doc.title}
-                          </Link>
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {doc.fileSize} • v{doc.version}
-                        </div>
-                        <div className="flex items-center mt-1 space-x-2">
-                          {doc.tags.map((tag, index) => (
-                            <span key={index} className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-700">
-                              <Tag className="w-3 h-3 mr-1" />
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {doc.type}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusColors[doc.status as keyof typeof statusColors]}`}>
-                      {doc.status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {doc.department}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center text-sm text-gray-900">
-                      <User className="h-4 w-4 mr-2 text-gray-400" />
-                      {doc.author}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center text-sm text-gray-900">
-                      <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                      {new Date(doc.createdDate).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: '2-digit', 
-                        day: '2-digit' 
-                      })}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex items-center space-x-2">
-                      <Link 
-                        href={`/documents/${doc.id}`}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Link>
-                      <button className="text-gray-600 hover:text-gray-900">
-                        <Download className="h-4 w-4" />
-                      </button>
-                      <button className="text-gray-600 hover:text-gray-900">
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button className="text-gray-600 hover:text-gray-900">
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as DocumentStatus | 'all')}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTERS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
               ))}
-            </tbody>
-          </table>
+            </SelectContent>
+          </Select>
+          <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as DocumentType | 'all')}>
+            <SelectTrigger>
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {DOCUMENT_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {typeLabel(type)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={divisionFilter} onValueChange={setDivisionFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Division" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Divisions</SelectItem>
+              {DIVISIONS.map((division) => (
+                <SelectItem key={division.id} value={division.id}>
+                  {division.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {DEPARTMENTS.map((department) => (
+                <SelectItem key={department.id} value={department.id}>
+                  {department.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Pagination */}
-        <div className="px-6 py-4 border-t border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              Showing <span className="font-medium">1</span> to <span className="font-medium">5</span> of <span className="font-medium">{documents.length}</span> results
-            </div>
-            <div className="flex space-x-2">
-              <button className="px-3 py-1 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50">
-                Previous
-              </button>
-              <button className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
-                1
-              </button>
-              <button className="px-3 py-1 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50">
-                2
-              </button>
-              <button className="px-3 py-1 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50">
-                Next
-              </button>
-            </div>
-          </div>
-        </div>
+        <Tabs defaultValue="drafts" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="drafts">Drafts ({draftDocuments.length})</TabsTrigger>
+            <TabsTrigger value="published">Published ({publishedDocuments.length})</TabsTrigger>
+            <TabsTrigger value="archived">Archived ({archivedDocuments.length})</TabsTrigger>
+            <TabsTrigger value="all">All ({filteredDocuments.length})</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="drafts" className="space-y-3">
+            {renderDocumentList(draftDocuments)}
+          </TabsContent>
+
+          <TabsContent value="published" className="space-y-3">
+            {renderDocumentList(publishedDocuments)}
+          </TabsContent>
+
+          <TabsContent value="archived" className="space-y-3">
+            {renderDocumentList(archivedDocuments)}
+          </TabsContent>
+
+          <TabsContent value="all" className="space-y-3">
+            {renderDocumentList(filteredDocuments)}
+          </TabsContent>
+        </Tabs>
       </div>
-    </div>
+    </DashboardLayout>
   );
-}
+};
+
+export default MyDocuments;

@@ -1,137 +1,249 @@
-'use client';
+"use client";
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { DashboardLayout } from '@/components/DashboardLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { 
+  FileText, 
+  Clock, 
+  CheckCircle, 
+  AlertCircle,
+  TrendingUp,
+  Users,
+  Mail,
+  Send
+} from 'lucide-react';
+import { MOCK_USERS, MOCK_CORRESPONDENCE, DIVISIONS, type User } from '@/lib/npa-structure';
+import { formatDateShort } from '@/lib/correspondence-helpers';
+import Link from 'next/link';
 
-// Import role-specific dashboards
-import OfficerDashboard from '@/components/dashboards/OfficerDashboard';
-import PrincipalManagerDashboard from '@/components/dashboards/PrincipalManagerDashboard';
-import AGMDashboard from '@/components/dashboards/AGMDashboard';
-import GMDashboard from '@/components/dashboards/GMDashboard';
-import MDDashboard from '@/components/dashboards/MDDashboard';
-import RegistryDashboard from '@/components/dashboards/RegistryDashboard';
-import AdminDashboard from '@/components/dashboards/AdminDashboard';
-import ICTDivisionDashboard from '@/components/dashboards/ICTDivisionDashboard';
-import MarineOperationsDashboard from '@/components/dashboards/MarineOperationsDashboard';
-import FinanceDivisionDashboard from '@/components/dashboards/FinanceDivisionDashboard';
-import HRDivisionDashboard from '@/components/dashboards/HRDivisionDashboard';
-import SoftwareApplicationsDashboard from '@/components/dashboards/SoftwareApplicationsDashboard';
-import NetworkInfrastructureDashboard from '@/components/dashboards/NetworkInfrastructureDashboard';
-import PortOperationsDashboard from '@/components/dashboards/PortOperationsDashboard';
-import FinancialPlanningDashboard from '@/components/dashboards/FinancialPlanningDashboard';
+const Dashboard = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-export default function DashboardPage() {
-  const [userRole, setUserRole] = useState<string>('officer'); // Mock - will come from auth
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Mock user role detection - in real app this would come from auth context/API
   useEffect(() => {
-    // Simulate API call to get user role
-    const mockUserRole = localStorage.getItem('mockUserRole') || 'officer';
-    setUserRole(mockUserRole);
-    setIsLoading(false);
+    const savedUserId = localStorage.getItem('npa_demo_user_id');
+    if (savedUserId) {
+      const user = MOCK_USERS.find(u => u.id === savedUserId);
+      if (user) setCurrentUser(user);
+    } else {
+      const md = MOCK_USERS.find(u => u.gradeLevel === 'MDCS');
+      if (md) setCurrentUser(md);
+    }
   }, []);
 
-  // Role switcher for testing (remove in production)
-  const handleRoleChange = (newRole: string) => {
-    setUserRole(newRole);
-    localStorage.setItem('mockUserRole', newRole);
-    // Force reload to update sidebar
-    window.location.reload();
-  };
+  if (!currentUser) return null;
 
-  const dashboards: Record<string, React.ComponentType> = {
-    'staff': OfficerDashboard,
-    'junior_officer': OfficerDashboard,
-    'officer': OfficerDashboard,
-    'senior_officer': OfficerDashboard,
-    'am': PrincipalManagerDashboard,
-    'manager': PrincipalManagerDashboard,
-    'sm': PrincipalManagerDashboard,
-    'pm': PrincipalManagerDashboard,
-    'agm': AGMDashboard,
-    'gm': GMDashboard,
-    'ed': GMDashboard,
-    'md': MDDashboard,
-    'secretary': MDDashboard, // Secretaries use their executive's dashboard
-    'registry': RegistryDashboard,
-    'admin': AdminDashboard,
-    // Division-specific dashboards
-    'ict_division': ICTDivisionDashboard,
-    'marine_operations': MarineOperationsDashboard,
-    'finance_division': FinanceDivisionDashboard,
-    'hr_division': HRDivisionDashboard,
-    // Department-specific dashboards
-    'software_applications': SoftwareApplicationsDashboard,
-    'network_infrastructure': NetworkInfrastructureDashboard,
-    'port_operations': PortOperationsDashboard,
-    'financial_planning': FinancialPlanningDashboard,
-  };
+  const division = DIVISIONS.find(d => d.id === currentUser.division);
+  const pendingCorrespondence = MOCK_CORRESPONDENCE.filter(
+    c => c.currentApproverId === currentUser.id || c.divisionId === currentUser.division
+  );
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  const DashboardComponent = dashboards[userRole] || OfficerDashboard;
-
-  // Role switcher for testing (remove in production)
-  const roleOptions = [
-    { value: 'staff', label: 'Staff' },
-    { value: 'junior_officer', label: 'Junior Officer' },
-    { value: 'officer', label: 'Officer' },
-    { value: 'senior_officer', label: 'Senior Officer' },
-    { value: 'am', label: 'Assistant Manager' },
-    { value: 'manager', label: 'Manager' },
-    { value: 'sm', label: 'Senior Manager' },
-    { value: 'pm', label: 'Principal Manager' },
-    { value: 'agm', label: 'Assistant General Manager' },
-    { value: 'gm', label: 'General Manager' },
-    { value: 'ed', label: 'Executive Director' },
-    { value: 'md', label: 'Managing Director' },
-    { value: 'secretary', label: 'Secretary' },
-    { value: 'registry', label: 'Registry Officer' },
-    { value: 'admin', label: 'System Administrator' },
-    // Division-specific dashboards
-    { value: 'ict_division', label: 'ICT Division Dashboard' },
-    { value: 'marine_operations', label: 'Marine Operations Dashboard' },
-    { value: 'finance_division', label: 'Finance Division Dashboard' },
-    { value: 'hr_division', label: 'HR Division Dashboard' },
-    // Department-specific dashboards
-    { value: 'software_applications', label: 'Software Applications Department' },
-    { value: 'network_infrastructure', label: 'Network Infrastructure Department' },
-    { value: 'port_operations', label: 'Port Operations Department' },
-    { value: 'financial_planning', label: 'Financial Planning Department' },
+  const stats = [
+    {
+      title: 'Pending Action',
+      value: pendingCorrespondence.length.toString(),
+      icon: Clock,
+      color: 'text-warning',
+      bgColor: 'bg-warning/10',
+    },
+    {
+      title: 'In Progress',
+      value: MOCK_CORRESPONDENCE.filter(c => c.status === 'in-progress').length.toString(),
+      icon: Send,
+      color: 'text-info',
+      bgColor: 'bg-info/10',
+    },
+    {
+      title: 'Completed Today',
+      value: '0',
+      icon: CheckCircle,
+      color: 'text-success',
+      bgColor: 'bg-success/10',
+    },
+    {
+      title: 'Urgent Items',
+      value: MOCK_CORRESPONDENCE.filter(c => c.priority === 'urgent').length.toString(),
+      icon: AlertCircle,
+      color: 'text-destructive',
+      bgColor: 'bg-destructive/10',
+    },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Role Switcher for Testing */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        {/* Welcome Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-yellow-800">Role Testing Switcher</h3>
-            <p className="text-xs text-yellow-600 mt-1">Switch roles to test different dashboards (for development only)</p>
+            <h1 className="text-3xl font-bold text-foreground">
+              Welcome back, {currentUser.name.split(' ')[0]}
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {currentUser.systemRole}
+              {division && ` - ${division.name}`}
+            </p>
           </div>
-          <select
-            value={userRole}
-            onChange={(e) => handleRoleChange(e.target.value)}
-            className="px-3 py-2 border border-yellow-300 rounded-md text-sm focus:ring-yellow-500 focus:border-yellow-500"
-          >
-            {roleOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <ContextualHelp
+              title="How to use the Dashboard"
+              description="Switch personas with the Role Switcher to see different perspectives. Use the cards below to monitor workload, then jump into the inbox or DMS from the quick links."
+              steps={[
+                "Use Role Switcher in the top bar to change persona.",
+                "Review pending actions and urgent items.",
+                "Open a correspondence or document directly from the lists."
+              ]}
+            />
+            <Badge variant="outline" className="text-sm px-4 py-2">
+              {currentUser.employeeId}
+            </Badge>
+          </div>
+        </div>
+
+        <HelpGuideCard
+          title="Dashboard Overview"
+          description="Track high-level workload, recent correspondence, and divisional performance for your current persona. Use the Role Switcher to see how metrics change for MD, ED, GM, and departmental views."
+          links={[
+            { label: "Role Switcher", href: "/settings" },
+            { label: "Help & Guides", href: "/help" },
+          ]}
+        />
+
+        {/* Stats Grid */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {stats.map((stat, index) => {
+            const Icon = stat.icon;
+            return (
+              <Card key={index} className="shadow-soft hover:shadow-medium transition-shadow">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {stat.title}
+                  </CardTitle>
+                  <div className={`${stat.bgColor} p-2 rounded-lg`}>
+                    <Icon className={`h-4 w-4 ${stat.color}`} />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold">{stat.value}</div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Recent Correspondence */}
+        <Card className="shadow-soft">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              Recent Correspondence
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {pendingCorrespondence.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>No pending correspondence</p>
+                </div>
+              ) : (
+                pendingCorrespondence.map(corr => (
+                  <Link
+                    key={corr.id}
+                    href={`/correspondence/${corr.id}`}
+                    className="flex items-start gap-4 p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer block"
+                  >
+                    <div className={`p-2 rounded-lg ${
+                      corr.priority === 'urgent' ? 'bg-destructive/10' :
+                      corr.priority === 'high' ? 'bg-warning/10' :
+                      'bg-primary/10'
+                    }`}>
+                      <Mail className={`h-5 w-5 ${
+                        corr.priority === 'urgent' ? 'text-destructive' :
+                        corr.priority === 'high' ? 'text-warning' :
+                        'text-primary'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold text-sm truncate">{corr.subject}</h4>
+                        <Badge variant={corr.priority === 'urgent' ? 'destructive' : 'secondary'}>
+                          {corr.priority}
+                        </Badge>
+                        <Badge variant="outline">
+                          {corr.direction === 'downward' ? '↓ Downward' : '↑ Upward'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        From: {corr.senderName} • Ref: {corr.referenceNumber}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Received: {formatDateShort(corr.receivedDate)}
+                      </p>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Quick Actions */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <Link href="/correspondence/register">
+            <Card className="shadow-soft hover:shadow-medium transition-shadow cursor-pointer border-primary/20 hover:border-primary">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="h-5 w-5 text-primary" />
+                  Create Document
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Start a new memo or internal document
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/correspondence/register">
+            <Card className="shadow-soft hover:shadow-medium transition-shadow cursor-pointer border-secondary/20 hover:border-secondary">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Mail className="h-5 w-5 text-secondary" />
+                  Register Correspondence
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Register incoming external correspondence
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/analytics">
+            <Card className="shadow-soft hover:shadow-medium transition-shadow cursor-pointer border-success/20 hover:border-success">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TrendingUp className="h-5 w-5 text-success" />
+                  View Analytics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Track performance and turnaround times
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </div>
-
-      {/* Dashboard Content */}
-      <DashboardComponent />
-    </div>
+    </DashboardLayout>
   );
-}
+};
+
+export default Dashboard;
+

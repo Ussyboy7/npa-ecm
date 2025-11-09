@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Toaster } from "react-hot-toast";
-import { NotificationProvider } from "@/components/notifications/NotificationContext";
-import ToastContainer from "@/components/notifications/ToastContainer";
+import { Providers } from "@/components/Providers";
 
 export const metadata: Metadata = {
   title: "NPA Electronic Content Management",
   description: "Enterprise electronic content management system (ECM) and workflow system for NPA",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/npalogo-256.png",
+  },
 };
 
 export default function RootLayout({
@@ -15,21 +18,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="font-sans">
-        <NotificationProvider>
-          {children}
-          <ToastContainer />
-        </NotificationProvider>
-        <Toaster position="top-right" />
+    <html lang="en" suppressHydrationWarning>
+      <body className="font-sans antialiased">
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
-
-
-
-
-
-
 

@@ -1,432 +1,398 @@
 "use client";
-
-import { useState } from "react";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { DashboardLayout } from '@/components/DashboardLayout';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
-  Upload,
-  FileText,
-  Mail,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { toast } from 'sonner';
+import { 
+  Upload, 
+  FileText, 
   Calendar,
-  User,
-  Building,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
-  Save,
+  Building2,
+  User as UserIcon,
+  Mail,
+  AlertCircle,
   Send,
-  Eye,
-  Edit,
-  Trash2,
-  Plus,
-  Search,
-  Filter
-} from "lucide-react";
-import Link from "next/link";
+  Save
+} from 'lucide-react';
+import { DIVISIONS, MOCK_USERS, DIRECTORATES } from '@/lib/npa-structure';
 
-export default function RegisterCorrespondencePage() {
+const CorrespondenceRegister = () => {
+  const router = useRouter();
   const [formData, setFormData] = useState({
-    correspondenceType: "",
-    reference: "",
-    subject: "",
-    sender: "",
-    recipient: "",
-    date: "",
-    priority: "Medium",
-    category: "",
-    department: "",
-    description: "",
-    attachments: [],
-    status: "Draft"
+    subject: '',
+    senderName: '',
+    senderOrganization: '',
+    receivedDate: new Date().toISOString().split('T')[0],
+    priority: 'normal',
+    assignTo: '',
+    divisionId: '',
+    documentType: 'letter',
+    tags: '',
   });
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const executives = MOCK_USERS.filter(u => ['MD', 'ED', 'GM', 'AGM'].includes(u.gradeLevel));
 
-  const correspondenceTypes = [
-    { value: "inward", label: "Inward Correspondence" },
-    { value: "outward", label: "Outward Correspondence" },
-    { value: "internal", label: "Internal Memo" },
-    { value: "circular", label: "Circular" }
-  ];
-
-  const priorityOptions = [
-    { value: "Low", label: "Low" },
-    { value: "Medium", label: "Medium" },
-    { value: "High", label: "High" },
-    { value: "Urgent", label: "Urgent" }
-  ];
-
-  const categories = [
-    "Government Correspondence",
-    "Port Operations",
-    "Security Matters",
-    "Financial Matters",
-    "HR Matters",
-    "Legal Matters",
-    "Technical Issues",
-    "General Administration"
-  ];
-
-  const departments = [
-    "Marine Operations",
-    "ICT Division",
-    "Finance Division",
-    "Human Resources",
-    "Safety & Security",
-    "Legal Department",
-    "Administration",
-    "Planning Department"
-  ];
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setFormData(prev => ({
-      ...prev,
-      attachments: [...prev.attachments, ...files]
-    }));
-  };
-
-  const removeAttachment = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      attachments: prev.attachments.filter((_, i) => i !== index)
-    }));
-  };
-
-  const generateReference = () => {
-    const type = formData.correspondenceType.toUpperCase();
-    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-    const reference = `${type}/${date}/${random}`;
-    setFormData(prev => ({ ...prev, reference }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    setIsSubmitting(false);
-    // Handle success/error
+    if (!formData.subject || !formData.senderName || !formData.assignTo) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Generate reference number
+    const refNumber = `NPA/REG/${new Date().getFullYear()}/${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+
+    toast.success('Correspondence registered successfully', {
+      description: `Reference: ${refNumber}`,
+    });
+
+    // Navigate to correspondence inbox after short delay
+    setTimeout(() => {
+      router.push('/correspondence/inbox');
+    }, 1500);
+  };
+
+  const handleSaveDraft = () => {
+    toast.info('Draft saved', {
+      description: 'You can continue editing later',
+    });
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Register Correspondence</h1>
-          <p className="text-gray-600">Register new incoming or outgoing correspondence</p>
+    <DashboardLayout>
+      <div className="p-6 max-w-5xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+              <Mail className="h-8 w-8 text-primary" />
+              Register New Correspondence
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Capture and initiate new inbound or outbound correspondence
+            </p>
+          </div>
+          <ContextualHelp
+            title="Registering correspondence"
+            description="Fill every required field, attach the source document, and select the first approver. The system generates the reference number automatically."
+            steps={[
+              'Capture sender details and document type.',
+              'Choose the initial executive to receive the memo.',
+              'Attach supporting files and register to push into workflow.'
+            ]}
+          />
         </div>
-        <div className="flex space-x-3">
-          <Link
-            href="/correspondence"
-            className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            View All
-          </Link>
-        </div>
-      </div>
 
-      {/* Form */}
-      <div className="bg-white rounded-lg shadow-sm border p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Correspondence Type *
-              </label>
-              <select
-                name="correspondenceType"
-                value={formData.correspondenceType}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Select Type</option>
-                {correspondenceTypes.map(type => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <HelpGuideCard
+          title="Register New Correspondence"
+          description="Capture the subject, sender, priority, and routing details before handing the memo off to the appropriate directorate or division. Upload supporting files and assign next action owners."
+          links={[
+            { label: "Correspondence Inbox", href: "/correspondence/inbox" },
+            { label: "Help & Guides", href: "/help" },
+          ]}
+        />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Reference Number
-              </label>
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  name="reference"
-                  value={formData.reference}
-                  onChange={handleInputChange}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Auto-generated"
-                />
-                <button
-                  type="button"
-                  onClick={generateReference}
-                  className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                >
-                  Generate
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Subject *
-            </label>
-            <input
-              type="text"
-              name="subject"
-              value={formData.subject}
-              onChange={handleInputChange}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter correspondence subject"
-            />
-          </div>
-
-          {/* Sender/Recipient Information */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {formData.correspondenceType === 'outward' ? 'Recipient' : 'Sender'} *
-              </label>
-              <input
-                type="text"
-                name={formData.correspondenceType === 'outward' ? 'recipient' : 'sender'}
-                value={formData.correspondenceType === 'outward' ? formData.recipient : formData.sender}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={`Enter ${formData.correspondenceType === 'outward' ? 'recipient' : 'sender'} name`}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date *
-              </label>
-              <input
-                type="date"
-                name="date"
-                value={formData.date}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          {/* Classification */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Priority *
-              </label>
-              <select
-                name="priority"
-                value={formData.priority}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {priorityOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Category *
-              </label>
-              <select
-                name="category"
-                value={formData.category}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Select Category</option>
-                {categories.map(category => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Department *
-              </label>
-              <select
-                name="department"
-                value={formData.department}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="">Select Department</option>
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description *
-            </label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleInputChange}
-              required
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter detailed description of the correspondence"
-            />
-          </div>
-
-          {/* File Attachments */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Attachments
-            </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-              <div className="text-center">
-                <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="mt-4">
-                  <label htmlFor="file-upload" className="cursor-pointer">
-                    <span className="mt-2 block text-sm font-medium text-gray-900">
-                      Upload files
-                    </span>
-                    <input
-                      id="file-upload"
-                      name="file-upload"
-                      type="file"
-                      multiple
-                      onChange={handleFileUpload}
-                      className="sr-only"
-                    />
-                  </label>
-                  <p className="mt-1 text-xs text-gray-500">
-                    PDF, DOC, DOCX, XLS, XLSX up to 10MB each
+        <form onSubmit={handleSubmit}>
+          <Card className="shadow-medium">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Correspondence Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Document Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="document" className="flex items-center gap-2">
+                  <Upload className="h-4 w-4" />
+                  Upload Document *
+                </Label>
+                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:bg-muted/50 transition-colors cursor-pointer">
+                  <Upload className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                  <p className="text-sm font-medium mb-1">
+                    Click to upload or drag and drop
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    PDF, DOC, DOCX up to 10MB
+                  </p>
+                  <input 
+                    type="file" 
+                    id="document" 
+                    className="hidden"
+                    accept=".pdf,.doc,.docx"
+                  />
                 </div>
               </div>
-            </div>
 
-            {/* Attached Files */}
-            {formData.attachments.length > 0 && (
-              <div className="mt-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Attached Files:</h4>
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* Subject */}
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="subject">Subject *</Label>
+                  <Input
+                    id="subject"
+                    placeholder="Enter correspondence subject"
+                    value={formData.subject}
+                    onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                    required
+                  />
+                </div>
+
+                {/* Sender Name */}
                 <div className="space-y-2">
-                  {formData.attachments.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <FileText className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{file.name}</p>
-                          <p className="text-xs text-gray-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                  <Label htmlFor="senderName" className="flex items-center gap-2">
+                    <UserIcon className="h-4 w-4" />
+                    Sender Name *
+                  </Label>
+                  <Input
+                    id="senderName"
+                    placeholder="Enter sender's name"
+                    value={formData.senderName}
+                    onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
+                    required
+                  />
+                </div>
+
+                {/* Sender Organization */}
+                <div className="space-y-2">
+                  <Label htmlFor="senderOrganization" className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    Sender Organization
+                  </Label>
+                  <Input
+                    id="senderOrganization"
+                    placeholder="Enter organization name"
+                    value={formData.senderOrganization}
+                    onChange={(e) => setFormData({ ...formData, senderOrganization: e.target.value })}
+                  />
+                </div>
+
+                {/* Date Received */}
+                <div className="space-y-2">
+                  <Label htmlFor="receivedDate" className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Date Received
+                  </Label>
+                  <Input
+                    id="receivedDate"
+                    type="date"
+                    value={formData.receivedDate}
+                    onChange={(e) => setFormData({ ...formData, receivedDate: e.target.value })}
+                  />
+                </div>
+
+                {/* Priority */}
+                <div className="space-y-2">
+                  <Label htmlFor="priority" className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Priority
+                  </Label>
+                  <Select
+                    value={formData.priority}
+                    onValueChange={(value) => setFormData({ ...formData, priority: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border z-50">
+                      <SelectItem value="urgent">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="destructive">Urgent</Badge>
                         </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(index)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                      </SelectItem>
+                      <SelectItem value="high">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default">High</Badge>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="normal">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">Normal</Badge>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="low">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">Low</Badge>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Assign To */}
+                <div className="space-y-2">
+                  <Label htmlFor="assignTo" className="flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Assign To *
+                  </Label>
+                  <Select
+                    value={formData.assignTo}
+                    onValueChange={(value) => {
+                      const user = executives.find(u => u.id === value);
+                      setFormData({ 
+                        ...formData, 
+                        assignTo: value,
+                        divisionId: user?.division || ''
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select executive" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border z-50">
+                      {DIRECTORATES.map(dir => {
+                        const dirExecs = executives.filter(u => {
+                          const userDiv = DIVISIONS.find(d => d.id === u.division);
+                          return userDiv?.directorateId === dir.id;
+                        });
+                        
+                        if (dirExecs.length === 0) return null;
+                        
+                        return (
+                          <div key={dir.id}>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                              {dir.name}
+                            </div>
+                            {dirExecs.map(user => {
+                              const division = DIVISIONS.find(d => d.id === user.division);
+                              return (
+                                <SelectItem key={user.id} value={user.id}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{user.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {user.systemRole} - {division?.name}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Document Type */}
+                <div className="space-y-2">
+                  <Label htmlFor="documentType">Document Type</Label>
+                  <Select
+                    value={formData.documentType}
+                    onValueChange={(value) => setFormData({ ...formData, documentType: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border z-50">
+                      <SelectItem value="letter">Letter</SelectItem>
+                      <SelectItem value="request">Request</SelectItem>
+                      <SelectItem value="complaint">Complaint</SelectItem>
+                      <SelectItem value="inquiry">Inquiry</SelectItem>
+                      <SelectItem value="report">Report</SelectItem>
+                      <SelectItem value="directive">Directive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Tags */}
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="tags">Tags (comma-separated)</Label>
+                  <Input
+                    id="tags"
+                    placeholder="e.g., infrastructure, urgent, budget"
+                    value={formData.tags}
+                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                  />
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Form Actions */}
-          <div className="flex items-center justify-between pt-6 border-t border-gray-200">
-            <div className="flex space-x-3">
-              <button
-                type="button"
-                className="inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                Save Draft
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                Preview
-              </button>
-            </div>
-            <div className="flex space-x-3">
-              <Link
-                href="/correspondence"
-                className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              {/* Preview Section */}
+              {formData.assignTo && (
+                <div className="p-4 bg-muted/50 border border-border rounded-lg">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Preview
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Reference:</span>
+                      <span className="font-medium">Auto-generated on submit</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Priority:</span>
+                      <Badge variant={
+                        formData.priority === 'urgent' ? 'destructive' :
+                        formData.priority === 'high' ? 'default' :
+                        'secondary'
+                      }>
+                        {formData.priority.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Assigned to:</span>
+                      <span className="font-medium">
+                        {executives.find(u => u.id === formData.assignTo)?.name}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Division:</span>
+                      <span className="font-medium">
+                        {DIVISIONS.find(d => d.id === formData.divisionId)?.name}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Action Buttons */}
+          <div className="flex justify-between gap-3 mt-6">
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={handleSaveDraft}
+              className="gap-2"
+            >
+              <Save className="h-4 w-4" />
+              Save Draft
+            </Button>
+            <div className="flex gap-3">
+              <Button 
+                type="button" 
+                variant="outline"
+                onClick={() => router.push('/correspondence/inbox')}
               >
                 Cancel
-              </Link>
-              <button
+              </Button>
+              <Button 
                 type="submit"
-                disabled={isSubmitting}
-                className="inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="bg-gradient-secondary hover:opacity-90 transition-opacity gap-2"
               >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Registering...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4 mr-2" />
-                    Register Correspondence
-                  </>
-                )}
-              </button>
+                <Send className="h-4 w-4" />
+                Register & Send
+              </Button>
             </div>
           </div>
         </form>
       </div>
-
-      {/* Quick Reference */}
-      <div className="bg-blue-50 rounded-lg p-6">
-        <h3 className="text-lg font-medium text-blue-900 mb-3">Quick Reference</h3>
-        <div className="text-sm text-blue-800 space-y-2">
-          <p>• <strong>Inward Correspondence:</strong> Documents received from external sources</p>
-          <p>• <strong>Outward Correspondence:</strong> Documents sent to external parties</p>
-          <p>• <strong>Internal Memo:</strong> Internal communication within NPA</p>
-          <p>• <strong>Circular:</strong> General announcements or directives</p>
-          <p>• Reference numbers are auto-generated but can be customized</p>
-          <p>• All fields marked with * are required</p>
-        </div>
-      </div>
-    </div>
+    </DashboardLayout>
   );
-}
+};
+
+export default CorrespondenceRegister;
