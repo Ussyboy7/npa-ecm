@@ -10,13 +10,16 @@ import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Download, TrendingUp, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDate } from '@/lib/correspondence-helpers';
-import { DIVISIONS } from '@/lib/npa-structure';
 
 const Reports = () => {
   const { correspondence } = useCorrespondence();
+  const { divisions } = useOrganization();
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('30');
+
+  const availableDivisions = useMemo(() => divisions ?? [], [divisions]);
 
   // Filter correspondence based on selected filters
   const filteredCorrespondence = useMemo(() => {
@@ -81,20 +84,20 @@ const Reports = () => {
 
   // Division performance data
   const divisionData = useMemo(() => {
-    return DIVISIONS.map(division => {
+    return availableDivisions.map(division => {
       const divisionCorrespondence = filteredCorrespondence.filter(c => c.divisionId === division.id);
       const completed = divisionCorrespondence.filter(c => c.status === 'completed').length;
       const total = divisionCorrespondence.length;
 
       return {
-        name: division.code,
+        name: division.code ?? division.name,
         total,
         completed,
         pending: total - completed,
         rate: total > 0 ? Math.round((completed / total) * 100) : 0,
       };
     }).filter(d => d.total > 0);
-  }, [filteredCorrespondence]);
+  }, [filteredCorrespondence, availableDivisions]);
 
   // Trend data (last 7 days)
   const trendData = useMemo(() => {
@@ -159,9 +162,9 @@ const Reports = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Divisions</SelectItem>
-                    {DIVISIONS.map(division => (
+                    {availableDivisions.map(division => (
                       <SelectItem key={division.id} value={division.id}>
-                        {division.name} ({division.code})
+                        {division.name} {division.code ? `(${division.code})` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
