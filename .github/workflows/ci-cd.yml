@@ -175,6 +175,8 @@ jobs:
     needs: build-and-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -209,7 +211,7 @@ jobs:
 
           # Test API health through Nginx
           echo 'Testing API health...'
-          curl -f http://localhost:4646/api/health/ || exit 1
+          curl -f http://localhost:4646/health || exit 1
 
           # Test frontend availability
           echo 'Testing frontend availability...'
@@ -218,7 +220,7 @@ jobs:
           echo "✅ All staging tests passed!"
 
       - name: Notify Deployment Success
-        if: success()
+        if: success() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: success
@@ -228,7 +230,7 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify Deployment Failure
-        if: failure()
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: failure
@@ -271,7 +273,7 @@ jobs:
           };
 
           export default function () {
-          let response = http.get('http://localhost:4646/api/health/');
+          let response = http.get('http://localhost:4646/health');
             check(response, {
               'status is 200': (r) => r.status === 200,
               'response time < 500ms': (r) => r.timings.duration < 500,
@@ -297,6 +299,8 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: production
     concurrency: production-deployment
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -317,6 +321,7 @@ jobs:
           echo "✅ Production deployment completed (simulated)"
 
       - name: Notify Production Deployment
+        if: env.SLACK_WEBHOOK_URL != ''
         uses: 8398a7/action-slack@v3
         with:
           status: success
