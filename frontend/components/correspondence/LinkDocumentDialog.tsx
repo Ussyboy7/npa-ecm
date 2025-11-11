@@ -17,14 +17,13 @@ import { Badge } from '@/components/ui/badge';
 import {
   DocumentRecord,
   getAccessibleDocumentsForUser,
-  initializeDmsDocuments,
-  loadDocuments,
-  getDivisionName,
-  getDepartmentName,
+  fetchDocuments,
+  getCachedDocuments,
 } from '@/lib/dms-storage';
 import { type User } from '@/lib/npa-structure';
 import { formatDate } from '@/lib/correspondence-helpers';
-import { FileText, Hash, Layers, Filter } from 'lucide-react';
+import { FileText, Hash, Layers, Filter, Calendar } from 'lucide-react';
+import { useOrganization } from '@/contexts/OrganizationContext';
 
 interface LinkDocumentDialogProps {
   open: boolean;
@@ -50,16 +49,24 @@ export const LinkDocumentDialog = ({
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(linkedDocumentIds ?? []);
-
-  useEffect(() => {
-    initializeDmsDocuments();
-  }, []);
+  const { divisions, departments } = useOrganization();
 
   useEffect(() => {
     if (!open) return;
+
     setSelectedIds(linkedDocumentIds ?? []);
-    const available = currentUser ? getAccessibleDocumentsForUser(currentUser) : loadDocuments();
-    setDocuments(available);
+
+    const load = async () => {
+      await fetchDocuments();
+      const cache = getCachedDocuments();
+      if (currentUser) {
+        setDocuments(getAccessibleDocumentsForUser(currentUser));
+      } else {
+        setDocuments(cache);
+      }
+    };
+
+    void load();
   }, [open, currentUser, linkedDocumentIds]);
 
   const filteredDocuments = useMemo(() => {
@@ -190,17 +197,28 @@ export const LinkDocumentDialog = ({
                             </div>
                             <div className="flex items-center gap-2">
                               <Layers className="h-3 w-3" />
-                              <span>{getDivisionName(doc.divisionId)}</span>
+                              <span>
+                                {doc.divisionId
+                                  ? divisions.find((division) => division.id === doc.divisionId)?.name ?? 'Unknown division'
+                                  : 'Unassigned'}
+                              </span>
                             </div>
                             <div className="flex items-center gap-2">
                               <Filter className="h-3 w-3" />
-                              <span>{getDepartmentName(doc.departmentId)}</span>
+                              <span>
+                                {doc.departmentId
+                                  ? departments.find((department) => department.id === doc.departmentId)?.name ?? 'Unknown department'
+                                  : 'Unassigned'}
+                              </span>
                             </div>
                           </div>
                           {latest && (
-                            <p className="text-xs text-muted-foreground">
-                              Updated {formatDate(doc.updatedAt)} · Version {latest.versionNumber}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-3 w-3" />
+                              <span>
+                                Updated {formatDate(doc.updatedAt)} · Version {latest.versionNumber}
+                              </span>
+                            </div>
                           )}
                         </div>
                       </div>

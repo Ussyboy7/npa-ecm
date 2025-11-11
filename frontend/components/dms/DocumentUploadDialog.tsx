@@ -18,15 +18,15 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import {
-  addDocument,
-  addDocumentVersion,
+  createDocument,
+  createDocumentVersion,
   type DocumentRecord,
-  type DocumentVersion,
   type DocumentType,
   type DocumentStatus,
   type DocumentSensitivity,
 } from '@/lib/dms-storage';
-import { DIVISIONS, DEPARTMENTS, type User } from '@/lib/npa-structure';
+import type { User } from '@/lib/npa-structure';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { RichTextEditor } from './RichTextEditor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -84,6 +84,9 @@ export const DocumentUploadDialog = ({
   document,
   onComplete,
 }: DocumentUploadDialogProps) => {
+  const { divisions, departments } = useOrganization();
+  const activeDivisions = useMemo(() => divisions.filter((division) => division.isActive !== false), [divisions]);
+  const activeDepartments = useMemo(() => departments.filter((department) => department.isActive !== false), [departments]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [documentType, setDocumentType] = useState<DocumentType>('memo');
@@ -124,9 +127,9 @@ export const DocumentUploadDialog = ({
   }, [document, open]);
 
   const filteredDepartments = useMemo(() => {
-    if (!divisionId) return DEPARTMENTS;
-    return DEPARTMENTS.filter((dept) => dept.divisionId === divisionId);
-  }, [divisionId]);
+    if (!divisionId) return activeDepartments;
+    return activeDepartments.filter((dept) => dept.divisionId === divisionId);
+  }, [activeDepartments, divisionId]);
 
   useEffect(() => {
     initializeTemplates();
@@ -222,12 +225,12 @@ export const DocumentUploadDialog = ({
     setIsSubmitting(true);
 
     try {
-      if (mode === 'create') {
-        const tags = tagsInput
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean);
+      const tags = tagsInput
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean);
 
+      if (mode === 'create') {
         let fileUrl: string | undefined;
         let fileType = '';
         let fileName = '';
@@ -239,7 +242,7 @@ export const DocumentUploadDialog = ({
           contentHtml = editorHtml;
           contentJson = editorJson;
           fileType = 'text/html';
-          fileName = `${title.trim().replace(/\s+/g, '-')}.html`;
+          fileName = `${title.trim().replace(/\s+/g, '-') || 'document'}.html`;
           const htmlFile = new File([contentHtml], fileName, { type: fileType });
           fileSize = htmlFile.size;
           fileUrl = await fileToDataUrl(htmlFile);
@@ -250,54 +253,43 @@ export const DocumentUploadDialog = ({
           fileSize = file.size;
         }
 
-        const newDocument = addDocument({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          documentType,
-          divisionId,
-          departmentId,
-          referenceNumber: referenceNumber.trim() || undefined,
-          authorId: currentUser.id,
-          status,
-          sensitivity,
-          tags,
-          versions: [
-            {
-              id: '',
-              documentId: '',
-              versionNumber: 1,
-              fileName,
-              fileType,
-              fileSize,
-              fileUrl,
-              uploadedBy: currentUser.id,
-              uploadedAt: new Date().toISOString(),
-              notes: notes.trim() || undefined,
-              contentHtml,
-              contentJson,
-            } as DocumentVersion,
-          ],
-          permissions: [
-            {
-              access: 'read',
-              divisionIds: divisionId ? [divisionId] : undefined,
-              gradeLevels: ['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3'],
-            },
-            {
-              access: 'write',
-              userIds: [currentUser.id],
-            },
-          ],
-        });
+        if (!fileUrl) {
+          toast.error('Failed to prepare file content.');
+          return;
+        }
 
-        onComplete(newDocument);
+        const created = await createDocument(
+          {
+            title: title.trim(),
+            description: description.trim() || undefined,
+            documentType,
+            status,
+            sensitivity,
+            divisionId,
+            departmentId,
+            referenceNumber: referenceNumber.trim() || undefined,
+            tags,
+            authorId: currentUser.id,
+          },
+          {
+            fileName,
+            fileType,
+            fileSize,
+            fileUrl,
+            contentHtml,
+            contentJson,
+            notes: notes.trim() || undefined,
+          },
+        );
+
+        onComplete(created);
         toast.success('Document created successfully');
         handleClose(false);
         return;
       }
 
       if (mode === 'version' && document) {
-        let fileUrl: string | undefined = undefined;
+        let fileUrl: string | undefined;
         let fileType = '';
         let fileName = '';
         let fileSize = 0;
@@ -308,7 +300,7 @@ export const DocumentUploadDialog = ({
           contentHtml = editorHtml;
           contentJson = editorJson;
           fileType = 'text/html';
-          fileName = `${document.title.trim().replace(/\s+/g, '-')}-v${document.versions.length + 1}.html`;
+          fileName = `${document.title.trim().replace(/\s+/g, '-') || 'document'}-v${document.versions.length + 1}.html`;
           const htmlFile = new File([contentHtml], fileName, { type: fileType });
           fileSize = htmlFile.size;
           fileUrl = await fileToDataUrl(htmlFile);
@@ -317,29 +309,26 @@ export const DocumentUploadDialog = ({
           fileType = file.type || 'application/octet-stream';
           fileName = file.name;
           fileSize = file.size;
-        } else {
-          toast.error('Please select a file to upload.');
+        }
+
+        if (!fileUrl) {
+          toast.error('Please select or compose a document to upload.');
           return;
         }
 
-        const updated = addDocumentVersion(document.id, {
+        const updated = await createDocumentVersion(document.id, {
           fileName,
           fileType,
           fileSize,
           fileUrl,
-          uploadedBy: currentUser.id,
-          notes: notes.trim() || undefined,
           contentHtml,
           contentJson,
+          notes: notes.trim() || undefined,
         });
 
-        if (updated) {
-          onComplete(updated);
-          toast.success('New version added');
-          handleClose(false);
-        } else {
-          toast.error('Unable to add version. Document not found.');
-        }
+        onComplete(updated);
+        toast.success('New version added');
+        handleClose(false);
       }
     } catch (error) {
       console.error(error);
@@ -358,14 +347,14 @@ export const DocumentUploadDialog = ({
   const templateTokens = useMemo(() => {
     if (!currentUser) return [];
     const division = divisionId
-      ? DIVISIONS.find((div) => div.id === divisionId)
+      ? activeDivisions.find((div) => div.id === divisionId)
       : currentUser.division
-      ? DIVISIONS.find((div) => div.id === currentUser.division)
+      ? activeDivisions.find((div) => div.id === currentUser.division)
       : undefined;
     const department = departmentId
-      ? DEPARTMENTS.find((dept) => dept.id === departmentId)
+      ? activeDepartments.find((dept) => dept.id === departmentId)
       : currentUser.department
-      ? DEPARTMENTS.find((dept) => dept.id === currentUser.department)
+      ? activeDepartments.find((dept) => dept.id === currentUser.department)
       : undefined;
 
     const today = new Date();
@@ -493,9 +482,14 @@ export const DocumentUploadDialog = ({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Unassigned</SelectItem>
-                    {DIVISIONS.map((division) => (
-                      <SelectItem key={division.id} value={division.id}>
-                        {division.name}
+                    {activeDivisions.map((division) => (
+                      <SelectItem key={division.id} value={division.id}
+                        className="flex flex-col items-start gap-1"
+                      >
+                        <span className="text-sm font-medium">{division.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {division.code ?? division.name}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

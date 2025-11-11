@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,10 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
-import { X, Building2, Users, Info, CheckCircle, MessageSquare } from 'lucide-react';
-import { DIVISIONS, DEPARTMENTS, getDivisionById, getDepartmentById } from '@/lib/npa-structure';
+import { X, Building2, Users, Info, CheckCircle, MessageSquare, Layers } from 'lucide-react';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import type { DistributionRecipient } from '@/lib/npa-structure';
 
 interface DistributionSelectorProps {
@@ -31,51 +29,103 @@ export const DistributionSelector = ({
   currentDivisionId,
   currentDepartmentId,
 }: DistributionSelectorProps) => {
-  const [selectedType, setSelectedType] = useState<'division' | 'department'>('division');
+  const { directorates, divisions, departments } = useOrganization();
+  const allDirectorates = useMemo(() => directorates, [directorates]);
+  const allDivisions = useMemo(() => divisions, [divisions]);
+  const allDepartments = useMemo(() => departments, [departments]);
+  const [selectedType, setSelectedType] = useState<'directorate' | 'division' | 'department'>('division');
   const [selectedId, setSelectedId] = useState<string>('');
   const [selectedPurpose, setSelectedPurpose] = useState<'information' | 'action' | 'comment'>('information');
 
-  // Filter out current division/department and already selected ones
-  const availableDivisions = DIVISIONS.filter(
-    div => div.active && 
-    div.id !== currentDivisionId && 
-    !selectedDistribution.some(d => d.type === 'division' && d.id === div.id)
-  );
+  const currentDirectorateId = useMemo(() => {
+    if (currentDivisionId) {
+      const currentDivision = allDivisions.find((division) => division.id === currentDivisionId);
+      if (currentDivision) return currentDivision.directorateId;
+    }
+    if (currentDepartmentId) {
+      const currentDepartment = allDepartments.find((department) => department.id === currentDepartmentId);
+      if (currentDepartment) {
+        const parentDivision = allDivisions.find((division) => division.id === currentDepartment.divisionId);
+        return parentDivision?.directorateId;
+      }
+    }
+    return undefined;
+  }, [allDepartments, allDivisions, currentDepartmentId, currentDivisionId]);
 
-  const availableDepartments = DEPARTMENTS.filter(
-    dept => dept.active && 
-    dept.id !== currentDepartmentId && 
-    !selectedDistribution.some(d => d.type === 'department' && d.id === dept.id)
-  );
+  const availableDirectorates = useMemo(() => {
+    const filtered = allDirectorates
+      .filter((dir) => dir.isActive !== false)
+      .filter((dir) => dir.id !== currentDirectorateId)
+      .filter((dir) => !selectedDistribution.some((recipient) => recipient.type === 'directorate' && recipient.id === dir.id));
+
+    if (filtered.length > 0) return filtered;
+
+    return allDirectorates
+      .filter((dir) => dir.isActive !== false)
+      .filter((dir) => !selectedDistribution.some((recipient) => recipient.type === 'directorate' && recipient.id === dir.id));
+  }, [allDirectorates, currentDirectorateId, selectedDistribution]);
+
+  const availableDivisions = useMemo(() => {
+    const filtered = allDivisions
+      .filter((division) => division.isActive !== false)
+      .filter((division) => division.id !== currentDivisionId)
+      .filter((division) => !selectedDistribution.some((recipient) => recipient.type === 'division' && recipient.id === division.id));
+
+    if (filtered.length > 0) return filtered;
+
+    return allDivisions
+      .filter((division) => division.isActive !== false)
+      .filter((division) => !selectedDistribution.some((recipient) => recipient.type === 'division' && recipient.id === division.id));
+  }, [allDivisions, currentDivisionId, selectedDistribution]);
+
+  const availableDepartments = useMemo(() => {
+    const filtered = allDepartments
+      .filter((department) => department.isActive !== false)
+      .filter((department) => department.id !== currentDepartmentId)
+      .filter((department) => !selectedDistribution.some((recipient) => recipient.type === 'department' && recipient.id === department.id));
+
+    if (filtered.length > 0) return filtered;
+
+    return allDepartments
+      .filter((department) => department.isActive !== false)
+      .filter((department) => !selectedDistribution.some((recipient) => recipient.type === 'department' && recipient.id === department.id));
+  }, [allDepartments, currentDepartmentId, selectedDistribution]);
 
   const handleAdd = () => {
     if (!selectedId) return;
 
     let name = '';
-    if (selectedType === 'division') {
-      const division = getDivisionById(selectedId);
-      name = division?.name || '';
-    } else {
-      const department = getDepartmentById(selectedId);
-      name = department?.name || '';
-    }
-
-    if (!name) return;
-
     const newRecipient: DistributionRecipient = {
       type: selectedType,
       id: selectedId,
-      name,
-      addedBy: '', // Will be set by parent component
-      addedAt: new Date().toISOString(),
+      directorateId: selectedType === 'directorate' ? selectedId : undefined,
+      divisionId: selectedType === 'division' ? selectedId : undefined,
+      departmentId: selectedType === 'department' ? selectedId : undefined,
       purpose: selectedPurpose,
     };
 
+    if (selectedType === 'directorate') {
+      name = allDirectorates.find((directorate) => directorate.id === selectedId)?.name ?? '';
+    } else if (selectedType === 'division') {
+      const division = allDivisions.find((item) => item.id === selectedId);
+      name = division?.name ?? '';
+      newRecipient.directorateId = division?.directorateId;
+    } else {
+      const department = allDepartments.find((item) => item.id === selectedId);
+      name = department?.name ?? '';
+      newRecipient.divisionId = department?.divisionId;
+      if (department?.divisionId) {
+        const parentDivision = allDivisions.find((item) => item.id === department.divisionId);
+        newRecipient.directorateId = parentDivision?.directorateId;
+      }
+    }
+
+    newRecipient.name = name;
     onDistributionChange([...selectedDistribution, newRecipient]);
     setSelectedId('');
   };
 
-  const handleRemove = (id: string, type: 'division' | 'department') => {
+  const handleRemove = (id: string, type: DistributionRecipient['type']) => {
     onDistributionChange(
       selectedDistribution.filter(d => !(d.id === id && d.type === type))
     );
@@ -119,13 +169,19 @@ export const DistributionSelector = ({
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Type</Label>
             <Select value={selectedType} onValueChange={(value) => {
-              setSelectedType(value as 'division' | 'department');
+              setSelectedType(value as 'directorate' | 'division' | 'department');
               setSelectedId('');
             }}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="directorate">
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4" />
+                    Directorate
+                  </div>
+                </SelectItem>
                 <SelectItem value="division">
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
@@ -144,26 +200,34 @@ export const DistributionSelector = ({
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">
-              {selectedType === 'division' ? 'Division' : 'Department'}
+              {selectedType === 'directorate'
+                ? 'Directorate'
+                : selectedType === 'division'
+                ? 'Division'
+                : 'Department'}
             </Label>
             <Select value={selectedId} onValueChange={setSelectedId}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder={`Select ${selectedType}`} />
               </SelectTrigger>
               <SelectContent>
-                {selectedType === 'division' ? (
-                  availableDivisions.map(div => (
-                    <SelectItem key={div.id} value={div.id}>
-                      {div.name}
-                    </SelectItem>
-                  ))
-                ) : (
-                  availableDepartments.map(dept => (
-                    <SelectItem key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </SelectItem>
-                  ))
-                )}
+                {selectedType === 'directorate'
+                  ? availableDirectorates.map((directorate) => (
+                      <SelectItem key={directorate.id} value={directorate.id}>
+                        {directorate.name}
+                      </SelectItem>
+                    ))
+                  : selectedType === 'division'
+                  ? availableDivisions.map((division) => (
+                      <SelectItem key={division.id} value={division.id}>
+                        {division.name}
+                      </SelectItem>
+                    ))
+                  : availableDepartments.map((department) => (
+                      <SelectItem key={department.id} value={department.id}>
+                        {department.name}
+                      </SelectItem>
+                    ))}
               </SelectContent>
             </Select>
           </div>
@@ -223,7 +287,9 @@ export const DistributionSelector = ({
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">
-                      {recipient.type === 'division' ? (
+                      {recipient.type === 'directorate' ? (
+                        <Layers className="h-4 w-4 text-primary" />
+                      ) : recipient.type === 'division' ? (
                         <Building2 className="h-4 w-4 text-primary" />
                       ) : (
                         <Users className="h-4 w-4 text-secondary" />
@@ -263,7 +329,7 @@ export const DistributionSelector = ({
         <Card className="border-dashed">
           <CardContent className="p-4 text-center">
             <p className="text-sm text-muted-foreground">
-              No distribution recipients added yet. Add divisions or departments to CC.
+              No distribution recipients added yet. Add directorates, divisions, or departments to CC.
             </p>
           </CardContent>
         </Card>

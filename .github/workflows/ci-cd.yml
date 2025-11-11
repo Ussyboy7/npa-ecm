@@ -207,13 +207,13 @@ jobs:
         run: |
           echo "🧪 Running staging environment tests"
 
-          # Test backend health
-          echo 'Testing backend health...'
-          curl -f http://localhost:8001/api/health/ || exit 1
+          # Test API health through Nginx
+          echo 'Testing API health...'
+          curl -f http://localhost:4646/api/health/ || exit 1
 
-          # Test frontend health
-          echo 'Testing frontend health...'
-          curl -f http://localhost:4646/api/health || exit 1
+          # Test frontend availability
+          echo 'Testing frontend availability...'
+          curl -f http://localhost:4646 || exit 1
 
           echo "✅ All staging tests passed!"
 
@@ -271,7 +271,7 @@ jobs:
           };
 
           export default function () {
-            let response = http.get('http://localhost:4646/api/health');
+          let response = http.get('http://localhost:4646/api/health/');
             check(response, {
               'status is 200': (r) => r.status === 200,
               'response time < 500ms': (r) => r.timings.duration < 500,

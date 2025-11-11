@@ -5,7 +5,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { MOCK_USERS } from '@/lib/npa-structure';
 import { toast } from 'sonner';
 
 interface DelegateModalProps {
@@ -23,7 +22,7 @@ export const DelegateModal = ({
   executiveId,
   onDelegate,
 }: DelegateModalProps) => {
-  const { assistantAssignments } = useOrganization();
+  const { assistantAssignments, users } = useOrganization();
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');
 
@@ -31,7 +30,7 @@ export const DelegateModal = ({
   const availableAssistants = assistantAssignments
     .filter(assignment => assignment.executiveId === executiveId)
     .map(assignment => {
-      const user = MOCK_USERS.find(u => u.id === assignment.assistantId);
+      const user = users.find(u => u.id === assignment.assistantId);
       return {
         ...assignment,
         userName: user?.name || 'Unknown User',

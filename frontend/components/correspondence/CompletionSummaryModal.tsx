@@ -18,10 +18,11 @@ import {
   Network
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { type Correspondence, type Minute, MOCK_USERS, getDivisionById, getDepartmentById } from '@/lib/npa-structure';
+import { type Correspondence, type Minute, getDivisionById, getDepartmentById } from '@/lib/npa-structure';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
+import { useOrganization } from '@/contexts/OrganizationContext';
 
 interface CompletionSummaryModalProps {
   open: boolean;
@@ -36,9 +37,10 @@ export const CompletionSummaryModal = ({
   correspondence,
   minutes 
 }: CompletionSummaryModalProps) => {
-  const { updateCorrespondence } = useCorrespondence();
+  const { updateCorrespondence, syncFromApi } = useCorrespondence();
   const { currentUser } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
+  const { users } = useOrganization();
   const [isEditing, setIsEditing] = useState(false);
   const [summary, setSummary] = useState(generateAutoSummary(correspondence, minutes));
   const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>(
@@ -59,8 +61,8 @@ export const CompletionSummaryModal = ({
   }, [allowedArchiveLevels, archiveLevel]);
 
   const stakeholders = minutes.reduce((acc, minute) => {
-    if (!acc.find(s => s.id === minute.userId)) {
-      const user = MOCK_USERS.find(u => u.id === minute.userId);
+    if (!acc.find((s) => s.id === minute.userId)) {
+      const user = users.find((u) => u.id === minute.userId);
       acc.push({ id: minute.userId, name: user?.name || 'Unknown User', role: minute.gradeLevel });
     }
     return acc;
@@ -74,24 +76,32 @@ export const CompletionSummaryModal = ({
     );
   };
 
-  const handleSendSummary = () => {
+  const handleSendSummary = async () => {
     if (selectedStakeholders.length === 0) {
       toast.error('Please select at least one stakeholder');
       return;
     }
 
-    // Mark correspondence as archived with selected archive level
-    updateCorrespondence(correspondence.id, {
-      status: 'archived',
-      archiveLevel: archiveLevel,
-    });
+    try {
+      await updateCorrespondence(correspondence.id, {
+        status: 'archived',
+        archiveLevel: archiveLevel,
+      });
 
-    const levelName = archiveLevel === 'department' ? 'Department' : archiveLevel === 'division' ? 'Division' : 'Directorate';
-    toast.success('Correspondence archived successfully', {
-      description: `Archived at ${levelName} level. Summary sent to ${selectedStakeholders.length} stakeholder(s)`
-    });
+      await syncFromApi();
 
-    onOpenChange(false);
+      const levelName = archiveLevel === 'department' ? 'Department' : archiveLevel === 'division' ? 'Division' : 'Directorate';
+      toast.success('Correspondence archived successfully', {
+        description: `Archived at ${levelName} level. Summary sent to ${selectedStakeholders.length} stakeholder(s)`
+      });
+
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Failed to archive correspondence', error);
+      toast.error('Unable to archive correspondence', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    }
   };
 
   const handleExportPDF = () => {

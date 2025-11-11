@@ -22,9 +22,10 @@ import {
   createTemplate,
   deleteTemplate,
 } from '@/lib/template-storage';
-import { DIRECTORATES, DIVISIONS, DEPARTMENTS, MOCK_USERS, type User } from '@/lib/npa-structure';
 import { Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useCurrentUser } from '@/hooks/use-current-user';
 
 const scopeOrder: TemplateScope[] = ['organization', 'directorate', 'division', 'department', 'user'];
 
@@ -44,9 +45,6 @@ const scopeLabelSingular: Record<TemplateScope, string> = {
   user: 'User',
 };
 
-const getUsersForPersonalTemplates = () =>
-  MOCK_USERS.filter((user) => user.systemRole !== 'Super Admin');
-
 const templateCategoryOrder: TemplateType[] = ['document', 'minute'];
 
 const templateTypeLabel: Record<TemplateType, string> = {
@@ -55,6 +53,8 @@ const templateTypeLabel: Record<TemplateType, string> = {
 };
 
 const TemplatesAdminPage = () => {
+  const { directorates, divisions, departments, users: organizationUsers, isSyncing } = useOrganization();
+  const { currentUser, hydrated: userHydrated } = useCurrentUser();
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [activeScope, setActiveScope] = useState<TemplateScope>('organization');
   const [selectedScopeId, setSelectedScopeId] = useState<string | null>(null);
@@ -63,8 +63,12 @@ const TemplatesAdminPage = () => {
   const [description, setDescription] = useState('');
   const [contentHtml, setContentHtml] = useState('');
   const [activeTemplateType, setActiveTemplateType] = useState<TemplateType>('document');
-  const [currentUser] = useState<User | null>(() => MOCK_USERS.find((user) => user.systemRole === 'Super Admin') ?? null);
   const { toast } = useToast();
+
+  const personalTemplateUsers = useMemo(
+    () => organizationUsers.filter((user) => user.systemRole !== 'Super Admin'),
+    [organizationUsers],
+  );
 
   const refreshTemplates = () => {
     const loaded = loadTemplates();
@@ -101,17 +105,61 @@ const scopedTemplates = useMemo(() => {
       case 'organization':
         return [{ id: 'org', name: 'All Directorates', shortName: 'NPA' }];
       case 'directorate':
-        return DIRECTORATES.map((dir) => ({ id: dir.id, name: dir.name, shortName: dir.shortName ?? dir.name }));
+        return directorates.map((dir) => ({
+          id: dir.id,
+          name: dir.name,
+          shortName: dir.code ?? dir.name,
+        }));
       case 'division':
-        return DIVISIONS.map((div) => ({ id: div.id, name: div.name, shortName: div.shortName ?? div.name }));
+        return divisions.map((div) => ({
+          id: div.id,
+          name: div.name,
+          shortName: div.code ?? div.name,
+        }));
       case 'department':
-        return DEPARTMENTS.map((dept) => ({ id: dept.id, name: dept.name, shortName: dept.shortName ?? dept.name }));
+        return departments.map((dept) => ({
+          id: dept.id,
+          name: dept.name,
+          shortName: dept.code ?? dept.name,
+        }));
       case 'user':
-        return getUsersForPersonalTemplates().map((user) => ({ id: user.id, name: user.name, shortName: user.systemRole ?? user.gradeLevel }));
+        return personalTemplateUsers.map((user) => ({
+          id: user.id,
+          name: user.name,
+          shortName: user.systemRole || user.gradeLevel,
+        }));
       default:
         return [];
     }
-  }, [activeScope]);
+  }, [activeScope, departments, directorates, divisions, personalTemplateUsers]);
+
+  if (!userHydrated || isSyncing) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <Card className="shadow-soft">
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              Loading templates…
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <HelpGuideCard
+            title="Select a persona"
+            description="Use the Role Switcher to choose a user context before managing templates."
+            links={[{ label: 'Role Switcher', href: '/settings' }]}
+          />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   useEffect(() => {
     if (activeScope === 'organization') {

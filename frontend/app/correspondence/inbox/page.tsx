@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,66 +10,62 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Mail, 
-  Search, 
-  Calendar,
+import {
+  Mail,
+  Search,
   User as UserIcon,
   ArrowDown,
   ArrowUp,
   Clock,
-  AlertCircle
+  AlertCircle,
 } from 'lucide-react';
-import { MOCK_CORRESPONDENCE, MOCK_USERS, getDivisionById, type User as NPAUser, type Correspondence } from '@/lib/npa-structure';
 import { formatDateShort } from '@/lib/correspondence-helpers';
-import Link from 'next/link';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Correspondence } from '@/lib/npa-structure';
 
 const CorrespondenceInbox = () => {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<NPAUser | null>(null);
+  const { correspondence, syncFromApi } = useCorrespondence();
+  const { currentUser } = useCurrentUser();
+  const { divisions, users: organizationUsers } = useOrganization();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredCorrespondence, setFilteredCorrespondence] = useState<Correspondence[]>([]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    let savedUserId = localStorage.getItem('npa_demo_user_id');
-    
-    // If no user is saved, default to MD
-    if (!savedUserId) {
-      const md = MOCK_USERS.find(u => u.gradeLevel === 'MDCS');
-      if (md) {
-        savedUserId = md.id;
-        localStorage.setItem('npa_demo_user_id', md.id);
-      }
-    }
-    
-    if (savedUserId) {
-      const user = MOCK_USERS.find(u => u.id === savedUserId);
-      if (user) {
-        setCurrentUser(user);
-        // Show all correspondence for demo purposes
-        setFilteredCorrespondence(MOCK_CORRESPONDENCE);
-      }
-    }
-  }, []);
+    void syncFromApi();
+  }, [syncFromApi]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
-
-    if (!query.trim()) {
-      setFilteredCorrespondence(MOCK_CORRESPONDENCE);
-      return;
-    }
-
-    const filtered = MOCK_CORRESPONDENCE.filter(c =>
-      c.subject.toLowerCase().includes(query.toLowerCase()) ||
-      c.referenceNumber.toLowerCase().includes(query.toLowerCase()) ||
-      c.senderName.toLowerCase().includes(query.toLowerCase())
-    );
-    setFilteredCorrespondence(filtered);
   };
+
+  const filteredCorrespondence = useMemo(() => {
+    const list = correspondence;
+    if (!searchQuery.trim()) return list;
+    const lowered = searchQuery.toLowerCase();
+    return list.filter((item) =>
+      item.subject.toLowerCase().includes(lowered) ||
+      item.referenceNumber.toLowerCase().includes(lowered) ||
+      item.senderName.toLowerCase().includes(lowered),
+    );
+  }, [correspondence, searchQuery]);
+
+  const assignedToUser = useMemo(() => {
+    if (!currentUser) return filteredCorrespondence;
+    return filteredCorrespondence.filter((item) => item.currentApproverId === currentUser.id);
+  }, [filteredCorrespondence, currentUser]);
+
+  const createdByUser = useMemo(() => {
+    if (!currentUser) return [];
+    return filteredCorrespondence.filter((item) => item.createdById === currentUser.id);
+  }, [filteredCorrespondence, currentUser]);
+
+  const pending = useMemo(() => filteredCorrespondence.filter((item) => item.status === 'pending'), [filteredCorrespondence]);
+  const inProgress = useMemo(() => filteredCorrespondence.filter((item) => item.status === 'in-progress'), [filteredCorrespondence]);
+  const completed = useMemo(() => filteredCorrespondence.filter((item) => item.status === 'completed'), [filteredCorrespondence]);
+  const archived = useMemo(() => filteredCorrespondence.filter((item) => item.status === 'archived'), [filteredCorrespondence]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -84,15 +81,17 @@ const CorrespondenceInbox = () => {
     switch (priority) {
       case 'urgent': return 'destructive';
       case 'high': return 'default';
-      case 'normal': return 'secondary';
+      case 'medium': return 'secondary';
       case 'low': return 'outline';
       default: return 'secondary';
     }
   };
 
   const CorrespondenceCard = ({ corr }: { corr: Correspondence }) => {
-    const division = getDivisionById(corr.divisionId);
-    const currentApprover = corr.currentApproverId ? MOCK_USERS.find(u => u.id === corr.currentApproverId) : null;
+    const division = corr.divisionId ? divisions.find((div) => div.id === corr.divisionId) : undefined;
+    const currentApprover = corr.currentApproverId
+      ? organizationUsers.find((user) => user.id === corr.currentApproverId)
+      : undefined;
 
     return (
       <Link
@@ -180,11 +179,6 @@ const CorrespondenceInbox = () => {
     );
   };
 
-  const filterByStatus = (status: string) => {
-    if (status === 'all') return filteredCorrespondence;
-    return filteredCorrespondence.filter(c => c.status === status);
-  };
-
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
@@ -240,19 +234,14 @@ const CorrespondenceInbox = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="all" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="all">
-              All ({filteredCorrespondence.length})
-            </TabsTrigger>
-            <TabsTrigger value="pending">
-              Pending ({filterByStatus('pending').length})
-            </TabsTrigger>
-            <TabsTrigger value="in-progress">
-              In Progress ({filterByStatus('in-progress').length})
-            </TabsTrigger>
-            <TabsTrigger value="completed">
-              Completed ({filterByStatus('completed').length})
-            </TabsTrigger>
+          <TabsList className="flex flex-wrap gap-2">
+            <TabsTrigger value="all">All ({filteredCorrespondence.length})</TabsTrigger>
+            <TabsTrigger value="assigned">Assigned to Me ({assignedToUser.length})</TabsTrigger>
+            <TabsTrigger value="created">Registered by Me ({createdByUser.length})</TabsTrigger>
+            <TabsTrigger value="pending">Pending ({pending.length})</TabsTrigger>
+            <TabsTrigger value="in-progress">In Progress ({inProgress.length})</TabsTrigger>
+            <TabsTrigger value="completed">Completed ({completed.length})</TabsTrigger>
+            <TabsTrigger value="archived">Archived ({archived.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="space-y-3">
@@ -264,28 +253,48 @@ const CorrespondenceInbox = () => {
                 </CardContent>
               </Card>
             ) : (
-              filteredCorrespondence.map(corr => (
-                <CorrespondenceCard key={corr.id} corr={corr} />
-              ))
+              filteredCorrespondence.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)
+            )}
+          </TabsContent>
+
+          <TabsContent value="assigned" className="space-y-3">
+            {assignedToUser.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12 text-sm text-muted-foreground">
+                  You have no correspondence awaiting your action.
+                </CardContent>
+              </Card>
+            ) : (
+              assignedToUser.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)
+            )}
+          </TabsContent>
+
+          <TabsContent value="created" className="space-y-3">
+            {createdByUser.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12 text-sm text-muted-foreground">
+                  You haven't registered any correspondence yet.
+                </CardContent>
+              </Card>
+            ) : (
+              createdByUser.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)
             )}
           </TabsContent>
 
           <TabsContent value="pending" className="space-y-3">
-            {filterByStatus('pending').map(corr => (
-              <CorrespondenceCard key={corr.id} corr={corr} />
-            ))}
+            {pending.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)}
           </TabsContent>
 
           <TabsContent value="in-progress" className="space-y-3">
-            {filterByStatus('in-progress').map(corr => (
-              <CorrespondenceCard key={corr.id} corr={corr} />
-            ))}
+            {inProgress.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)}
           </TabsContent>
 
           <TabsContent value="completed" className="space-y-3">
-            {filterByStatus('completed').map(corr => (
-              <CorrespondenceCard key={corr.id} corr={corr} />
-            ))}
+            {completed.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)}
+          </TabsContent>
+
+          <TabsContent value="archived" className="space-y-3">
+            {archived.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)}
           </TabsContent>
         </Tabs>
       </div>

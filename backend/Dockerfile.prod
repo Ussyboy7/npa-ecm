@@ -1,53 +1,22 @@
-# DMS Backend Dockerfile (Production)
-FROM python:3.11-slim
+FROM python:3.13-slim as base
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV DJANGO_ENV=production
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_ENV=prod
 
-# Set work directory
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        gcc \
-        g++ \
-        postgresql-client \
-        libpq-dev \
-        libmagic1 \
+    && apt-get install -y --no-install-recommends build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt .
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+    && pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Copy project
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p /app/media /app/staticfiles /app/logs
-
-# Collect static files
 RUN python manage.py collectstatic --noinput
 
-# Create non-root user
-RUN adduser --disabled-password --gecos '' dmsuser \
-    && chown -R dmsuser:dmsuser /app
-
-USER dmsuser
-
-# Expose port
-EXPOSE 8000
-
-# Run with gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120", "dms.wsgi:application"]
-
-
-
-
-
-
+CMD ["gunicorn", "ecm_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
 

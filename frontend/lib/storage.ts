@@ -125,34 +125,6 @@ export const clearAllData = () => {
   });
 };
 
-// Initialize data from mock data
-export const initializeFromMockData = (correspondence: Correspondence[], minutes: Minute[]) => {
-  const existingCorrespondence = loadCorrespondence() || [];
-  const existingMinutes = loadMinutes() || [];
-  
-  // Merge mock data with existing data, keeping existing and adding new
-  const mergedCorrespondence = [...existingCorrespondence];
-  const mergedMinutes = [...existingMinutes];
-  
-  // Add new correspondence that doesn't exist
-  correspondence.forEach(corr => {
-    if (!mergedCorrespondence.find(c => c.id === corr.id)) {
-      mergedCorrespondence.push(corr);
-    }
-  });
-  
-  // Add new minutes that don't exist
-  minutes.forEach(minute => {
-    if (!mergedMinutes.find(m => m.id === minute.id)) {
-      mergedMinutes.push(minute);
-    }
-  });
-  
-  // Save merged data
-  saveCorrespondence(mergedCorrespondence);
-  saveMinutes(mergedMinutes);
-};
-
 // Minute templates
 
 export type MinuteTemplate = {

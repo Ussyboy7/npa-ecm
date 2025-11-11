@@ -1,31 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { DIRECTORATES, DIVISIONS, DEPARTMENTS, MOCK_USERS, type User } from '@/lib/npa-structure';
-
-const ORG_DATA_VERSION = '2025-02-admin-refresh';
-const STORAGE_KEY = 'npa_organization';
-const DIRECTORATES_KEY = `${STORAGE_KEY}_directorates`;
-const DIVISIONS_KEY = `${STORAGE_KEY}_divisions`;
-const DEPARTMENTS_KEY = `${STORAGE_KEY}_departments`;
-const ASSIGNMENTS_KEY = `${STORAGE_KEY}_assignments`;
-
-let storagePrepared = false;
-
-const prepareStorage = () => {
-  if (storagePrepared || typeof window === 'undefined') return;
-  const storedVersion = localStorage.getItem(`${STORAGE_KEY}_version`);
-  if (storedVersion !== ORG_DATA_VERSION) {
-    localStorage.removeItem(DIRECTORATES_KEY);
-    localStorage.removeItem(DIVISIONS_KEY);
-    localStorage.removeItem(DEPARTMENTS_KEY);
-    localStorage.removeItem(ASSIGNMENTS_KEY);
-  }
-  storagePrepared = true;
-};
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import type { User } from '@/lib/npa-structure';
+import { updateOrganizationCache } from '@/lib/npa-structure';
+import { apiFetch, hasTokens } from '@/lib/api-client';
+import { useCurrentUser } from '@/hooks/use-current-user';
 
 export interface Directorate {
   id: string;
   name: string;
   code: string;
+  description?: string;
   executiveDirectorId?: string;
   isActive: boolean;
 }
@@ -35,7 +18,7 @@ export interface Division {
   name: string;
   code: string;
   directorateId: string;
-  generalManagerId: string;
+  generalManagerId?: string | null;
   isActive: boolean;
 }
 
@@ -44,7 +27,7 @@ export interface Department {
   name: string;
   code: string;
   divisionId: string;
-  assistantGeneralManagerId?: string;
+  assistantGeneralManagerId?: string | null;
   isActive: boolean;
 }
 
@@ -63,262 +46,512 @@ interface OrganizationContextType {
   departments: Department[];
   assistantAssignments: AssistantAssignment[];
   users: User[];
-  addDirectorate: (directorate: Omit<Directorate, 'id'>) => void;
-  updateDirectorate: (id: string, updates: Partial<Directorate>) => void;
-  deleteDirectorate: (id: string) => void;
-  addDivision: (division: Omit<Division, 'id'>) => void;
-  updateDivision: (id: string, updates: Partial<Division>) => void;
-  deleteDivision: (id: string) => void;
-  addDepartment: (department: Omit<Department, 'id'>) => void;
-  updateDepartment: (id: string, updates: Partial<Department>) => void;
-  deleteDepartment: (id: string) => void;
+  addDirectorate: (directorate: CreateDirectorateInput) => Promise<Directorate>;
+  updateDirectorate: (id: string, updates: UpdateDirectorateInput) => Promise<Directorate | null>;
+  deleteDirectorate: (id: string) => Promise<Directorate | null>;
+  addDivision: (division: CreateDivisionInput) => Promise<Division>;
+  updateDivision: (id: string, updates: UpdateDivisionInput) => Promise<Division | null>;
+  deleteDivision: (id: string) => Promise<Division | null>;
+  addDepartment: (department: CreateDepartmentInput) => Promise<Department>;
+  updateDepartment: (id: string, updates: UpdateDepartmentInput) => Promise<Department | null>;
+  deleteDepartment: (id: string) => Promise<Department | null>;
   addAssignment: (assignment: Omit<AssistantAssignment, 'id'>) => void;
   updateAssignment: (id: string, updates: Partial<AssistantAssignment>) => void;
   deleteAssignment: (id: string) => void;
   resetOrganizationData: () => void;
+  refreshOrganizationData: () => Promise<void>;
+  isSyncing: boolean;
+  updateUser: (id: string, updates: UpdateUserInput) => Promise<User>;
 }
 
-const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
+type CreateDirectorateInput = {
+  name: string;
+  code: string;
+  description?: string;
+  executiveDirectorId?: string | null;
+  isActive?: boolean;
+};
 
-const getBaseDirectorates = (): Directorate[] =>
-  DIRECTORATES.map((dir) => ({
-    id: dir.id,
-    name: dir.name,
-    code: dir.code || `DIR-${dir.id.toUpperCase()}`,
-    executiveDirectorId: dir.executiveDirectorId || '',
-    isActive: dir.active,
-  }));
+type UpdateDirectorateInput = Partial<CreateDirectorateInput>;
 
-const getBaseDivisions = (): Division[] =>
-  DIVISIONS.map((div) => ({
-    id: div.id,
-    name: div.name,
-    code: div.code || `DIV-${div.id}`,
-    directorateId: div.directorateId,
-    generalManagerId: div.generalManagerId || '',
-    isActive: div.active,
-  }));
+type CreateDivisionInput = {
+  name: string;
+  code: string;
+  directorateId: string;
+  generalManagerId?: string | null;
+  isActive?: boolean;
+};
 
-const getBaseDepartments = (): Department[] =>
-  DEPARTMENTS.map((dept) => ({
-    id: dept.id,
-    name: dept.name,
-    code: dept.code || `DEPT-${dept.id}`,
-    divisionId: dept.divisionId,
-    assistantGeneralManagerId: dept.assistantGeneralManagerId || '',
-    isActive: dept.active,
-  }));
+type UpdateDivisionInput = Partial<CreateDivisionInput>;
 
-const getBaseAssignments = (): AssistantAssignment[] => [
-  { id: 'assign-1', executiveId: 'user-md', assistantId: 'user-officer-dev', type: 'TA', specialization: 'Finance', permissions: ['view', 'draft', 'schedule'] },
-  { id: 'assign-2', executiveId: 'user-md', assistantId: 'user-officer-support', type: 'PA', permissions: ['view', 'schedule', 'coordinate'] },
-];
+type CreateDepartmentInput = {
+  name: string;
+  code: string;
+  divisionId: string;
+  assistantGeneralManagerId?: string | null;
+  isActive?: boolean;
+};
 
-const mergeDirectorates = (base: Directorate[], stored: Directorate[]) => {
-  const baseMap = new Map(base.map((item) => [item.id, item]));
-  const merged: Directorate[] = stored.map((storedItem) => {
-    const baseItem = baseMap.get(storedItem.id);
-    if (!baseItem) {
-      return storedItem;
+type UpdateDepartmentInput = Partial<CreateDepartmentInput>;
+type UpdateUserInput = {
+  systemRole?: string | null;
+  gradeLevel?: string | null;
+  directorateId?: string | null;
+  divisionId?: string | null;
+  departmentId?: string | null;
+  isActive?: boolean;
+  email?: string;
+  employeeId?: string | null;
+};
+
+export const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
+
+const unwrapResults = <T,>(payload: unknown): T[] => {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === 'object' && 'results' in payload) {
+    const results = (payload as { results?: unknown }).results;
+    if (Array.isArray(results)) return results as T[];
+  }
+  return [];
+};
+
+const normalizeId = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'object') {
+    if ('id' in (value as Record<string, unknown>)) {
+      return normalizeId((value as Record<string, unknown>).id);
     }
-    baseMap.delete(storedItem.id);
-    return {
-      ...baseItem,
-      isActive: storedItem.isActive ?? baseItem.isActive,
-      executiveDirectorId: storedItem.executiveDirectorId || baseItem.executiveDirectorId,
-    };
-  });
-
-  baseMap.forEach((item) => merged.push(item));
-  return merged;
-};
-
-const mergeDivisions = (base: Division[], stored: Division[]) => {
-  const baseMap = new Map(base.map((item) => [item.id, item]));
-  const merged: Division[] = stored.map((storedItem) => {
-    const baseItem = baseMap.get(storedItem.id);
-    if (!baseItem) {
-      return storedItem;
+    if ('pk' in (value as Record<string, unknown>)) {
+      return normalizeId((value as Record<string, unknown>).pk);
     }
-    baseMap.delete(storedItem.id);
-    return {
-      ...baseItem,
-      code: storedItem.code || baseItem.code,
-      directorateId: storedItem.directorateId || baseItem.directorateId,
-      generalManagerId: storedItem.generalManagerId || baseItem.generalManagerId,
-      isActive: storedItem.isActive ?? baseItem.isActive,
-    };
-  });
-
-  baseMap.forEach((item) => merged.push(item));
-  return merged;
+  }
+  return String(value);
 };
 
-const mergeDepartments = (base: Department[], stored: Department[]) => {
-  const baseMap = new Map(base.map((item) => [item.id, item]));
-  const merged: Department[] = stored.map((storedItem) => {
-    const baseItem = baseMap.get(storedItem.id);
-    if (!baseItem) {
-      return storedItem;
+const mapApiUserToUser = (user: any): User => {
+  const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim();
+  return {
+    id: String(user.id ?? user.username),
+    username: user.username ?? undefined,
+    name: fullName.length > 0 ? fullName : user.username ?? 'User',
+    email: user.email ?? '',
+    employeeId: user.employee_id ?? '',
+    gradeLevel: user.grade_level ?? '',
+    directorate: normalizeId(user.directorate ?? user.directorate_id),
+    division: normalizeId(user.division ?? user.division_id),
+    department: normalizeId(user.department ?? user.department_id),
+    systemRole: user.system_role ?? '',
+    avatar: undefined,
+    active: user.is_active ?? true,
+  };
+};
+
+const mapApiDirectorate = (item: any): Directorate => ({
+  id: String(item.id),
+  name: item.name ?? 'Directorate',
+  code: item.code ?? `DIR-${String(item.id).slice(0, 6).toUpperCase()}`,
+  description: item.description ?? '',
+  executiveDirectorId: normalizeId(item.executive_director ?? item.executive_director_id),
+  isActive: item.is_active ?? true,
+});
+
+const mapApiDivision = (item: any): Division => ({
+  id: String(item.id),
+  name: item.name ?? 'Division',
+  code: item.code ?? `DIV-${String(item.id).slice(0, 6).toUpperCase()}`,
+  directorateId: normalizeId(item.directorate ?? item.directorate_id) ?? '',
+  generalManagerId:
+    item.general_manager === null || item.general_manager === undefined
+      ? item.general_manager
+      : String(item.general_manager ?? item.general_manager_id ?? ''),
+  isActive: item.is_active ?? true,
+});
+
+const mapApiDepartment = (item: any): Department => ({
+  id: String(item.id),
+  name: item.name ?? 'Department',
+  code: item.code ?? `DEPT-${String(item.id).slice(0, 6).toUpperCase()}`,
+  divisionId: normalizeId(item.division ?? item.division_id) ?? '',
+  assistantGeneralManagerId:
+    item.head_of_department === null || item.head_of_department === undefined
+      ? item.head_of_department
+      : String(item.head_of_department ?? item.head_of_department_id ?? ''),
+  isActive: item.is_active ?? true,
+});
+
+const mapApiDelegation = (item: any): AssistantAssignment => {
+  const permissions: string[] = [];
+  if (item.can_minute) permissions.push('minute');
+  if (item.can_forward) permissions.push('forward');
+  if (item.can_approve) permissions.push('approve');
+
+  return {
+    id: String(item.id),
+    executiveId: item.principal_id ?? item.principal?.id ?? '',
+    assistantId: item.assistant_id ?? item.assistant?.id ?? '',
+    type: item.can_approve ? 'TA' : 'PA',
+    specialization: undefined,
+    permissions: permissions.length > 0 ? permissions : ['view'],
+  };
+};
+
+const cleanPayload = (payload: Record<string, unknown>) =>
+  Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined)
+  );
+
+const sortByName = <T extends { name: string }>(items: T[]) =>
+  [...items].sort((a, b) => a.name.localeCompare(b.name));
+
+const upsertById = <T extends { id: string }>(items: T[], item: T, comparator?: (items: T[]) => T[]): T[] => {
+  const next = items.some((existing) => existing.id === item.id)
+    ? items.map((existing) => (existing.id === item.id ? item : existing))
+    : [...items, item];
+
+  return comparator ? comparator(next) : next;
+};
+
+const isCanonicalUser = (user: User): boolean => {
+  const username = user.username ?? "";
+  if (!username) return true;
+  if (username === "superadmin") return true;
+  return username.startsWith("user-");
+};
+
+const userDetailScore = (user: User): number => {
+  let score = 0;
+  if (user.division) score += 2;
+  if (user.department) score += 1;
+  if (user.systemRole) score += 1;
+  return score;
+};
+
+const dedupeUsers = (incoming: User[]): User[] => {
+  const byEmail = new Map<string, User>();
+
+  for (const user of incoming) {
+    const key = (user.email || user.id).toLowerCase();
+    const existing = byEmail.get(key);
+
+    if (!existing) {
+      byEmail.set(key, user);
+      continue;
     }
-    baseMap.delete(storedItem.id);
-    return {
-      ...baseItem,
-      code: storedItem.code || baseItem.code,
-      divisionId: storedItem.divisionId || baseItem.divisionId,
-      assistantGeneralManagerId: storedItem.assistantGeneralManagerId || baseItem.assistantGeneralManagerId,
-      isActive: storedItem.isActive ?? baseItem.isActive,
-    };
-  });
 
-  baseMap.forEach((item) => merged.push(item));
-  return merged;
-};
+    const existingCanonical = isCanonicalUser(existing);
+    const candidateCanonical = isCanonicalUser(user);
 
-const initializeDirectorates = (): Directorate[] => {
-  if (typeof window === 'undefined') {
-    return getBaseDirectorates();
+    if (candidateCanonical && !existingCanonical) {
+      byEmail.set(key, user);
+      continue;
+    }
+
+    if (candidateCanonical === existingCanonical) {
+      const existingScore = userDetailScore(existing);
+      const candidateScore = userDetailScore(user);
+      if (candidateScore > existingScore) {
+        byEmail.set(key, user);
+      }
+    }
   }
 
-  prepareStorage();
-  const storedRaw = localStorage.getItem(DIRECTORATES_KEY);
-  const base = getBaseDirectorates();
-  if (!storedRaw) return base;
-  try {
-    const stored = JSON.parse(storedRaw) as Directorate[];
-    return mergeDirectorates(base, stored);
-  } catch (error) {
-    console.warn('Failed to parse stored directorates. Using base data.', error);
-    return base;
-  }
-};
-
-const initializeDivisions = (): Division[] => {
-  if (typeof window === 'undefined') {
-    return getBaseDivisions();
-  }
-
-  prepareStorage();
-  const storedRaw = localStorage.getItem(DIVISIONS_KEY);
-  const base = getBaseDivisions();
-  if (!storedRaw) return base;
-  try {
-    const stored = JSON.parse(storedRaw) as Division[];
-    return mergeDivisions(base, stored);
-  } catch (error) {
-    console.warn('Failed to parse stored divisions. Using base data.', error);
-    return base;
-  }
-};
-
-const initializeDepartments = (): Department[] => {
-  if (typeof window === 'undefined') {
-    return getBaseDepartments();
-  }
-
-  prepareStorage();
-  const storedRaw = localStorage.getItem(DEPARTMENTS_KEY);
-  const base = getBaseDepartments();
-  if (!storedRaw) return base;
-  try {
-    const stored = JSON.parse(storedRaw) as Department[];
-    return mergeDepartments(base, stored);
-  } catch (error) {
-    console.warn('Failed to parse stored departments. Using base data.', error);
-    return base;
-  }
-};
-
-const initializeAssignments = (): AssistantAssignment[] => {
-  if (typeof window === 'undefined') {
-    return getBaseAssignments();
-  }
-
-  prepareStorage();
-  const storedRaw = localStorage.getItem(ASSIGNMENTS_KEY);
-  if (!storedRaw) return getBaseAssignments();
-  try {
-    return JSON.parse(storedRaw) as AssistantAssignment[];
-  } catch (error) {
-    console.warn('Failed to parse stored assistant assignments. Using base data.', error);
-    return getBaseAssignments();
-  }
+  return sortByName(Array.from(byEmail.values()));
 };
 
 export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [directorates, setDirectorates] = useState<Directorate[]>(initializeDirectorates);
-  const [divisions, setDivisions] = useState<Division[]>(initializeDivisions);
-  const [departments, setDepartments] = useState<Department[]>(initializeDepartments);
-  const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>(initializeAssignments);
+  const [directorates, setDirectorates] = useState<Directorate[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [hasSynced, setHasSynced] = useState(false);
+  const { currentUser, hydrated } = useCurrentUser();
+
+  const applyDirectorateUpdate = useCallback(
+    (directorate: Directorate) => {
+      setDirectorates((prev) => {
+        const next = upsertById(prev, directorate, sortByName);
+        updateOrganizationCache({ directorates: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const applyDivisionUpdate = useCallback(
+    (division: Division) => {
+      setDivisions((prev) => {
+        const next = upsertById(prev, division, sortByName);
+        updateOrganizationCache({ divisions: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const applyDepartmentUpdate = useCallback(
+    (department: Department) => {
+      setDepartments((prev) => {
+        const next = upsertById(prev, department, sortByName);
+        updateOrganizationCache({ departments: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const applyUserUpdate = useCallback(
+    (userRecord: User) => {
+      setUsers((prev) => {
+        const next = upsertById(prev, userRecord, sortByName);
+        updateOrganizationCache({ users: next });
+        return next;
+      });
+    },
+    []
+  );
+
+  const refreshOrganizationData = useCallback(async () => {
+    if (!hydrated || !currentUser || !hasTokens()) {
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      const [usersDataRaw, directoratesRaw, divisionsRaw, departmentsRaw, delegationsRaw] = await Promise.all([
+        apiFetch('/accounts/users/'),
+        apiFetch('/organization/directorates/?ordering=name'),
+        apiFetch('/organization/divisions/?ordering=name'),
+        apiFetch('/organization/departments/?ordering=name'),
+        apiFetch('/correspondence/delegations/'),
+      ]);
+
+      const apiUsers = dedupeUsers(unwrapResults<any>(usersDataRaw).map(mapApiUserToUser));
+      const sortedUsers = sortByName(apiUsers);
+      setUsers(sortedUsers);
+
+      const apiDirectorates = unwrapResults<any>(directoratesRaw).map(mapApiDirectorate);
+      const apiDivisions = unwrapResults<any>(divisionsRaw).map(mapApiDivision);
+      const apiDepartments = unwrapResults<any>(departmentsRaw).map(mapApiDepartment);
+      const apiDelegations = unwrapResults<any>(delegationsRaw).map(mapApiDelegation);
+
+      const sortedDirectorates = sortByName(apiDirectorates);
+      const sortedDivisions = sortByName(apiDivisions);
+      const sortedDepartments = sortByName(apiDepartments);
+
+      setDirectorates(sortedDirectorates);
+      setDivisions(sortedDivisions);
+      setDepartments(sortedDepartments);
+      setAssistantAssignments(apiDelegations);
+      updateOrganizationCache({
+        directorates: sortedDirectorates,
+        divisions: sortedDivisions,
+        departments: sortedDepartments,
+        users: sortedUsers,
+      });
+
+      setHasSynced(true);
+    } catch (error) {
+      console.error('Failed to load organization data from API', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [hydrated, currentUser]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(DIRECTORATES_KEY, JSON.stringify(directorates));
-      localStorage.setItem(`${STORAGE_KEY}_version`, ORG_DATA_VERSION);
+    if (!hydrated || !currentUser || !hasTokens()) {
+      return;
     }
-  }, [directorates]);
+
+    if (!hasSynced) {
+      void refreshOrganizationData();
+    }
+  }, [hydrated, currentUser, hasSynced, refreshOrganizationData]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(DIVISIONS_KEY, JSON.stringify(divisions));
-      localStorage.setItem(`${STORAGE_KEY}_version`, ORG_DATA_VERSION);
+    if (hydrated && currentUser && hasTokens()) {
+      setHasSynced(false);
     }
-  }, [divisions]);
+  }, [currentUser?.id, hydrated]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(DEPARTMENTS_KEY, JSON.stringify(departments));
-      localStorage.setItem(`${STORAGE_KEY}_version`, ORG_DATA_VERSION);
+  const buildDirectoratePayload = (input: Partial<CreateDirectorateInput>) =>
+    cleanPayload({
+      name: input.name,
+      code: input.code,
+      description: input.description,
+      executive_director:
+        input.executiveDirectorId === undefined
+          ? undefined
+          : input.executiveDirectorId
+          ? input.executiveDirectorId
+          : null,
+      is_active: input.isActive,
+    });
+
+  const buildDivisionPayload = (input: Partial<CreateDivisionInput>) =>
+    cleanPayload({
+      name: input.name,
+      code: input.code,
+      directorate: input.directorateId,
+      general_manager:
+        input.generalManagerId === undefined
+          ? undefined
+          : input.generalManagerId
+          ? input.generalManagerId
+          : null,
+      is_active: input.isActive,
+    });
+
+  const buildDepartmentPayload = (input: Partial<CreateDepartmentInput>) =>
+    cleanPayload({
+      name: input.name,
+      code: input.code,
+      division: input.divisionId,
+      head_of_department:
+        input.assistantGeneralManagerId === undefined
+          ? undefined
+          : input.assistantGeneralManagerId
+          ? input.assistantGeneralManagerId
+          : null,
+      is_active: input.isActive,
+    });
+
+  const buildUserPayload = (input: UpdateUserInput) =>
+    cleanPayload({
+      system_role: input.systemRole,
+      grade_level: input.gradeLevel,
+      directorate: input.directorateId === undefined ? undefined : input.directorateId || null,
+      division: input.divisionId === undefined ? undefined : input.divisionId || null,
+      department: input.departmentId === undefined ? undefined : input.departmentId || null,
+      is_active: input.isActive,
+      email: input.email,
+      employee_id: input.employeeId === undefined ? undefined : input.employeeId ?? null,
+    });
+
+  const addDirectorate = async (directorate: CreateDirectorateInput) => {
+    const payload = buildDirectoratePayload(directorate);
+    const response = await apiFetch('/organization/directorates/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const created = mapApiDirectorate(response);
+    applyDirectorateUpdate(created);
+    return created;
+  };
+
+  const updateDirectorate = async (id: string, updates: UpdateDirectorateInput) => {
+    const payload = buildDirectoratePayload(updates);
+    if (Object.keys(payload).length === 0) {
+      return directorates.find((dir) => dir.id === id) ?? null;
     }
-  }, [departments]);
+    const response = await apiFetch(`/organization/directorates/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    const updated = mapApiDirectorate(response);
+    applyDirectorateUpdate(updated);
+    return updated;
+  };
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(assistantAssignments));
-      localStorage.setItem(`${STORAGE_KEY}_version`, ORG_DATA_VERSION);
+  const deleteDirectorate = async (id: string) => {
+    const response = await apiFetch(`/organization/directorates/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: false }),
+    });
+    const updated = mapApiDirectorate(response);
+    applyDirectorateUpdate(updated);
+    return updated;
+  };
+
+  const addDivision = async (division: CreateDivisionInput) => {
+    const payload = buildDivisionPayload(division);
+    const response = await apiFetch('/organization/divisions/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const created = mapApiDivision(response);
+    applyDivisionUpdate(created);
+    return created;
+  };
+
+  const updateDivision = async (id: string, updates: UpdateDivisionInput) => {
+    const payload = buildDivisionPayload(updates);
+    if (Object.keys(payload).length === 0) {
+      return divisions.find((div) => div.id === id) ?? null;
     }
-  }, [assistantAssignments]);
-
-  const addDirectorate = (directorate: Omit<Directorate, 'id'>) => {
-    const newDirectorate: Directorate = {
-      ...directorate,
-      id: `dir-${Date.now()}`,
-    };
-    setDirectorates((prev) => [...prev, newDirectorate]);
+    const response = await apiFetch(`/organization/divisions/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    const updated = mapApiDivision(response);
+    applyDivisionUpdate(updated);
+    return updated;
   };
 
-  const updateDirectorate = (id: string, updates: Partial<Directorate>) => {
-    setDirectorates((prev) => prev.map((dir) => (dir.id === id ? { ...dir, ...updates } : dir)));
+  const deleteDivision = async (id: string) => {
+    const response = await apiFetch(`/organization/divisions/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: false }),
+    });
+    const updated = mapApiDivision(response);
+    applyDivisionUpdate(updated);
+    return updated;
   };
 
-  const deleteDirectorate = (id: string) => {
-    setDirectorates((prev) => prev.map((dir) => (dir.id === id ? { ...dir, isActive: false } : dir)));
+  const addDepartment = async (department: CreateDepartmentInput) => {
+    const payload = buildDepartmentPayload(department);
+    const response = await apiFetch('/organization/departments/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const created = mapApiDepartment(response);
+    applyDepartmentUpdate(created);
+    return created;
   };
 
-  const addDivision = (division: Omit<Division, 'id'>) => {
-    const newDivision: Division = { ...division, id: `div-${Date.now()}` };
-    setDivisions((prev) => [...prev, newDivision]);
+  const updateDepartment = async (id: string, updates: UpdateDepartmentInput) => {
+    const payload = buildDepartmentPayload(updates);
+    if (Object.keys(payload).length === 0) {
+      return departments.find((dept) => dept.id === id) ?? null;
+    }
+    const response = await apiFetch(`/organization/departments/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    const updated = mapApiDepartment(response);
+    applyDepartmentUpdate(updated);
+    return updated;
   };
 
-  const updateDivision = (id: string, updates: Partial<Division>) => {
-    setDivisions((prev) => prev.map((div) => (div.id === id ? { ...div, ...updates } : div)));
+  const deleteDepartment = async (id: string) => {
+    const response = await apiFetch(`/organization/departments/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: false }),
+    });
+    const updated = mapApiDepartment(response);
+    applyDepartmentUpdate(updated);
+    return updated;
   };
 
-  const deleteDivision = (id: string) => {
-    setDivisions((prev) => prev.map((div) => (div.id === id ? { ...div, isActive: false } : div)));
-  };
+  const updateUser = async (id: string, updates: UpdateUserInput) => {
+    const payload = buildUserPayload(updates);
+    if (Object.keys(payload).length === 0) {
+      const existing = users.find((user) => user.id === id);
+      if (!existing) {
+        throw new Error('User not found in context.');
+      }
+      return existing;
+    }
 
-  const addDepartment = (department: Omit<Department, 'id'>) => {
-    const newDepartment: Department = { ...department, id: `dept-${Date.now()}` };
-    setDepartments((prev) => [...prev, newDepartment]);
-  };
+    const response = await apiFetch(`/accounts/users/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
 
-  const updateDepartment = (id: string, updates: Partial<Department>) => {
-    setDepartments((prev) => prev.map((dept) => (dept.id === id ? { ...dept, ...updates } : dept)));
-  };
-
-  const deleteDepartment = (id: string) => {
-    setDepartments((prev) => prev.map((dept) => (dept.id === id ? { ...dept, isActive: false } : dept)));
+    const updatedUser = mapApiUserToUser(response);
+    applyUserUpdate(updatedUser);
+    return updatedUser;
   };
 
   const addAssignment = (assignment: Omit<AssistantAssignment, 'id'>) => {
@@ -335,23 +568,13 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const resetOrganizationData = () => {
-    const baseDirectorates = getBaseDirectorates();
-    const baseDivisions = getBaseDivisions();
-    const baseDepartments = getBaseDepartments();
-    const baseAssignments = getBaseAssignments();
-
-    setDirectorates(baseDirectorates);
-    setDivisions(baseDivisions);
-    setDepartments(baseDepartments);
-    setAssistantAssignments(baseAssignments);
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(DIRECTORATES_KEY, JSON.stringify(baseDirectorates));
-      localStorage.setItem(DIVISIONS_KEY, JSON.stringify(baseDivisions));
-      localStorage.setItem(DEPARTMENTS_KEY, JSON.stringify(baseDepartments));
-      localStorage.setItem(ASSIGNMENTS_KEY, JSON.stringify(baseAssignments));
-      localStorage.setItem(`${STORAGE_KEY}_version`, ORG_DATA_VERSION);
-    }
+    setDirectorates([]);
+    setDivisions([]);
+    setDepartments([]);
+    setAssistantAssignments([]);
+    setUsers([]);
+    setHasSynced(false);
+    updateOrganizationCache({ directorates: [], divisions: [], departments: [], users: [] });
   };
 
   return (
@@ -361,7 +584,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         divisions,
         departments,
         assistantAssignments,
-        users: MOCK_USERS,
+        users,
         addDirectorate,
         updateDirectorate,
         deleteDirectorate,
@@ -375,6 +598,9 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         updateAssignment,
         deleteAssignment,
         resetOrganizationData,
+        refreshOrganizationData,
+        isSyncing,
+        updateUser,
       }}
     >
       {children}

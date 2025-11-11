@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   User as UserIcon,
   ChevronDown,
@@ -25,12 +25,21 @@ import { Badge } from "@/components/ui/badge";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { User } from "@/lib/npa-structure";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import {
+  hasTokens,
+  impersonateUser,
+  storeOriginalTokens,
+  clearOriginalTokens,
+  getOriginalTokens,
+  storeTokens,
+} from "@/lib/api-client";
+import { toast } from "sonner";
 
 type FilterMode = "all" | "directorate" | "division" | "department";
 
 export const RoleSwitcher = () => {
-  const { directorates, divisions, departments, users } = useOrganization();
-  const { currentUser, selectUser, clearDemoUser, isDemo, hydrated } = useCurrentUser();
+  const { directorates, divisions, departments, users, refreshOrganizationData } = useOrganization();
+  const { currentUser, hydrated, refresh: refreshCurrentUser, isImpersonating } = useCurrentUser();
 
   const [filterType, setFilterType] = useState<FilterMode>("all");
   const [selectedDirectorate, setSelectedDirectorate] = useState<string | null>(null);
@@ -46,6 +55,63 @@ export const RoleSwitcher = () => {
   const departmentMap = useMemo(
     () => new Map(departments.map((dept) => [dept.id, dept])),
     [departments]
+  );
+  const executiveDirectorNameMap = useMemo(() => {
+    const entries = new Map<string, string>();
+    directorates.forEach((dir) => {
+      if (dir.executiveDirectorId) {
+        entries.set(dir.executiveDirectorId, dir.name);
+      }
+    });
+    return entries;
+  }, [directorates]);
+
+  const getDirectorateNameForUser = useCallback(
+    (user: User): string | undefined => {
+      const roleLabel = (user.systemRole ?? '').trim();
+      if (roleLabel.length > 0 && /director/i.test(roleLabel)) {
+        return roleLabel;
+      }
+
+      const byExecutiveAssignment = executiveDirectorNameMap.get(user.id ?? "");
+      if (byExecutiveAssignment) {
+        return byExecutiveAssignment;
+      }
+
+      const explicitDirectorate = user.directorate ? directorateMap.get(user.directorate) : undefined;
+      if (explicitDirectorate) return explicitDirectorate.name;
+
+      const directorateByExec = Array.from(directorateMap.values()).find((dir) => {
+        return (
+          dir.executiveDirectorId === user.id ||
+          dir.executiveDirectorId === user.username ||
+          dir.executiveDirectorId === user.employeeId
+        );
+      });
+      if (directorateByExec) return directorateByExec.name;
+
+      if (user.division) {
+        const division = divisionMap.get(user.division);
+        if (division) {
+          const parentDirectorate = division.directorateId ? directorateMap.get(division.directorateId) : undefined;
+          if (parentDirectorate) return parentDirectorate.name;
+        }
+      }
+
+      if (user.department) {
+        const department = departmentMap.get(user.department);
+        if (department) {
+          const division = department.divisionId ? divisionMap.get(department.divisionId) : undefined;
+          if (division?.directorateId) {
+            const parentDirectorate = directorateMap.get(division.directorateId);
+            if (parentDirectorate) return parentDirectorate.name;
+          }
+        }
+      }
+
+      return undefined;
+    },
+    [departmentMap, directorateMap, divisionMap, executiveDirectorNameMap]
   );
 
   const matchesDirectorate = (user: User, directorateId: string) => {
@@ -113,10 +179,13 @@ export const RoleSwitcher = () => {
     return null;
   }
 
+  const impersonationEnabled = hasTokens() && (currentUser.systemRole === "Super Admin" || isImpersonating);
+
   const currentDivision = currentUser.division ? divisionMap.get(currentUser.division) : undefined;
   const currentDepartment = currentUser.department
     ? departmentMap.get(currentUser.department)
     : undefined;
+  const currentDirectorateName = getDirectorateNameForUser(currentUser);
 
   const executiveUsers = filteredUsers.filter((user) =>
     ["MDCS", "EDCS"].includes(user.gradeLevel)
@@ -136,6 +205,73 @@ export const RoleSwitcher = () => {
 
   const noUsersMatch = filteredUsers.length === 0;
 
+  const handleImpersonate = async (user: User) => {
+    if (!impersonationEnabled || currentUser.systemRole !== "Super Admin") {
+      toast.error("Impersonation is only available to Super Admins");
+      return;
+    }
+
+    if (!isImpersonating) {
+      storeOriginalTokens();
+    }
+
+    const identifier = user.username ?? user.id;
+
+    try {
+      await impersonateUser(identifier);
+      toast.success(`You are now impersonating ${user.name || user.username}`);
+      await refreshCurrentUser();
+      await refreshOrganizationData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to impersonate user";
+      toast.error(message);
+    }
+  };
+
+  const handleReset = async () => {
+    const originalTokens = getOriginalTokens();
+
+    if (!originalTokens?.access || !originalTokens.refresh) {
+      toast.info("You are already using your primary account");
+      return;
+    }
+
+    try {
+      const secondsRemaining = originalTokens.expiresAt
+        ? Math.max(0, Math.floor((originalTokens.expiresAt - Date.now()) / 1000))
+        : undefined;
+      storeTokens(originalTokens.access, originalTokens.refresh, secondsRemaining);
+      clearOriginalTokens();
+      toast.success("Returned to your primary account");
+      await refreshCurrentUser();
+      await refreshOrganizationData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to restore your session";
+      toast.error(message);
+    }
+  };
+
+  if (!impersonationEnabled) {
+    return (
+      <Button variant="outline" className="gap-2" disabled>
+        <UserIcon className="h-4 w-4" />
+        <div className="flex flex-col items-start gap-1">
+          <span className="text-sm font-medium">{currentUser.name}</span>
+          <Badge variant="secondary" className="text-xs">
+            {currentUser.systemRole}
+            {currentDepartment
+              ? ` • ${currentDepartment.name}`
+              : currentDivision
+              ? ` • ${currentDivision.name}`
+              : currentDirectorateName
+              ? ` • ${currentDirectorateName}`
+              : ""}
+          </Badge>
+        </div>
+      </Button>
+    );
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -144,12 +280,13 @@ export const RoleSwitcher = () => {
           <div className="flex flex-col items-start gap-1">
             <span className="text-sm font-medium">{currentUser.name}</span>
             <Badge variant="secondary" className="text-xs">
-              {isDemo && "Demo: "}
               {currentUser.systemRole}
               {currentDepartment
                 ? ` • ${currentDepartment.name}`
                 : currentDivision
                 ? ` • ${currentDivision.name}`
+                : currentDirectorateName
+                ? ` • ${currentDirectorateName}`
                 : ""}
             </Badge>
           </div>
@@ -157,7 +294,7 @@ export const RoleSwitcher = () => {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-96 max-h-[600px] overflow-y-auto">
-        <DropdownMenuLabel>Switch Demo Role</DropdownMenuLabel>
+        <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
         <DropdownMenuSeparator />
 
         <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-2">
@@ -277,9 +414,11 @@ export const RoleSwitcher = () => {
                   <RoleOption
                     key={user.id}
                     user={user}
+                    directorateName={getDirectorateNameForUser(user)}
                     divisionName={divisionMap.get(user.division ?? "")?.name}
-                    onSelect={selectUser}
-                    subtitle={user.email}
+                    onSelect={handleImpersonate}
+                    subtitle={user.systemRole}
+                    tertiary={user.email}
                   />
                 ))}
                 <DropdownMenuSeparator />
@@ -295,8 +434,10 @@ export const RoleSwitcher = () => {
                   <RoleOption
                     key={user.id}
                     user={user}
+                    directorateName={getDirectorateNameForUser(user)}
                     divisionName={divisionMap.get(user.division ?? "")?.name}
-                    onSelect={selectUser}
+                    onSelect={handleImpersonate}
+                    subtitle={user.systemRole}
                   />
                 ))}
                 <DropdownMenuSeparator />
@@ -312,9 +453,11 @@ export const RoleSwitcher = () => {
                   <RoleOption
                     key={user.id}
                     user={user}
+                    directorateName={getDirectorateNameForUser(user)}
                     divisionName={divisionMap.get(user.division ?? "")?.name}
                     departmentName={departmentMap.get(user.department ?? "")?.name}
-                    onSelect={selectUser}
+                    onSelect={handleImpersonate}
+                    subtitle={user.systemRole}
                   />
                 ))}
                 <DropdownMenuSeparator />
@@ -330,9 +473,11 @@ export const RoleSwitcher = () => {
                   <RoleOption
                     key={user.id}
                     user={user}
+                    directorateName={getDirectorateNameForUser(user)}
                     divisionName={divisionMap.get(user.division ?? "")?.name}
                     departmentName={departmentMap.get(user.department ?? "")?.name}
-                    onSelect={selectUser}
+                    onSelect={handleImpersonate}
+                    subtitle={user.systemRole}
                   />
                 ))}
                 <DropdownMenuSeparator />
@@ -350,18 +495,21 @@ export const RoleSwitcher = () => {
                   <RoleOption
                     key={user.id}
                     user={user}
+                    directorateName={getDirectorateNameForUser(user)}
                     divisionName={divisionMap.get(user.division ?? "")?.name ?? "MD Office"}
                     icon={<Shield className="h-3 w-3" />}
-                    onSelect={selectUser}
+                    onSelect={handleImpersonate}
                     subtitle="Secretary"
+                    tertiary={user.email}
                   />
                 ))}
                 {assistantUsers.map((user) => (
                   <RoleOption
                     key={user.id}
                     user={user}
+                    directorateName={getDirectorateNameForUser(user)}
                     divisionName={divisionMap.get(user.division ?? "")?.name ?? "MD Office"}
-                    onSelect={selectUser}
+                    onSelect={handleImpersonate}
                     subtitle="Assistant"
                   />
                 ))}
@@ -369,8 +517,10 @@ export const RoleSwitcher = () => {
                   <RoleOption
                     key={user.id}
                     user={user}
-                    onSelect={selectUser}
-                    subtitle="Super Admin • System Administrator"
+                    directorateName={getDirectorateNameForUser(user)}
+                    onSelect={handleImpersonate}
+                    subtitle="Super Admin"
+                    tertiary={user.email}
                   />
                 ))}
                 <DropdownMenuSeparator />
@@ -379,8 +529,8 @@ export const RoleSwitcher = () => {
           </>
         )}
 
-        <DropdownMenuItem onClick={() => clearDemoUser()} className="text-destructive">
-          Reset to Actual User
+        <DropdownMenuItem onClick={handleReset} className="text-destructive">
+          Reset to Primary Account
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -389,34 +539,51 @@ export const RoleSwitcher = () => {
 
 interface RoleOptionProps {
   user: User;
+  directorateName?: string;
   divisionName?: string;
   departmentName?: string;
   subtitle?: string;
+  tertiary?: string;
   icon?: React.ReactNode;
-  onSelect: (userId: string) => void;
+  onSelect?: (user: User) => void;
 }
 
 const RoleOption = ({
   user,
+  directorateName,
   divisionName,
   departmentName,
   subtitle,
+  tertiary,
   icon,
   onSelect,
 }: RoleOptionProps) => {
-  const locationLabel = departmentName ?? divisionName;
+  const isExecutive = user.gradeLevel === "EDCS" || user.gradeLevel === "MDCS" || user.systemRole?.includes("Executive Director") || user.systemRole?.includes("Managing Director");
+  const locationLabel = isExecutive
+    ? directorateName ?? divisionName ?? departmentName
+    : departmentName ?? divisionName ?? directorateName;
+  const detailLine = subtitle ?? user.systemRole;
 
   return (
-    <DropdownMenuItem onClick={() => onSelect(user.id)}>
+    <DropdownMenuItem
+      onClick={() => {
+        if (onSelect) {
+          onSelect(user);
+        }
+      }}
+    >
       <div className="flex flex-col">
         <span className="font-medium flex items-center gap-2">
           {icon}
           {user.name}
         </span>
         <span className="text-xs text-muted-foreground">
-          {subtitle ?? user.systemRole}
+          {detailLine}
           {locationLabel ? ` • ${locationLabel}` : ""}
         </span>
+        {tertiary && (
+          <span className="text-[11px] text-muted-foreground/80">{tertiary}</span>
+        )}
       </div>
     </DropdownMenuItem>
   );

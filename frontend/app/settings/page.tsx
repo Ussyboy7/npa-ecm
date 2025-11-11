@@ -42,10 +42,19 @@ import {
   Check
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { loadUserSignature, saveUserSignature, deleteUserSignature, type StoredSignature, ensureDefaultSignatureTemplates, saveSignatureTemplates, loadUserSignaturePreferences, saveUserSignaturePreferences } from '@/lib/signature-storage';
-import type { SignatureTemplate } from '@/lib/npa-structure';
-import type { UserSignaturePreferences } from '@/lib/signature-storage';
-import { MOCK_SIGNATURE_TEMPLATES } from '@/lib/npa-structure';
+import {
+  loadUserSignature,
+  saveUserSignature,
+  deleteUserSignature,
+  type StoredSignature,
+  ensureDefaultSignatureTemplates,
+  saveSignatureTemplates,
+  loadUserSignaturePreferences,
+  saveUserSignaturePreferences,
+  type SignatureTemplate,
+  type UserSignaturePreferences,
+  DEFAULT_SIGNATURE_TEMPLATES,
+} from '@/lib/signature-storage';
 
 const MAX_SIGNATURE_SIZE_MB = 2;
 type SignatureTemplateType = SignatureTemplate['templateType'];
@@ -258,8 +267,8 @@ export default function SettingsPage() {
   };
 
   const resetOrganizationTemplates = () => {
-    saveSignatureTemplates(MOCK_SIGNATURE_TEMPLATES);
-    setSignatureTemplates([...MOCK_SIGNATURE_TEMPLATES]);
+    saveSignatureTemplates(DEFAULT_SIGNATURE_TEMPLATES);
+    setSignatureTemplates([...DEFAULT_SIGNATURE_TEMPLATES]);
     cancelEditTemplate();
     toast.success('Organization templates reset to defaults');
   };

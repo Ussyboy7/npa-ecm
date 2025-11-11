@@ -52,7 +52,7 @@ The staging environment includes:
 
 #### Backend Service
 ```yaml
-- Port: 8001
+- Port: internal (8000 via Nginx)
 - Health Check: /api/health/
 - Environment: staging
 ```
@@ -69,7 +69,7 @@ The staging environment includes:
 ```yaml
 - Prometheus: http://localhost:9091
 - Grafana: http://localhost:3002 (admin/staging_admin_2024)
-- Nginx: http://localhost:80
+- Nginx: http://localhost:4646
 ```
 
 ## 📋 Deployment Scripts

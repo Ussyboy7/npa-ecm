@@ -16,7 +16,7 @@ import { CheckCircle, Send, User, AlertCircle } from 'lucide-react';
 interface ConfirmationDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   type: 'minute' | 'treatment';
   data: {
     currentUserName: string;

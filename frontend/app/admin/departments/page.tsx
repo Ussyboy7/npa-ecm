@@ -41,6 +41,7 @@ const DepartmentsManagement = () => {
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [selectedDepartment, setSelectedDepartment] = useState<any>(null);
 
   const filteredDepartments = mounted ? departments.filter(dept =>
@@ -77,12 +78,22 @@ const DepartmentsManagement = () => {
     setDeactivateDialogOpen(true);
   };
 
-  const confirmDeactivate = () => {
-    if (selectedDepartment) {
-      deleteDepartment(selectedDepartment.id);
+  const confirmDeactivate = async () => {
+    if (!selectedDepartment || isProcessing) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await deleteDepartment(selectedDepartment.id);
       toast({ title: "Success", description: "Department deactivated successfully" });
       setDeactivateDialogOpen(false);
       setSelectedDepartment(null);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : 'Unable to deactivate department';
+      toast({ title: 'Request failed', description, variant: 'destructive' });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -303,7 +314,13 @@ const DepartmentsManagement = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeactivate}>Deactivate</AlertDialogAction>
+            <AlertDialogAction
+              onClick={confirmDeactivate}
+              disabled={isProcessing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isProcessing ? 'Deactivating…' : 'Deactivate'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

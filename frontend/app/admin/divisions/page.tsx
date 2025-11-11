@@ -15,7 +15,6 @@ import {
   History,
   Users
 } from 'lucide-react';
-import { DIRECTORATES } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { DivisionFormModal } from '@/components/admin/DivisionFormModal';
 import { MoveEntityModal } from '@/components/admin/MoveEntityModal';
@@ -42,6 +41,7 @@ const DivisionsManagement = () => {
   const [formModalOpen, setFormModalOpen] = useState(false);
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [selectedDivision, setSelectedDivision] = useState<any>(null);
 
   const filteredDivisions = mounted ? divisions.filter(div =>
@@ -50,9 +50,7 @@ const DivisionsManagement = () => {
   ) : [];
 
   const getDirectorateName = (dirId: string) => {
-    const dir = directorates.find(d => d.id === dirId);
-    if (dir) return dir.name;
-    return DIRECTORATES.find(d => d.id === dirId)?.name || 'Unknown';
+    return directorates.find(d => d.id === dirId)?.name ?? 'Unknown';
   };
 
   const getGMName = (gmId: string) => {
@@ -79,12 +77,22 @@ const DivisionsManagement = () => {
     setDeactivateDialogOpen(true);
   };
 
-  const confirmDeactivate = () => {
-    if (selectedDivision) {
-      deleteDivision(selectedDivision.id);
+  const confirmDeactivate = async () => {
+    if (!selectedDivision || isProcessing) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await deleteDivision(selectedDivision.id);
       toast({ title: "Success", description: "Division deactivated successfully" });
       setDeactivateDialogOpen(false);
       setSelectedDivision(null);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : 'Unable to deactivate division';
+      toast({ title: 'Request failed', description, variant: 'destructive' });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -315,7 +323,13 @@ const DivisionsManagement = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeactivate}>Deactivate</AlertDialogAction>
+            <AlertDialogAction
+              onClick={confirmDeactivate}
+              disabled={isProcessing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isProcessing ? 'Deactivating…' : 'Deactivate'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

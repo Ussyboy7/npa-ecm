@@ -42,7 +42,7 @@ interface ManualRouteModalProps {
 }
 
 export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRouteModalProps) => {
-  const { addMinute, updateCorrespondence, getMinutesByCorrespondenceId } = useCorrespondence();
+  const { addMinute, updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const { users } = useOrganization();
   const { currentUser, hydrated } = useCurrentUser();
 
@@ -110,7 +110,7 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
     setShowConfirmation(true);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!actingUser) {
       toast.error('Active user not found. Unable to route.');
       setShowConfirmation(false);
@@ -135,29 +135,39 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
       actedByAssistant: false,
     };
 
-    addMinute(newMinute);
+    try {
+      await addMinute(newMinute);
 
-    updateCorrespondence(correspondence.id, {
-      currentApproverId: selectedUser,
-      status: 'in-progress',
-    });
+      await updateCorrespondence(correspondence.id, {
+        currentApproverId: selectedUser,
+        status: 'in-progress',
+      });
 
-    setShowConfirmation(false);
+      await syncFromApi();
 
-    setTimeout(() => {
-      onClose();
+      setShowConfirmation(false);
 
       setTimeout(() => {
-        setRoutingNotes('');
-        setSelectedUser('');
-        setSelectedDivision('all');
-        setSearchQuery('');
-      }, 100);
-    }, 200);
+        onClose();
 
-    toast.success('Correspondence routed successfully', {
-      description: `Manually routed to ${recipient?.name ?? 'selected user'}`,
-    });
+        setTimeout(() => {
+          setRoutingNotes('');
+          setSelectedUser('');
+          setSelectedDivision('all');
+          setSearchQuery('');
+        }, 100);
+      }, 200);
+
+      toast.success('Correspondence routed successfully', {
+        description: `Manually routed to ${recipient?.name ?? 'selected user'}`,
+      });
+    } catch (error) {
+      console.error('Failed to route correspondence', error);
+      toast.error('Unable to route correspondence', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+      setShowConfirmation(false);
+    }
   };
 
   const division = getDivisionById(correspondence.divisionId);

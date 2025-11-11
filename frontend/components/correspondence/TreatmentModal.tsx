@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -29,12 +29,7 @@ import {
   AlertCircle,
   Search,
 } from 'lucide-react';
-import {
-  GRADE_LEVELS,
-  getUserById,
-  getDivisionById,
-  getDepartmentById,
-} from '@/lib/npa-structure';
+import { GRADE_LEVELS } from '@/lib/npa-structure';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 
@@ -45,9 +40,9 @@ interface TreatmentModalProps {
 }
 
 export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentModalProps) => {
-  const { addCorrespondence, addMinute, updateCorrespondence, getMinutesByCorrespondenceId } = useCorrespondence();
+  const { addCorrespondence, addMinute, updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const { currentUser: activeUser } = useCurrentUser();
-  const { users } = useOrganization();
+  const { users, divisions, departments } = useOrganization();
   const [currentUser, setCurrentUser] = useState(activeUser ?? null);
   const [memoSubject, setMemoSubject] = useState(`Re: ${correspondence.subject}`);
   const [memoContent, setMemoContent] = useState('');
@@ -90,27 +85,56 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
 
   const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
 
+  const findUserById = useCallback(
+    (id?: string | null) => (id ? users.find((user) => user.id === id) : undefined),
+    [users],
+  );
+
   const getForwardingOptions = () => {
     if (!currentUser) return [];
     const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map((g) => g.code);
     const currentGradeIndex = gradeOrder.indexOf(currentUser.gradeLevel);
+    if (currentGradeIndex === -1) return [];
     const higherGrades = gradeOrder.slice(0, currentGradeIndex);
 
-    const division = currentUser.division ? getDivisionById(currentUser.division) : null;
-    const currentDirectorate = division?.directorateId;
+    const currentDivision = currentUser.division
+      ? divisions.find((div) => div.id === currentUser.division)
+      : undefined;
+    const currentDirectorateId = currentUser.directorate ?? currentDivision?.directorateId;
 
-    return activeUsers.filter((user) => {
+    const candidates = activeUsers.filter((user) => {
       if (user.id === currentUser.id) return false;
-      if (!user.division) return false;
 
-      const userDivision = getDivisionById(user.division);
-      const userDirectorate = userDivision?.directorateId;
+      if (user.systemRole === 'Managing Director' || user.gradeLevel === 'MDCS') {
+        return true;
+      }
 
-      const sameDivision = user.division === currentUser.division;
-      const sameDirectorate = currentDirectorate && userDirectorate === currentDirectorate && higherGrades.includes(user.gradeLevel);
+      const targetGradeIndex = gradeOrder.indexOf(user.gradeLevel);
+      const isHigherGrade = targetGradeIndex !== -1 && targetGradeIndex < currentGradeIndex;
 
-      return sameDivision || sameDirectorate;
+      if (user.division && currentUser.division && user.division === currentUser.division) {
+        return true;
+      }
+
+      const userDivision = user.division ? divisions.find((div) => div.id === user.division) : undefined;
+      const userDirectorateId = user.directorate ?? userDivision?.directorateId;
+
+      if (currentDirectorateId && userDirectorateId === currentDirectorateId && isHigherGrade) {
+        return true;
+      }
+
+      if (!user.division && isHigherGrade) {
+        return true;
+      }
+
+      return false;
     });
+
+    if (candidates.length === 0) {
+      return activeUsers;
+    }
+
+    return candidates;
   };
 
   const getBehalfOfOptions = () => {
@@ -127,15 +151,15 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     );
   };
 
-  const forwardingOptions = useMemo(() => getForwardingOptions(), [activeUsers, currentUser]);
-  const behalfOfOptions = useMemo(() => getBehalfOfOptions(), [activeUsers, currentUser]);
+  const forwardingOptions = useMemo(() => getForwardingOptions(), [activeUsers, currentUser, divisions]);
+  const behalfOfOptions = useMemo(() => getBehalfOfOptions(), [activeUsers, currentUser, divisions]);
 
   const filteredForwardingOptions = useMemo(() => {
     if (!searchQuery.trim()) return forwardingOptions;
     const query = searchQuery.toLowerCase();
     return forwardingOptions.filter((user) => {
-      const division = user.division ? getDivisionById(user.division) : null;
-      const departmentName = user.department ? getDepartmentById(user.department)?.name : '';
+      const division = user.division ? divisions.find((div) => div.id === user.division) : undefined;
+      const departmentName = user.department ? (departments.find((dept) => dept.id === user.department)?.name ?? '') : '';
       return (
         user.name.toLowerCase().includes(query) ||
         user.systemRole.toLowerCase().includes(query) ||
@@ -176,16 +200,16 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     setShowConfirmation(true);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!currentUser) {
       toast.error('Current user not found. Cannot perform action.');
       setShowConfirmation(false);
       return;
     }
 
-    const recipient = getUserById(forwardTo);
-    const actingFor = onBehalfOf && onBehalfOf !== 'none' ? getUserById(onBehalfOf) : null;
-    const division = getDivisionById(currentUser.division || '');
+    const recipient = findUserById(forwardTo);
+    const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) : null;
+    const division = currentUser.division ? divisions.find((div) => div.id === currentUser.division) : undefined;
 
     const existingMinutes = getMinutesByCorrespondenceId(correspondence.id);
     const nextStep = getNextStepNumber(existingMinutes);
@@ -204,14 +228,6 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       actedByAssistant: false,
     };
 
-    addMinute(treatmentMinute);
-
-    updateCorrespondence(correspondence.id, {
-      direction: 'upward',
-      currentApproverId: forwardTo,
-      status: 'in-progress',
-    });
-
     const newCorrespondence: Correspondence = {
       id: generateId('corr'),
       referenceNumber: generateReferenceNumber(division?.code || 'NPA'),
@@ -219,7 +235,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       source: 'internal',
       receivedDate: new Date().toISOString(),
       senderName: actingFor ? `${currentUser.name} (on behalf of ${actingFor.name})` : currentUser.name,
-      senderOrganization: division?.name,
+      senderOrganization: division?.name ?? '',
       status: 'pending',
       priority: correspondence.priority,
       divisionId: recipient?.division ?? correspondence.divisionId,
@@ -228,33 +244,51 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       direction: 'upward',
     };
 
-    addCorrespondence(newCorrespondence);
+    try {
+      await addMinute(treatmentMinute);
 
-    if (draftId) {
-      deleteDraft(draftId);
-    }
+      await updateCorrespondence(correspondence.id, {
+        direction: 'upward',
+        currentApproverId: forwardTo,
+        status: 'in-progress',
+      });
 
-    setShowConfirmation(false);
+      await addCorrespondence(newCorrespondence);
 
-    setTimeout(() => {
-      onClose();
+      await syncFromApi();
+
+      if (draftId) {
+        deleteDraft(draftId);
+      }
+
+      setShowConfirmation(false);
 
       setTimeout(() => {
-        setMemoSubject(`Re: ${correspondence.subject}`);
-        setMemoContent('');
-        setForwardTo('');
-        setOnBehalfOf('');
-        setHasDraft(false);
-        setDraftId(null);
-        setSearchQuery('');
-      }, 100);
-    }, 200);
+        onClose();
 
-    toast.success('Response sent successfully', {
-      description: actingFor
-        ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
-        : `Sent to ${recipient?.name ?? 'selected user'}`,
-    });
+        setTimeout(() => {
+          setMemoSubject(`Re: ${correspondence.subject}`);
+          setMemoContent('');
+          setForwardTo('');
+          setOnBehalfOf('');
+          setHasDraft(false);
+          setDraftId(null);
+          setSearchQuery('');
+        }, 100);
+      }, 200);
+
+      toast.success('Response sent successfully', {
+        description: actingFor
+          ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
+          : `Sent to ${recipient?.name ?? 'selected user'}`,
+      });
+    } catch (error) {
+      console.error('Failed to process treatment', error);
+      toast.error('Unable to send response', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+      setShowConfirmation(false);
+    }
   };
 
   const handleSaveDraft = () => {
@@ -283,9 +317,11 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
 
   if (!currentUser) return null;
 
-  const divisionEntity = currentUser.division ? getDivisionById(currentUser.division) : null;
-  const selectedRecipient = forwardTo ? getUserById(forwardTo) : null;
-  const actingFor = onBehalfOf ? getUserById(onBehalfOf) : null;
+  const divisionEntity = currentUser.division
+    ? divisions.find((division) => division.id === currentUser.division) ?? null
+    : null;
+  const selectedRecipient = forwardTo ? findUserById(forwardTo) ?? null : null;
+  const actingFor = onBehalfOf ? findUserById(onBehalfOf) ?? null : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -421,7 +457,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                 </div>
                 {filteredForwardingOptions.length > 0 ? (
                   filteredForwardingOptions.map((user) => {
-                    const userDivision = user.division ? getDivisionById(user.division) : null;
+                    const userDivision = user.division ? divisions.find((div) => div.id === user.division) : undefined;
                     return (
                       <SelectItem key={user.id} value={user.id}>
                         <div className="flex flex-col items-start">

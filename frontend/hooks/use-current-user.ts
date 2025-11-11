@@ -1,80 +1,95 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "@/lib/npa-structure";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { OrganizationContext } from "@/contexts/OrganizationContext";
+import { apiFetch, hasOriginalTokens, hasTokens } from "@/lib/api-client";
 
-export const DEMO_USER_STORAGE_KEY = "npa_demo_user_id";
+const toOptionalString = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  return String(value);
+};
 
-interface UseCurrentUserOptions {
-  reload?: boolean;
-}
+const mapApiUserToUser = (data: any): User => {
+  const name = `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim();
+  return {
+    id: String(data.id ?? data.username),
+    username: data.username ?? undefined,
+    name: name.length > 0 ? name : data.username ?? "User",
+    email: data.email ?? "",
+    employeeId: data.employee_id ?? "",
+    gradeLevel: data.grade_level ?? "",
+    directorate: toOptionalString(data.directorate ?? data.directorate_id),
+    division: toOptionalString(data.division ?? data.division_id),
+    department: toOptionalString(data.department ?? data.department_id),
+    systemRole: data.system_role ?? "",
+    avatar: undefined,
+    active: data.is_active ?? true,
+  };
+};
 
 export const useCurrentUser = () => {
-  const { users } = useOrganization();
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [isDemo, setIsDemo] = useState(false);
+  const organization = useContext(OrganizationContext);
+  const users = organization?.users ?? [];
+  const [remoteUser, setRemoteUser] = useState<User | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const activeUsers = users.filter((user) => user.active);
-    if (activeUsers.length === 0) {
+  const loadCurrentUser = useCallback(async () => {
+    if (!hasTokens()) {
+      setRemoteUser(null);
       setHydrated(true);
       return;
     }
 
-    const savedId = localStorage.getItem(DEMO_USER_STORAGE_KEY);
-    if (savedId && activeUsers.some((user) => user.id === savedId)) {
-      setCurrentUserId(savedId);
-      setIsDemo(true);
-    } else {
-      const fallback =
-        activeUsers.find((user) => user.gradeLevel === "MDCS") ?? activeUsers[0];
-      if (fallback) {
-        setCurrentUserId(fallback.id);
-        localStorage.setItem(DEMO_USER_STORAGE_KEY, fallback.id);
-        setIsDemo(true);
-      }
+    try {
+      const response = await apiFetch("/accounts/auth/me/");
+      setRemoteUser(mapApiUserToUser(response));
+    } catch (error) {
+      console.warn("Failed to hydrate current user from API", error);
+      setRemoteUser(null);
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCurrentUser();
+  }, [loadCurrentUser]);
+
+  const resolvedUser = useMemo(() => {
+    if (!remoteUser) return null;
+    const orgMatch = users.find(
+      (candidate) =>
+        candidate.id === remoteUser.id ||
+        (remoteUser.username && candidate.username === remoteUser.username),
+    );
+
+    if (!orgMatch) {
+      return remoteUser;
     }
 
-    setHydrated(true);
-  }, [users]);
+    return {
+      ...orgMatch,
+      ...remoteUser,
+      directorate: orgMatch.directorate ?? remoteUser.directorate,
+      division: orgMatch.division ?? remoteUser.division,
+      department: orgMatch.department ?? remoteUser.department,
+      systemRole: remoteUser.systemRole || orgMatch.systemRole,
+      gradeLevel: remoteUser.gradeLevel || orgMatch.gradeLevel,
+      active: orgMatch.active,
+    } satisfies User;
+  }, [remoteUser, users]);
 
-  const currentUser: User | null = useMemo(() => {
-    if (!currentUserId) return null;
-    return users.find((user) => user.id === currentUserId) ?? null;
-  }, [users, currentUserId]);
-
-  const selectUser = (userId: string, options?: UseCurrentUserOptions) => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem(DEMO_USER_STORAGE_KEY, userId);
-    setCurrentUserId(userId);
-    setIsDemo(true);
-
-    if (options?.reload ?? true) {
-      window.location.reload();
-    }
-  };
-
-  const clearDemoUser = (options?: UseCurrentUserOptions) => {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem(DEMO_USER_STORAGE_KEY);
-    setIsDemo(false);
-    setCurrentUserId(null);
-
-    if (options?.reload ?? true) {
-      window.location.reload();
-    }
-  };
+  const refresh = useCallback(async () => {
+    setHydrated(false);
+    await loadCurrentUser();
+  }, [loadCurrentUser]);
 
   return {
-    currentUser,
-    isDemo,
+    currentUser: resolvedUser,
     hydrated,
-    selectUser,
-    clearDemoUser,
+    refresh,
+    isImpersonating: hasOriginalTokens(),
   };
 };
 

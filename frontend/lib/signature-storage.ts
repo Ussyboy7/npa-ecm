@@ -1,5 +1,3 @@
-import { MOCK_SIGNATURE_TEMPLATES } from './npa-structure';
-
 export type StoredSignature = {
   imageData: string;
   fileName?: string;
@@ -15,6 +13,45 @@ export type SignatureTemplate = {
   style: 'stamp' | 'formal' | 'minimal';
   defaultApply: boolean;
 };
+
+export const DEFAULT_SIGNATURE_TEMPLATES: SignatureTemplate[] = [
+  {
+    id: 'template-approval-standard',
+    name: 'Approval – Standard',
+    description: 'Formal approval block with signature, role, and date.',
+    templateType: 'approval',
+    format: 'APPROVED BY {name}\n{role}\n{date}',
+    style: 'formal',
+    defaultApply: true,
+  },
+  {
+    id: 'template-minute-followup',
+    name: 'Minute – Follow Up',
+    description: 'Minute stamp highlighting requested follow-up actions.',
+    templateType: 'minute',
+    format: 'MINUTED BY {name}\n{role}\nFollow up and revert within 48 hours.\n{date}',
+    style: 'stamp',
+    defaultApply: false,
+  },
+  {
+    id: 'template-forward-standard',
+    name: 'Forward – FYI',
+    description: 'Forwarding note for information or action.',
+    templateType: 'forward',
+    format: 'FORWARDED BY {name}\n{role}\n{date}',
+    style: 'minimal',
+    defaultApply: false,
+  },
+  {
+    id: 'template-treatment-response',
+    name: 'Treatment – Response Memo',
+    description: 'Template for treatment responses back to originator.',
+    templateType: 'treatment',
+    format: 'TREATED BY {name}\n{role}\n{date}',
+    style: 'formal',
+    defaultApply: false,
+  },
+];
 
 export type UserSignaturePreferences = {
   defaultTemplateId?: string;
@@ -83,8 +120,8 @@ export const saveSignatureTemplates = (templates: SignatureTemplate[]) => {
 export const ensureDefaultSignatureTemplates = (): SignatureTemplate[] => {
   const existing = loadSignatureTemplates();
   if (existing.length === 0) {
-    saveSignatureTemplates(MOCK_SIGNATURE_TEMPLATES);
-    return [...MOCK_SIGNATURE_TEMPLATES];
+    saveSignatureTemplates(DEFAULT_SIGNATURE_TEMPLATES);
+    return [...DEFAULT_SIGNATURE_TEMPLATES];
   }
   return existing;
 };

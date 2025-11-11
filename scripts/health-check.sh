@@ -35,7 +35,7 @@ warning() {
 check_docker_services() {
     log "🔍 Checking Docker services status..."
 
-    local services=("npa-ecm-postgres-stag" "npa-ecm-redis-stag" "npa-ecm-backend-stag" "npa-ecm-frontend-stag" "npa-ecm-nginx-stag")
+    local services=("ecm-postgres-stag" "ecm-redis-stag" "ecm-backend-stag" "ecm-frontend-stag" "ecm-nginx-stag")
 
     for service in "${services[@]}"; do
         if docker ps --format "table {{.Names}}" | grep -q "^${service}$"; then
@@ -53,12 +53,12 @@ check_docker_services() {
 check_postgres() {
     log "🔍 Checking PostgreSQL health..."
 
-    if docker exec npa-ecm-postgres-stag pg_isready -U npa_user -d npa_ecm_stag >/dev/null 2>&1; then
+    if docker exec ecm-postgres-stag pg_isready -U npa_user -d npa_ecm_stag >/dev/null 2>&1; then
         success "✓ PostgreSQL is healthy"
 
         # Check database size and connections
-        local db_size=$(docker exec npa-ecm-postgres-stag psql -U npa_user -d npa_ecm_stag -t -c "SELECT pg_size_pretty(pg_database_size('npa_ecm_stag'));")
-        local active_connections=$(docker exec npa-ecm-postgres-stag psql -U npa_user -d npa_ecm_stag -t -c "SELECT count(*) FROM pg_stat_activity WHERE state = 'active';")
+        local db_size=$(docker exec ecm-postgres-stag psql -U npa_user -d npa_ecm_stag -t -c "SELECT pg_size_pretty(pg_database_size('npa_ecm_stag'));")
+        local active_connections=$(docker exec ecm-postgres-stag psql -U npa_user -d npa_ecm_stag -t -c "SELECT count(*) FROM pg_stat_activity WHERE state = 'active';")
 
         log "  Database size: $db_size"
         log "  Active connections: $active_connections"
@@ -74,12 +74,12 @@ check_postgres() {
 check_redis() {
     log "🔍 Checking Redis health..."
 
-    if docker exec npa-ecm-redis-stag redis-cli ping | grep -q "PONG"; then
+    if docker exec ecm-redis-stag redis-cli ping | grep -q "PONG"; then
         success "✓ Redis is healthy"
 
         # Check Redis stats
-        local connected_clients=$(docker exec npa-ecm-redis-stag redis-cli info clients | grep "connected_clients" | cut -d: -f2)
-        local used_memory=$(docker exec npa-ecm-redis-stag redis-cli info memory | grep "used_memory_human" | cut -d: -f2)
+        local connected_clients=$(docker exec ecm-redis-stag redis-cli info clients | grep "connected_clients" | cut -d: -f2)
+        local used_memory=$(docker exec ecm-redis-stag redis-cli info memory | grep "used_memory_human" | cut -d: -f2)
 
         log "  Connected clients: $connected_clients"
         log "  Used memory: $used_memory"
@@ -96,11 +96,11 @@ check_backend() {
     log "🔍 Checking Backend health..."
 
     # Test health endpoint
-    if curl -f -s --max-time 10 http://localhost:8001/api/health/ >/dev/null 2>&1; then
+    if curl -f -s --max-time 10 http://localhost:4646/api/health/ >/dev/null 2>&1; then
         success "✓ Backend API is responding"
 
         # Test specific endpoints
-        local api_status=$(curl -s -w "%{http_code}" -o /dev/null http://localhost:8001/api/)
+        local api_status=$(curl -s -w "%{http_code}" -o /dev/null http://localhost:4646/api/)
         if [[ "$api_status" == "200" ]]; then
             success "✓ API root endpoint is accessible"
         else
@@ -108,7 +108,7 @@ check_backend() {
         fi
 
         # Check Django admin
-        local admin_status=$(curl -s -w "%{http_code}" -o /dev/null http://localhost:8001/admin/)
+        local admin_status=$(curl -s -w "%{http_code}" -o /dev/null http://localhost:4646/admin/)
         if [[ "$admin_status" == "200" || "$admin_status" == "302" ]]; then
             success "✓ Django admin is accessible"
         else
@@ -177,11 +177,11 @@ check_nginx() {
 check_celery() {
     log "🔍 Checking Celery workers..."
 
-    if docker ps --format "table {{.Names}}" | grep -q "npa-ecm-celery-worker-stag"; then
+    if docker ps --format "table {{.Names}}" | grep -q "ecm-celery-worker-stag"; then
         success "✓ Celery worker is running"
 
         # Check Celery status (if possible)
-        local celery_status=$(docker exec npa-ecm-celery-worker-stag celery -A ecm inspect active 2>/dev/null | head -5 || echo "Status check failed")
+        local celery_status=$(docker exec ecm-celery-worker-stag celery -A ecm inspect active 2>/dev/null | head -5 || echo "Status check failed")
         if [[ "$celery_status" != "Status check failed" ]]; then
             success "✓ Celery worker is active"
         else

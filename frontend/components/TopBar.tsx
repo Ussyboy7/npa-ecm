@@ -2,11 +2,28 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { RoleSwitcher } from "./RoleSwitcher";
 import { NotificationBadge } from "./correspondence/NotificationBadge";
+import { ThemeToggle } from "./ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
+import { hasTokens, logout } from "@/lib/api-client";
 
 export const TopBar = () => {
+  const router = useRouter();
+  const [authenticated, setAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setAuthenticated(hasTokens());
+  }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    setAuthenticated(false);
+    router.push("/login");
+  };
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center gap-4 px-6">
@@ -36,8 +53,27 @@ export const TopBar = () => {
           {/* Notifications */}
           <NotificationBadge />
 
+          {/* Theme Toggle */}
+          <ThemeToggle />
+
           {/* Role Switcher */}
           <RoleSwitcher />
+
+          {authenticated ? (
+            <button
+              onClick={handleLogout}
+              className="rounded-md border border-border px-3 py-1 text-sm transition-colors hover:bg-muted"
+            >
+              Logout
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="rounded-md border border-border px-3 py-1 text-sm transition-colors hover:bg-muted"
+            >
+              Login
+            </Link>
+          )}
         </div>
       </div>
     </header>

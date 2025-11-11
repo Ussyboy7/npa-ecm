@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -11,18 +12,16 @@ import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  initializeDmsDocuments,
-  loadDocuments,
+  fetchDocuments,
+  getCachedDocuments,
   getAccessibleDocumentsForUser,
   type DocumentRecord,
   type DocumentType,
   type DocumentStatus,
-  getDivisionName,
-  getDepartmentName,
-  listWorkspaces,
+  fetchWorkspaces,
+  getCachedWorkspaces,
   type DocumentWorkspace,
 } from '@/lib/dms-storage';
-import { MOCK_USERS, DIVISIONS, DEPARTMENTS, type User as NPAUser } from '@/lib/npa-structure';
 import {
   FileText,
   Search,
@@ -38,6 +37,7 @@ import {
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
+import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 
@@ -107,52 +107,61 @@ const sensitivityBadgeVariant = (value: DocumentRecord['sensitivity']) => {
 const DocumentManagementPage = () => {
   const router = useRouter();
   const { currentUser } = useCurrentUser();
-  const { users: organizationUsers } = useOrganization();
-  const effectiveUser = useMemo(
-    () => currentUser ?? organizationUsers.find((user) => user.active) ?? null,
-    [currentUser, organizationUsers],
-  );
-  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const { users: organizationUsers, divisions, departments } = useOrganization();
+  const [documents, setDocuments] = useState<DocumentRecord[]>(() => getCachedDocuments());
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<DocumentType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | 'all'>('all');
   const [divisionFilter, setDivisionFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const workspaces = useMemo(() => listWorkspaces(), []);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState<DocumentRecord | null>(null);
+  const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>(() => getCachedWorkspaces());
+
+  const effectiveUser = useMemo(() => {
+    if (currentUser) return currentUser;
+    return organizationUsers.find((user) => user.active) ?? null;
+  }, [currentUser, organizationUsers]);
+
   const workspaceLookup = useMemo(() => {
     const map = new Map<string, DocumentWorkspace>();
     workspaces.forEach((workspace) => map.set(workspace.id, workspace));
     return map;
   }, [workspaces]);
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-    initializeDmsDocuments();
-    setDocuments(loadDocuments());
+    let ignore = false;
+
+    const load = async () => {
+      try {
+        const [docs, spaces] = await Promise.allSettled([
+          fetchDocuments(),
+          fetchWorkspaces(),
+        ]);
+
+        if (ignore) return;
+
+        if (docs.status === 'fulfilled') {
+          setDocuments(docs.value);
+        }
+        if (spaces.status === 'fulfilled') {
+          setWorkspaces(spaces.value);
+        }
+      } catch (error) {
+        console.error('Failed to load DMS data', error);
+      }
+    };
+
+    void load();
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
-  useEffect(() => {
-    if (!effectiveUser) {
-      setDocuments([]);
-      return;
-    }
-    const accessible = getAccessibleDocumentsForUser(effectiveUser);
-    setDocuments(accessible);
-  }, [effectiveUser]);
-
-  const handleRefresh = () => {
-    if (effectiveUser) {
-      setDocuments(getAccessibleDocumentsForUser(effectiveUser));
-    } else {
-      setDocuments(loadDocuments());
-    }
-  };
-
   const filteredDocuments = useMemo(() => {
-    if (!effectiveUser) return [];
-    const list = documents;
+    const list = effectiveUser ? getAccessibleDocumentsForUser(effectiveUser) : documents;
     return list
       .filter((doc) => {
         if (typeFilter !== 'all' && doc.documentType !== typeFilter) return false;
@@ -176,8 +185,12 @@ const DocumentManagementPage = () => {
   const publishedDocuments = filteredDocuments.filter((doc) => doc.status === 'published');
   const archivedDocuments = filteredDocuments.filter((doc) => doc.status === 'archived');
 
+  const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
+  const departmentLookup = useMemo(() => new Map(departments.map((department) => [department.id, department.name])), [departments]);
+  const userLookup = useMemo(() => new Map(organizationUsers.map((user) => [user.id, user])), [organizationUsers]);
+
   const renderDocumentList = (list: DocumentRecord[]) => (
-    mounted && list.length === 0 ? (
+    list.length === 0 ? (
       <Card>
         <CardContent className="py-12 text-center text-sm text-muted-foreground">
           No documents found for the current filters.
@@ -186,7 +199,7 @@ const DocumentManagementPage = () => {
     ) : (
       list.map((document) => {
         const latestVersion = document.versions[0];
-        const author = MOCK_USERS.find((u) => u.id === document.authorId);
+        const author = userLookup.get(document.authorId);
         return (
           <div
             key={document.id}
@@ -218,9 +231,22 @@ const DocumentManagementPage = () => {
                       ))}
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    Updated {formatDate(document.updatedAt)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      Updated {formatDate(document.updatedAt)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setShareTarget(document);
+                        setShareDialogOpen(true);
+                      }}
+                    >
+                      Share
+                    </Button>
+                  </div>
                 </div>
 
                 {document.description && (
@@ -257,11 +283,15 @@ const DocumentManagementPage = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <Layers className="h-3 w-3" />
-                    <span>{getDivisionName(document.divisionId)}</span>
+                    <span>{document.divisionId ? divisionLookup.get(document.divisionId) ?? 'Unknown division' : 'Unassigned'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Filter className="h-3 w-3" />
-                    <span>{getDepartmentName(document.departmentId)}</span>
+                    <span>
+                      {document.departmentId
+                        ? departmentLookup.get(document.departmentId) ?? 'Unknown department'
+                        : 'Unassigned'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <UserIcon className="h-3 w-3" />
@@ -298,7 +328,7 @@ const DocumentManagementPage = () => {
           <div className="flex items-center gap-2">
             <ContextualHelp
               title="Navigating the DMS"
-              description="Create documents with the rich text editor, upload existing files, and leverage workspaces for collaboration and governance."
+              description="Search across workspaces, filter by status, document type, division, department, and sensitivity. Open a record to review version history and link it to correspondence."
               steps={[
                 'Filter by status, type, or workspace to find the right file.',
                 'Create or upload from the actions panel to add new content.',
@@ -320,7 +350,7 @@ const DocumentManagementPage = () => {
 
         <HelpGuideCard
           title="Central Document Workspace"
-          description="Search across workspaces, filter by status, document type, division, department, and sensitivity. Open a record to review version history, inline comments, workspace assignments, and link it to correspondence."
+          description="Search across workspaces, filter by status, document type, division, department, and sensitivity. Open a record to review version history and link it to correspondence."
           links={[
             { label: "My Documents", href: "/documents" },
             { label: "Help & Guides", href: "/help" },
@@ -369,7 +399,7 @@ const DocumentManagementPage = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Divisions</SelectItem>
-              {DIVISIONS.map((division) => (
+              {divisions.map((division) => (
                 <SelectItem key={division.id} value={division.id}>
                   {division.name}
                 </SelectItem>
@@ -382,7 +412,7 @@ const DocumentManagementPage = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
-              {DEPARTMENTS.map((department) => (
+              {departments.map((department) => (
                 <SelectItem key={department.id} value={department.id}>
                   {department.name}
                 </SelectItem>
@@ -448,10 +478,22 @@ const DocumentManagementPage = () => {
           mode="create"
           currentUser={effectiveUser}
           onComplete={() => {
-            handleRefresh();
+            setDocuments(getCachedDocuments());
           }}
         />
       )}
+      <ShareDocumentDialog
+        open={shareDialogOpen}
+        onOpenChange={(open) => {
+          setShareDialogOpen(open);
+          if (!open) setShareTarget(null);
+        }}
+        document={shareTarget}
+        currentUserId={currentUser?.id}
+        onShared={() => {
+          setDocuments(getCachedDocuments());
+        }}
+      />
     </DashboardLayout>
   );
 };

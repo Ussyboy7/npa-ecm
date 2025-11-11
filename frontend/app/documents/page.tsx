@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -21,19 +22,20 @@ import {
   FilePlus,
 } from 'lucide-react';
 import {
-  initializeDmsDocuments,
-  loadDocuments,
+  fetchDocuments,
   getAccessibleDocumentsForUser,
   type DocumentRecord,
   type DocumentStatus,
   type DocumentType,
-  getDivisionName,
-  getDepartmentName,
-  listWorkspaces,
+  fetchWorkspaces,
   type DocumentWorkspace,
+  getCachedDocuments,
+  getCachedWorkspaces,
 } from '@/lib/dms-storage';
-import { MOCK_USERS, DIVISIONS, DEPARTMENTS, type User as NPAUser } from '@/lib/npa-structure';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'other'];
 const STATUS_FILTERS: { value: DocumentStatus | 'all'; label: string }[] = [
@@ -105,51 +107,61 @@ const sensitivityBadgeVariant = (value: DocumentRecord['sensitivity']) => {
 
 const MyDocuments = () => {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<NPAUser | null>(null);
-  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const { currentUser } = useCurrentUser();
+  const { users: organizationUsers, divisions, departments } = useOrganization();
+  const effectiveUser = useMemo(
+    () => currentUser ?? organizationUsers.find((user) => user.active) ?? null,
+    [currentUser, organizationUsers],
+  );
+  const [documents, setDocuments] = useState<DocumentRecord[]>(() => getCachedDocuments());
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<DocumentType | 'all'>('all');
   const [divisionFilter, setDivisionFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
-  const workspaces = useMemo(() => listWorkspaces(), []);
+  const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>(() => getCachedWorkspaces());
   const workspaceLookup = useMemo(() => {
     const map = new Map<string, DocumentWorkspace>();
     workspaces.forEach((workspace) => map.set(workspace.id, workspace));
     return map;
   }, [workspaces]);
-  const [mounted, setMounted] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState<DocumentRecord | null>(null);
 
   useEffect(() => {
-    initializeDmsDocuments();
-    let savedUserId = localStorage.getItem('npa_demo_user_id');
-    if (!savedUserId) {
-      const md = MOCK_USERS.find((u) => u.gradeLevel === 'MDCS');
-      if (md) {
-        savedUserId = md.id;
-        localStorage.setItem('npa_demo_user_id', md.id);
-      }
-    }
+    let ignore = false;
 
-    if (savedUserId) {
-      const user = MOCK_USERS.find((u) => u.id === savedUserId) ?? null;
-      setCurrentUser(user);
-      if (user) {
-        const accessible = getAccessibleDocumentsForUser(user);
-        setDocuments(accessible);
-      } else {
-        setDocuments(loadDocuments());
-      }
-    }
-  }, []);
+    const load = async () => {
+      try {
+        const [docs, spaces] = await Promise.allSettled([
+          fetchDocuments(),
+          fetchWorkspaces(),
+        ]);
 
-  useEffect(() => {
-    setMounted(true);
+        if (ignore) return;
+
+        if (docs.status === 'fulfilled') {
+          setDocuments(docs.value);
+        }
+        if (spaces.status === 'fulfilled') {
+          setWorkspaces(spaces.value);
+        }
+      } catch (error) {
+        console.error('Failed to load My Documents data', error);
+      }
+    };
+
+    void load();
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const filteredDocuments = useMemo(() => {
-    if (!currentUser || !mounted) return [];
-    return documents
+    if (!effectiveUser) return documents;
+    const accessible = getAccessibleDocumentsForUser(effectiveUser);
+    return accessible
       .filter((doc) => {
         if (statusFilter !== 'all' && doc.status !== statusFilter) return false;
         if (typeFilter !== 'all' && doc.documentType !== typeFilter) return false;
@@ -166,23 +178,21 @@ const MyDocuments = () => {
         );
       })
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [currentUser, mounted, documents, searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter]);
+  }, [effectiveUser, documents, searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter]);
 
   const draftDocuments = filteredDocuments.filter((doc) => doc.status === 'draft');
   const publishedDocuments = filteredDocuments.filter((doc) => doc.status === 'published');
   const archivedDocuments = filteredDocuments.filter((doc) => doc.status === 'archived');
 
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
-        <div className="p-6">Loading...</div>
-      </DashboardLayout>
-    );
-  }
-
   const DocumentCard = ({ document }: { document: DocumentRecord }) => {
     const latestVersion = document.versions[0];
-    const author = MOCK_USERS.find((u) => u.id === document.authorId);
+    const author = organizationUsers.find((u) => u.id === document.authorId);
+    const division = document.divisionId
+      ? divisions.find((div) => div.id === document.divisionId)
+      : undefined;
+    const department = document.departmentId
+      ? departments.find((dept) => dept.id === document.departmentId)
+      : undefined;
 
     return (
       <div
@@ -214,9 +224,22 @@ const MyDocuments = () => {
                   ))}
                 </div>
               </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                Updated {formatDate(document.updatedAt)}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  Updated {formatDate(document.updatedAt)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setShareTarget(document);
+                    setShareDialogOpen(true);
+                  }}
+                >
+                  Share
+                </Button>
+              </div>
             </div>
 
             {document.description && (
@@ -255,7 +278,11 @@ const MyDocuments = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Layers className="h-3 w-3" />
-                <span>{getDivisionName(document.divisionId)}</span>
+                <span>{division?.name ?? 'Unassigned'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Filter className="h-3 w-3" />
+                <span>{department?.name ?? 'Unassigned'}</span>
               </div>
               <div className="flex items-center gap-2">
                 <UserIcon className="h-3 w-3" />
@@ -300,37 +327,33 @@ const MyDocuments = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={() => router.push('/dms')}
-              className="gap-2">
-              <FilePlus className="h-4 w-4" />
-              Open DMS
-            </Button>
             <ContextualHelp
-              title="How to work with documents"
-              description="Search across metadata and full text, then open a record for version history, collaboration, and signature controls."
+              title="Manage your personal workspace"
+              description="Filter by status, type, and workspace to review your assigned documents. Upload new versions or start new drafts to collaborate with your team."
               steps={[
-                'Use filters or tags to narrow documents.',
-                'Open a document to view versions and collaborate.',
-                'Create or upload new files from the DMS workspace.'
+                'Search within your documents using title, reference, or content.',
+                'Upload new versions or create documents to keep content up to date.',
+                'Filter by division, department, or status to focus on relevant work.',
               ]}
             />
+            <Button variant="default" size="sm" className="gap-1" onClick={() => router.push('/dms')}>
+              <FilePlus className="h-4 w-4" />
+              Go to DMS
+            </Button>
           </div>
         </div>
 
         <HelpGuideCard
           title="Manage Your Documents"
           description="Review documents you authored, collaborate on, or have access to through divisional permissions. Filter by status, type, division, and workspace, then open the DMS for version history and collaboration."
-          links={[
-            { label: "Open DMS", href: "/dms" },
-            { label: "Help & Guides", href: "/help" },
-          ]}
+          links={[{ label: 'Open DMS', href: '/dms' }]}
         />
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           <div className="md:col-span-2 relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search documents by title, reference, or tag..."
+              placeholder="Search documents by title or reference..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -341,9 +364,9 @@ const MyDocuments = () => {
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              {STATUS_FILTERS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+              {STATUS_FILTERS.map((status) => (
+                <SelectItem key={status.value} value={status.value}>
+                  {status.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -367,7 +390,7 @@ const MyDocuments = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Divisions</SelectItem>
-              {DIVISIONS.map((division) => (
+              {divisions.map((division) => (
                 <SelectItem key={division.id} value={division.id}>
                   {division.name}
                 </SelectItem>
@@ -380,7 +403,7 @@ const MyDocuments = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
-              {DEPARTMENTS.map((department) => (
+              {departments.map((department) => (
                 <SelectItem key={department.id} value={department.id}>
                   {department.name}
                 </SelectItem>
@@ -413,6 +436,22 @@ const MyDocuments = () => {
             {renderDocumentList(filteredDocuments)}
           </TabsContent>
         </Tabs>
+
+      <ShareDocumentDialog
+        open={shareDialogOpen}
+        onOpenChange={(open) => {
+          setShareDialogOpen(open);
+          if (!open) setShareTarget(null);
+        }}
+        document={shareTarget}
+        currentUserId={currentUser?.id}
+        onShared={() => {
+          setDocuments(getCachedDocuments());
+          if (effectiveUser) {
+            setDocuments(getAccessibleDocumentsForUser(effectiveUser));
+          }
+        }}
+      />
       </div>
     </DashboardLayout>
   );

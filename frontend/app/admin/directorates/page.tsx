@@ -15,11 +15,6 @@ import {
   Network,
   UserCircle2,
 } from "lucide-react";
-import {
-  DIRECTORATES,
-  getDivisionById,
-  getDepartmentById,
-} from "@/lib/npa-structure";
 import { Input } from "@/components/ui/input";
 import { useOrganization, type Directorate as OrgDirectorate } from "@/contexts/OrganizationContext";
 
@@ -37,8 +32,7 @@ const DirectoratesManagement = () => {
   const leadershipCount = useMemo(() => {
     return directorates.filter((dir) => {
       if (dir.executiveDirectorId) return true;
-      const baseMeta = DIRECTORATES.find((meta) => meta.id === dir.id);
-      return Boolean(baseMeta?.executiveDirectorId);
+      return false;
     }).length;
   }, [directorates]);
 
@@ -53,38 +47,17 @@ const DirectoratesManagement = () => {
   }, [directorates, searchQuery]);
 
   const getExecutive = (directorate: OrgDirectorate) => {
-    const assignedId = directorate.executiveDirectorId;
-    if (assignedId) {
-      const leader = users.find((u) => u.id === assignedId);
-      if (leader) return leader.name;
-    }
-
-    const baseMeta = DIRECTORATES.find((dir) => dir.id === directorate.id);
-    if (baseMeta?.executiveDirectorId) {
-      const leader = users.find((u) => u.id === baseMeta.executiveDirectorId);
-      if (leader) return leader.name;
-    }
-
-    return baseMeta?.executiveDirector ?? "Not assigned";
+    if (!directorate.executiveDirectorId) return "Not assigned";
+    return users.find((u) => u.id === directorate.executiveDirectorId)?.name ?? "Not assigned";
   };
 
   const getExecutiveEmail = (directorate: OrgDirectorate) => {
-    const assignedId = directorate.executiveDirectorId;
-    if (assignedId) {
-      return users.find((u) => u.id === assignedId)?.email;
-    }
-
-    const baseMeta = DIRECTORATES.find((dir) => dir.id === directorate.id);
-    if (baseMeta?.executiveDirectorId) {
-      return users.find((u) => u.id === baseMeta.executiveDirectorId)?.email;
-    }
-
-    return undefined;
+    if (!directorate.executiveDirectorId) return undefined;
+    return users.find((u) => u.id === directorate.executiveDirectorId)?.email;
   };
 
   const getExecutiveTitle = (directorate: OrgDirectorate) => {
-    const baseMeta = DIRECTORATES.find((dir) => dir.id === directorate.id);
-    return baseMeta?.id === 'dir-md' ? 'Managing Director' : 'Executive Director';
+    return directorate.id === 'dir-md' ? 'Managing Director' : 'Executive Director';
   };
 
   const getDivisionManager = (divisionId: string) => {
@@ -199,10 +172,15 @@ const DirectoratesManagement = () => {
             const dirDivisions = mounted ? divisions.filter(
               (div) => div.directorateId === directorate.id && div.isActive
             ) : [];
-            const dirDepartments = mounted ? departments.filter(
-              (dept) =>
-                dirDivisions.some((div) => div.id === dept.divisionId) && dept.isActive
-            ) : [];
+            const divisionCount = dirDivisions.length;
+            const departmentCount = dirDivisions.reduce((acc, division) => {
+              const divisionDepartments = departments.filter(
+                (department) => department.divisionId === division.id && department.isActive
+              );
+              return acc + divisionDepartments.length;
+            }, 0);
+            const leadershipName = getExecutive(directorate);
+            const leadershipEmail = getExecutiveEmail(directorate);
 
             return (
               <Card key={directorate.id}>
@@ -215,7 +193,7 @@ const DirectoratesManagement = () => {
                         <Badge variant="outline" className="text-xs uppercase">{directorate.code}</Badge>
                       </span>
                       <Badge variant="secondary">{mounted ? dirDivisions.length : 0} Divisions</Badge>
-                      <Badge variant="outline">{mounted ? dirDepartments.length : 0} Departments</Badge>
+                      <Badge variant="outline">{mounted ? departmentCount : 0} Departments</Badge>
                     </CardTitle>
                     <div className="flex items-center gap-2">
                       {!directorate.isActive && (
@@ -240,10 +218,10 @@ const DirectoratesManagement = () => {
                   <div className="rounded-lg border p-4 bg-muted/30">
                     <p className="text-sm font-semibold text-muted-foreground">{getExecutiveTitle(directorate)}</p>
                     <div className="flex flex-wrap items-center gap-3 mt-2">
-                      <Badge>{getExecutive(directorate)}</Badge>
-                      {getExecutiveEmail(directorate) && (
+                      <Badge>{leadershipName}</Badge>
+                      {leadershipEmail && (
                         <span className="text-xs text-muted-foreground">
-                          {getExecutiveEmail(directorate)}
+                          {leadershipEmail}
                         </span>
                       )}
                     </div>
@@ -253,10 +231,10 @@ const DirectoratesManagement = () => {
                     {dirDivisions.map((division) => {
                       const managerName = getDivisionManager(division.id);
                       const managerEmail = getDivisionManagerEmail(division.id);
-                      const divisionRecord = getDivisionById(division.id);
-                      const divisionDepartments = mounted ? dirDepartments.filter(
-                        (dept) => dept.divisionId === division.id
-                      ) : [];
+                      const divisionRecord = divisions.find(d => d.id === division.id);
+                      const divisionDepartments = departments.filter(
+                        (department) => department.divisionId === division.id && department.isActive
+                      );
 
                       return (
                         <Card key={division.id} className="border-muted">
@@ -280,7 +258,7 @@ const DirectoratesManagement = () => {
                             </div>
                             <div className="space-y-1">
                               {divisionDepartments.map((dept) => {
-                                const deptRecord = getDepartmentById(dept.id);
+                                const deptRecord = departments.find(d => d.id === dept.id);
                                 const agmName = dept.assistantGeneralManagerId
                                   ? users.find((u) => u.id === dept.assistantGeneralManagerId)?.name
                                   : null;

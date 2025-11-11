@@ -7,27 +7,142 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
+import { Button } from "@/components/ui/button";
 import {
   Users,
   Search,
   Building2,
   Shield,
+  X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getDivisionById, getDepartmentById, getGradeLevelByCode } from "@/lib/npa-structure";
+import { UserEditDialog } from "@/components/admin/UserEditDialog";
+import { getGradeLevelByCode, type User } from "@/lib/npa-structure";
+
+type FilterCategory = "role" | "grade" | "directorate" | "division" | "department" | "status";
+
+type ActiveFilter = {
+  key: FilterCategory;
+  value: string;
+  display: string;
+};
+
+type SortKey = "name" | "email" | "role" | "grade" | "division" | "department" | "status";
+
+type SortState = {
+  key: SortKey;
+  direction: "asc" | "desc";
+};
+
+const getGradeLabel = (code: string | undefined) => getGradeLevelByCode(code)?.name;
 
 const UserManagementPage = () => {
-  const { users } = useOrganization();
+  const { users, divisions, departments } = useOrganization();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [filters, setFilters] = useState<ActiveFilter[]>([]);
+  const [sortState, setSortState] = useState<SortState | null>(null);
+
+  const addFilter = (filter: ActiveFilter) => {
+    setFilters((prev) => {
+      const exists = prev.some((item) => item.key === filter.key && item.value === filter.value);
+      if (exists) return prev;
+      return [...prev, filter];
+    });
+  };
+
+  const removeFilter = (filter: ActiveFilter) => {
+    setFilters((prev) => prev.filter((item) => item !== filter));
+  };
+
+  const filterPredicate = (user: User) => {
+    if (filters.length === 0) return true;
+    return filters.every((filter) => {
+      switch (filter.key) {
+        case "role":
+          return user.systemRole === filter.value;
+        case "grade":
+          return user.gradeLevel === filter.value;
+        case "directorate":
+          return user.directorate === filter.value;
+        case "division":
+          return user.division === filter.value;
+        case "department":
+          return user.department === filter.value;
+        case "status":
+          return filter.value === (user.active ? "active" : "inactive");
+        default:
+          return true;
+      }
+    });
+  };
 
   const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return users;
-    return users.filter((user) =>
+    if (!searchQuery.trim()) {
+      return users.filter(filterPredicate);
+    }
+    return users
+      .filter(filterPredicate)
+      .filter((user) =>
       [user.name, user.email, user.systemRole, user.employeeId]
         .filter(Boolean)
         .some((field) => field!.toLowerCase().includes(searchQuery.toLowerCase()))
     );
-  }, [users, searchQuery]);
+  }, [users, searchQuery, filters]);
+
+  const sortedUsers = useMemo(() => {
+    if (!sortState) return filteredUsers;
+
+    const accessor = (user: User): string => {
+      switch (sortState.key) {
+        case "name":
+          return user.name ?? "";
+        case "email":
+          return user.email ?? "";
+        case "role":
+          return user.systemRole ?? "";
+        case "grade":
+          return user.gradeLevel ?? "";
+        case "division":
+          return user.division ?? "";
+        case "department":
+          return user.department ?? "";
+        case "status":
+          return user.active ? "active" : "inactive";
+        default:
+          return "";
+      }
+    };
+
+    const collator = new Intl.Collator(undefined, { sensitivity: "base" });
+    const sorted = [...filteredUsers].sort((a, b) => collator.compare(accessor(a), accessor(b)));
+    if (sortState.direction === "desc") {
+      sorted.reverse();
+    }
+    return sorted;
+  }, [filteredUsers, sortState]);
+
+  const toggleSort = (key: SortKey) => {
+    setSortState((prev) => {
+      if (!prev || prev.key !== key) {
+        return { key, direction: "asc" };
+      }
+      if (prev.direction === "asc") {
+        return { key, direction: "desc" };
+      }
+      return null;
+    });
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (!sortState || sortState.key !== key) return <ArrowUpDown className="h-3.5 w-3.5" />;
+    if (sortState.direction === "asc") return <ArrowUp className="h-3.5 w-3.5" />;
+    return <ArrowDown className="h-3.5 w-3.5" />;
+  };
 
   return (
     <DashboardLayout>
@@ -113,6 +228,32 @@ const UserManagementPage = () => {
         />
       </div>
 
+      {filters.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {filters.map((filter) => (
+            <Badge key={`${filter.key}-${filter.value}`} variant="outline" className="pl-3 pr-1 py-1 text-xs">
+              <span className="mr-2 capitalize">{filter.display}</span>
+              <button
+                type="button"
+                className="rounded-full p-1 hover:bg-muted"
+                onClick={() => removeFilter(filter)}
+                aria-label={`Remove filter ${filter.display}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs"
+            onClick={() => setFilters([])}
+          >
+            Clear all
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>User Directory</CardTitle>
@@ -121,20 +262,88 @@ const UserManagementPage = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Grade</TableHead>
-                <TableHead>Division</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left"
+                    onClick={() => toggleSort("name")}
+                  >
+                    Name
+                    {renderSortIcon("name")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left"
+                    onClick={() => toggleSort("email")}
+                  >
+                    Email
+                    {renderSortIcon("email")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left"
+                    onClick={() => toggleSort("role")}
+                  >
+                    Role
+                    {renderSortIcon("role")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left"
+                    onClick={() => toggleSort("grade")}
+                  >
+                    Grade
+                    {renderSortIcon("grade")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left"
+                    onClick={() => toggleSort("division")}
+                  >
+                    Division
+                    {renderSortIcon("division")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left"
+                    onClick={() => toggleSort("department")}
+                  >
+                    Department
+                    {renderSortIcon("department")}
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-left"
+                    onClick={() => toggleSort("status")}
+                  >
+                    Status
+                    {renderSortIcon("status")}
+                  </button>
+                </TableHead>
+                <TableHead className="w-[120px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.map((user) => {
-                const grade = getGradeLevelByCode(user.gradeLevel);
-                const division = user.division ? getDivisionById(user.division) : undefined;
-                const department = user.department ? getDepartmentById(user.department) : undefined;
+              {sortedUsers.map((user) => {
+                const grade = getGradeLabel(user.gradeLevel);
+                const division = user.division
+                  ? divisions.find((div) => div.id === user.division)
+                  : undefined;
+                const department = user.department
+                  ? departments.find((dept) => dept.id === user.department)
+                  : undefined;
                 return (
                   <TableRow key={user.id}>
                     <TableCell>
@@ -145,38 +354,90 @@ const UserManagementPage = () => {
                     </TableCell>
                     <TableCell className="text-sm">{user.email}</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{user.systemRole}</Badge>
+                      <Badge
+                        variant="secondary"
+                        className="cursor-pointer"
+                        onClick={() =>
+                          addFilter({ key: "role", value: user.systemRole, display: `Role: ${user.systemRole}` })
+                        }
+                      >
+                        {user.systemRole || "—"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">
+                      <Badge
+                        variant="outline"
+                        className="cursor-pointer"
+                        onClick={() =>
+                          addFilter({ key: "grade", value: user.gradeLevel, display: `Grade: ${user.gradeLevel}` })
+                        }
+                      >
                         {user.gradeLevel}
-                        {grade ? ` • ${grade.name}` : ""}
+                        {grade ? ` • ${grade}` : ""}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       {division ? (
-                        <div className="flex flex-col">
+                        <button
+                          type="button"
+                          className="flex flex-col text-left hover:text-primary"
+                          onClick={() =>
+                            addFilter({ key: "division", value: division.id, display: `Division: ${division.name}` })
+                          }
+                        >
                           <span>{division.name}</span>
                           <span className="text-xs text-muted-foreground">{division.code}</span>
-                        </div>
+                        </button>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell>
                       {department ? (
-                        <div className="flex flex-col">
+                        <button
+                          type="button"
+                          className="flex flex-col text-left hover:text-primary"
+                          onClick={() =>
+                            addFilter({
+                              key: "department",
+                              value: department.id,
+                              display: `Department: ${department.name}`,
+                            })
+                          }
+                        >
                           <span>{department.name}</span>
                           <span className="text-xs text-muted-foreground">{department.code}</span>
-                        </div>
+                        </button>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={user.active ? "success" : "secondary"}>
+                      <Badge
+                        variant={user.active ? "default" : "secondary"}
+                        className="cursor-pointer"
+                        onClick={() =>
+                          addFilter({
+                            key: "status",
+                            value: user.active ? "active" : "inactive",
+                            display: `Status: ${user.active ? "Active" : "Inactive"}`,
+                          })
+                        }
+                      >
                         {user.active ? "Active" : "Inactive"}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setEditOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );
@@ -193,6 +454,16 @@ const UserManagementPage = () => {
       </Card>
 
       </div>
+      <UserEditDialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) {
+            setSelectedUser(null);
+          }
+        }}
+        user={selectedUser}
+      />
     </DashboardLayout>
   );
 };

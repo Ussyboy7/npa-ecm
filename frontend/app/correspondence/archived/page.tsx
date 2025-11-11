@@ -20,7 +20,8 @@ import {
   Filter
 } from 'lucide-react';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
-import { getDivisionById, getDepartmentById, DIRECTORATES, type Correspondence } from '@/lib/npa-structure';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import type { Correspondence } from '@/lib/npa-structure';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -29,6 +30,7 @@ import { useUserPermissions } from '@/hooks/use-user-permissions';
 const ArchivedCorrespondence = () => {
   const router = useRouter();
   const { correspondence } = useCorrespondence();
+  const { divisions, departments, directorates } = useOrganization();
   const { currentUser } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
   const [searchQuery, setSearchQuery] = useState('');
@@ -69,13 +71,13 @@ const ArchivedCorrespondence = () => {
       const archiveLevel = c.archiveLevel || 'department';
       if (!permissions.allowedArchiveLevels.includes(archiveLevel)) return false;
 
-      const userDivision = currentUser.division ? getDivisionById(currentUser.division) : null;
-      const userDepartment = currentUser.department ? getDepartmentById(currentUser.department) : null;
-      const userDirectorate = userDivision ? DIRECTORATES.find(d => d.id === userDivision.directorateId) : null;
+      const userDivision = currentUser.division ? divisions.find((item) => item.id === currentUser.division) : null;
+      const userDepartment = currentUser.department ? departments.find((item) => item.id === currentUser.department) : null;
+      const userDirectorate = userDivision ? directorates.find((item) => item.id === userDivision.directorateId) : null;
 
-      const corrDivision = c.divisionId ? getDivisionById(c.divisionId) : null;
-      const corrDepartment = c.departmentId ? getDepartmentById(c.departmentId) : null;
-      const corrDirectorate = corrDivision ? DIRECTORATES.find(d => d.id === corrDivision.directorateId) : null;
+      const corrDivision = c.divisionId ? divisions.find((item) => item.id === c.divisionId) : null;
+      const corrDepartment = c.departmentId ? departments.find((item) => item.id === c.departmentId) : null;
+      const corrDirectorate = corrDivision ? directorates.find((item) => item.id === corrDivision.directorateId) : null;
 
       if (archiveLevel === 'department') {
         return corrDepartment && userDepartment && corrDepartment.id === userDepartment.id;
@@ -95,7 +97,7 @@ const ArchivedCorrespondence = () => {
     });
 
     applyFilters(archived);
-  }, [correspondence, searchQuery, yearFilter, priorityFilter, currentUser, permissions.allowedArchiveLevels, applyFilters]);
+  }, [correspondence, searchQuery, yearFilter, priorityFilter, currentUser, permissions.allowedArchiveLevels, applyFilters, divisions, departments, directorates]);
 
   if (!currentUser) {
     return null;
@@ -121,8 +123,8 @@ const ArchivedCorrespondence = () => {
   };
 
   const CorrespondenceCard = ({ corr }: { corr: Correspondence }) => {
-    const division = getDivisionById(corr.divisionId);
-    const department = corr.departmentId ? getDepartmentById(corr.departmentId) : null;
+    const division = corr.divisionId ? divisions.find((item) => item.id === corr.divisionId) : null;
+    const department = corr.departmentId ? departments.find((item) => item.id === corr.departmentId) : null;
     const archiveLevel = corr.archiveLevel || 'department';
     const levelName = archiveLevel === 'department' ? 'Department' : archiveLevel === 'division' ? 'Division' : 'Directorate';
 

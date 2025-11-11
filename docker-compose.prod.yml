@@ -1,154 +1,103 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  # PostgreSQL Database
-  dms-db:
-    image: postgres:15-alpine
-    container_name: dms-db-prod
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecm-postgres-prod
     environment:
-      POSTGRES_DB: ${DB_NAME:-dms_db}
-      POSTGRES_USER: ${DB_USER:-dmsadmin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-npa_ecm_prod}
+      POSTGRES_USER: ${DB_USER:-npa_ecm_prod}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me}
     volumes:
-      - dms-postgres-data:/var/lib/postgresql/data
-    networks:
-      - dms-network
+      - postgres-data:/var/lib/postgresql/data
     restart: always
 
-  # Redis
-  dms-redis:
+  redis:
     image: redis:7-alpine
-    container_name: dms-redis-prod
-    networks:
-      - dms-network
+    container_name: ecm-redis-prod
+    command: redis-server --appendonly yes
     restart: always
 
-  # Django Backend
-  dms-backend:
+  backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    container_name: dms-backend-prod
+    container_name: ecm-backend-prod
+    env_file:
+      - ./backend/env/production.env
     volumes:
-      - dms-media:/app/media
-      - dms-static:/app/staticfiles
+      - media-data:/app/media
+      - static-data:/app/staticfiles
     expose:
-      - 8000
-    environment:
-      - DJANGO_ENV=production
-      - DJANGO_DEBUG=False
-      - DB_HOST=dms-db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-dms_db}
-      - DB_USER=${DB_USER:-dmsadmin}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - REDIS_HOST=dms-redis
-      - REDIS_PORT=6379
-      - CELERY_BROKER_URL=redis://dms-redis:6379/0
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - "8000"
     depends_on:
-      - dms-db
-      - dms-redis
-    networks:
-      - dms-network
+      - postgres
+      - redis
     restart: always
 
-  # Celery Worker
-  dms-celery:
+  celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    container_name: dms-celery-prod
-    command: celery -A dms worker -l info
+    container_name: ecm-celery-worker-prod
+    env_file:
+      - ./backend/env/production.env
+    command: celery -A ecm_backend worker -l info
     volumes:
-      - dms-media:/app/media
-    environment:
-      - DJANGO_ENV=production
-      - DB_HOST=dms-db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-dms_db}
-      - DB_USER=${DB_USER:-dmsadmin}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - REDIS_HOST=dms-redis
-      - REDIS_PORT=6379
-      - CELERY_BROKER_URL=redis://dms-redis:6379/0
+      - ./backend:/app
     depends_on:
-      - dms-db
-      - dms-redis
-      - dms-backend
-    networks:
-      - dms-network
+      - backend
+      - redis
     restart: always
 
-  # Celery Beat
-  dms-celery-beat:
+  celery-beat:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    container_name: dms-celery-beat-prod
-    command: celery -A dms beat -l info
-    environment:
-      - DJANGO_ENV=production
-      - DB_HOST=dms-db
-      - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-dms_db}
-      - DB_USER=${DB_USER:-dmsadmin}
-      - DB_PASSWORD=${DB_PASSWORD:-changeme}
-      - REDIS_HOST=dms-redis
-      - REDIS_PORT=6379
-      - CELERY_BROKER_URL=redis://dms-redis:6379/0
+    container_name: ecm-celery-beat-prod
+    env_file:
+      - ./backend/env/production.env
+    command: celery -A ecm_backend beat -l info
+    volumes:
+      - ./backend:/app
     depends_on:
-      - dms-db
-      - dms-redis
-      - dms-backend
-    networks:
-      - dms-network
+      - backend
+      - redis
     restart: always
 
-  # Next.js Frontend
-  dms-frontend:
+  frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
-    container_name: dms-frontend-prod
-    expose:
-      - 3001
+    container_name: ecm-frontend-prod
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ecm-backend/api}
+      NODE_ENV: production
+    expose:
+      - "3000"
     depends_on:
-      - dms-backend
-    networks:
-      - dms-network
+      - backend
     restart: always
 
-  # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
-    container_name: dms-nginx-prod
+    container_name: ecm-nginx-prod
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
-      - dms-static:/var/www/static
-      - dms-media:/var/www/media
+      - static-data:/var/www/static
+      - media-data:/var/www/media
     depends_on:
-      - dms-backend
-      - dms-frontend
-    networks:
-      - dms-network
+      - frontend
+      - backend
     restart: always
 
 volumes:
-  dms-postgres-data:
-  dms-media:
-  dms-static:
-
-networks:
-  dms-network:
-    driver: bridge
+  postgres-data:
+  media-data:
+  static-data:
 
 
 

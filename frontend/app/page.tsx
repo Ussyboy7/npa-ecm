@@ -34,7 +34,7 @@ const features = [
 
 const stats = [
   { value: "14+", label: "Directorates and divisions represented" },
-  { value: "200+", label: "Mock documents & correspondence seeded" },
+  { value: "200+", label: "Documents & correspondence managed" },
   { value: "24/7", label: "Access to routing, approvals, and archives" },
 ];
 

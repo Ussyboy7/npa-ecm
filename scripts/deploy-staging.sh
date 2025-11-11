@@ -72,9 +72,9 @@ backup_current_deployment() {
     mkdir -p "$backup_dir"
 
     # Backup database if it exists
-    if docker ps | grep -q "npa-ecm-postgres-stag"; then
+    if docker ps | grep -q "ecm-postgres-stag"; then
         log "Backing up PostgreSQL database..."
-        docker exec npa-ecm-postgres-stag pg_dump -U npa_user npa_ecm_stag > "${backup_dir}/database_backup.sql" 2>/dev/null || warning "Database backup failed"
+        docker exec ecm-postgres-stag pg_dump -U npa_user npa_ecm_stag > "${backup_dir}/database_backup.sql" 2>/dev/null || warning "Database backup failed"
     fi
 
     # Backup Docker Compose configuration
@@ -141,19 +141,19 @@ run_health_checks() {
         local healthy=true
 
         # Check PostgreSQL
-        if ! docker exec npa-ecm-postgres-stag pg_isready -U npa_user -d npa_ecm_stag >/dev/null 2>&1; then
+        if ! docker exec ecm-postgres-stag pg_isready -U npa_user -d npa_ecm_stag >/dev/null 2>&1; then
             warning "PostgreSQL is not healthy"
             healthy=false
         fi
 
         # Check Redis
-        if ! docker exec npa-ecm-redis-stag redis-cli ping >/dev/null 2>&1; then
+        if ! docker exec ecm-redis-stag redis-cli ping >/dev/null 2>&1; then
             warning "Redis is not healthy"
             healthy=false
         fi
 
         # Check Backend
-        if ! curl -f -s http://localhost:8001/api/health/ >/dev/null 2>&1; then
+        if ! curl -f -s http://localhost:4646/api/health/ >/dev/null 2>&1; then
             warning "Backend is not healthy"
             healthy=false
         fi
@@ -183,15 +183,15 @@ post_deployment_tasks() {
 
     # Run database migrations if needed
     log "Running database migrations..."
-    docker exec npa-ecm-backend-stag python manage.py migrate --noinput || warning "Migration failed"
+    docker exec ecm-backend-stag python manage.py migrate --noinput || warning "Migration failed"
 
     # Collect static files
     log "Collecting static files..."
-    docker exec npa-ecm-backend-stag python manage.py collectstatic --noinput --clear || warning "Static files collection failed"
+    docker exec ecm-backend-stag python manage.py collectstatic --noinput --clear || warning "Static files collection failed"
 
     # Create superuser if it doesn't exist (for staging)
     log "Ensuring superuser exists..."
-    docker exec npa-ecm-backend-stag python manage.py shell -c "
+    docker exec ecm-backend-stag python manage.py shell -c "
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
@@ -251,8 +251,8 @@ main() {
         success "🎉 Deployment completed successfully!"
         success "Application is available at:"
         success "  Frontend: http://172.16.0.46:4646"
-        success "  Backend API: http://localhost:8001/api/"
-        success "  Admin: http://localhost:8001/admin/"
+        success "  API Health: http://172.16.0.46:4646/api/health/"
+        success "  Admin: http://172.16.0.46:4646/admin/"
         success "  Grafana: http://localhost:3002 (admin/staging_admin_2024)"
         success "  Prometheus: http://localhost:9091"
     else

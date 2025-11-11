@@ -21,6 +21,7 @@ export const DivisionFormModal = ({ open, onOpenChange, division }: DivisionForm
     directorateId: '',
     generalManagerId: '',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (division) {
@@ -38,7 +39,7 @@ export const DivisionFormModal = ({ open, onOpenChange, division }: DivisionForm
   const generalManagers = users.filter(u => u.gradeLevel === 'MSS1');
   const activeDirectorates = directorates.filter(dir => dir.isActive);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.code || !formData.directorateId || !formData.generalManagerId) {
@@ -46,15 +47,29 @@ export const DivisionFormModal = ({ open, onOpenChange, division }: DivisionForm
       return;
     }
 
-    if (division) {
-      updateDivision(division.id, { ...formData });
-      toast({ title: "Success", description: "Division updated successfully" });
-    } else {
-      addDivision({ ...formData, isActive: true });
-      toast({ title: "Success", description: "Division created successfully" });
+    setIsSubmitting(true);
+    try {
+      if (division) {
+        await updateDivision(division.id, {
+          ...formData,
+          generalManagerId: formData.generalManagerId || null,
+        });
+        toast({ title: "Success", description: "Division updated successfully" });
+      } else {
+        await addDivision({
+          ...formData,
+          generalManagerId: formData.generalManagerId || null,
+          isActive: true,
+        });
+        toast({ title: "Success", description: "Division created successfully" });
+      }
+      onOpenChange(false);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : 'Unable to save division';
+      toast({ title: 'Request failed', description, variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    onOpenChange(false);
   };
 
   return (
@@ -114,7 +129,9 @@ export const DivisionFormModal = ({ open, onOpenChange, division }: DivisionForm
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit">{division ? 'Update' : 'Create'}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {division ? (isSubmitting ? 'Updating…' : 'Update') : isSubmitting ? 'Creating…' : 'Create'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -1,201 +1,131 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  # PostgreSQL Database for Staging
   postgres_stag:
-    image: postgres:15-alpine
-    container_name: npa-ecm-postgres-stag
+    image: postgres:16-alpine
+    container_name: ecm-postgres-stag
     environment:
-      POSTGRES_DB: npa_ecm_stag
-      POSTGRES_USER: npa_user
-      POSTGRES_PASSWORD: staging_password_2024
+      POSTGRES_DB: npa_ecm_staging
+      POSTGRES_USER: npa_ecm_staging
+      POSTGRES_PASSWORD: ecmadmin
     volumes:
       - postgres_stag_data:/var/lib/postgresql/data
-      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
-    ports:
-      - "5433:5432"
-    networks:
-      - npa-ecm-stag
-    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U npa_user -d npa_ecm_stag"]
+      test: ["CMD-SHELL", "pg_isready -U npa_ecm_staging"]
       interval: 30s
       timeout: 10s
       retries: 5
+    restart: unless-stopped
 
-  # Redis Cache for Staging
   redis_stag:
     image: redis:7-alpine
-    container_name: npa-ecm-redis-stag
-    ports:
-      - "6380:6379"
+    container_name: ecm-redis-stag
+    command: redis-server --appendonly yes
     volumes:
       - redis_stag_data:/data
-    networks:
-      - npa-ecm-stag
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
 
-  # Django Backend API (Staging)
   backend_stag:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    container_name: npa-ecm-backend-stag
-    environment:
-      - DJANGO_SETTINGS_MODULE=ecm.settings
-      - DATABASE_URL=postgresql://npa_user:staging_password_2024@postgres_stag:5432/npa_ecm_stag
-      - REDIS_URL=redis://redis_stag:6379/0
-      - SECRET_KEY=django-insecure-staging-key-2024-npa-ecm
-      - DEBUG=False
-      - ALLOWED_HOSTS=localhost,127.0.0.1,staging.npa-ecm.com
-      - CORS_ALLOWED_ORIGINS=http://localhost:4646,http://172.16.0.46:4646
-      - ENVIRONMENT=staging
-    ports:
-      - "8001:8000"
+    container_name: ecm-backend-stag
+    env_file:
+      - ./backend/env/staging.env
     volumes:
       - ./backend/media:/app/media
-      - ./backend/static:/app/static
-      - ./backend/logs:/app/logs
+      - ./backend/staticfiles:/app/staticfiles
     depends_on:
       postgres_stag:
         condition: service_healthy
       redis_stag:
-        condition: service_started
-    networks:
-      - npa-ecm-stag
+        condition: service_healthy
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
-  # Next.js Frontend (Staging)
+  celery_worker_stag:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: ecm-celery-worker-stag
+    env_file:
+      - ./backend/env/staging.env
+    command: celery -A ecm_backend worker -l info
+    volumes:
+      - ./backend:/app
+    depends_on:
+      backend_stag:
+        condition: service_started
+      redis_stag:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery_beat_stag:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: ecm-celery-beat-stag
+    env_file:
+      - ./backend/env/staging.env
+    command: celery -A ecm_backend beat -l info
+    volumes:
+      - ./backend:/app
+    depends_on:
+      backend_stag:
+        condition: service_started
+      redis_stag:
+        condition: service_healthy
+    restart: unless-stopped
+
   frontend_stag:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
-    container_name: npa-ecm-frontend-stag
+    container_name: ecm-frontend-stag
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend_stag:8000/api
-      - NEXT_PUBLIC_ENVIRONMENT=staging
-      - NEXT_PUBLIC_APP_URL=http://172.16.0.46:4646
-    ports:
-      - "4646:3000"
+      NEXT_PUBLIC_API_URL: http://backend_stag:8000/api
+      NEXT_PUBLIC_ENVIRONMENT: staging
     depends_on:
       backend_stag:
-        condition: service_healthy
-    networks:
-      - npa-ecm-stag
+        condition: service_started
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
-  # Nginx Reverse Proxy (Staging)
   nginx_stag:
     image: nginx:alpine
-    container_name: npa-ecm-nginx-stag
+    container_name: ecm-nginx-stag
     ports:
-      - "80:80"
-      - "443:443"
+      - "4646:80"
     volumes:
       - ./nginx/stag.conf:/etc/nginx/conf.d/default.conf
       - ./nginx/ssl:/etc/nginx/ssl
       - nginx_logs_stag:/var/log/nginx
     depends_on:
       frontend_stag:
-        condition: service_healthy
-      backend_stag:
-        condition: service_healthy
-    networks:
-      - npa-ecm-stag
-    restart: unless-stopped
-
-  # Celery Worker (Staging)
-  celery_worker_stag:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: npa-ecm-celery-worker-stag
-    command: celery -A ecm worker --loglevel=info
-    environment:
-      - DJANGO_SETTINGS_MODULE=ecm.settings
-      - DATABASE_URL=postgresql://npa_user:staging_password_2024@postgres_stag:5432/npa_ecm_stag
-      - REDIS_URL=redis://redis_stag:6379/0
-      - SECRET_KEY=django-insecure-staging-key-2024-npa-ecm
-    volumes:
-      - ./backend:/app
-    depends_on:
-      postgres_stag:
-        condition: service_healthy
-      redis_stag:
         condition: service_started
       backend_stag:
-        condition: service_healthy
-    networks:
-      - npa-ecm-stag
-    restart: unless-stopped
-
-  # Celery Beat (Staging)
-  celery_beat_stag:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    container_name: npa-ecm-celery-beat-stag
-    command: celery -A ecm beat --loglevel=info
-    environment:
-      - DJANGO_SETTINGS_MODULE=ecm.settings
-      - DATABASE_URL=postgresql://npa_user:staging_password_2024@postgres_stag:5432/npa_ecm_stag
-      - REDIS_URL=redis://redis_stag:6379/0
-      - SECRET_KEY=django-insecure-staging-key-2024-npa-ecm
-    volumes:
-      - ./backend:/app
-    depends_on:
-      postgres_stag:
-        condition: service_healthy
-      redis_stag:
         condition: service_started
-      backend_stag:
-        condition: service_healthy
-    networks:
-      - npa-ecm-stag
     restart: unless-stopped
 
-  # Monitoring - Prometheus (Staging)
   prometheus_stag:
     image: prom/prometheus:latest
-    container_name: npa-ecm-prometheus-stag
-    ports:
-      - "9091:9090"
+    container_name: ecm-prometheus-stag
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_stag_data:/prometheus
-    networks:
-      - npa-ecm-stag
     restart: unless-stopped
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
 
-  # Monitoring - Grafana (Staging)
   grafana_stag:
     image: grafana/grafana:latest
-    container_name: npa-ecm-grafana-stag
+    container_name: ecm-grafana-stag
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=staging_admin_2024
-      - GF_USERS_ALLOW_SIGN_UP=false
-    ports:
-      - "3002:3000"
+      GF_SECURITY_ADMIN_PASSWORD: staging_admin_change_me
+      GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_stag_data:/var/lib/grafana
-    networks:
-      - npa-ecm-stag
     restart: unless-stopped
 
 volumes:
@@ -204,7 +134,3 @@ volumes:
   nginx_logs_stag:
   prometheus_stag_data:
   grafana_stag_data:
-
-networks:
-  npa-ecm-stag:
-    driver: bridge

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,55 +21,170 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { MOCK_USERS, type User as NPAUser, type Correspondence } from '@/lib/npa-structure';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import type { Correspondence } from '@/lib/npa-structure';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 
 const ApprovalsInbox = () => {
   const router = useRouter();
-  const { correspondence } = useCorrespondence();
-  const [currentUser, setCurrentUser] = useState<NPAUser | null>(null);
+  const { correspondence, updateCorrespondence, syncFromApi } = useCorrespondence();
+  const { currentUser, hydrated } = useCurrentUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingApprovals, setPendingApprovals] = useState<Correspondence[]>([]);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const computedPending = useMemo(() => {
+    if (!currentUser) return [];
+    return correspondence
+      .filter((item) => item.currentApproverId === currentUser.id && item.status !== 'completed')
+      .sort((a, b) => new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime());
+  }, [correspondence, currentUser]);
 
   useEffect(() => {
-    const savedUserId = localStorage.getItem('npa_demo_user_id');
-    if (savedUserId) {
-      const user = MOCK_USERS.find(u => u.id === savedUserId);
-      if (user) {
-        setCurrentUser(user);
-        // Filter items pending this user's approval
-        const pending = correspondence.filter(
-          c => c.currentApproverId === user.id && c.status !== 'completed'
-        );
-        setPendingApprovals(pending);
-      }
+    setPendingApprovals(computedPending);
+  }, [computedPending]);
+
+  const filteredItems = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (term.length === 0) return pendingApprovals;
+    return pendingApprovals.filter((item) => {
+      const subject = item.subject?.toLowerCase() ?? '';
+      const reference = item.referenceNumber?.toLowerCase() ?? '';
+      return subject.includes(term) || reference.includes(term);
+    });
+  }, [pendingApprovals, searchQuery]);
+
+  const stats = useMemo(() => {
+    if (!currentUser) {
+      return [];
     }
-  }, [correspondence]);
 
-  const filteredItems = pendingApprovals.filter(c =>
-    c.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
-  const handleApprove = (corrId: string) => {
-    toast.success('Item approved successfully', {
-      description: 'Forwarded to next approver in the chain'
+    const inProgress = correspondence.filter(
+      (item) => item.currentApproverId === currentUser.id && item.status === 'in-progress',
+    ).length;
+
+    const completedToday = correspondence.filter((item) => {
+      if (item.currentApproverId !== currentUser.id || item.status !== 'completed') return false;
+      const referenceDate = item.updatedAt ?? item.receivedDate;
+      return new Date(referenceDate).getTime() >= startOfToday.getTime();
+    }).length;
+
+    const urgentPending = pendingApprovals.filter((item) => item.priority === 'urgent').length;
+
+    return [
+      {
+        title: 'Pending',
+        value: pendingApprovals.length.toString(),
+        icon: Clock,
+        accent: 'bg-warning/10',
+        color: 'text-warning',
+      },
+      {
+        title: 'Completed Today',
+        value: completedToday.toString(),
+        icon: CheckCircle2,
+        accent: 'bg-success/10',
+        color: 'text-success',
+      },
+      {
+        title: 'In Progress',
+        value: inProgress.toString(),
+        icon: ArrowRight,
+        accent: 'bg-info/10',
+        color: 'text-info',
+      },
+      {
+        title: 'Urgent',
+        value: urgentPending.toString(),
+        icon: AlertCircle,
+        accent: 'bg-destructive/10',
+        color: 'text-destructive',
+      },
+    ];
+  }, [correspondence, currentUser, pendingApprovals]);
+
+  const applySearch = useCallback((items: Correspondence[]) => {
+    const term = searchQuery.trim().toLowerCase();
+    if (term.length === 0) return items;
+    return items.filter((item) => {
+      const subject = item.subject?.toLowerCase() ?? '';
+      const reference = item.referenceNumber?.toLowerCase() ?? '';
+      return subject.includes(term) || reference.includes(term);
     });
-    setPendingApprovals(prev => prev.filter(c => c.id !== corrId));
+  }, [searchQuery]);
+
+  const inProgressItems = useMemo(() => {
+    if (!currentUser) return [];
+    const items = correspondence.filter(
+      (item) => item.currentApproverId === currentUser.id && item.status === 'in-progress',
+    );
+    return applySearch(items);
+  }, [applySearch, correspondence, currentUser]);
+
+  const completedItems = useMemo(() => {
+    if (!currentUser) return [];
+    const items = correspondence.filter(
+      (item) => item.currentApproverId === currentUser.id && item.status === 'completed',
+    );
+    return applySearch(items);
+  }, [applySearch, correspondence, currentUser]);
+
+  const allItems = useMemo(() => {
+    if (!currentUser) return [];
+    const items = correspondence.filter((item) => item.currentApproverId === currentUser.id);
+    return applySearch(items);
+  }, [applySearch, correspondence, currentUser]);
+
+  const handleApprove = async (corr: Correspondence) => {
+    setProcessingId(corr.id);
+    try {
+      await updateCorrespondence(corr.id, {
+        status: 'completed',
+        currentApproverId: null,
+      });
+      setPendingApprovals((prev) => prev.filter((item) => item.id !== corr.id));
+      toast.success('Item approved successfully', {
+        description: 'Forwarded to next approver in the chain',
+      });
+      await syncFromApi();
+    } catch (error) {
+      console.error('Failed to approve correspondence', error);
+      toast.error('Unable to approve correspondence', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const handleReject = (corrId: string) => {
-    toast.error('Item rejected', {
-      description: 'Returned to sender for revision'
-    });
-    setPendingApprovals(prev => prev.filter(c => c.id !== corrId));
+  const handleReject = async (corr: Correspondence) => {
+    setProcessingId(corr.id);
+    try {
+      await updateCorrespondence(corr.id, {
+        status: 'in-progress',
+        currentApproverId: corr.createdById ?? null,
+      });
+      setPendingApprovals((prev) => prev.filter((item) => item.id !== corr.id));
+      toast.error('Item rejected', {
+        description: 'Returned to originator for revision',
+      });
+      await syncFromApi();
+    } catch (error) {
+      console.error('Failed to reject correspondence', error);
+      toast.error('Unable to reject correspondence', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const handleDelegate = (corrId: string) => {
-    toast.info('Item delegated', {
-      description: 'Assigned to your assistant'
-    });
+  const handleDelegate = (corr: Correspondence) => {
+    router.push(`/correspondence/${corr.id}`);
   };
 
   const ApprovalCard = ({ corr }: { corr: Correspondence }) => (
@@ -109,24 +224,26 @@ const ApprovalsInbox = () => {
       <div className="flex gap-2">
         <Button 
           size="sm" 
-          onClick={() => handleApprove(corr.id)}
+          onClick={() => handleApprove(corr)}
           className="flex-1 bg-gradient-primary"
+          disabled={processingId === corr.id}
         >
           <CheckCircle2 className="h-4 w-4 mr-2" />
-          Approve
+          {processingId === corr.id ? 'Processing…' : 'Approve'}
         </Button>
         <Button 
           size="sm" 
           variant="outline"
-          onClick={() => handleReject(corr.id)}
+          onClick={() => handleReject(corr)}
+          disabled={processingId === corr.id}
         >
           <XCircle className="h-4 w-4 mr-2" />
-          Reject
+          {processingId === corr.id ? 'Processing…' : 'Reject'}
         </Button>
         <Button 
           size="sm" 
           variant="outline"
-          onClick={() => handleDelegate(corr.id)}
+          onClick={() => handleDelegate(corr)}
         >
           <UserCheck className="h-4 w-4 mr-2" />
           Delegate
@@ -141,6 +258,34 @@ const ApprovalsInbox = () => {
       </div>
     </div>
   );
+
+  if (!hydrated) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <Card className="shadow-soft">
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              Loading approvals…
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <HelpGuideCard
+            title="Select a persona"
+            description="Use the Role Switcher to choose a user context before managing approvals."
+            links={[{ label: 'Role Switcher', href: '/settings' }]}
+          />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -179,61 +324,24 @@ const ApprovalsInbox = () => {
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-warning/10">
-                  <Clock className="h-6 w-6 text-warning" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Pending</p>
-                  <p className="text-2xl font-bold">{pendingApprovals.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-success/10">
-                  <CheckCircle2 className="h-6 w-6 text-success" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Approved Today</p>
-                  <p className="text-2xl font-bold">8</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-destructive/10">
-                  <XCircle className="h-6 w-6 text-destructive" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Rejected</p>
-                  <p className="text-2xl font-bold">2</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-info/10">
-                  <UserCheck className="h-6 w-6 text-info" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Delegated</p>
-                  <p className="text-2xl font-bold">3</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {stats.map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <Card key={stat.title}>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-lg ${stat.accent}`}>
+                      <Icon className={`h-6 w-6 ${stat.color}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">{stat.title}</p>
+                      <p className="text-2xl font-bold">{stat.value}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Search */}
@@ -253,17 +361,14 @@ const ApprovalsInbox = () => {
             <TabsTrigger value="pending">
               Pending ({filteredItems.length})
             </TabsTrigger>
-            <TabsTrigger value="approved">
-              Approved
+            <TabsTrigger value="in-progress">
+              In Progress ({inProgressItems.length})
             </TabsTrigger>
-            <TabsTrigger value="rejected">
-              Rejected
-            </TabsTrigger>
-            <TabsTrigger value="delegated">
-              Delegated
+            <TabsTrigger value="completed">
+              Completed ({completedItems.length})
             </TabsTrigger>
             <TabsTrigger value="all">
-              All
+              All ({allItems.length})
             </TabsTrigger>
           </TabsList>
 
@@ -282,37 +387,43 @@ const ApprovalsInbox = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="approved" className="space-y-3">
-            <Card>
-              <CardContent className="text-center py-12">
-                <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-success" />
-                <p className="text-muted-foreground">No approved items yet</p>
-              </CardContent>
-            </Card>
+          <TabsContent value="in-progress" className="space-y-3">
+            {inProgressItems.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <ArrowRight className="h-12 w-12 mx-auto mb-3 text-info" />
+                  <p className="text-muted-foreground">No in-progress items currently assigned.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              inProgressItems.map((corr) => <ApprovalCard key={corr.id} corr={corr} />)
+            )}
           </TabsContent>
 
-          <TabsContent value="rejected" className="space-y-3">
-            <Card>
-              <CardContent className="text-center py-12">
-                <XCircle className="h-12 w-12 mx-auto mb-3 text-destructive" />
-                <p className="text-muted-foreground">No rejected items yet</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="delegated" className="space-y-3">
-            <Card>
-              <CardContent className="text-center py-12">
-                <UserCheck className="h-12 w-12 mx-auto mb-3 text-info" />
-                <p className="text-muted-foreground">No delegated items yet</p>
-              </CardContent>
-            </Card>
+          <TabsContent value="completed" className="space-y-3">
+            {completedItems.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-success" />
+                  <p className="text-muted-foreground">No completed items yet.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              completedItems.map((corr) => <ApprovalCard key={corr.id} corr={corr} />)
+            )}
           </TabsContent>
 
           <TabsContent value="all" className="space-y-3">
-            {filteredItems.map(corr => (
-              <ApprovalCard key={corr.id} corr={corr} />
-            ))}
+            {allItems.length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <Mail className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-60" />
+                  <p className="text-muted-foreground">No correspondence routed to you yet.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              allItems.map((corr) => <ApprovalCard key={corr.id} corr={corr} />)
+            )}
           </TabsContent>
         </Tabs>
       </div>

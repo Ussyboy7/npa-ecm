@@ -41,10 +41,7 @@ import {
   Search
 } from 'lucide-react';
 import { 
-  MOCK_USERS, 
-  MOCK_MINUTES,
   GRADE_LEVELS,
-  getUserById,
   getDivisionById,
   getDepartmentById,
   type Correspondence,
@@ -63,6 +60,7 @@ import {
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
+import { apiFetch } from '@/lib/api-client';
 
 interface MinuteModalProps {
   correspondence: Correspondence;
@@ -72,8 +70,8 @@ interface MinuteModalProps {
 }
 
 export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initialDirection }: MinuteModalProps) => {
-  const { addMinute, updateCorrespondence, getMinutesByCorrespondenceId } = useCorrespondence();
-  const [currentUser, setCurrentUser] = useState(MOCK_USERS[0]);
+  const { addMinute, updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [minuteText, setMinuteText] = useState('');
   const [actionType, setActionType] = useState<'minute' | 'approve'>('minute');
   const [forwardTo, setForwardTo] = useState('');
@@ -100,8 +98,11 @@ const [newTemplateName, setNewTemplateName] = useState('');
   const { currentUser: activeUser } = useCurrentUser();
   const { assistantAssignments, users: organizationUsers } = useOrganization();
 
-  const allDirectoryUsers = useMemo(() => (organizationUsers.length > 0 ? organizationUsers : MOCK_USERS), [organizationUsers]);
-  const activeDirectoryUsers = useMemo(() => allDirectoryUsers.filter((user) => user.active !== false), [allDirectoryUsers]);
+  const allDirectoryUsers = organizationUsers;
+  const activeDirectoryUsers = useMemo(
+    () => organizationUsers.filter((user) => user.active !== false),
+    [organizationUsers],
+  );
 
   const assistantTeam = useMemo(() => {
     if (!currentUser) return [];
@@ -134,7 +135,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
   );
 
   const findUserById = useCallback(
-    (id: string) => activeDirectoryUsers.find((user) => user.id === id) ?? getUserById(id),
+    (id: string) => activeDirectoryUsers.find((user) => user.id === id),
     [activeDirectoryUsers],
   );
  
@@ -180,22 +181,22 @@ const [newTemplateName, setNewTemplateName] = useState('');
   };
   
   useEffect(() => {
-    if (activeUser) {
-      setCurrentUser(activeUser);
-      const signature = loadUserSignature(activeUser.id);
-      if (signature) {
-        setUserSignature(signature);
-      }
-      refreshMinuteTemplates(activeUser);
+    const selectedUser = activeUser ?? organizationUsers.find((user) => user.active) ?? null;
+    if (!selectedUser) return;
+    setCurrentUser(selectedUser);
+    const signature = loadUserSignature(selectedUser.id);
+    if (signature) {
+      setUserSignature(signature);
     }
-  }, [activeUser, refreshMinuteTemplates]);
+    refreshMinuteTemplates(selectedUser);
+  }, [activeUser, organizationUsers, refreshMinuteTemplates]);
 
   // Check if user is management level (MDCS, EDCS, MSS1, MSS2, MSS3)
   const userPermissions = useUserPermissions(currentUser ?? undefined);
   const canDistribute = userPermissions.canDistribute;
   
   // Check if user is MD (highest level - can only send downward)
-  const isMD = currentUser.gradeLevel === 'MDCS';
+  const isMD = currentUser?.gradeLevel === 'MDCS';
   
   // Other users (below MD) can choose direction
   const canChooseDirection = !isMD;
@@ -318,6 +319,11 @@ const [newTemplateName, setNewTemplateName] = useState('');
     [minuteTemplates, actionType],
   );
 
+  const existingMinutes = useMemo(
+    () => getMinutesByCorrespondenceId(correspondence.id),
+    [correspondence.id, getMinutesByCorrespondenceId],
+  );
+
   useEffect(() => {
     const available = filteredMinuteTemplates;
     if (available.length === 0) {
@@ -340,13 +346,15 @@ const [newTemplateName, setNewTemplateName] = useState('');
   const canDeleteSelectedTemplate =
     !!selectedMinuteTemplate &&
     selectedMinuteTemplate.scope === 'user' &&
-    selectedMinuteTemplate.createdBy === currentUser.id;
+    selectedMinuteTemplate.createdBy === currentUser?.id;
 
   // Get previous minute
-  const previousMinute = MOCK_MINUTES
-    .filter(m => m.correspondenceId === correspondence.id)
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
-  
+  const previousMinute = useMemo(() => {
+    return existingMinutes
+      .slice()
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+  }, [existingMinutes]);
+
   const previousUser = previousMinute ? findUserById(previousMinute.userId) : null;
 
   // Get suggested next approvers based on hierarchy and organizational structure
@@ -356,16 +364,16 @@ const [newTemplateName, setNewTemplateName] = useState('');
     
     // Get grade levels sorted by level (higher level = more authority)
     const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map(g => g.code);
-    const currentGradeIndex = gradeOrder.indexOf(currentUser.gradeLevel);
+    const currentGradeIndex = gradeOrder.indexOf(currentUser?.gradeLevel);
     
     // Get current user's division and directorate info
-    const division = currentUser.division ? getDivisionById(currentUser.division) : null;
+    const division = currentUser?.division ? getDivisionById(currentUser.division) : null;
     const currentDirectorate = division?.directorateId;
     const candidates = new Map<string, User>();
 
     const addCandidate = (user?: User) => {
       if (!user) return;
-      if (user.id === currentUser.id) return;
+      if (user.id === currentUser?.id) return;
       if (user.active === false) return;
       candidates.set(user.id, user);
     };
@@ -388,7 +396,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
           .filter(
             (user) =>
               lowerGrades.includes(user.gradeLevel) &&
-              user.division === currentUser.division,
+              user.division === currentUser?.division,
           )
           .forEach(addCandidate);
       }
@@ -403,7 +411,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
           const userDivision = getDivisionById(user.division);
           const userDirectorate = userDivision?.directorateId;
 
-          const sameDivision = user.division === currentUser.division;
+          const sameDivision = user.division === currentUser?.division;
           const sameDirectorate = currentDirectorate && userDirectorate === currentDirectorate;
 
           return sameDivision || Boolean(sameDirectorate);
@@ -493,13 +501,13 @@ const [newTemplateName, setNewTemplateName] = useState('');
     const contentHtml = convertTextToHtml(content);
     const created = createDocumentTemplate({
       scope: 'user',
-      scopeId: currentUser.id,
+      scopeId: currentUser?.id,
       title: resolvedName.slice(0, 80),
       description: actionType === 'approve' ? 'Approval minute template' : 'Minute template',
       contentHtml,
       contentText: content,
-      createdBy: currentUser.id,
-      updatedBy: currentUser.id,
+      createdBy: currentUser?.id,
+      updatedBy: currentUser?.id,
       isDefault: false,
       templateType: 'minute',
       actionType,
@@ -550,7 +558,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
     setShowConfirmation(true);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!currentUser) {
       toast.error('Current user not found. Cannot perform action.');
       setShowConfirmation(false);
@@ -570,7 +578,6 @@ const [newTemplateName, setNewTemplateName] = useState('');
     }
 
     const forwardUser = findUserById(forwardTo);
-    const existingMinutes = getMinutesByCorrespondenceId(correspondence.id);
     const nextStep = getNextStepNumber(existingMinutes);
 
     // MD can only send downward, others use selected direction or initial
@@ -595,24 +602,15 @@ const [newTemplateName, setNewTemplateName] = useState('');
     } : undefined;
 
     const existingDistribution = correspondence.distribution ?? [];
-    let mergedDistribution = [...existingDistribution];
     let distributionWithAddedBy: DistributionRecipient[] = [];
 
     if (canDistribute && distribution.length > 0) {
       distributionWithAddedBy = distribution.map((recipient) => ({
         ...recipient,
-        addedBy: recipient.addedBy || currentUser.id,
+        addedById: recipient.addedById || currentUser.id,
+        addedByName: recipient.addedByName || currentUser.name,
         addedAt: recipient.addedAt || new Date().toISOString(),
       }));
-
-      distributionWithAddedBy.forEach((newRecipient) => {
-        const exists = mergedDistribution.some(
-          (existing) => existing.type === newRecipient.type && existing.id === newRecipient.id
-        );
-        if (!exists) {
-          mergedDistribution.push(newRecipient);
-        }
-      });
     }
 
     const newMinute: Minute = {
@@ -630,43 +628,96 @@ const [newTemplateName, setNewTemplateName] = useState('');
       signature: signaturePayload,
     };
 
-    addMinute(newMinute);
+    try {
+      const existingKeys = new Set(
+        existingDistribution.map((entry) => {
+          const targetId =
+            entry.type === 'directorate'
+              ? entry.directorateId ?? entry.id
+              : entry.type === 'division'
+              ? entry.divisionId ?? entry.id
+              : entry.departmentId ?? entry.id;
+          return `${entry.type}:${targetId}`;
+        }),
+      );
+      const newDistributionEntries = distributionWithAddedBy.filter((entry) => {
+        const targetId =
+          entry.type === 'directorate'
+            ? entry.directorateId ?? entry.id
+            : entry.type === 'division'
+            ? entry.divisionId ?? entry.id
+            : entry.departmentId ?? entry.id;
+        return !existingKeys.has(`${entry.type}:${targetId}`);
+      });
 
-    updateCorrespondence(correspondence.id, {
-      currentApproverId: forwardTo,
-      status: 'in-progress',
-      direction: finalDirection,
-      distribution: mergedDistribution,
-    });
+      await addMinute(newMinute);
 
-    // Delete draft if exists
-    if (draftId) {
-      deleteDraft(draftId);
-    }
-    
-    // Close confirmation dialog first
-    setShowConfirmation(false);
-    
-    // Wait for confirmation dialog to close before closing main dialog
-    // This prevents overlay conflicts that cause the page to freeze
-    setTimeout(() => {
-      onClose();
-      
-      // Reset form after dialog closes
+      await updateCorrespondence(correspondence.id, {
+        currentApproverId: forwardTo,
+        status: 'in-progress',
+        direction: finalDirection,
+      });
+
+      if (canDistribute && newDistributionEntries.length > 0) {
+        await Promise.all(
+          newDistributionEntries.map((recipient) =>
+            apiFetch('/correspondence/distribution/', {
+              method: 'POST',
+              body: JSON.stringify({
+                correspondence: correspondence.id,
+                recipient_type: recipient.type,
+                directorate:
+                  recipient.type === 'directorate'
+                    ? recipient.directorateId ?? recipient.id
+                    : recipient.directorateId ?? null,
+                division:
+                  recipient.type === 'division'
+                    ? recipient.divisionId ?? recipient.id
+                    : recipient.divisionId ?? null,
+                department:
+                  recipient.type === 'department'
+                    ? recipient.departmentId ?? recipient.id
+                    : recipient.departmentId ?? null,
+                purpose: recipient.purpose ?? 'information',
+                added_by_id: recipient.addedById ?? currentUser.id,
+              }),
+            }),
+          ),
+        );
+      }
+
+      await syncFromApi();
+
+      if (draftId) {
+        deleteDraft(draftId);
+      }
+
+      setShowConfirmation(false);
+
       setTimeout(() => {
-        setMinuteText('');
-        setForwardTo('');
-        setActionType('minute');
-        setDistribution([]);
-        setHasDraft(false);
-        setDraftId(null);
-        setSearchQuery('');
-      }, 100);
-    }, 200);
-    
-    toast.success('Minute added successfully', {
-      description: `Forwarded to ${forwardUser?.name}`,
-    });
+        onClose();
+
+        setTimeout(() => {
+          setMinuteText('');
+          setForwardTo('');
+          setActionType('minute');
+          setDistribution([]);
+          setHasDraft(false);
+          setDraftId(null);
+          setSearchQuery('');
+        }, 100);
+      }, 200);
+
+      toast.success('Minute added successfully', {
+        description: `Forwarded to ${forwardUser?.name ?? 'selected user'}`,
+      });
+    } catch (error) {
+      console.error('Failed to record minute', error);
+      toast.error('Unable to save minute', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+      setShowConfirmation(false);
+    }
   };
 
   const handleSaveDraft = () => {
@@ -691,16 +742,16 @@ const [newTemplateName, setNewTemplateName] = useState('');
   const division = correspondence.divisionId ? getDivisionById(correspondence.divisionId) : null;
 
   const getTemplateContext = () => {
-    const divisionEntity = currentUser.division ? getDivisionById(currentUser.division) : null;
-    const departmentEntity = currentUser.department ? getDepartmentById(currentUser.department) : null;
+    const divisionEntity = currentUser?.division ? getDivisionById(currentUser.division) : null;
+    const departmentEntity = currentUser?.department ? getDepartmentById(currentUser.department) : null;
     const now = new Date();
     return {
-      name: currentUser.name,
-      title: currentUser.systemRole,
-      gradeLevel: currentUser.gradeLevel,
+      name: currentUser?.name,
+      title: currentUser?.systemRole,
+      gradeLevel: currentUser?.gradeLevel,
       division: divisionEntity?.name ?? '',
       department: departmentEntity?.name ?? '',
-      initials: currentUser.name.split(' ').map(part => part[0]).join('').toUpperCase(),
+      initials: currentUser?.name.split(' ').map(part => part[0]).join('').toUpperCase(),
       date: now.toLocaleDateString('en-US'),
       dateTime: now.toLocaleString('en-US'),
       referenceNumber: correspondence.referenceNumber,
@@ -1269,7 +1320,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
                     )}
                   </div>
                   <p className="text-muted-foreground">
-                    <strong>{currentUser.name}</strong> will minute and forward to{' '}
+                    <strong>{currentUser?.name}</strong> will minute and forward to{' '}
                     <strong>{findUserById(forwardTo)?.name}</strong>
                   </p>
                   {applySignature && userSignature && selectedTemplate && (
@@ -1320,7 +1371,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
           onConfirm={handleConfirm}
           type="minute"
           data={{
-            currentUserName: currentUser.name,
+            currentUserName: currentUser?.name,
             recipientName: findUserById(forwardTo)?.name || '',
             actionType,
             content: minuteText,

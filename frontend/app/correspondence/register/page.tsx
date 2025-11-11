@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,54 +18,141 @@ import { Badge } from '@/components/ui/badge';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { toast } from 'sonner';
-import { 
-  Upload, 
-  FileText, 
+import { apiFetch } from '@/lib/api-client';
+import {
+  Upload,
+  FileText,
   Calendar,
   Building2,
   User as UserIcon,
   Mail,
   AlertCircle,
   Send,
-  Save
+  Save,
+  Search,
 } from 'lucide-react';
-import { DIVISIONS, MOCK_USERS, DIRECTORATES } from '@/lib/npa-structure';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { useUserPermissions } from '@/hooks/use-user-permissions';
+
+const generateReferenceNumber = () => `NPA/REG/${new Date().getFullYear()}/${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
 const CorrespondenceRegister = () => {
   const router = useRouter();
+  const { directorates, divisions, users: organizationUsers } = useOrganization();
+  const { syncFromApi } = useCorrespondence();
+  const { currentUser } = useCurrentUser();
+  const permissions = useUserPermissions(currentUser);
   const [formData, setFormData] = useState({
     subject: '',
     senderName: '',
     senderOrganization: '',
     receivedDate: new Date().toISOString().split('T')[0],
-    priority: 'normal',
+    priority: 'medium',
+    referenceNumber: generateReferenceNumber(),
     assignTo: '',
     divisionId: '',
     documentType: 'letter',
     tags: '',
   });
+  const [documentFiles, setDocumentFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const ASSIGN_PLACEHOLDER = '__select_assign__';
+  const [assignSearch, setAssignSearch] = useState('');
 
-  const executives = MOCK_USERS.filter(u => ['MD', 'ED', 'GM', 'AGM'].includes(u.gradeLevel));
+  const executives = useMemo(() => {
+    const eligibleGrades = new Set(['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3', 'MSS4']);
+    return organizationUsers.filter((user) => eligibleGrades.has(user.gradeLevel));
+  }, [organizationUsers]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const filteredExecutives = useMemo(() => {
+    if (!assignSearch.trim()) return executives;
+    const query = assignSearch.toLowerCase();
+    return executives.filter((user) =>
+      [user.name, user.systemRole, user.email]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(query)),
+    );
+  }, [executives, assignSearch]);
+
+  if (!permissions.canRegisterCorrespondence) {
+    return (
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center p-10">
+          <Card className="max-w-xl border-border/60 text-center shadow-medium">
+            <CardHeader>
+              <CardTitle>Registration Restricted</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground">
+                Only records staff up to Senior Officer (Level 10) or delegates with drafting permissions can register new
+                correspondence. Please contact the registry or your supervising directorate if you require access.
+              </p>
+              <Button variant="outline" onClick={() => router.push('/correspondence/inbox')}>
+                Back to correspondence
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!documentFiles.length) {
+      toast.error('Please upload at least one source document before registering');
+      return;
+    }
+
     if (!formData.subject || !formData.senderName || !formData.assignTo) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    // Generate reference number
-    const refNumber = `NPA/REG/${new Date().getFullYear()}/${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-
-    toast.success('Correspondence registered successfully', {
-      description: `Reference: ${refNumber}`,
+    const form = new FormData();
+    form.append('subject', formData.subject);
+    form.append('reference_number', formData.referenceNumber);
+    form.append('sender_name', formData.senderName);
+    form.append('sender_organization', formData.senderOrganization);
+    form.append('received_date', formData.receivedDate);
+    form.append('priority', formData.priority);
+    form.append('current_approver_id', formData.assignTo);
+    form.append('documentType', formData.documentType);
+    if (formData.tags) {
+      const tags = formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean);
+      form.append('tags', JSON.stringify(tags));
+    }
+    if (formData.divisionId) {
+      form.append('division', formData.divisionId);
+    }
+    form.append('source', 'internal');
+    documentFiles.forEach((file) => {
+      form.append('attachments', file);
     });
 
-    // Navigate to correspondence inbox after short delay
-    setTimeout(() => {
-      router.push('/correspondence/inbox');
-    }, 1500);
+    try {
+      const response = await apiFetch('/correspondence/items/', {
+        method: 'POST',
+        body: form,
+        headers: {},
+      });
+
+      await syncFromApi();
+
+      toast.success('Correspondence registered successfully', {
+        description: `Reference: ${response.reference_number ?? formData.referenceNumber}`,
+      });
+
+      setTimeout(() => {
+        router.push('/correspondence/inbox');
+      }, 1200);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : 'Unable to register correspondence';
+      toast.error(description);
+    }
   };
 
   const handleSaveDraft = () => {
@@ -123,7 +210,33 @@ const CorrespondenceRegister = () => {
                   <Upload className="h-4 w-4" />
                   Upload Document *
                 </Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:bg-muted/50 transition-colors cursor-pointer">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const fileList = Array.from(event.dataTransfer.files ?? []);
+                    if (fileList.length) {
+                      setDocumentFiles((prev) => {
+                        const next = [...prev, ...fileList];
+                        toast.success('Documents attached', { description: `${fileList.length} file(s) added` });
+                        return next;
+                      });
+                    }
+                  }}
+                  className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
                   <Upload className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                   <p className="text-sm font-medium mb-1">
                     Click to upload or drag and drop
@@ -136,11 +249,70 @@ const CorrespondenceRegister = () => {
                     id="document" 
                     className="hidden"
                     accept=".pdf,.doc,.docx"
+                    ref={fileInputRef}
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      if (files.length) {
+                        setDocumentFiles((prev) => {
+                          const next = [...prev, ...files];
+                          toast.success('Documents attached', { description: `${files.length} file(s) added` });
+                          return next;
+                        });
+                        event.target.value = '';
+                      }
+                    }}
                   />
                 </div>
+                {documentFiles.length > 0 ? (
+                  <div className="space-y-2 text-xs">
+                    {documentFiles.map((file, index) => (
+                      <div
+                        key={`${file.name}-${index}`}
+                        className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2"
+                      >
+                        <span className="font-medium truncate">{file.name}</span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-destructive"
+                            onClick={() =>
+                              setDocumentFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index))
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No documents attached.</p>
+                )}
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
+                {/* Reference Number */}
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="referenceNumber">Reference Number</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="referenceNumber"
+                      value={formData.referenceNumber}
+                      onChange={(event) => setFormData({ ...formData, referenceNumber: event.target.value })}
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setFormData({ ...formData, referenceNumber: generateReferenceNumber() })}
+                    >
+                      Regenerate
+                    </Button>
+                  </div>
+                </div>
+
                 {/* Subject */}
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="subject">Subject *</Label>
@@ -220,9 +392,9 @@ const CorrespondenceRegister = () => {
                           <Badge variant="default">High</Badge>
                         </div>
                       </SelectItem>
-                      <SelectItem value="normal">
+                      <SelectItem value="medium">
                         <div className="flex items-center gap-2">
-                          <Badge variant="secondary">Normal</Badge>
+                          <Badge variant="secondary">Medium</Badge>
                         </div>
                       </SelectItem>
                       <SelectItem value="low">
@@ -241,49 +413,75 @@ const CorrespondenceRegister = () => {
                     Assign To *
                   </Label>
                   <Select
-                    value={formData.assignTo}
+                    value={formData.assignTo || ASSIGN_PLACEHOLDER}
                     onValueChange={(value) => {
-                      const user = executives.find(u => u.id === value);
-                      setFormData({ 
-                        ...formData, 
+                      if (value === ASSIGN_PLACEHOLDER) {
+                        setFormData({ ...formData, assignTo: '', divisionId: '' });
+                        return;
+                      }
+                      const user = executives.find((u) => u.id === value);
+                      setFormData({
+                        ...formData,
                         assignTo: value,
-                        divisionId: user?.division || ''
+                        divisionId: user?.division || '',
                       });
                     }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select executive" />
                     </SelectTrigger>
-                    <SelectContent className="bg-popover border-border z-50">
-                      {DIRECTORATES.map(dir => {
-                        const dirExecs = executives.filter(u => {
-                          const userDiv = DIVISIONS.find(d => d.id === u.division);
-                          return userDiv?.directorateId === dir.id;
-                        });
-                        
-                        if (dirExecs.length === 0) return null;
-                        
+                    <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
+                      <div className="sticky top-0 z-10 bg-popover p-2 border-b border-border">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={assignSearch}
+                            onChange={(event) => setAssignSearch(event.target.value)}
+                            placeholder="Search name, role, division..."
+                            className="pl-8 h-9"
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          />
+                        </div>
+                      </div>
+                      <SelectItem value={ASSIGN_PLACEHOLDER} disabled>
+                        Select executive
+                      </SelectItem>
+                      {directorates.map((dir) => {
+                        const dirDivisions = divisions.filter((div) => div.directorateId === dir.id);
+                        const dirUsers = filteredExecutives.filter((user) =>
+                          dirDivisions.some((div) => div.id === user.division),
+                        );
+                        if (dirUsers.length === 0) return null;
                         return (
-                          <div key={dir.id}>
-                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          <div key={dir.id} className="border border-border rounded-lg my-1">
+                            <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/70">
                               {dir.name}
                             </div>
-                            {dirExecs.map(user => {
-                              const division = DIVISIONS.find(d => d.id === user.division);
+                            {dirUsers.map((user) => {
+                              const division = divisions.find((div) => div.id === user.division);
                               return (
-                                <SelectItem key={user.id} value={user.id}>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{user.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {user.systemRole} - {division?.name}
-                                    </span>
-                                  </div>
+                                <SelectItem
+                                  key={user.id}
+                                  value={user.id}
+                                  className="flex flex-col items-start gap-1 px-3 py-2"
+                                >
+                                  <span className="font-medium">{user.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {user.systemRole} • {user.gradeLevel}
+                                    {division ? ` • ${division.name}` : ''}
+                                  </span>
                                 </SelectItem>
                               );
                             })}
                           </div>
                         );
                       })}
+                      {filteredExecutives.length === 0 && (
+                        <SelectItem value="none" disabled>
+                          No executives match your search
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -331,15 +529,21 @@ const CorrespondenceRegister = () => {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Reference:</span>
-                      <span className="font-medium">Auto-generated on submit</span>
+                      <span className="font-medium">{formData.referenceNumber}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Priority:</span>
-                      <Badge variant={
-                        formData.priority === 'urgent' ? 'destructive' :
-                        formData.priority === 'high' ? 'default' :
-                        'secondary'
-                      }>
+                      <Badge
+                        variant={
+                          formData.priority === 'urgent'
+                            ? 'destructive'
+                            : formData.priority === 'high'
+                            ? 'default'
+                            : formData.priority === 'low'
+                            ? 'outline'
+                            : 'secondary'
+                        }
+                      >
                         {formData.priority.toUpperCase()}
                       </Badge>
                     </div>
@@ -352,7 +556,7 @@ const CorrespondenceRegister = () => {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Division:</span>
                       <span className="font-medium">
-                        {DIVISIONS.find(d => d.id === formData.divisionId)?.name}
+                        {divisions.find(d => d.id === formData.divisionId)?.name}
                       </span>
                     </div>
                   </div>

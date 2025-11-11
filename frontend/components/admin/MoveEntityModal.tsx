@@ -18,8 +18,9 @@ interface MoveEntityModalProps {
 export const MoveEntityModal = ({ open, onOpenChange, entityType, entityId, entityName, currentParentId }: MoveEntityModalProps) => {
   const { updateDivision, updateDepartment, divisions, directorates } = useOrganization();
   const [newParentId, setNewParentId] = useState('');
+  const [isMoving, setIsMoving] = useState(false);
 
-  const handleMove = () => {
+  const handleMove = async () => {
     if (!newParentId) {
       toast({ title: "Error", description: "Please select a destination", variant: "destructive" });
       return;
@@ -30,23 +31,31 @@ export const MoveEntityModal = ({ open, onOpenChange, entityType, entityId, enti
       return;
     }
 
-    if (entityType === 'division') {
-      updateDivision(entityId, { directorateId: newParentId });
-      const directorate = directorates.find(d => d.id === newParentId);
-      toast({ 
-        title: "Success", 
-        description: `Division moved to ${directorate?.name ?? 'selected directorate'}` 
-      });
-    } else {
-      updateDepartment(entityId, { divisionId: newParentId });
-      const division = divisions.find(d => d.id === newParentId);
-      toast({ 
-        title: "Success", 
-        description: `Department moved to ${division?.name}` 
-      });
-    }
+    setIsMoving(true);
+    try {
+      if (entityType === 'division') {
+        await updateDivision(entityId, { directorateId: newParentId });
+        const directorate = directorates.find(d => d.id === newParentId);
+        toast({ 
+          title: "Success", 
+          description: `Division moved to ${directorate?.name ?? 'selected directorate'}` 
+        });
+      } else {
+        await updateDepartment(entityId, { divisionId: newParentId });
+        const division = divisions.find(d => d.id === newParentId);
+        toast({ 
+          title: "Success", 
+          description: `Department moved to ${division?.name ?? 'selected division'}` 
+        });
+      }
 
-    onOpenChange(false);
+      onOpenChange(false);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : 'Unable to move entity';
+      toast({ title: 'Move failed', description, variant: 'destructive' });
+    } finally {
+      setIsMoving(false);
+    }
   };
 
   const activeDivisions = divisions.filter(d => d.isActive);
@@ -91,7 +100,9 @@ export const MoveEntityModal = ({ open, onOpenChange, entityType, entityId, enti
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleMove}>Move</Button>
+          <Button onClick={handleMove} disabled={isMoving}>
+            {isMoving ? 'Moving…' : 'Move'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

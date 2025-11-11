@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,42 +18,100 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { MOCK_USERS, getDivisionById, getDepartmentById } from "@/lib/npa-structure";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
+import { login, clearTokens } from "@/lib/api-client";
+
+type PersonaOption = {
+  id: string;
+  label: string;
+  username: string;
+  password: string;
+  summary: string;
+};
+
+const DEMO_PERSONAS: PersonaOption[] = [
+  {
+    id: "superadmin",
+    label: "Super Admin",
+    username: "superadmin",
+    password: "ChangeMe123!",
+    summary: "Full tenancy access for system administration.",
+  },
+  {
+    id: "user-md",
+    label: "Managing Director",
+    username: "md",
+    password: "ChangeMe123!",
+    summary: "Executive dashboard with approvals workload.",
+  },
+  {
+    id: "user-ed-fa",
+    label: "Executive Director · Finance & Administration",
+    username: "edfa",
+    password: "ChangeMe123!",
+    summary: "Directorate-level routing and delegation flows.",
+  },
+  {
+    id: "user-gm-ict",
+    label: "General Manager · Information & Communication Technology",
+    username: "gmict",
+    password: "ChangeMe123!",
+    summary: "Division leadership view with distribution lists.",
+  },
+  {
+    id: "user-pa-md",
+    label: "Personal Assistant · MD",
+    username: "pamd",
+    password: "ChangeMe123!",
+    summary: "Assistant persona with delegated approvals.",
+  },
+];
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const demoUsers = useMemo(() => {
-    const preferredGrades = new Set(["MDCS", "EDCS", "MSS1", "MSS2", "MSS3", "MSS4", "SSS1", "SSS2"]);
-    return MOCK_USERS.filter((user) => preferredGrades.has(user.gradeLevel));
-  }, []);
+  const personaMap = useMemo(() => new Map(DEMO_PERSONAS.map((persona) => [persona.id, persona])), []);
+
+  useEffect(() => {
+    if (!selectedUserId) return;
+    const persona = personaMap.get(selectedUserId);
+    if (!persona) return;
+    setUsername(persona.username);
+    setPassword(persona.password);
+  }, [personaMap, selectedUserId]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!selectedUserId) {
-      toast.error("Select a demo persona to continue.");
-      return;
-    }
-
     setIsSubmitting(true);
 
     try {
+      if (!username || !password) {
+        toast.error("Enter your username and password.");
+        return;
+      }
+
+      await login(username, password);
+
       if (rememberMe) {
-        localStorage.setItem("npa_ecm_remember_me", JSON.stringify({ email }));
+        localStorage.setItem("npa_ecm_remember_me", JSON.stringify({ username }));
       } else {
         localStorage.removeItem("npa_ecm_remember_me");
       }
 
-      localStorage.setItem("npa_demo_user_id", selectedUserId);
       toast.success("Signed in successfully");
       router.push("/dashboard");
+    } catch (error) {
+      console.error(error);
+      clearTokens();
+      toast.error(
+        error instanceof Error ? error.message : "Unable to sign in. Please check your credentials."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -128,20 +186,18 @@ export default function LoginPage() {
             <CardHeader>
               <CardTitle className="text-2xl font-semibold">Sign in to NPA ECM</CardTitle>
               <CardDescription>
-                Use your official credentials. For this demo, select a persona to preview different grade-level experiences.
+                Use your official credentials. For this demo, you may select a persona to auto-fill seeded accounts (passwords are <code>ChangeMe123!</code>).
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form className="space-y-5" onSubmit={handleSubmit}>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Official email address</Label>
+                  <Label htmlFor="username">Username</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="firstname.lastname@nigerianports.gov.ng"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    required
+                    id="username"
+                    placeholder="superadmin"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -157,29 +213,19 @@ export default function LoginPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Select a demo persona</Label>
-                  <Select onValueChange={setSelectedUserId}>
+                  <Select onValueChange={setSelectedUserId} value={selectedUserId ?? ""}>
                     <SelectTrigger>
                       <SelectValue placeholder="Choose grade level / role" />
                     </SelectTrigger>
                     <SelectContent className="max-h-72">
-                      {demoUsers.map((user) => {
-                        const division = user.division ? getDivisionById(user.division) : null;
-                        const department = user.department ? getDepartmentById(user.department) : null;
-                        return (
-                          <SelectItem key={user.id} value={user.id}>
-                            <div className="flex flex-col">
-                              <span className="text-sm font-medium">
-                                {user.name} · {user.systemRole}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {user.gradeLevel}
-                                {division ? ` · ${division.name}` : ""}
-                                {department ? ` · ${department.name}` : ""}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
+                      {DEMO_PERSONAS.map((persona) => (
+                        <SelectItem key={persona.id} value={persona.id}>
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{persona.label}</span>
+                            <span className="text-xs text-muted-foreground">{persona.summary}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -196,7 +242,7 @@ export default function LoginPage() {
                   </Link>
                 </div>
                 <Button type="submit" className="w-full gap-2" disabled={isSubmitting}>
-                  Continue
+                  {isSubmitting ? "Signing in..." : "Continue"}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </form>
@@ -210,4 +256,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

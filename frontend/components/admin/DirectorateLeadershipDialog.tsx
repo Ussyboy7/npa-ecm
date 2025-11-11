@@ -21,7 +21,6 @@ import {
 import { useOrganization, type Directorate } from "@/contexts/OrganizationContext";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import { DIRECTORATES } from "@/lib/npa-structure";
 
 interface DirectorateLeadershipDialogProps {
   open: boolean;
@@ -36,6 +35,7 @@ export const DirectorateLeadershipDialog = ({
 }: DirectorateLeadershipDialogProps) => {
   const { users, updateDirectorate } = useOrganization();
   const [selectedLeader, setSelectedLeader] = useState<string>("");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (directorate) {
@@ -62,27 +62,32 @@ export const DirectorateLeadershipDialog = ({
     ? users.find((user) => user.id === selectedLeader)
     : undefined;
 
-  const baseDirectorate = directorate
-    ? DIRECTORATES.find((dir) => dir.id === directorate.id)
-    : undefined;
+  const handleSave = async () => {
+    if (!directorate || isSaving) return;
 
-  const handleSave = () => {
-    if (!directorate) return;
+    setIsSaving(true);
+    try {
+      await updateDirectorate(directorate.id, {
+        executiveDirectorId: selectedLeader || null,
+      });
 
-    updateDirectorate(directorate.id, {
-      executiveDirectorId: selectedLeader || undefined,
-    });
+      const message = selectedLeader
+        ? `Assigned ${selectedUser?.name ?? "selected leader"} as head of ${directorate.name}.`
+        : `Cleared executive assignment for ${directorate.name}.`;
 
-    const message = selectedLeader
-      ? `Assigned ${selectedUser?.name ?? "selected leader"} as head of ${directorate.name}.`
-      : `Cleared executive assignment for ${directorate.name}.`;
+      toast({
+        title: "Leadership updated",
+        description: message,
+      });
 
-    toast({
-      title: "Leadership updated",
-      description: message,
-    });
-
-    onOpenChange(false);
+      onOpenChange(false);
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : "Unable to update directorate leadership.";
+      toast({ title: "Update failed", description, variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -133,7 +138,7 @@ export const DirectorateLeadershipDialog = ({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No leader assigned. {baseDirectorate?.executiveDirector ?? "Assign an executive director."}
+                  No leader assigned. Assign an executive director.
                 </p>
               )}
             </div>
@@ -144,7 +149,7 @@ export const DirectorateLeadershipDialog = ({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!directorate}>
+          <Button onClick={handleSave} disabled={!directorate || isSaving}>
             Save
           </Button>
         </DialogFooter>

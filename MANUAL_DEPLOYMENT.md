@@ -23,8 +23,8 @@ With the self-hosted GitHub Actions runner installed on your server, deployments
 
 ### Access URLs
 - **Frontend**: http://172.16.0.46:4646
-- **Backend API**: http://172.16.0.46:8001/api/
-- **Admin Panel**: http://172.16.0.46:8001/admin/
+- **Backend API**: http://172.16.0.46:4646/api/
+- **Admin Panel**: http://172.16.0.46:4646/admin/
 - **Grafana**: http://172.16.0.46:3002 (admin/staging_admin_2024)
 - **Prometheus**: http://172.16.0.46:9091
 
@@ -102,8 +102,8 @@ docker compose -f docker-compose.stag.yml ps
 The script will automatically check service health. Once complete, your application will be available at:
 
 - **Frontend**: http://172.16.0.46:4646
-- **Backend API**: http://172.16.0.46:8001/api/
-- **Admin Panel**: http://172.16.0.46:8001/admin/
+- **Backend API**: http://172.16.0.46:4646/api/
+- **Admin Panel**: http://172.16.0.46:4646/admin/
 - **Grafana**: http://172.16.0.46:3002 (admin/staging_admin_2024)
 - **Prometheus**: http://172.16.0.46:9091
 
@@ -132,7 +132,7 @@ docker compose -f docker-compose.stag.yml restart
 1. Check if ports are available:
 ```bash
 netstat -tlnp | grep :4646
-netstat -tlnp | grep :8001
+netstat -tlnp | grep :4646
 ```
 
 2. Stop conflicting services and try again.

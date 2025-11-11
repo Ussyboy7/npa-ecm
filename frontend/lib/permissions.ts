@@ -11,6 +11,7 @@ export type PermissionProfile = {
   canRegisterCorrespondence: boolean;
   canAccessDocumentManagement: boolean;
   canDistribute: boolean;
+  canViewCorrespondenceRegistry: boolean;
   allowedArchiveLevels: ArchiveLevel[];
 };
 
@@ -20,9 +21,10 @@ const defaultProfile: PermissionProfile = {
   canAccessExecutiveDashboard: false,
   canAccessAdministration: false,
   canAccessReports: false,
-  canRegisterCorrespondence: true,
+  canRegisterCorrespondence: false,
   canAccessDocumentManagement: true,
   canDistribute: false,
+  canViewCorrespondenceRegistry: false,
   allowedArchiveLevels: ["department"],
 };
 
@@ -43,6 +45,13 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
   const isAGM = grade === "MSS2";
   const isPrincipalManager = grade === "MSS3";
   const isSeniorManager = grade === "MSS4";
+  const isAssistantManager = grade === "SSS1";
+  const isSeniorOfficer = grade === "SSS2";
+  const isOfficerI = grade === "SSS3";
+  const isOfficerII = grade === "SSS4";
+  const isStaffI = grade === "JSS1";
+  const isStaffII = grade === "JSS2";
+  const isStaffIII = grade === "JSS3";
 
   const managementGrades = isMD || isED || isGM || isAGM || isPrincipalManager;
 
@@ -65,6 +74,26 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
 
   if (managementGrades || isSuperAdmin) {
     profile.canDistribute = true;
+  }
+
+  if (isSuperAdmin || isMD || isED || isGM || isAGM) {
+    profile.canViewCorrespondenceRegistry = true;
+  }
+
+  const canRegisterByGrade =
+    isSuperAdmin ||
+    role === "Secretary" ||
+    isSeniorOfficer ||
+    isOfficerI ||
+    isOfficerII ||
+    isStaffI ||
+    isStaffII ||
+    isStaffIII;
+
+  profile.canRegisterCorrespondence = canRegisterByGrade;
+
+  if (isAssistantManager || managementGrades) {
+    profile.canRegisterCorrespondence = false;
   }
 
   const allowedLevels: ArchiveLevel[] = ["department"];

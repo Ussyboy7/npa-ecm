@@ -11,10 +11,11 @@ import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { TrendingUp, TrendingDown, Clock, Users, Target, Award } from 'lucide-react';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
-import { DIVISIONS } from '@/lib/npa-structure';
+import { useOrganization } from '@/contexts/OrganizationContext';
 
 const Performance = () => {
   const { correspondence, minutes } = useCorrespondence();
+  const { divisions } = useOrganization();
   const [selectedPeriod, setSelectedPeriod] = useState<string>('30');
 
   // Filter correspondence based on selected period
@@ -76,7 +77,7 @@ const Performance = () => {
 
   // Division Performance Comparison
   const divisionPerformance = useMemo(() => {
-    return DIVISIONS.map(division => {
+    return divisions.map(division => {
       const divisionCorr = filteredCorrespondence.filter(c => c.divisionId === division.id);
       const completed = divisionCorr.filter(c => c.status === 'completed');
       
@@ -97,7 +98,7 @@ const Performance = () => {
         : 0;
 
       return {
-        name: division.code,
+        name: division.code ?? division.name,
         fullName: division.name,
         workload,
         completed: completed.length,
@@ -106,7 +107,7 @@ const Performance = () => {
         efficiency: completionRate > 0 ? Math.round((completionRate / (avgTurnaround || 1)) * 10) : 0,
       };
     }).filter(d => d.workload > 0);
-  }, [filteredCorrespondence]);
+  }, [filteredCorrespondence, divisions]);
 
   // Response Time Distribution
   const responseDistribution = useMemo(() => {

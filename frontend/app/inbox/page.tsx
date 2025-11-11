@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,34 +18,70 @@ import {
   AlertCircle,
   User as UserIcon
 } from 'lucide-react';
-import { MOCK_CORRESPONDENCE, MOCK_USERS, type User as NPAUser, type Correspondence } from '@/lib/npa-structure';
+import { useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import type { Correspondence } from '@/lib/npa-structure';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 
 const ExecutiveInbox = () => {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<NPAUser | null>(null);
+  const { correspondence } = useCorrespondence();
+  const { currentUser, hydrated } = useCurrentUser();
   const [searchQuery, setSearchQuery] = useState('');
-  const [myItems, setMyItems] = useState<Correspondence[]>([]);
 
-  useEffect(() => {
-    const savedUserId = localStorage.getItem('npa_demo_user_id');
-    if (savedUserId) {
-      const user = MOCK_USERS.find(u => u.id === savedUserId);
-      if (user) {
-        setCurrentUser(user);
-        // Filter items assigned to this executive
-        const items = MOCK_CORRESPONDENCE.filter(
-          c => c.currentApproverId === user.id || c.divisionId === user.division
-        );
-        setMyItems(items);
-      }
+  const inboxItems = useMemo(() => {
+    if (!currentUser) return [];
+    const userDivisionId = currentUser.division;
+
+    return correspondence
+      .filter((item) => {
+        if (item.status === 'completed') return false;
+        if (item.currentApproverId === currentUser.id) return true;
+        if (userDivisionId && item.divisionId === userDivisionId) return true;
+        return false;
+      })
+      .sort((a, b) => new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime());
+  }, [correspondence, currentUser]);
+
+  const filteredItems = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (term.length === 0) {
+      return inboxItems;
     }
-  }, []);
+    return inboxItems.filter((item) => {
+      const subject = item.subject?.toLowerCase() ?? '';
+      const reference = item.referenceNumber?.toLowerCase() ?? '';
+      return subject.includes(term) || reference.includes(term);
+    });
+  }, [searchQuery, inboxItems]);
 
-  const filteredItems = myItems.filter(c =>
-    c.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  if (!hydrated) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <Card className="shadow-soft">
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              Loading inbox…
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <HelpGuideCard
+            title="Select a persona"
+            description="Use the Role Switcher to choose a user context before viewing your inbox."
+            links={[{ label: 'Role Switcher', href: '/settings' }]}
+          />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {

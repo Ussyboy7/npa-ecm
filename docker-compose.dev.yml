@@ -1,156 +1,111 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  # PostgreSQL Database
-  dms-db:
-    image: postgres:15-alpine
-    container_name: dms-db-dev
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecm-postgres-dev
     environment:
-      POSTGRES_DB: dms_db
-      POSTGRES_USER: dmsadmin
-      POSTGRES_PASSWORD: dmsadmin
+      POSTGRES_DB: npa_ecm_local
+      POSTGRES_USER: npa_ecm_local
+      POSTGRES_PASSWORD: changeme
     volumes:
-      - dms-postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     ports:
       - "5433:5432"
-    networks:
-      - dms-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dmsadmin"]
+      test: ["CMD-SHELL", "pg_isready -U npa_ecm_local"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis
-  dms-redis:
+  redis:
     image: redis:7-alpine
-    container_name: dms-redis-dev
+    container_name: ecm-redis-dev
     ports:
       - "6380:6379"
-    networks:
-      - dms-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
 
-  # Django Backend
-  dms-backend:
+  backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: dms-backend-dev
+    container_name: ecm-backend-dev
+    env_file:
+      - ./backend/env/local.env
+    volumes:
+      - ./backend:/app
+      - media-data:/app/media
+      - static-data:/app/staticfiles
     command: >
       sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn --bind 0.0.0.0:8000 --workers 3 --reload dms.wsgi:application"
-    volumes:
-      - ./backend:/app
-      - dms-media:/app/media
-      - dms-static:/app/staticfiles
+             python manage.py runserver 0.0.0.0:8000"
     ports:
       - "8000:8000"
-    environment:
-      - DJANGO_ENV=dev
-      - DJANGO_DEBUG=True
-      - DB_HOST=dms-db
-      - DB_PORT=5432
-      - DB_NAME=dms_db
-      - DB_USER=dmsadmin
-      - DB_PASSWORD=dmsadmin
-      - REDIS_HOST=dms-redis
-      - REDIS_PORT=6379
-      - CELERY_BROKER_URL=redis://dms-redis:6379/0
     depends_on:
-      dms-db:
+      postgres:
         condition: service_healthy
-      dms-redis:
+      redis:
         condition: service_healthy
-    networks:
-      - dms-network
 
-  # Celery Worker
-  dms-celery:
+  celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: dms-celery-dev
-    command: celery -A dms worker -l info
+    container_name: ecm-celery-worker-dev
+    env_file:
+      - ./backend/env/local.env
+    command: celery -A ecm_backend worker -l info
     volumes:
       - ./backend:/app
-      - dms-media:/app/media
-    environment:
-      - DJANGO_ENV=dev
-      - DB_HOST=dms-db
-      - DB_PORT=5432
-      - DB_NAME=dms_db
-      - DB_USER=dmsadmin
-      - DB_PASSWORD=dmsadmin
-      - REDIS_HOST=dms-redis
-      - REDIS_PORT=6379
-      - CELERY_BROKER_URL=redis://dms-redis:6379/0
+      - media-data:/app/media
     depends_on:
-      - dms-db
-      - dms-redis
-      - dms-backend
-    networks:
-      - dms-network
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
 
-  # Celery Beat
-  dms-celery-beat:
+  celery-beat:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: dms-celery-beat-dev
-    command: celery -A dms beat -l info
+    container_name: ecm-celery-beat-dev
+    env_file:
+      - ./backend/env/local.env
+    command: celery -A ecm_backend beat -l info
     volumes:
       - ./backend:/app
-    environment:
-      - DJANGO_ENV=dev
-      - DB_HOST=dms-db
-      - DB_PORT=5432
-      - DB_NAME=dms_db
-      - DB_USER=dmsadmin
-      - DB_PASSWORD=dmsadmin
-      - REDIS_HOST=dms-redis
-      - REDIS_PORT=6379
-      - CELERY_BROKER_URL=redis://dms-redis:6379/0
     depends_on:
-      - dms-db
-      - dms-redis
-      - dms-backend
-    networks:
-      - dms-network
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
 
-  # Next.js Frontend
-  dms-frontend:
+  frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: dms-frontend-dev
+    container_name: ecm-frontend-dev
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000/api
+      NODE_ENV: development
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api
+      - "3002:3000"
     depends_on:
-      - dms-backend
-    networks:
-      - dms-network
+      backend:
+        condition: service_started
 
 volumes:
-  dms-postgres-data:
-  dms-media:
-  dms-static:
-
-networks:
-  dms-network:
-    driver: bridge
+  postgres-data:
+  media-data:
+  static-data:
 
 
 

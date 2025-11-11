@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import { getFromStorage, saveToStorage } from './storage';
-import { DIRECTORATES, DIVISIONS, DEPARTMENTS, type User } from './npa-structure';
+import type { User } from './npa-structure';
 
 export type TemplateScope = 'organization' | 'directorate' | 'division' | 'department' | 'user';
 
@@ -112,14 +112,17 @@ const seedTemplates = () => {
   let updated = false;
 
   if (!localStorage.getItem(SEEDED_KEY)) {
-    const orgContentHtml = buildBaseTemplate('Nigerian Ports Authority', 'Official Correspondence Template');
+    const orgContentHtml = buildBaseTemplate(
+      'Nigerian Ports Authority',
+      'Official Correspondence Template',
+    );
     updated =
       ensureTemplateEntry(storage, {
         id: nanoid(),
         scope: 'organization',
         scopeId: null,
         title: 'Corporate Memorandum',
-        description: 'Baseline template for NPA official memoranda across all directorates.',
+        description: 'Baseline template for NPA official memoranda.',
         contentHtml: orgContentHtml,
         contentText: deriveContentText(orgContentHtml),
         createdBy: 'system',
@@ -129,75 +132,6 @@ const seedTemplates = () => {
         isDefault: true,
         templateType: 'document',
       }) || updated;
-
-    DIRECTORATES.forEach((directorate) => {
-      const contentHtml = buildBaseTemplate(
-        directorate.name,
-        `Directorate Briefing - ${directorate.shortName ?? directorate.name}`,
-      );
-      updated =
-        ensureTemplateEntry(storage, {
-          id: nanoid(),
-          scope: 'directorate',
-          scopeId: directorate.id,
-          title: `${directorate.name} Briefing Note`,
-          description: `Default template for documents issued by ${directorate.name}.`,
-          contentHtml,
-          contentText: deriveContentText(contentHtml),
-          createdBy: 'system',
-          updatedBy: 'system',
-          createdAt: now,
-          updatedAt: now,
-          isDefault: true,
-          templateType: 'document',
-        }) || updated;
-    });
-
-    DIVISIONS.forEach((division) => {
-      const contentHtml = buildBaseTemplate(
-        division.name,
-        `${division.shortName ?? division.name} Division - Official Report`,
-      );
-      updated =
-        ensureTemplateEntry(storage, {
-          id: nanoid(),
-          scope: 'division',
-          scopeId: division.id,
-          title: `${division.name} Division Report`,
-          description: `Standard reporting template for the ${division.name} division.`,
-          contentHtml,
-          contentText: deriveContentText(contentHtml),
-          createdBy: 'system',
-          updatedBy: 'system',
-          createdAt: now,
-          updatedAt: now,
-          isDefault: true,
-          templateType: 'document',
-        }) || updated;
-    });
-
-    DEPARTMENTS.forEach((department) => {
-      const contentHtml = buildBaseTemplate(
-        department.name,
-        `${department.shortName ?? department.name} Department Memo`,
-      );
-      updated =
-        ensureTemplateEntry(storage, {
-          id: nanoid(),
-          scope: 'department',
-          scopeId: department.id,
-          title: `${department.name} Department Memo`,
-          description: `Template for departmental communications within ${department.name}.`,
-          contentHtml,
-          contentText: deriveContentText(contentHtml),
-          createdBy: 'system',
-          updatedBy: 'system',
-          createdAt: now,
-          updatedAt: now,
-          isDefault: true,
-          templateType: 'document',
-        }) || updated;
-    });
 
     localStorage.setItem(SEEDED_KEY, 'true');
   }
@@ -369,11 +303,11 @@ export const getTemplatesForUser = (user: User, templateType: TemplateType = 'do
       case 'organization':
         return true;
       case 'directorate':
-        return template.scopeId === user.directorate;
+        return user.directorate ? template.scopeId === user.directorate : false;
       case 'division':
-        return template.scopeId === user.division;
+        return user.division ? template.scopeId === user.division : false;
       case 'department':
-        return template.scopeId === user.department;
+        return user.department ? template.scopeId === user.department : false;
       case 'user':
         return template.scopeId === user.id;
       default:

@@ -7,14 +7,8 @@ import { Button } from '@/components/ui/button';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
-import {
-  getDivisionName,
-  getDepartmentName,
-  initializeDmsDocuments,
-  loadDocuments,
-  type DocumentRecord,
-} from '@/lib/dms-storage';
-import { MOCK_USERS } from '@/lib/npa-structure';
+import { fetchDocuments, getCachedDocuments, type DocumentRecord } from '@/lib/dms-storage';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line } from 'recharts';
 import { FileDown, Download, Activity, AlertTriangle, Flame } from 'lucide-react';
@@ -38,10 +32,32 @@ interface DepartmentActivity {
 const ExecutiveAnalyticsPage = () => {
   const { correspondence, minutes } = useCorrespondence();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const { users, divisions, departments } = useOrganization();
 
   useEffect(() => {
-    initializeDmsDocuments();
-    setDocuments(loadDocuments());
+    const cached = getCachedDocuments();
+    if (cached.length) {
+      setDocuments(cached);
+    }
+
+    let ignore = false;
+
+    const load = async () => {
+      try {
+        const docs = await fetchDocuments();
+        if (!ignore) {
+          setDocuments(docs);
+        }
+      } catch (error) {
+        console.error('Failed to load documents for analytics', error);
+      }
+    };
+
+    void load();
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const divisionMetrics: DivisionMetric[] = useMemo(() => {
@@ -70,13 +86,16 @@ const ExecutiveAnalyticsPage = () => {
 
     return Array.from(map.entries()).map(([divisionId, data]) => ({
       id: divisionId,
-      name: getDivisionName(divisionId === 'unassigned' ? undefined : divisionId),
+      name:
+        divisionId === 'unassigned'
+          ? 'Unassigned'
+          : divisions.find((division) => division.id === divisionId)?.name ?? 'Unknown division',
       total: data.total,
       avgDays: data.total === 0 ? 0 : Number((data.sumDays / data.total).toFixed(1)),
       highPriority: data.highPriority,
       backlog: data.backlog,
     }));
-  }, [correspondence, minutes]);
+  }, [correspondence, minutes, divisions]);
 
   const departmentActivity: DepartmentActivity[] = useMemo(() => {
     const counts = new Map<string, number>();
@@ -87,12 +106,15 @@ const ExecutiveAnalyticsPage = () => {
     return Array.from(counts.entries())
       .map(([departmentId, total]) => ({
         id: departmentId,
-        name: getDepartmentName(departmentId === 'unassigned' ? undefined : departmentId),
+        name:
+          departmentId === 'unassigned'
+            ? 'Unassigned'
+            : departments.find((department) => department.id === departmentId)?.name ?? 'Unknown department',
         total,
       }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 6);
-  }, [correspondence]);
+  }, [correspondence, departments]);
 
   const delayedApprovals = useMemo(() => {
     const now = Date.now();
@@ -114,20 +136,27 @@ const ExecutiveAnalyticsPage = () => {
       .slice(0, 6);
   }, [correspondence, minutes]);
 
+  const leadershipIds = useMemo(
+    () =>
+      new Set(
+        users
+          .filter((user) => ['MDCS', 'EDCS', 'MSS1', 'MSS2'].includes(user.gradeLevel))
+          .map((user) => user.id),
+      ),
+    [users],
+  );
+
   const pendingTopLevel = useMemo(() => {
-    const leadershipIds = new Set(
-      MOCK_USERS.filter((user) => ['MDCS', 'EDCS', 'MSS1', 'MSS2'].includes(user.gradeLevel)).map((user) => user.id),
-    );
     return correspondence
       .filter((item) => item.currentApproverId && leadershipIds.has(item.currentApproverId))
       .map((item) => {
-        const approver = MOCK_USERS.find((user) => user.id === item.currentApproverId);
+        const approver = users.find((user) => user.id === item.currentApproverId);
         return {
           ...item,
           approverName: approver?.name ?? 'Unassigned',
         };
       });
-  }, [correspondence]);
+  }, [correspondence, leadershipIds, users]);
 
   const weeklyTrend = useMemo(() => {
     const map = new Map<string, { completed: number; pending: number; date: Date }>();
@@ -399,7 +428,7 @@ const ExecutiveAnalyticsPage = () => {
                         </div>
                         <p className="text-muted-foreground">{item.subject}</p>
                         <p className="text-xs text-muted-foreground">
-                          Received {formatDateShort(item.receivedDate)} · Division {getDivisionName(item.divisionId)}
+                          Received {formatDateShort(item.receivedDate)} · Division {item.divisionId}
                         </p>
                       </div>
                     ))
@@ -431,7 +460,7 @@ const ExecutiveAnalyticsPage = () => {
                       </div>
                       <p className="text-muted-foreground">{item.subject}</p>
                       <p className="text-xs text-muted-foreground">
-                        Division {getDivisionName(item.divisionId)} · Current approver: {item.approverName}
+                        Division {item.divisionId} · Current approver: {item.approverName}
                       </p>
                     </div>
                   ))

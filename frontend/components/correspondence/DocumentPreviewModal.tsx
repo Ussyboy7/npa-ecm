@@ -23,15 +23,19 @@ interface DocumentPreviewModalProps {
 }
 
 export const DocumentPreviewModal = ({ correspondence, minutes, isOpen, onClose }: DocumentPreviewModalProps) => {
-  const documentHtml = useMemo(() => generateDocumentHTML({ correspondence, minutes }), [correspondence, minutes]);
+  const normalizedMinutes = Array.isArray(minutes) ? minutes : [];
+  const documentHtml = useMemo(
+    () => generateDocumentHTML({ correspondence, minutes: normalizedMinutes }),
+    [correspondence, normalizedMinutes],
+  );
 
   const handlePrint = () => {
-    downloadAsPDF({ correspondence, minutes });
+    downloadAsPDF({ correspondence, minutes: normalizedMinutes });
     onClose();
   };
 
   const handleDownloadPdf = () => {
-    downloadAsPDF({ correspondence, minutes });
+    downloadAsPDF({ correspondence, minutes: normalizedMinutes });
   };
 
   return (
@@ -61,6 +65,10 @@ export const DocumentPreviewModal = ({ correspondence, minutes, isOpen, onClose 
             <Button variant="outline" className="gap-2" onClick={handlePrint}>
               <Printer className="h-4 w-4" />
               Print
+            </Button>
+            <Button className="gap-2" onClick={handleDownloadPdf}>
+              <Download className="h-4 w-4" />
+              Download PDF
             </Button>
           </div>
         </DialogFooter>

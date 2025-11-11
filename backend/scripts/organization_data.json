@@ -1,0 +1,1735 @@
+{
+  "DIRECTORATES": [
+    {
+      "id": "dir-md",
+      "name": "Managing Director Office",
+      "code": "MD",
+      "executiveDirector": "Managing Director",
+      "executiveDirectorId": "user-md",
+      "active": true
+    },
+    {
+      "id": "dir-edfa",
+      "name": "Executive Director, Finance & Administration",
+      "code": "EDFA",
+      "executiveDirector": "Executive Director, Finance & Administration",
+      "executiveDirectorId": "user-ed-fa",
+      "active": true
+    },
+    {
+      "id": "dir-edmo",
+      "name": "Executive Director, Marine & Operations",
+      "code": "EDMO",
+      "executiveDirector": "Executive Director, Marine & Operations",
+      "executiveDirectorId": "user-ed-mo",
+      "active": true
+    },
+    {
+      "id": "dir-edets",
+      "name": "Executive Director, Engineering & Technical Services",
+      "code": "EDETS",
+      "executiveDirector": "Executive Director, Engineering & Technical Services",
+      "executiveDirectorId": "user-ed-ets",
+      "active": true
+    }
+  ],
+  "DIVISIONS": [
+    {
+      "id": "div-csp",
+      "name": "Corporate & Strategic Planning",
+      "code": "C&SP",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-csp",
+      "active": true
+    },
+    {
+      "id": "div-csc",
+      "name": "Corporate & Strategic Communications",
+      "code": "C&SC",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-csc",
+      "active": true
+    },
+    {
+      "id": "div-audit",
+      "name": "Audit",
+      "code": "AUDIT",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-audit",
+      "active": true
+    },
+    {
+      "id": "div-legal",
+      "name": "Legal Services",
+      "code": "LEGAL",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-legal",
+      "active": true
+    },
+    {
+      "id": "div-tariff",
+      "name": "Tariff & Billing",
+      "code": "TARIFF",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-tariff",
+      "active": true
+    },
+    {
+      "id": "div-monitoring",
+      "name": "Monitoring",
+      "code": "MONITORING",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-monitoring",
+      "active": true
+    },
+    {
+      "id": "div-servicom",
+      "name": "SERVICOM",
+      "code": "SERVICOM",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-servicom",
+      "active": true
+    },
+    {
+      "id": "div-erm",
+      "name": "Enterprise Risk Management",
+      "code": "ERM",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-erm",
+      "active": true
+    },
+    {
+      "id": "div-liaison",
+      "name": "Administrative Support & Liaison Offices",
+      "code": "LIAISON",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-liaison",
+      "active": true
+    },
+    {
+      "id": "div-special-duties",
+      "name": "Special Duties / Executive Support",
+      "code": "SPECIAL_DUTIES",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-special-duties",
+      "active": true
+    },
+    {
+      "id": "div-hr",
+      "name": "Human Resources",
+      "code": "HR",
+      "directorateId": "dir-edfa",
+      "generalManagerId": "user-gm-hr",
+      "active": true
+    },
+    {
+      "id": "div-finance",
+      "name": "Finance",
+      "code": "FINANCE",
+      "directorateId": "dir-edfa",
+      "generalManagerId": "user-gm-finance",
+      "active": true
+    },
+    {
+      "id": "div-procurement",
+      "name": "Procurement",
+      "code": "PROCUREMENT",
+      "directorateId": "dir-edfa",
+      "generalManagerId": "user-gm-procurement",
+      "active": true
+    },
+    {
+      "id": "div-admin",
+      "name": "GM Administration",
+      "code": "GM_ADMIN",
+      "directorateId": "dir-edfa",
+      "generalManagerId": "user-gm-admin",
+      "active": true
+    },
+    {
+      "id": "div-medical",
+      "name": "Medical Services",
+      "code": "MEDICAL",
+      "directorateId": "dir-edfa",
+      "generalManagerId": "user-gm-medical",
+      "active": true
+    },
+    {
+      "id": "div-superannuation",
+      "name": "Superannuation",
+      "code": "SUPERANNUATION",
+      "directorateId": "dir-edfa",
+      "generalManagerId": "user-gm-superannuation",
+      "active": true
+    },
+    {
+      "id": "div-marine-ops",
+      "name": "Marine & Operations",
+      "code": "MARINE_OPS",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-marine",
+      "active": true
+    },
+    {
+      "id": "div-security",
+      "name": "Security",
+      "code": "SECURITY",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-security",
+      "active": true
+    },
+    {
+      "id": "div-hse",
+      "name": "Health, Safety & Environment",
+      "code": "HSE",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-hse",
+      "active": true
+    },
+    {
+      "id": "div-regulatory",
+      "name": "Regulatory Services",
+      "code": "REGULATORY",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-regulatory",
+      "active": true
+    },
+    {
+      "id": "div-ppp",
+      "name": "Public-Private Partnership",
+      "code": "PPP",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-ppp",
+      "active": true
+    },
+    {
+      "id": "div-engineering",
+      "name": "Engineering & Technical Services",
+      "code": "ENGINEERING",
+      "directorateId": "dir-edets",
+      "generalManagerId": "user-gm-engineering",
+      "active": true
+    },
+    {
+      "id": "div-ict",
+      "name": "Information & Communication Technology",
+      "code": "ICT",
+      "directorateId": "dir-edets",
+      "generalManagerId": "user-gm-ict",
+      "active": true
+    },
+    {
+      "id": "div-lands-assets",
+      "name": "Lands & Assets Administration",
+      "code": "LANDS_ASSETS",
+      "directorateId": "dir-edets",
+      "generalManagerId": "user-gm-lands-assets",
+      "active": true
+    }
+  ],
+  "DEPARTMENTS": [
+    {
+      "id": "dept-csp-research",
+      "name": "Research & Statistics",
+      "code": "CSP_RESEARCH",
+      "divisionId": "div-csp",
+      "assistantGeneralManagerId": "user-agm-csp-research",
+      "active": true
+    },
+    {
+      "id": "dept-csp-planning",
+      "name": "Planning & Monitoring",
+      "code": "CSP_PLANNING",
+      "divisionId": "div-csp",
+      "assistantGeneralManagerId": "user-agm-csp-planning",
+      "active": true
+    },
+    {
+      "id": "dept-csp-imo",
+      "name": "Deputy Alternate, IMO London",
+      "code": "CSP_IMO",
+      "divisionId": "div-csp",
+      "assistantGeneralManagerId": "user-agm-csp-imo",
+      "active": true
+    },
+    {
+      "id": "dept-csc-media",
+      "name": "Media & Communication / Protocol",
+      "code": "CSC_MEDIA",
+      "divisionId": "div-csc",
+      "assistantGeneralManagerId": "user-agm-csc-media",
+      "active": true
+    },
+    {
+      "id": "dept-csc-csr",
+      "name": "Corporate Social Responsibility",
+      "code": "CSC_CSR",
+      "divisionId": "div-csc",
+      "assistantGeneralManagerId": "user-agm-csc-csr",
+      "active": true
+    },
+    {
+      "id": "dept-audit-finance",
+      "name": "Finance & Investment",
+      "code": "AUDIT_FINANCE",
+      "divisionId": "div-audit",
+      "assistantGeneralManagerId": "user-agm-audit-finance",
+      "active": true
+    },
+    {
+      "id": "dept-audit-systems",
+      "name": "Systems / ICT",
+      "code": "AUDIT_SYSTEMS",
+      "divisionId": "div-audit",
+      "assistantGeneralManagerId": "user-agm-audit-systems",
+      "active": true
+    },
+    {
+      "id": "dept-audit-policy",
+      "name": "Policy Compliance",
+      "code": "AUDIT_POLICY",
+      "divisionId": "div-audit",
+      "assistantGeneralManagerId": "user-agm-audit-policy",
+      "active": true
+    },
+    {
+      "id": "dept-legal",
+      "name": "Legal",
+      "code": "LEGAL",
+      "divisionId": "div-legal",
+      "assistantGeneralManagerId": "user-agm-legal",
+      "active": true
+    },
+    {
+      "id": "dept-tariff",
+      "name": "Tariff & Billing",
+      "code": "TARIFF",
+      "divisionId": "div-tariff",
+      "assistantGeneralManagerId": "user-agm-tariff",
+      "active": true
+    },
+    {
+      "id": "dept-monitoring",
+      "name": "Monitoring",
+      "code": "MONITORING",
+      "divisionId": "div-monitoring",
+      "assistantGeneralManagerId": "user-agm-monitoring",
+      "active": true
+    },
+    {
+      "id": "dept-performance",
+      "name": "Performance Management",
+      "code": "PERFORMANCE",
+      "divisionId": "div-monitoring",
+      "assistantGeneralManagerId": "user-agm-performance",
+      "active": true
+    },
+    {
+      "id": "dept-servicom",
+      "name": "SERVICOM",
+      "code": "SERVICOM",
+      "divisionId": "div-servicom",
+      "assistantGeneralManagerId": "user-agm-servicom",
+      "active": true
+    },
+    {
+      "id": "dept-erm",
+      "name": "Risk Management",
+      "code": "ERM",
+      "divisionId": "div-erm",
+      "assistantGeneralManagerId": "user-agm-erm",
+      "active": true
+    },
+    {
+      "id": "dept-abuja",
+      "name": "Abuja Liaison Office",
+      "code": "ABUJA",
+      "divisionId": "div-liaison",
+      "assistantGeneralManagerId": "user-agm-abuja",
+      "active": true
+    },
+    {
+      "id": "dept-overseas",
+      "name": "Overseas Liaison Office",
+      "code": "OVERSEAS",
+      "divisionId": "div-liaison",
+      "assistantGeneralManagerId": "user-agm-overseas",
+      "active": true
+    },
+    {
+      "id": "dept-md-office",
+      "name": "MD's Office",
+      "code": "MD_OFFICE",
+      "divisionId": "div-special-duties",
+      "active": true
+    },
+    {
+      "id": "dept-board",
+      "name": "Board",
+      "code": "BOARD",
+      "divisionId": "div-special-duties",
+      "active": true
+    },
+    {
+      "id": "dept-special-performance",
+      "name": "Performance Management",
+      "code": "SPECIAL_PERFORMANCE",
+      "divisionId": "div-special-duties",
+      "active": true
+    },
+    {
+      "id": "dept-hr-operations",
+      "name": "HR Operations",
+      "code": "HR_OPS",
+      "divisionId": "div-hr",
+      "assistantGeneralManagerId": "user-agm-hr-ops",
+      "active": true
+    },
+    {
+      "id": "dept-hr-labour",
+      "name": "Employee & Labour Relations",
+      "code": "HR_LABOUR",
+      "divisionId": "div-hr",
+      "assistantGeneralManagerId": "user-agm-hr-labour",
+      "active": true
+    },
+    {
+      "id": "dept-hr-training",
+      "name": "Training & Capacity Development",
+      "code": "HR_TRAINING",
+      "divisionId": "div-hr",
+      "assistantGeneralManagerId": "user-agm-hr-training",
+      "active": true
+    },
+    {
+      "id": "dept-finance",
+      "name": "Finance",
+      "code": "FINANCE",
+      "divisionId": "div-finance",
+      "assistantGeneralManagerId": "user-agm-finance",
+      "active": true
+    },
+    {
+      "id": "dept-accounts",
+      "name": "Accounts",
+      "code": "ACCOUNTS",
+      "divisionId": "div-finance",
+      "assistantGeneralManagerId": "user-agm-accounts",
+      "active": true
+    },
+    {
+      "id": "dept-tax",
+      "name": "Tax",
+      "code": "TAX",
+      "divisionId": "div-finance",
+      "assistantGeneralManagerId": "user-agm-tax",
+      "active": true
+    },
+    {
+      "id": "dept-investment",
+      "name": "Investment",
+      "code": "INVESTMENT",
+      "divisionId": "div-finance",
+      "assistantGeneralManagerId": "user-agm-investment",
+      "active": true
+    },
+    {
+      "id": "dept-procurement",
+      "name": "Procurement",
+      "code": "PROCUREMENT",
+      "divisionId": "div-procurement",
+      "assistantGeneralManagerId": "user-agm-procurement",
+      "active": true
+    },
+    {
+      "id": "dept-admin-general",
+      "name": "Administration",
+      "code": "ADMIN_GENERAL",
+      "divisionId": "div-admin",
+      "assistantGeneralManagerId": "user-agm-admin-general",
+      "active": true
+    },
+    {
+      "id": "dept-admin-facility",
+      "name": "Facility Management",
+      "code": "ADMIN_FACILITY",
+      "divisionId": "div-admin",
+      "assistantGeneralManagerId": "user-agm-admin-facility",
+      "active": true
+    },
+    {
+      "id": "dept-admin-archives",
+      "name": "Archives & Records Management",
+      "code": "ADMIN_ARCHIVES",
+      "divisionId": "div-admin",
+      "assistantGeneralManagerId": "user-agm-admin-archives",
+      "active": true
+    },
+    {
+      "id": "dept-admin-risk",
+      "name": "Risk Management",
+      "code": "ADMIN_RISK",
+      "divisionId": "div-admin",
+      "assistantGeneralManagerId": "user-agm-admin-risk",
+      "active": true
+    },
+    {
+      "id": "dept-medical",
+      "name": "Medical Services",
+      "code": "MEDICAL",
+      "divisionId": "div-medical",
+      "assistantGeneralManagerId": "user-agm-medical",
+      "active": true
+    },
+    {
+      "id": "dept-pharmacy",
+      "name": "Pharmacy",
+      "code": "PHARMACY",
+      "divisionId": "div-medical",
+      "assistantGeneralManagerId": "user-agm-pharmacy",
+      "active": true
+    },
+    {
+      "id": "dept-occupational",
+      "name": "Occupational Health",
+      "code": "OCCUPATIONAL",
+      "divisionId": "div-medical",
+      "assistantGeneralManagerId": "user-agm-occupational",
+      "active": true
+    },
+    {
+      "id": "dept-superannuation",
+      "name": "Superannuation",
+      "code": "SUPERANNUATION",
+      "divisionId": "div-superannuation",
+      "assistantGeneralManagerId": "user-agm-superannuation",
+      "active": true
+    },
+    {
+      "id": "dept-marine-ops",
+      "name": "Marine Operations",
+      "code": "MARINE_OPS",
+      "divisionId": "div-marine-ops",
+      "assistantGeneralManagerId": "user-agm-marine-ops",
+      "active": true
+    },
+    {
+      "id": "dept-vessel",
+      "name": "Vessel Management",
+      "code": "VESSEL",
+      "divisionId": "div-marine-ops",
+      "assistantGeneralManagerId": "user-agm-vessel",
+      "active": true
+    },
+    {
+      "id": "dept-hydrographic",
+      "name": "Hydrographic",
+      "code": "HYDROGRAPHIC",
+      "divisionId": "div-marine-ops",
+      "assistantGeneralManagerId": "user-agm-hydrographic",
+      "active": true
+    },
+    {
+      "id": "dept-port-ops",
+      "name": "Port Operations",
+      "code": "PORT_OPS",
+      "divisionId": "div-marine-ops",
+      "assistantGeneralManagerId": "user-agm-port-ops",
+      "active": true
+    },
+    {
+      "id": "dept-security",
+      "name": "Security",
+      "code": "SECURITY",
+      "divisionId": "div-security",
+      "assistantGeneralManagerId": "user-agm-security",
+      "active": true
+    },
+    {
+      "id": "dept-environment",
+      "name": "Environment",
+      "code": "ENVIRONMENT",
+      "divisionId": "div-hse",
+      "assistantGeneralManagerId": "user-agm-environment",
+      "active": true
+    },
+    {
+      "id": "dept-safety",
+      "name": "Safety",
+      "code": "SAFETY",
+      "divisionId": "div-hse",
+      "assistantGeneralManagerId": "user-agm-safety",
+      "active": true
+    },
+    {
+      "id": "dept-regulatory",
+      "name": "Regulatory Services",
+      "code": "REGULATORY",
+      "divisionId": "div-regulatory",
+      "assistantGeneralManagerId": "user-agm-regulatory",
+      "active": true
+    },
+    {
+      "id": "dept-ppp",
+      "name": "PPP",
+      "code": "PPP",
+      "divisionId": "div-ppp",
+      "assistantGeneralManagerId": "user-agm-ppp",
+      "active": true
+    },
+    {
+      "id": "dept-ports-eng",
+      "name": "Ports Engineering",
+      "code": "PORTS_ENG",
+      "divisionId": "div-engineering",
+      "assistantGeneralManagerId": "user-agm-ports-eng",
+      "active": true
+    },
+    {
+      "id": "dept-electrical",
+      "name": "Electrical & Corrosion",
+      "code": "ELECTRICAL",
+      "divisionId": "div-engineering",
+      "assistantGeneralManagerId": "user-agm-electrical",
+      "active": true
+    },
+    {
+      "id": "dept-civil",
+      "name": "Civil Engineering",
+      "code": "CIVIL",
+      "divisionId": "div-engineering",
+      "assistantGeneralManagerId": "user-agm-civil",
+      "active": true
+    },
+    {
+      "id": "dept-ict-software",
+      "name": "Software Applications & Database Management",
+      "code": "ICT_SOFTWARE",
+      "divisionId": "div-ict",
+      "assistantGeneralManagerId": "user-agm-software",
+      "active": true
+    },
+    {
+      "id": "dept-ict-hardware",
+      "name": "Hardware, Infrastructure & Support",
+      "code": "ICT_HARDWARE",
+      "divisionId": "div-ict",
+      "assistantGeneralManagerId": "user-agm-infra",
+      "active": true
+    },
+    {
+      "id": "dept-ict-networks",
+      "name": "Networks & Communication",
+      "code": "ICT_NETWORKS",
+      "divisionId": "div-ict",
+      "assistantGeneralManagerId": "user-agm-networks",
+      "active": true
+    },
+    {
+      "id": "dept-ict-research",
+      "name": "Research & Special Projects",
+      "code": "ICT_RESEARCH",
+      "divisionId": "div-ict",
+      "assistantGeneralManagerId": "user-agm-research",
+      "active": true
+    },
+    {
+      "id": "dept-assets",
+      "name": "Assets Administration",
+      "code": "ASSETS",
+      "divisionId": "div-lands-assets",
+      "assistantGeneralManagerId": "user-agm-assets",
+      "active": true
+    }
+  ],
+  "MOCK_USERS": [
+    {
+      "id": "user-md",
+      "name": "Dr. Abubakar Dantsoho",
+      "email": "md@npa.gov.ng",
+      "employeeId": "NPA001",
+      "gradeLevel": "MDCS",
+      "systemRole": "Managing Director",
+      "active": true
+    },
+    {
+      "id": "user-ed-ets",
+      "name": "Engr. Ibrahim Abba Umar",
+      "email": "ed.ets@npa.gov.ng",
+      "employeeId": "NPA002",
+      "gradeLevel": "EDCS",
+      "division": "div-ict",
+      "systemRole": "Executive Director",
+      "active": true
+    },
+    {
+      "id": "user-ed-mo",
+      "name": "Engr. Olalekan Badmus",
+      "email": "ed.mo@npa.gov.ng",
+      "employeeId": "NPA003",
+      "gradeLevel": "EDCS",
+      "division": "div-marine-ops",
+      "systemRole": "Executive Director",
+      "active": true
+    },
+    {
+      "id": "user-ed-fa",
+      "name": "Mrs. Vivian C. Richard-Edet",
+      "email": "ed.fa@npa.gov.ng",
+      "employeeId": "NPA004",
+      "gradeLevel": "EDCS",
+      "division": "div-finance",
+      "systemRole": "Executive Director",
+      "active": true
+    },
+    {
+      "id": "user-gm-ict",
+      "name": "Gbotolorun Babatunde Ayodele",
+      "email": "gm.ict@npa.gov.ng",
+      "employeeId": "NPA010",
+      "gradeLevel": "MSS1",
+      "division": "div-ict",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-marine",
+      "name": "Capt. Jerome Bitrus Angyunwe",
+      "email": "gm.marine@npa.gov.ng",
+      "employeeId": "NPA011",
+      "gradeLevel": "MSS1",
+      "division": "div-marine-ops",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-csp",
+      "name": "Iyawe Seyi Akinyemi",
+      "email": "gm.csp@npa.gov.ng",
+      "employeeId": "NPA012",
+      "gradeLevel": "MSS1",
+      "division": "div-csp",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-security",
+      "name": "Edosomwan A. Anthony",
+      "email": "gm.security@npa.gov.ng",
+      "employeeId": "NPA013",
+      "gradeLevel": "MSS1",
+      "division": "div-security",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-monitoring",
+      "name": "Salau Razaq Adesina",
+      "email": "gm.monitoring@npa.gov.ng",
+      "employeeId": "NPA014",
+      "gradeLevel": "MSS1",
+      "division": "div-monitoring",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-engineering",
+      "name": "Isa Mukhtar Umar",
+      "email": "gm.engineering@npa.gov.ng",
+      "employeeId": "NPA015",
+      "gradeLevel": "MSS1",
+      "division": "div-engineering",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-audit",
+      "name": "Gofwan Victor Paul",
+      "email": "gm.audit@npa.gov.ng",
+      "employeeId": "NPA016",
+      "gradeLevel": "MSS1",
+      "division": "div-audit",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-finance",
+      "name": "Mrs. Blessing Eze",
+      "email": "gm.finance@npa.gov.ng",
+      "employeeId": "NPA017",
+      "gradeLevel": "MSS1",
+      "division": "div-finance",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-hr",
+      "name": "Mr. Kunle Adebayo",
+      "email": "gm.hr@npa.gov.ng",
+      "employeeId": "NPA018",
+      "gradeLevel": "MSS1",
+      "division": "div-hr",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-legal",
+      "name": "Mrs. Folake Adeola",
+      "email": "gm.legal@npa.gov.ng",
+      "employeeId": "NPA019",
+      "gradeLevel": "MSS1",
+      "division": "div-legal",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-procurement",
+      "name": "Mr. Chidi Okeke",
+      "email": "gm.procurement@npa.gov.ng",
+      "employeeId": "NPA020",
+      "gradeLevel": "MSS1",
+      "division": "div-procurement",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-admin",
+      "name": "Mrs. Ngozi Obi",
+      "email": "gm.admin@npa.gov.ng",
+      "employeeId": "NPA021",
+      "gradeLevel": "MSS1",
+      "division": "div-admin",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-medical",
+      "name": "Dr. Emeka Nwosu",
+      "email": "gm.medical@npa.gov.ng",
+      "employeeId": "NPA022",
+      "gradeLevel": "MSS1",
+      "division": "div-medical",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-hse",
+      "name": "Mr. Femi Adewale",
+      "email": "gm.hse@npa.gov.ng",
+      "employeeId": "NPA023",
+      "gradeLevel": "MSS1",
+      "division": "div-hse",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-regulatory",
+      "name": "Capt. Bola Williams",
+      "email": "gm.regulatory@npa.gov.ng",
+      "employeeId": "NPA024",
+      "gradeLevel": "MSS1",
+      "division": "div-regulatory",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-ppp",
+      "name": "Mr. Olumide Adeyemi",
+      "email": "gm.ppp@npa.gov.ng",
+      "employeeId": "NPA025",
+      "gradeLevel": "MSS1",
+      "division": "div-ppp",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-lands-assets",
+      "name": "Mrs. Chiamaka Eze",
+      "email": "gm.lands@npa.gov.ng",
+      "employeeId": "NPA026",
+      "gradeLevel": "MSS1",
+      "division": "div-lands-assets",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-csc",
+      "name": "Mr. Tunde Fashola",
+      "email": "gm.csc@npa.gov.ng",
+      "employeeId": "NPA027",
+      "gradeLevel": "MSS1",
+      "division": "div-csc",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-tariff",
+      "name": "Mrs. Aisha Mohammed",
+      "email": "gm.tariff@npa.gov.ng",
+      "employeeId": "NPA028",
+      "gradeLevel": "MSS1",
+      "division": "div-tariff",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-servicom",
+      "name": "Mr. Ibrahim Yusuf",
+      "email": "gm.servicom@npa.gov.ng",
+      "employeeId": "NPA029",
+      "gradeLevel": "MSS1",
+      "division": "div-servicom",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-erm",
+      "name": "Mrs. Fatima Adekunle",
+      "email": "gm.erm@npa.gov.ng",
+      "employeeId": "NPA030",
+      "gradeLevel": "MSS1",
+      "division": "div-erm",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-superannuation",
+      "name": "Mr. Samuel Okeke",
+      "email": "gm.superannuation@npa.gov.ng",
+      "employeeId": "NPA031",
+      "gradeLevel": "MSS1",
+      "division": "div-superannuation",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-liaison",
+      "name": "Mrs. Halima Suleiman",
+      "email": "gm.liaison@npa.gov.ng",
+      "employeeId": "NPA032",
+      "gradeLevel": "MSS1",
+      "division": "div-liaison",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-special-duties",
+      "name": "Mr. Patrick Igbinedion",
+      "email": "gm.specialduties@npa.gov.ng",
+      "employeeId": "NPA033",
+      "gradeLevel": "MSS1",
+      "division": "div-special-duties",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-software",
+      "name": "Mrs. Chiamaka Eze",
+      "email": "agm.software@npa.gov.ng",
+      "employeeId": "NPA040",
+      "gradeLevel": "MSS2",
+      "division": "div-ict",
+      "department": "dept-ict-software",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-infra",
+      "name": "Mr. Femi Adewale",
+      "email": "agm.infra@npa.gov.ng",
+      "employeeId": "NPA041",
+      "gradeLevel": "MSS2",
+      "division": "div-ict",
+      "department": "dept-ict-hardware",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-networks",
+      "name": "Engr. Adebayo Ogunleye",
+      "email": "agm.networks@npa.gov.ng",
+      "employeeId": "NPA042",
+      "gradeLevel": "MSS2",
+      "division": "div-ict",
+      "department": "dept-ict-networks",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-marine-ops",
+      "name": "Capt. Bola Williams",
+      "email": "agm.marine@npa.gov.ng",
+      "employeeId": "NPA043",
+      "gradeLevel": "MSS2",
+      "division": "div-marine-ops",
+      "department": "dept-marine-ops",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-vessel",
+      "name": "Capt. Tunde Fashola",
+      "email": "agm.vessel@npa.gov.ng",
+      "employeeId": "NPA044",
+      "gradeLevel": "MSS2",
+      "division": "div-marine-ops",
+      "department": "dept-vessel",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-finance",
+      "name": "Mrs. Blessing Eze",
+      "email": "agm.finance@npa.gov.ng",
+      "employeeId": "NPA045",
+      "gradeLevel": "MSS2",
+      "division": "div-finance",
+      "department": "dept-finance",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-accounts",
+      "name": "Mr. Chidi Okafor",
+      "email": "agm.accounts@npa.gov.ng",
+      "employeeId": "NPA046",
+      "gradeLevel": "MSS2",
+      "division": "div-finance",
+      "department": "dept-accounts",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-hr-ops",
+      "name": "Mrs. Ngozi Obi",
+      "email": "agm.hr.ops@npa.gov.ng",
+      "employeeId": "NPA047",
+      "gradeLevel": "MSS2",
+      "division": "div-hr",
+      "department": "dept-hr-operations",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-hr-training",
+      "name": "Mr. Kunle Adebayo",
+      "email": "agm.hr.training@npa.gov.ng",
+      "employeeId": "NPA048",
+      "gradeLevel": "MSS2",
+      "division": "div-hr",
+      "department": "dept-hr-training",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-ports-eng",
+      "name": "Engr. Olumide Adeyemi",
+      "email": "agm.ports.eng@npa.gov.ng",
+      "employeeId": "NPA049",
+      "gradeLevel": "MSS2",
+      "division": "div-engineering",
+      "department": "dept-ports-eng",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-monitoring",
+      "name": "Mr. Sola Adeyeye",
+      "email": "agm.monitoring@npa.gov.ng",
+      "employeeId": "NPA050",
+      "gradeLevel": "MSS2",
+      "division": "div-monitoring",
+      "department": "dept-monitoring",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-performance",
+      "name": "Mrs. Yetunde Okoro",
+      "email": "agm.performance@npa.gov.ng",
+      "employeeId": "NPA051",
+      "gradeLevel": "MSS2",
+      "division": "div-monitoring",
+      "department": "dept-performance",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-servicom",
+      "name": "Ms. Victoria Enem",
+      "email": "agm.servicom@npa.gov.ng",
+      "employeeId": "NPA052",
+      "gradeLevel": "MSS2",
+      "division": "div-servicom",
+      "department": "dept-servicom",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-abuja",
+      "name": "Mr. Abdullahi Musa",
+      "email": "agm.abuja@npa.gov.ng",
+      "employeeId": "NPA053",
+      "gradeLevel": "MSS2",
+      "division": "div-liaison",
+      "department": "dept-abuja",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-overseas",
+      "name": "Mrs. Ifeoma Nwachukwu",
+      "email": "agm.overseas@npa.gov.ng",
+      "employeeId": "NPA054",
+      "gradeLevel": "MSS2",
+      "division": "div-liaison",
+      "department": "dept-overseas",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-hr-labour",
+      "name": "Mr. Peter Udo",
+      "email": "agm.hr.labour@npa.gov.ng",
+      "employeeId": "NPA055",
+      "gradeLevel": "MSS2",
+      "division": "div-hr",
+      "department": "dept-hr-labour",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-tax",
+      "name": "Mrs. Kemi Adesina",
+      "email": "agm.tax@npa.gov.ng",
+      "employeeId": "NPA056",
+      "gradeLevel": "MSS2",
+      "division": "div-finance",
+      "department": "dept-tax",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-investment",
+      "name": "Mr. Tayo Balogun",
+      "email": "agm.investment@npa.gov.ng",
+      "employeeId": "NPA057",
+      "gradeLevel": "MSS2",
+      "division": "div-finance",
+      "department": "dept-investment",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-medical",
+      "name": "Dr. Zainab Yusuf",
+      "email": "agm.medical@npa.gov.ng",
+      "employeeId": "NPA058",
+      "gradeLevel": "MSS2",
+      "division": "div-medical",
+      "department": "dept-medical",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-pharmacy",
+      "name": "Pharm. Adaeze Nnamdi",
+      "email": "agm.pharmacy@npa.gov.ng",
+      "employeeId": "NPA059",
+      "gradeLevel": "MSS2",
+      "division": "div-medical",
+      "department": "dept-pharmacy",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-occupational",
+      "name": "Dr. Chukwudi Okeke",
+      "email": "agm.occupational@npa.gov.ng",
+      "employeeId": "NPA060",
+      "gradeLevel": "MSS2",
+      "division": "div-medical",
+      "department": "dept-occupational",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-hydrographic",
+      "name": "Engr. Hassan Bello",
+      "email": "agm.hydrographic@npa.gov.ng",
+      "employeeId": "NPA061",
+      "gradeLevel": "MSS2",
+      "division": "div-marine-ops",
+      "department": "dept-hydrographic",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-port-ops",
+      "name": "Capt. Musa Ibrahim",
+      "email": "agm.portops@npa.gov.ng",
+      "employeeId": "NPA062",
+      "gradeLevel": "MSS2",
+      "division": "div-marine-ops",
+      "department": "dept-port-ops",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-security",
+      "name": "Mr. Richard Obasi",
+      "email": "agm.security@npa.gov.ng",
+      "employeeId": "NPA063",
+      "gradeLevel": "MSS2",
+      "division": "div-security",
+      "department": "dept-security",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-environment",
+      "name": "Mrs. Bisi Alade",
+      "email": "agm.environment@npa.gov.ng",
+      "employeeId": "NPA064",
+      "gradeLevel": "MSS2",
+      "division": "div-hse",
+      "department": "dept-environment",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-safety",
+      "name": "Mr. Emmanuel Akpan",
+      "email": "agm.safety@npa.gov.ng",
+      "employeeId": "NPA065",
+      "gradeLevel": "MSS2",
+      "division": "div-hse",
+      "department": "dept-safety",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-research",
+      "name": "Ms. Grace Nnaji",
+      "email": "agm.research@npa.gov.ng",
+      "employeeId": "NPA066",
+      "gradeLevel": "MSS2",
+      "division": "div-ict",
+      "department": "dept-ict-research",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-assets",
+      "name": "Mr. Felix Adegoke",
+      "email": "agm.assets@npa.gov.ng",
+      "employeeId": "NPA067",
+      "gradeLevel": "MSS2",
+      "division": "div-lands-assets",
+      "department": "dept-assets",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-csp-research",
+      "name": "Dr. Adebayo Ogunleye",
+      "email": "agm.csp.research@npa.gov.ng",
+      "employeeId": "NPA068",
+      "gradeLevel": "MSS2",
+      "division": "div-csp",
+      "department": "dept-csp-research",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-csp-planning",
+      "name": "Mrs. Funke Adeyemi",
+      "email": "agm.csp.planning@npa.gov.ng",
+      "employeeId": "NPA069",
+      "gradeLevel": "MSS2",
+      "division": "div-csp",
+      "department": "dept-csp-planning",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-csp-imo",
+      "name": "Capt. John Okoro",
+      "email": "agm.csp.imo@npa.gov.ng",
+      "employeeId": "NPA070",
+      "gradeLevel": "MSS2",
+      "division": "div-csp",
+      "department": "dept-csp-imo",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-csc-media",
+      "name": "Mrs. Chioma Nwosu",
+      "email": "agm.csc.media@npa.gov.ng",
+      "employeeId": "NPA071",
+      "gradeLevel": "MSS2",
+      "division": "div-csc",
+      "department": "dept-csc-media",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-csc-csr",
+      "name": "Mr. Tunde Fashola",
+      "email": "agm.csc.csr@npa.gov.ng",
+      "employeeId": "NPA072",
+      "gradeLevel": "MSS2",
+      "division": "div-csc",
+      "department": "dept-csc-csr",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-audit-finance",
+      "name": "Mrs. Aisha Mohammed",
+      "email": "agm.audit.finance@npa.gov.ng",
+      "employeeId": "NPA073",
+      "gradeLevel": "MSS2",
+      "division": "div-audit",
+      "department": "dept-audit-finance",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-audit-systems",
+      "name": "Mr. Ibrahim Yusuf",
+      "email": "agm.audit.systems@npa.gov.ng",
+      "employeeId": "NPA074",
+      "gradeLevel": "MSS2",
+      "division": "div-audit",
+      "department": "dept-audit-systems",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-audit-policy",
+      "name": "Mrs. Fatima Adekunle",
+      "email": "agm.audit.policy@npa.gov.ng",
+      "employeeId": "NPA075",
+      "gradeLevel": "MSS2",
+      "division": "div-audit",
+      "department": "dept-audit-policy",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-legal",
+      "name": "Barr. Samuel Okeke",
+      "email": "agm.legal@npa.gov.ng",
+      "employeeId": "NPA076",
+      "gradeLevel": "MSS2",
+      "division": "div-legal",
+      "department": "dept-legal",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-tariff",
+      "name": "Mrs. Kemi Adesina",
+      "email": "agm.tariff@npa.gov.ng",
+      "employeeId": "NPA077",
+      "gradeLevel": "MSS2",
+      "division": "div-tariff",
+      "department": "dept-tariff",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-ppp",
+      "name": "Mr. Olumide Adeyemi",
+      "email": "agm.ppp@npa.gov.ng",
+      "employeeId": "NPA078",
+      "gradeLevel": "MSS2",
+      "division": "div-ppp",
+      "department": "dept-ppp",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-regulatory",
+      "name": "Capt. Bola Williams",
+      "email": "agm.regulatory@npa.gov.ng",
+      "employeeId": "NPA079",
+      "gradeLevel": "MSS2",
+      "division": "div-regulatory",
+      "department": "dept-regulatory",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-electrical",
+      "name": "Engr. Hassan Bello",
+      "email": "agm.electrical@npa.gov.ng",
+      "employeeId": "NPA080",
+      "gradeLevel": "MSS2",
+      "division": "div-engineering",
+      "department": "dept-electrical",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-civil",
+      "name": "Engr. Musa Ibrahim",
+      "email": "agm.civil@npa.gov.ng",
+      "employeeId": "NPA081",
+      "gradeLevel": "MSS2",
+      "division": "div-engineering",
+      "department": "dept-civil",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-procurement",
+      "name": "Mr. Chidi Okeke",
+      "email": "agm.procurement@npa.gov.ng",
+      "employeeId": "NPA082",
+      "gradeLevel": "MSS2",
+      "division": "div-procurement",
+      "department": "dept-procurement",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-admin-general",
+      "name": "Mrs. Amina Lawal",
+      "email": "agm.admin@npa.gov.ng",
+      "employeeId": "NPA083",
+      "gradeLevel": "MSS2",
+      "division": "div-admin",
+      "department": "dept-admin-general",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-admin-facility",
+      "name": "Mr. Femi Adewale",
+      "email": "agm.admin.facility@npa.gov.ng",
+      "employeeId": "NPA084",
+      "gradeLevel": "MSS2",
+      "division": "div-admin",
+      "department": "dept-admin-facility",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-admin-archives",
+      "name": "Mrs. Ngozi Obi",
+      "email": "agm.admin.archives@npa.gov.ng",
+      "employeeId": "NPA085",
+      "gradeLevel": "MSS2",
+      "division": "div-admin",
+      "department": "dept-admin-archives",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-admin-risk",
+      "name": "Mr. Emmanuel Akpan",
+      "email": "agm.admin.risk@npa.gov.ng",
+      "employeeId": "NPA086",
+      "gradeLevel": "MSS2",
+      "division": "div-admin",
+      "department": "dept-admin-risk",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-superannuation",
+      "name": "Mr. Samuel Okeke",
+      "email": "agm.superannuation@npa.gov.ng",
+      "employeeId": "NPA087",
+      "gradeLevel": "MSS2",
+      "division": "div-superannuation",
+      "department": "dept-superannuation",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-agm-erm",
+      "name": "Mrs. Fatima Adekunle",
+      "email": "agm.erm@npa.gov.ng",
+      "employeeId": "NPA088",
+      "gradeLevel": "MSS2",
+      "division": "div-erm",
+      "department": "dept-erm",
+      "systemRole": "Assistant General Manager",
+      "active": true
+    },
+    {
+      "id": "user-pm-software",
+      "name": "Mr. Olumide Adeyemi",
+      "email": "pm.software@npa.gov.ng",
+      "employeeId": "NPA050",
+      "gradeLevel": "MSS3",
+      "division": "div-ict",
+      "department": "dept-ict-software",
+      "systemRole": "Principal Manager",
+      "active": true
+    },
+    {
+      "id": "user-manager-support",
+      "name": "Mrs. Ngozi Obi",
+      "email": "manager.support@npa.gov.ng",
+      "employeeId": "NPA051",
+      "gradeLevel": "MSS5",
+      "division": "div-ict",
+      "department": "dept-ict-hardware",
+      "systemRole": "Manager",
+      "active": true
+    },
+    {
+      "id": "user-sm-finance",
+      "name": "Mrs. Grace Okoro",
+      "email": "sm.finance@npa.gov.ng",
+      "employeeId": "NPA088",
+      "gradeLevel": "MSS4",
+      "division": "div-finance",
+      "department": "dept-finance",
+      "systemRole": "Senior Manager",
+      "active": true
+    },
+    {
+      "id": "user-sm-hr",
+      "name": "Mr. David Okafor",
+      "email": "sm.hr@npa.gov.ng",
+      "employeeId": "NPA089",
+      "gradeLevel": "MSS4",
+      "division": "div-hr",
+      "department": "dept-hr-operations",
+      "systemRole": "Senior Manager",
+      "active": true
+    },
+    {
+      "id": "user-officer-dev",
+      "name": "Mr. Emeka Nwosu",
+      "email": "officer.dev@npa.gov.ng",
+      "employeeId": "NPA060",
+      "gradeLevel": "SSS2",
+      "division": "div-ict",
+      "department": "dept-ict-software",
+      "systemRole": "Senior Officer",
+      "active": true
+    },
+    {
+      "id": "user-officer-support",
+      "name": "Miss Aisha Mohammed",
+      "email": "officer.support@npa.gov.ng",
+      "employeeId": "NPA061",
+      "gradeLevel": "SSS4",
+      "division": "div-ict",
+      "department": "dept-ict-hardware",
+      "systemRole": "Officer",
+      "active": true
+    },
+    {
+      "id": "user-officer-admin",
+      "name": "Mr. James Okonkwo",
+      "email": "officer.admin@npa.gov.ng",
+      "employeeId": "NPA090",
+      "gradeLevel": "SSS3",
+      "division": "div-admin",
+      "department": "dept-admin-archives",
+      "systemRole": "Officer",
+      "active": true
+    },
+    {
+      "id": "user-assistant-manager",
+      "name": "Mrs. Maryam Ibrahim",
+      "email": "assistant.manager@npa.gov.ng",
+      "employeeId": "NPA091",
+      "gradeLevel": "SSS1",
+      "division": "div-finance",
+      "department": "dept-accounts",
+      "systemRole": "Assistant Manager",
+      "active": true
+    },
+    {
+      "id": "user-staff-senior",
+      "name": "Mr. Tunde Ojo",
+      "email": "staff.senior@npa.gov.ng",
+      "employeeId": "NPA092",
+      "gradeLevel": "JSS1",
+      "division": "div-ict",
+      "department": "dept-ict-software",
+      "systemRole": "Staff",
+      "active": true
+    },
+    {
+      "id": "user-staff-mid",
+      "name": "Miss Funke Adeyemi",
+      "email": "staff.mid@npa.gov.ng",
+      "employeeId": "NPA093",
+      "gradeLevel": "JSS2",
+      "division": "div-hr",
+      "department": "dept-hr-operations",
+      "systemRole": "Staff",
+      "active": true
+    },
+    {
+      "id": "user-staff-junior",
+      "name": "Mr. Chukwuemeka Nwankwo",
+      "email": "staff.junior@npa.gov.ng",
+      "employeeId": "NPA094",
+      "gradeLevel": "JSS3",
+      "division": "div-admin",
+      "department": "dept-admin-facility",
+      "systemRole": "Staff",
+      "active": true
+    },
+    {
+      "id": "user-secretary-md",
+      "name": "Mrs. Amina Bello",
+      "email": "secretary.md@npa.gov.ng",
+      "employeeId": "NPA095",
+      "gradeLevel": "SSS2",
+      "division": "div-liaison",
+      "systemRole": "Secretary",
+      "active": true
+    },
+    {
+      "id": "user-secretary-ed",
+      "name": "Miss Fatima Ibrahim",
+      "email": "secretary.ed@npa.gov.ng",
+      "employeeId": "NPA096",
+      "gradeLevel": "SSS2",
+      "division": "div-ict",
+      "systemRole": "Secretary",
+      "active": true
+    },
+    {
+      "id": "user-assistant-md",
+      "name": "Mr. Ibrahim Musa",
+      "email": "assistant.md@npa.gov.ng",
+      "employeeId": "NPA097",
+      "gradeLevel": "SSS1",
+      "division": "div-liaison",
+      "systemRole": "Assistant",
+      "active": true
+    },
+    {
+      "id": "user-assistant-gm",
+      "name": "Mrs. Zainab Usman",
+      "email": "assistant.gm@npa.gov.ng",
+      "employeeId": "NPA098",
+      "gradeLevel": "SSS1",
+      "division": "div-ict",
+      "systemRole": "Assistant",
+      "active": true
+    },
+    {
+      "id": "user-super-admin",
+      "name": "Mr. Admin System",
+      "email": "admin@npa.gov.ng",
+      "employeeId": "NPA099",
+      "gradeLevel": "MSS1",
+      "systemRole": "Super Admin",
+      "active": true
+    }
+  ],
+  "GRADE_LEVELS": [
+    {
+      "code": "JSS3",
+      "name": "Staff III",
+      "level": 4,
+      "systemRole": "Staff",
+      "approvalAuthority": 1
+    },
+    {
+      "code": "JSS2",
+      "name": "Staff II",
+      "level": 5,
+      "systemRole": "Staff",
+      "approvalAuthority": 1
+    },
+    {
+      "code": "JSS1",
+      "name": "Staff I",
+      "level": 6,
+      "systemRole": "Staff",
+      "approvalAuthority": 2
+    },
+    {
+      "code": "SSS4",
+      "name": "Officer II",
+      "level": 8,
+      "systemRole": "Officer",
+      "approvalAuthority": 2
+    },
+    {
+      "code": "SSS3",
+      "name": "Officer I",
+      "level": 9,
+      "systemRole": "Officer",
+      "approvalAuthority": 3
+    },
+    {
+      "code": "SSS2",
+      "name": "Senior Officer",
+      "level": 10,
+      "systemRole": "Senior Officer",
+      "approvalAuthority": 3
+    },
+    {
+      "code": "SSS1",
+      "name": "Assistant Manager",
+      "level": 12,
+      "systemRole": "Assistant Manager",
+      "approvalAuthority": 4
+    },
+    {
+      "code": "MSS5",
+      "name": "Manager",
+      "level": 13,
+      "systemRole": "Manager",
+      "approvalAuthority": 5
+    },
+    {
+      "code": "MSS4",
+      "name": "Senior Manager",
+      "level": 14,
+      "systemRole": "Senior Manager",
+      "approvalAuthority": 6
+    },
+    {
+      "code": "MSS3",
+      "name": "Principal Manager",
+      "level": 15,
+      "systemRole": "Principal Manager",
+      "approvalAuthority": 7
+    },
+    {
+      "code": "MSS2",
+      "name": "Assistant General Manager",
+      "level": 16,
+      "systemRole": "Assistant General Manager",
+      "approvalAuthority": 8
+    },
+    {
+      "code": "MSS1",
+      "name": "General Manager",
+      "level": 17,
+      "systemRole": "General Manager",
+      "approvalAuthority": 9
+    },
+    {
+      "code": "EDCS",
+      "name": "Executive Director",
+      "level": 18,
+      "systemRole": "Executive Director",
+      "approvalAuthority": 10
+    },
+    {
+      "code": "MDCS",
+      "name": "Managing Director",
+      "level": 19,
+      "systemRole": "Managing Director",
+      "approvalAuthority": 11
+    }
+  ]
+}

@@ -1,76 +1,123 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
-import { 
-  FileText, 
-  Clock, 
-  CheckCircle, 
+import {
+  FileText,
+  Clock,
+  CheckCircle,
   AlertCircle,
   TrendingUp,
-  Users,
   Mail,
-  Send
+  Send,
 } from 'lucide-react';
-import { MOCK_USERS, MOCK_CORRESPONDENCE, DIVISIONS, type User } from '@/lib/npa-structure';
+import { useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import Link from 'next/link';
 
 const Dashboard = () => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { correspondence, minutes } = useCorrespondence();
+  const { currentUser, hydrated } = useCurrentUser();
+  const { divisions } = useOrganization();
 
-  useEffect(() => {
-    const savedUserId = localStorage.getItem('npa_demo_user_id');
-    if (savedUserId) {
-      const user = MOCK_USERS.find(u => u.id === savedUserId);
-      if (user) setCurrentUser(user);
-    } else {
-      const md = MOCK_USERS.find(u => u.gradeLevel === 'MDCS');
-      if (md) setCurrentUser(md);
-    }
-  }, []);
+  const division = useMemo(() => {
+    if (!currentUser?.division) return undefined;
+    return divisions.find((item) => item.id === currentUser.division);
+  }, [currentUser?.division, divisions]);
 
-  if (!currentUser) return null;
+  const pendingCorrespondence = useMemo(() => {
+    if (!currentUser) return [];
+    const userDivisionId = currentUser.division;
 
-  const division = DIVISIONS.find(d => d.id === currentUser.division);
-  const pendingCorrespondence = MOCK_CORRESPONDENCE.filter(
-    c => c.currentApproverId === currentUser.id || c.divisionId === currentUser.division
-  );
+    return correspondence
+      .filter((item) => {
+        if (item.status === 'completed') return false;
+        if (item.currentApproverId === currentUser.id) return true;
+        if (userDivisionId && item.divisionId === userDivisionId) return true;
+        return false;
+      })
+      .sort((a, b) => new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime());
+  }, [correspondence, currentUser]);
 
-  const stats = [
-    {
-      title: 'Pending Action',
-      value: pendingCorrespondence.length.toString(),
-      icon: Clock,
-      color: 'text-warning',
-      bgColor: 'bg-warning/10',
-    },
-    {
-      title: 'In Progress',
-      value: MOCK_CORRESPONDENCE.filter(c => c.status === 'in-progress').length.toString(),
-      icon: Send,
-      color: 'text-info',
-      bgColor: 'bg-info/10',
-    },
-    {
-      title: 'Completed Today',
-      value: '0',
-      icon: CheckCircle,
-      color: 'text-success',
-      bgColor: 'bg-success/10',
-    },
-    {
-      title: 'Urgent Items',
-      value: MOCK_CORRESPONDENCE.filter(c => c.priority === 'urgent').length.toString(),
-      icon: AlertCircle,
-      color: 'text-destructive',
-      bgColor: 'bg-destructive/10',
-    },
-  ];
+  const stats = useMemo(() => {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const inProgress = correspondence.filter((item) => item.status === 'in-progress').length;
+    const urgent = correspondence.filter(
+      (item) => item.priority === 'urgent' && item.status !== 'completed',
+    ).length;
+    const completedToday = correspondence.filter((item) => {
+      if (item.status !== 'completed') return false;
+      const referenceDate = item.updatedAt ?? item.receivedDate;
+      return new Date(referenceDate).getTime() >= startOfToday.getTime();
+    }).length;
+
+    return [
+      {
+        title: 'Pending Action',
+        value: pendingCorrespondence.length.toString(),
+        icon: Clock,
+        color: 'text-warning',
+        bgColor: 'bg-warning/10',
+      },
+      {
+        title: 'In Progress',
+        value: inProgress.toString(),
+        icon: Send,
+        color: 'text-info',
+        bgColor: 'bg-info/10',
+      },
+      {
+        title: 'Completed Today',
+        value: completedToday.toString(),
+        icon: CheckCircle,
+        color: 'text-success',
+        bgColor: 'bg-success/10',
+      },
+      {
+        title: 'Urgent Items',
+        value: urgent.toString(),
+        icon: AlertCircle,
+        color: 'text-destructive',
+        bgColor: 'bg-destructive/10',
+      },
+    ];
+  }, [correspondence, pendingCorrespondence.length]);
+
+  if (!hydrated) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <Card className="shadow-soft">
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              Loading dashboard…
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <HelpGuideCard
+            title="Select a persona"
+            description="Use the Role Switcher to choose a user context after signing in."
+            links={[{ label: 'Role Switcher', href: '/settings' }]}
+          />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

@@ -1,14 +1,16 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { apiFetch, hasTokens } from "@/lib/api-client";
 
 const quickStartSteps = [
   {
@@ -91,6 +93,25 @@ const workspaceHighlights = [
   },
 ];
 
+type HelpGuide = {
+  id: string;
+  title: string;
+  summary: string;
+  content: string;
+  category: string;
+  audience?: string;
+  tags?: string[];
+  slug: string;
+};
+
+type FaqEntry = {
+  id: string;
+  question: string;
+  answer: string;
+  category?: string;
+  order?: number;
+};
+
 const faqItems = [
   {
     question: "How do I know which navigation items I should see?",
@@ -166,6 +187,10 @@ const supportResources = [
 export default function HelpAndGuidePage() {
   const router = useRouter();
   const [isNavigating, setIsNavigating] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [guides, setGuides] = useState<HelpGuide[]>([]);
+  const [faqs, setFaqs] = useState<FaqEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     router.prefetch("/dashboard");
@@ -176,6 +201,76 @@ export default function HelpAndGuidePage() {
     setIsNavigating(true);
     router.push("/dashboard");
   };
+
+  useEffect(() => {
+    let ignore = false;
+
+    const toArray = <T,>(payload: unknown): T[] => {
+      if (Array.isArray(payload)) return payload as T[];
+      if (payload && typeof payload === "object" && "results" in payload) {
+        const results = (payload as { results?: unknown }).results;
+        if (Array.isArray(results)) return results as T[];
+      }
+      return [];
+    };
+
+    const loadSupportContent = async () => {
+      if (!hasTokens()) {
+        setGuides([]);
+        setFaqs([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [guidePayload, faqPayload] = await Promise.all([
+          apiFetch("/support/guides/?is_published=true&ordering=title"),
+          apiFetch("/support/faqs/?is_active=true&ordering=order"),
+        ]);
+
+        if (ignore) return;
+
+        setGuides(toArray<HelpGuide>(guidePayload));
+        setFaqs(toArray<FaqEntry>(faqPayload));
+      } catch (err) {
+        if (ignore) return;
+        const message = err instanceof Error ? err.message : "Unable to load help content.";
+        setError(message);
+        setGuides([]);
+        setFaqs([]);
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadSupportContent();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const faqsToRender = useMemo(() => (faqs.length > 0 ? faqs : faqItems), [faqs]);
+
+  const categorizedGuides = useMemo(() => {
+    if (guides.length === 0) return [] as Array<{ category: string; entries: HelpGuide[] }>;
+    const entries = new Map<string, HelpGuide[]>();
+    guides.forEach((guide) => {
+      const key = guide.category || "general";
+      const bucket = entries.get(key) ?? [];
+      bucket.push(guide);
+      entries.set(key, bucket);
+    });
+    return Array.from(entries.entries()).map(([category, entries]) => ({
+      category,
+      entries,
+    }));
+  }, [guides]);
 
   return (
     <DashboardLayout>
@@ -243,14 +338,80 @@ export default function HelpAndGuidePage() {
 
         <section className="space-y-4">
           <div>
+            <h2 className="text-2xl font-semibold tracking-tight">Published Help Guides</h2>
+            <p className="text-sm text-muted-foreground">
+              Step-by-step walkthroughs and reference material maintained by the ECM support team.
+            </p>
+          </div>
+          {loading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <Card key={index} className="border-border/60 bg-background/60 shadow-sm">
+                  <CardHeader>
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-5/6" />
+                    <Skeleton className="h-3 w-2/3" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : guides.length === 0 ? (
+            <Card className="border-border/60 bg-background/60 shadow-sm">
+              <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                {error ?? "No help guides have been published yet."}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {categorizedGuides.map(({ category, entries }) => (
+                <div key={category} className="space-y-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    {category.replace(/-/g, " ")}
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {entries.map((guide) => (
+                      <Card key={guide.id} className="border-border/60 bg-background/60 shadow-sm">
+                        <CardHeader className="space-y-2">
+                          <CardTitle className="text-base font-semibold">{guide.title}</CardTitle>
+                          {guide.summary && (
+                            <CardDescription>{guide.summary}</CardDescription>
+                          )}
+                        </CardHeader>
+                        <CardContent className="space-y-3 text-sm text-muted-foreground">
+                          <div dangerouslySetInnerHTML={{ __html: guide.content }} />
+                          {guide.tags && guide.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-2 pt-2">
+                              {guide.tags.map((tag) => (
+                                <Badge key={tag} variant="secondary" className="text-xs">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <div>
             <h2 className="text-2xl font-semibold tracking-tight">Frequently Asked Questions</h2>
             <p className="text-sm text-muted-foreground">
               Quick answers to common workflows, permissions, and navigation questions.
             </p>
           </div>
           <Accordion type="single" collapsible className="w-full">
-            {faqItems.map((item) => (
-              <AccordionItem value={item.question} key={item.question}>
+            {faqsToRender.map((item) => (
+              <AccordionItem value={item.question} key={item.id ?? item.question}>
                 <AccordionTrigger className="text-left">{item.question}</AccordionTrigger>
                 <AccordionContent className="text-sm text-muted-foreground">
                   {item.answer}

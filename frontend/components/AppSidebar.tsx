@@ -192,6 +192,17 @@ export function AppSidebar() {
                     </SidebarMenuItem>
                   )}
 
+                  {permissions.canViewCorrespondenceRegistry && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={isActive('/correspondence/registered')}>
+                        <Link href="/correspondence/registered">
+                          <FileText className="h-4 w-4" />
+                          {!isCollapsed && <span>Registered Correspondence</span>}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={isActive('/correspondence/archived')}>
                       <Link href="/correspondence/archived">

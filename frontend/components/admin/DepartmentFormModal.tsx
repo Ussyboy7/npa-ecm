@@ -13,6 +13,8 @@ interface DepartmentFormModalProps {
   department?: Department;
 }
 
+const EMPTY_VALUE = "__none";
+
 export const DepartmentFormModal = ({ open, onOpenChange, department }: DepartmentFormModalProps) => {
   const { addDepartment, updateDepartment, divisions, users } = useOrganization();
   const [formData, setFormData] = useState({
@@ -21,6 +23,7 @@ export const DepartmentFormModal = ({ open, onOpenChange, department }: Departme
     divisionId: '',
     assistantGeneralManagerId: '',
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (department) {
@@ -38,7 +41,7 @@ export const DepartmentFormModal = ({ open, onOpenChange, department }: Departme
   const activeDivisions = divisions.filter(d => d.isActive);
   const assistantGeneralManagers = users.filter(u => u.gradeLevel === 'MSS2');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.code || !formData.divisionId) {
@@ -46,15 +49,30 @@ export const DepartmentFormModal = ({ open, onOpenChange, department }: Departme
       return;
     }
 
-    if (department) {
-      updateDepartment(department.id, { ...formData });
-      toast({ title: "Success", description: "Department updated successfully" });
-    } else {
-      addDepartment({ ...formData, isActive: true });
-      toast({ title: "Success", description: "Department created successfully" });
+    setIsSubmitting(true);
+    try {
+      if (department) {
+        await updateDepartment(department.id, {
+          ...formData,
+          assistantGeneralManagerId: formData.assistantGeneralManagerId || null,
+        });
+        toast({ title: "Success", description: "Department updated successfully" });
+      } else {
+        await addDepartment({
+          ...formData,
+          assistantGeneralManagerId: formData.assistantGeneralManagerId || null,
+          isActive: true,
+        });
+        toast({ title: "Success", description: "Department created successfully" });
+      }
+
+      onOpenChange(false);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : 'Unable to save department';
+      toast({ title: 'Request failed', description, variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    onOpenChange(false);
   };
 
   return (
@@ -86,11 +104,20 @@ export const DepartmentFormModal = ({ open, onOpenChange, department }: Departme
 
           <div className="space-y-2">
             <Label htmlFor="division">Division</Label>
-            <Select value={formData.divisionId} onValueChange={(value) => setFormData({ ...formData, divisionId: value })}>
+            <Select
+              value={formData.divisionId || EMPTY_VALUE}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  divisionId: value === EMPTY_VALUE ? '' : value,
+                })
+              }
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select division" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={EMPTY_VALUE}>Unassigned</SelectItem>
                 {activeDivisions.map(div => (
                   <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
                 ))}
@@ -100,12 +127,20 @@ export const DepartmentFormModal = ({ open, onOpenChange, department }: Departme
 
           <div className="space-y-2">
             <Label htmlFor="agm">Assistant General Manager (Optional)</Label>
-            <Select value={formData.assistantGeneralManagerId} onValueChange={(value) => setFormData({ ...formData, assistantGeneralManagerId: value })}>
+            <Select
+              value={formData.assistantGeneralManagerId || EMPTY_VALUE}
+              onValueChange={(value) =>
+                setFormData({
+                  ...formData,
+                  assistantGeneralManagerId: value === EMPTY_VALUE ? '' : value,
+                })
+              }
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select AGM (optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value={EMPTY_VALUE}>None</SelectItem>
                 {assistantGeneralManagers.map(agm => (
                   <SelectItem key={agm.id} value={agm.id}>{agm.name} - {agm.systemRole}</SelectItem>
                 ))}
@@ -115,7 +150,9 @@ export const DepartmentFormModal = ({ open, onOpenChange, department }: Departme
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit">{department ? 'Update' : 'Create'}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {department ? (isSubmitting ? 'Updating…' : 'Update') : isSubmitting ? 'Creating…' : 'Create'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
