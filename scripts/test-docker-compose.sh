@@ -32,7 +32,7 @@ warning() {
 test_compose_config() {
     log "🔍 Testing Docker Compose configuration..."
 
-    local compose_files=("docker-compose.dev.yml" "docker-compose.prod.yml" "docker-compose.stag.yml")
+    local compose_files=("docker-compose.local.yml" "docker-compose.prod.yml" "docker-compose.stag.yml")
 
     for file in "${compose_files[@]}"; do
         if [[ -f "$file" ]]; then
@@ -42,7 +42,7 @@ test_compose_config() {
                     success "✓ $file configuration is valid"
                 else
                     # Special handling for dev file that might be from different project
-                    if [[ "$file" == "docker-compose.dev.yml" ]]; then
+                    if [[ "$file" == "docker-compose.local.yml" ]]; then
                         warning "! $file may be from different project (DMS), skipping validation"
                     else
                         error "✗ $file configuration is invalid"

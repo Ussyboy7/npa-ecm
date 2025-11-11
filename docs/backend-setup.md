@@ -56,7 +56,7 @@ GET  /api/accounts/auth/me/
 
 - `python backend/manage.py seed_demo_data` – re-seed when you reset the database.
 - `python backend/manage.py createsuperuser` – add additional admin accounts.
-- `docker-compose.dev.yml` – spin up PostgreSQL/Redis and run the backend in containers.
+- `docker-compose.local.yml` – spin up PostgreSQL/Redis and run the backend in containers.
 
 ## 5. Environment variables
 

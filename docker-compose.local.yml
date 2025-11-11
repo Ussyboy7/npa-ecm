@@ -1,0 +1,115 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecm-postgres-dev
+    environment:
+      POSTGRES_DB: npa_ecm_dev
+      POSTGRES_USER: ecmadmin
+      POSTGRES_PASSWORD: ecmadmin
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U npa_ecm_local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ecm-redis-dev
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecm-backend-dev
+    env_file:
+      - ./backend/env/local.env
+    volumes:
+      - ./backend:/app
+      - media-data:/app/media
+      - static-data:/app/staticfiles
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecm-celery-worker-dev
+    env_file:
+      - ./backend/env/local.env
+    command: celery -A ecm_backend worker -l info
+    volumes:
+      - ./backend:/app
+      - media-data:/app/media
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecm-celery-beat-dev
+    env_file:
+      - ./backend/env/local.env
+    command: celery -A ecm_backend beat -l info
+    volumes:
+      - ./backend:/app
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.local
+    container_name: ecm-frontend-dev
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000/api
+      NODE_ENV: development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    ports:
+      - "3002:3000"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  media-data:
+  static-data:
+
+
+
+
+
+
+

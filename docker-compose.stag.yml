@@ -5,8 +5,8 @@ services:
     image: postgres:16-alpine
     container_name: ecm-postgres-stag
     environment:
-      POSTGRES_DB: npa_ecm_staging
-      POSTGRES_USER: npa_ecm_staging
+      POSTGRES_DB: npa_ecm_stag
+      POSTGRES_USER: ecmadmin
       POSTGRES_PASSWORD: ecmadmin
     volumes:
       - postgres_stag_data:/var/lib/postgresql/data
@@ -36,7 +36,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: ecm-backend-stag
     env_file:
-      - ./backend/env/staging.env
+      - ./backend/env/stag.env
     volumes:
       - ./backend/media:/app/media
       - ./backend/staticfiles:/app/staticfiles
@@ -53,7 +53,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: ecm-celery-worker-stag
     env_file:
-      - ./backend/env/staging.env
+      - ./backend/env/stag.env
     command: celery -A ecm_backend worker -l info
     volumes:
       - ./backend:/app
@@ -70,7 +70,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: ecm-celery-beat-stag
     env_file:
-      - ./backend/env/staging.env
+      - ./backend/env/stag.env
     command: celery -A ecm_backend beat -l info
     volumes:
       - ./backend:/app
@@ -84,7 +84,7 @@ services:
   frontend_stag:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.prod
+      dockerfile: Dockerfile.stag
     container_name: ecm-frontend-stag
     environment:
       NEXT_PUBLIC_API_URL: http://backend_stag:8000/api

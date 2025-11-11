@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: ecm-backend-prod
     env_file:
-      - ./backend/env/production.env
+      - ./backend/env/prod.env
     volumes:
       - media-data:/app/media
       - static-data:/app/staticfiles
@@ -41,7 +41,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: ecm-celery-worker-prod
     env_file:
-      - ./backend/env/production.env
+      - ./backend/env/prod.env
     command: celery -A ecm_backend worker -l info
     volumes:
       - ./backend:/app
@@ -56,7 +56,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: ecm-celery-beat-prod
     env_file:
-      - ./backend/env/production.env
+      - ./backend/env/prod.env
     command: celery -A ecm_backend beat -l info
     volumes:
       - ./backend:/app
