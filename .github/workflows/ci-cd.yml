@@ -188,6 +188,10 @@ jobs:
           # Navigate to project directory
           cd /srv/npa-ecm
 
+          echo '📥 Syncing latest code...'
+          git fetch --all --prune
+          git reset --hard origin/main
+
           echo '🛑 Stopping existing containers...'
           docker compose -f docker-compose.stag.yml down || true
 
