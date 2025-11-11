@@ -86,7 +86,8 @@ export const isOverdue = (correspondence: Correspondence): boolean => {
   switch (correspondence.priority) {
     case 'urgent': return daysSinceReceived > 1;
     case 'high': return daysSinceReceived > 3;
-    case 'normal': return daysSinceReceived > 7;
+    case 'medium': return daysSinceReceived > 7;
+    case 'low': return daysSinceReceived > 10;
     default: return daysSinceReceived > 14;
   }
 };

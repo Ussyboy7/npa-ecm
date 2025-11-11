@@ -456,7 +456,7 @@ export const DocumentUploadDialog = ({
               <div className="space-y-2">
                 <Label>Sensitivity</Label>
                 <Select value={sensitivity} onValueChange={(value) => setSensitivity(value as DocumentSensitivity)}>
-                  <SelectTrigger disabled={mode === 'version'}>
+                  <SelectTrigger disabled={mode !== 'create'}>
                     <SelectValue placeholder="Select sensitivity" />
                   </SelectTrigger>
                   <SelectContent>

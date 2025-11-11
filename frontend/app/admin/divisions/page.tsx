@@ -53,7 +53,7 @@ const DivisionsManagement = () => {
     return directorates.find(d => d.id === dirId)?.name ?? 'Unknown';
   };
 
-  const getGMName = (gmId: string) => {
+  const getGMName = (gmId?: string | null) => {
     return users.find(u => u.id === gmId)?.name || 'Not assigned';
   };
 

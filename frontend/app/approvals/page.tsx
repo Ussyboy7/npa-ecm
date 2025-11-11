@@ -144,7 +144,7 @@ const ApprovalsInbox = () => {
     try {
       await updateCorrespondence(corr.id, {
         status: 'completed',
-        currentApproverId: null,
+        currentApproverId: undefined,
       });
       setPendingApprovals((prev) => prev.filter((item) => item.id !== corr.id));
       toast.success('Item approved successfully', {
@@ -166,7 +166,7 @@ const ApprovalsInbox = () => {
     try {
       await updateCorrespondence(corr.id, {
         status: 'in-progress',
-        currentApproverId: corr.createdById ?? null,
+        currentApproverId: corr.createdById ?? undefined,
       });
       setPendingApprovals((prev) => prev.filter((item) => item.id !== corr.id));
       toast.error('Item rejected', {

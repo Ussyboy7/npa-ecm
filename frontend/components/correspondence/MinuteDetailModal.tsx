@@ -151,7 +151,6 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName }: Mi
                     </h4>
                     <div className="flex flex-col sm:flex-row gap-4">
                       <div className="p-3 border rounded-lg bg-muted/50">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={minute.signature.imageData}
                           alt="Applied digital signature preview"

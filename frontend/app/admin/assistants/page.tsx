@@ -35,7 +35,7 @@ const AssistantsManagement = () => {
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [selectedExecutiveId, setSelectedExecutiveId] = useState<string>('');
-  const [selectedAssignment, setSelectedAssignment] = useState<AssistantAssignment | null>(null);
+  const [selectedAssignment, setSelectedAssignment] = useState<AssistantAssignment | undefined>(undefined);
   const [assignmentToRemove, setAssignmentToRemove] = useState<string>('');
 
   const isSuperAdmin = currentUser?.systemRole === 'Super Admin';
@@ -73,7 +73,7 @@ const AssistantsManagement = () => {
       return;
     }
     setSelectedExecutiveId(execId);
-    setSelectedAssignment(null);
+    setSelectedAssignment(undefined);
     setAssignmentModalOpen(true);
   };
 

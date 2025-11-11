@@ -19,8 +19,8 @@ import {
   getDocumentComments,
   resolveDocumentComment,
   type DocumentComment,
+  type DocumentVersion,
 } from '@/lib/dms-storage';
-import { type DocumentVersion } from '@/lib/dms-storage';
 import { type User } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateTime } from '@/lib/correspondence-helpers';
@@ -53,15 +53,27 @@ export const DocumentCommentsDialog = ({
 
   useEffect(() => {
     if (!open) return;
-    const results = getDocumentComments(documentId, version?.id);
-    const ordered = results.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    setComments(ordered);
-    onCommentsUpdated?.(ordered);
+
+    const loadComments = async () => {
+      try {
+        const results = await getDocumentComments(documentId, version?.id ?? null);
+        const ordered = [...results].sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        setComments(ordered);
+        onCommentsUpdated?.(ordered);
+      } catch (error) {
+        console.error('Failed to load document comments', error);
+        setComments([]);
+      }
+    };
+
+    void loadComments();
   }, [open, documentId, version?.id, onCommentsUpdated]);
 
   const resolvedCount = useMemo(() => comments.filter((item) => item.resolved).length, [comments]);
 
-  const handleAddComment = () => {
+  const handleAddComment = async () => {
     if (!currentUser) {
       toast.error('Select a user before adding comments.');
       return;
@@ -72,11 +84,11 @@ export const DocumentCommentsDialog = ({
     }
     setIsSubmitting(true);
     try {
-      const newComment = addDocumentComment({
+      const newComment = await addDocumentComment({
         authorId: currentUser.id,
         content: comment.trim(),
         documentId,
-        versionId: version?.id,
+        versionId: version?.id ?? null,
       });
       setComments((prev) => {
         const next = [...prev, newComment];
@@ -90,25 +102,35 @@ export const DocumentCommentsDialog = ({
     }
   };
 
-  const handleResolveToggle = (commentId: string, resolved: boolean) => {
-    const updated = resolveDocumentComment(commentId, resolved);
-    if (!updated) return;
-    setComments((prev) => {
-      const next = prev.map((item) => (item.id === commentId ? updated : item));
-      onCommentsUpdated?.(next);
-      return next;
-    });
-    toast.success(resolved ? 'Comment marked as resolved' : 'Comment re-opened');
+  const handleResolveToggle = async (commentId: string, resolved: boolean) => {
+    try {
+      const updated = await resolveDocumentComment(commentId, resolved);
+      if (!updated) return;
+      setComments((prev) => {
+        const next = prev.map((item) => (item.id === commentId ? updated : item));
+        onCommentsUpdated?.(next);
+        return next;
+      });
+      toast.success(resolved ? 'Comment marked as resolved' : 'Comment re-opened');
+    } catch (error) {
+      console.error('Failed to toggle comment resolution', error);
+      toast.error('Unable to update comment status');
+    }
   };
 
-  const handleDelete = (commentId: string) => {
-    deleteDocumentComment(commentId);
-    setComments((prev) => {
-      const next = prev.filter((item) => item.id !== commentId && item.parentId !== commentId);
-      onCommentsUpdated?.(next);
-      return next;
-    });
-    toast.success('Comment removed');
+  const handleDelete = async (commentId: string) => {
+    try {
+      await deleteDocumentComment(commentId);
+      setComments((prev) => {
+        const next = prev.filter((item) => item.id !== commentId && item.parentId !== commentId);
+        onCommentsUpdated?.(next);
+        return next;
+      });
+      toast.success('Comment removed');
+    } catch (error) {
+      console.error('Failed to delete comment', error);
+      toast.error('Unable to delete comment');
+    }
   };
 
   const heading = version ? `Comments for Version ${version.versionNumber}` : 'Document Comments';

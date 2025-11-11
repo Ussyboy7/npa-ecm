@@ -203,7 +203,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
 
   useEffect(() => {
     if (isOpen) {
-      refreshMinuteTemplates(currentUser);
+      refreshMinuteTemplates(currentUser ?? undefined);
 
       // Load draft if exists
       const draft = getDraftByCorrespondence(correspondence.id, 'minute');
@@ -364,7 +364,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
     
     // Get grade levels sorted by level (higher level = more authority)
     const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map(g => g.code);
-    const currentGradeIndex = gradeOrder.indexOf(currentUser?.gradeLevel);
+    const currentGradeIndex = currentUser?.gradeLevel ? gradeOrder.indexOf(currentUser.gradeLevel) : -1;
     
     // Get current user's division and directorate info
     const division = currentUser?.division ? getDivisionById(currentUser.division) : null;
@@ -486,6 +486,11 @@ const [newTemplateName, setNewTemplateName] = useState('');
   };
 
   const handleSaveMinuteTemplate = () => {
+    if (!currentUser) {
+      toast.error('Select a user context before saving templates.');
+      return;
+    }
+
     const content = minuteText.trim();
     if (!content) {
       toast.error('Write your minute before saving it as a template.');
@@ -501,13 +506,13 @@ const [newTemplateName, setNewTemplateName] = useState('');
     const contentHtml = convertTextToHtml(content);
     const created = createDocumentTemplate({
       scope: 'user',
-      scopeId: currentUser?.id,
+      scopeId: currentUser.id,
       title: resolvedName.slice(0, 80),
       description: actionType === 'approve' ? 'Approval minute template' : 'Minute template',
       contentHtml,
       contentText: content,
-      createdBy: currentUser?.id,
-      updatedBy: currentUser?.id,
+      createdBy: currentUser.id,
+      updatedBy: currentUser.id,
       isDefault: false,
       templateType: 'minute',
       actionType,
@@ -741,20 +746,28 @@ const [newTemplateName, setNewTemplateName] = useState('');
 
   const division = correspondence.divisionId ? getDivisionById(correspondence.divisionId) : null;
 
-  const getTemplateContext = () => {
+  const getTemplateContext = (): Record<string, string> => {
     const divisionEntity = currentUser?.division ? getDivisionById(currentUser.division) : null;
     const departmentEntity = currentUser?.department ? getDepartmentById(currentUser.department) : null;
     const now = new Date();
+    const userName = currentUser?.name ?? '';
+    const initials = userName
+      ? userName
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((part) => part[0]?.toUpperCase() ?? '')
+          .join('')
+      : '';
     return {
-      name: currentUser?.name,
-      title: currentUser?.systemRole,
-      gradeLevel: currentUser?.gradeLevel,
+      name: userName,
+      title: currentUser?.systemRole ?? '',
+      gradeLevel: currentUser?.gradeLevel ?? '',
       division: divisionEntity?.name ?? '',
       department: departmentEntity?.name ?? '',
-      initials: currentUser?.name.split(' ').map(part => part[0]).join('').toUpperCase(),
+      initials,
       date: now.toLocaleDateString('en-US'),
       dateTime: now.toLocaleString('en-US'),
-      referenceNumber: correspondence.referenceNumber,
+      referenceNumber: correspondence.referenceNumber ?? '',
     };
   };
 
@@ -1180,7 +1193,6 @@ const [newTemplateName, setNewTemplateName] = useState('');
                         </p>
                       </div>
                       <div className="p-3 border rounded-lg bg-background self-start">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={userSignature.imageData}
                           alt="Digital signature preview"
@@ -1371,7 +1383,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
           onConfirm={handleConfirm}
           type="minute"
           data={{
-            currentUserName: currentUser?.name,
+            currentUserName: currentUser?.name ?? '',
             recipientName: findUserById(forwardTo)?.name || '',
             actionType,
             content: minuteText,

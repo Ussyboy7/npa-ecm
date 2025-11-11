@@ -53,7 +53,7 @@ const DepartmentsManagement = () => {
     return divisions.find(d => d.id === divId)?.name || 'Unassigned';
   };
 
-  const getAGMName = (agmId?: string) => {
+  const getAGMName = (agmId?: string | null) => {
     if (!agmId) return 'Not assigned';
     return users.find(u => u.id === agmId)?.name || 'Not assigned';
   };

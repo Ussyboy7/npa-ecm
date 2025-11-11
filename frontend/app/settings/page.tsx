@@ -595,7 +595,6 @@ export default function SettingsPage() {
                         </Button>
                       </div>
                       <div className="p-4 border rounded-lg bg-background flex items-center justify-center">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={signature.imageData}
                           alt="Digital signature preview"

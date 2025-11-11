@@ -125,7 +125,7 @@ export const RichTextEditor = ({
     if (!editor) return;
     if (value !== undefined) {
       const resolved = value === '' ? '<p></p>' : value;
-      editor.commands.setContent(resolved, false, { preserveWhitespace: true });
+      editor.commands.setContent(resolved, { emitUpdate: false });
       return;
     }
     if (defaultJson) {

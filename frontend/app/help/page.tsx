@@ -411,7 +411,7 @@ export default function HelpAndGuidePage() {
           </div>
           <Accordion type="single" collapsible className="w-full">
             {faqsToRender.map((item) => (
-              <AccordionItem value={item.question} key={item.id ?? item.question}>
+              <AccordionItem value={item.question} key={item.question}>
                 <AccordionTrigger className="text-left">{item.question}</AccordionTrigger>
                 <AccordionContent className="text-sm text-muted-foreground">
                   {item.answer}

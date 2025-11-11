@@ -32,6 +32,29 @@ export interface DocumentVersion {
   notes?: string;
 }
 
+export interface DocumentCollaborator {
+  userId: string;
+  startedAt?: string;
+}
+
+export interface DocumentComment {
+  id: string;
+  documentId: string;
+  authorId: string;
+  content: string;
+  createdAt: string;
+  resolved: boolean;
+  parentId?: string | null;
+  versionId?: string | null;
+}
+
+export interface CreateDocumentCommentPayload {
+  authorId: string;
+  content: string;
+  documentId: string;
+  versionId?: string | null;
+  parentId?: string | null;
+}
 export interface DocumentRecord {
   id: string;
   title: string;
@@ -49,6 +72,7 @@ export interface DocumentRecord {
   createdAt: string;
   updatedAt: string;
   workspaceIds: string[];
+  activeEditors: DocumentCollaborator[];
 }
 
 export interface DocumentWorkspace {
@@ -96,6 +120,12 @@ const mapDocumentVersion = (data: any): DocumentVersion => ({
   notes: data.notes ?? undefined,
 });
 
+const mapActiveEditors = (editors: any[]): DocumentCollaborator[] =>
+  editors.map((editor) => ({
+    userId: String(editor.user?.id ?? editor.user ?? editor.user_id ?? ''),
+    startedAt: editor.started_at ?? editor.startedAt ?? undefined,
+  }));
+
 const mapDocument = (item: any): DocumentRecord => ({
   id: String(item.id),
   title: item.title ?? 'Untitled Document',
@@ -116,6 +146,11 @@ const mapDocument = (item: any): DocumentRecord => ({
     ? item.workspaces.map((workspace: any) => String(workspace.id ?? workspace))
     : Array.isArray(item.workspace_ids)
       ? item.workspace_ids.map(String)
+      : [],
+  activeEditors: Array.isArray(item.active_editors)
+    ? mapActiveEditors(item.active_editors)
+    : Array.isArray(item.activeEditors)
+      ? mapActiveEditors(item.activeEditors)
       : [],
 });
 
@@ -375,14 +410,14 @@ export const getAccessibleDocumentsForUser = (user: User): DocumentRecord[] => {
 };
 
 // Legacy helpers retained as no-ops while the comment/discussion UI is reworked.
-export const getDocumentComments = async () => [] as never[];
-export const addDocumentComment = async () => {
+export const getDocumentComments = async (_documentId: string, _versionId?: string | null): Promise<DocumentComment[]> => [];
+export const addDocumentComment = async (_payload: CreateDocumentCommentPayload): Promise<DocumentComment> => {
   throw new Error('Document comments API integration not yet implemented');
 };
-export const resolveDocumentComment = async () => {
+export const resolveDocumentComment = async (_commentId: string, _resolved: boolean): Promise<DocumentComment | null> => {
   throw new Error('Document comments API integration not yet implemented');
 };
-export const deleteDocumentComment = async () => {
+export const deleteDocumentComment = async (_commentId: string): Promise<void> => {
   throw new Error('Document comments API integration not yet implemented');
 };
 export const getDiscussionMessages = async () => [] as never[];

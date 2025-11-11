@@ -58,11 +58,6 @@ import { LinkDocumentDialog } from '@/components/correspondence/LinkDocumentDial
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useOrganization } from '@/contexts/OrganizationContext';
-import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
-import { getDelegationByCorrespondence } from '@/lib/delegation-storage';
-import { apiFetch } from '@/lib/api-client';
-
 const CorrespondenceDetail = () => {
   const params = useParams();
   const id = params.id as string;
@@ -87,7 +82,8 @@ const CorrespondenceDetail = () => {
   const [linkedDocuments, setLinkedDocuments] = useState<DocumentRecord[]>([]);
 
   useEffect(() => {
-    if (!correspondence?.linkedDocumentIds || correspondence.linkedDocumentIds.length === 0) {
+    const linkedIds = correspondence?.linkedDocumentIds ?? [];
+    if (linkedIds.length === 0) {
       setLinkedDocuments([]);
       return;
     }
@@ -97,7 +93,7 @@ const CorrespondenceDetail = () => {
     const loadLinkedDocs = async () => {
       try {
         const results = await Promise.all(
-          correspondence.linkedDocumentIds.map(async (docId) => {
+          linkedIds.map(async (docId) => {
             try {
               const document = await fetchDocumentById(docId);
               return document;

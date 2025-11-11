@@ -134,7 +134,7 @@ const CorrespondenceRegister = () => {
     });
 
     try {
-      const response = await apiFetch('/correspondence/items/', {
+      const response = await apiFetch<{ reference_number?: string }>('/correspondence/items/', {
         method: 'POST',
         body: form,
         headers: {},

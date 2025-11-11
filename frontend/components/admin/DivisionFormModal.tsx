@@ -29,7 +29,7 @@ export const DivisionFormModal = ({ open, onOpenChange, division }: DivisionForm
         name: division.name,
         code: division.code,
         directorateId: division.directorateId,
-        generalManagerId: division.generalManagerId,
+        generalManagerId: division.generalManagerId ?? '',
       });
     } else {
       setFormData({ name: '', code: '', directorateId: '', generalManagerId: '' });

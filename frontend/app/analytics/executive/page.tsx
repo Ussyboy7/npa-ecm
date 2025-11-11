@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
-import { fetchDocuments, getCachedDocuments, type DocumentRecord } from '@/lib/dms-storage';
+import { fetchDocuments, getCachedDocuments, type DocumentRecord, type DocumentSensitivity } from '@/lib/dms-storage';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line } from 'recharts';
