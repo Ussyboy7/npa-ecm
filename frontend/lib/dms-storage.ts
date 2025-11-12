@@ -257,16 +257,36 @@ const buildDocumentPayload = (input: CreateDocumentInput) => {
   return payload;
 };
 
-const buildVersionPayload = (documentId: string, version: CreateDocumentVersionInput) => ({
-  document: documentId,
-  file_name: version.fileName,
-  file_type: version.fileType,
-  file_size: version.fileSize,
-  file_url: version.fileUrl ?? '',
-  content_html: version.contentHtml ?? '',
-  content_json: version.contentJson ?? null,
-  notes: version.notes ?? '',
-});
+const buildVersionPayload = (documentId: string, version: CreateDocumentVersionInput) => {
+  const payload: Record<string, unknown> = {
+    document: documentId,
+    file_name: version.fileName,
+    file_type: version.fileType,
+    file_size: version.fileSize,
+    content_html: version.contentHtml ?? '',
+    content_json: version.contentJson ?? null,
+    notes: version.notes ?? '',
+    file_url: '', // Default to empty, only set if it's a valid short URL
+  };
+
+  // Only include file_url if it's a valid URL (not a data URL) and under 200 characters
+  // Data URLs (base64) are too long and should not be stored in file_url field
+  if (version.fileUrl && !version.fileUrl.startsWith('data:') && version.fileUrl.length <= 200) {
+    // Only include actual HTTP/HTTPS URLs that are under 200 characters
+    try {
+      const url = new URL(version.fileUrl);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        payload.file_url = version.fileUrl;
+      }
+    } catch {
+      // Invalid URL, leave file_url empty
+    }
+  }
+  // For data URLs or long URLs, we don't include them in file_url
+  // The content should be in content_html for HTML files or handled separately for binary files
+
+  return payload;
+};
 
 export const createDocument = async (
   documentInput: CreateDocumentInput,
