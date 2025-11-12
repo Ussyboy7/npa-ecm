@@ -44,6 +44,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Purge existing organization structure before seeding",
         )
+        parser.add_argument(
+            "--skip-users",
+            action="store_true",
+            help="Skip creating mock users (only seed organization structure)",
+        )
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.MIGRATE_HEADING("Starting demo data seeding"))
@@ -54,13 +59,25 @@ class Command(BaseCommand):
             if options.get("reset"):
                 self._reset_organization_units()
             directorates, divisions, departments = self._ensure_organization_units(data)
-            users = self._ensure_users(data["MOCK_USERS"], directorates, divisions, departments)
-            self._assign_org_leadership(data, directorates, divisions, departments, users)
-            documents = self._ensure_documents(users, divisions, departments)
-            correspondence_items = self._ensure_correspondence(users, divisions, departments, documents)
-            self._ensure_workflows(users, correspondence_items)
-            self._ensure_support_content(users)
-            self._ensure_analytics(users)
+            
+            # Only create users if not skipped
+            if options.get("skip_users"):
+                self.stdout.write(self.style.WARNING("Skipping mock user creation (--skip-users flag set)"))
+                users = {}
+            else:
+                users = self._ensure_users(data.get("MOCK_USERS", []), directorates, divisions, departments)
+            
+            # Only assign leadership and create demo data if users were created
+            if users:
+                self._assign_org_leadership(data, directorates, divisions, departments, users)
+                documents = self._ensure_documents(users, divisions, departments)
+                correspondence_items = self._ensure_correspondence(users, divisions, departments, documents)
+                self._ensure_workflows(users, correspondence_items)
+                self._ensure_support_content(users)
+                self._ensure_analytics(users)
+            else:
+                self.stdout.write(self.style.WARNING("Skipping demo data creation (no users available)"))
+                
         self.stdout.write(self.style.SUCCESS("Demo data seeding complete."))
 
     def _load_structure_data(self) -> dict:

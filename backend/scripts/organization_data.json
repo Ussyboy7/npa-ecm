@@ -35,6 +35,14 @@
   ],
   "DIVISIONS": [
     {
+      "id": "div-procurement",
+      "name": "Procurement",
+      "code": "PROCUREMENT",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-procurement",
+      "active": true
+    },
+    {
       "id": "div-csp",
       "name": "Corporate & Strategic Planning",
       "code": "C&SP",
@@ -59,19 +67,19 @@
       "active": true
     },
     {
+      "id": "div-ict",
+      "name": "Information & Communication Technology",
+      "code": "ICT",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-ict",
+      "active": true
+    },
+    {
       "id": "div-legal",
       "name": "Legal Services",
       "code": "LEGAL",
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-legal",
-      "active": true
-    },
-    {
-      "id": "div-tariff",
-      "name": "Tariff & Billing",
-      "code": "TARIFF",
-      "directorateId": "dir-md",
-      "generalManagerId": "user-gm-tariff",
       "active": true
     },
     {
@@ -91,14 +99,6 @@
       "active": true
     },
     {
-      "id": "div-erm",
-      "name": "Enterprise Risk Management",
-      "code": "ERM",
-      "directorateId": "dir-md",
-      "generalManagerId": "user-gm-erm",
-      "active": true
-    },
-    {
       "id": "div-liaison",
       "name": "Administrative Support & Liaison Offices",
       "code": "LIAISON",
@@ -107,11 +107,43 @@
       "active": true
     },
     {
+      "id": "div-oversea",
+      "name": "Oversea Liaison Office",
+      "code": "OVERSEA",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-oversea-liaison",
+      "active": true
+    },
+    {
       "id": "div-special-duties",
       "name": "Special Duties / Executive Support",
       "code": "SPECIAL_DUTIES",
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-special-duties",
+      "active": true
+    },
+    {
+      "id": "div-regulatory",
+      "name": "Regulatory Services",
+      "code": "REGULATORY",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-regulatory",
+      "active": true
+    },
+    {
+      "id": "div-ppp",
+      "name": "Public-Private Partnership",
+      "code": "PPP",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-ppp",
+      "active": true
+    },
+    {
+      "id": "div-erm",
+      "name": "Enterprise Risk Management",
+      "code": "ERM",
+      "directorateId": "dir-edfa",
+      "generalManagerId": "user-gm-erm",
       "active": true
     },
     {
@@ -128,14 +160,6 @@
       "code": "FINANCE",
       "directorateId": "dir-edfa",
       "generalManagerId": "user-gm-finance",
-      "active": true
-    },
-    {
-      "id": "div-procurement",
-      "name": "Procurement",
-      "code": "PROCUREMENT",
-      "directorateId": "dir-edfa",
-      "generalManagerId": "user-gm-procurement",
       "active": true
     },
     {
@@ -171,6 +195,22 @@
       "active": true
     },
     {
+      "id": "div-ops",
+      "name": "Operations",
+      "code": "OPS",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-ops",
+      "active": true
+    },
+    {
+      "id": "div-tariff",
+      "name": "Tariff & Billing",
+      "code": "TARIFF",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-tariff",
+      "active": true
+    },
+    {
       "id": "div-security",
       "name": "Security",
       "code": "SECURITY",
@@ -187,35 +227,11 @@
       "active": true
     },
     {
-      "id": "div-regulatory",
-      "name": "Regulatory Services",
-      "code": "REGULATORY",
-      "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-regulatory",
-      "active": true
-    },
-    {
-      "id": "div-ppp",
-      "name": "Public-Private Partnership",
-      "code": "PPP",
-      "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-ppp",
-      "active": true
-    },
-    {
       "id": "div-engineering",
       "name": "Engineering & Technical Services",
       "code": "ENGINEERING",
       "directorateId": "dir-edets",
       "generalManagerId": "user-gm-engineering",
-      "active": true
-    },
-    {
-      "id": "div-ict",
-      "name": "Information & Communication Technology",
-      "code": "ICT",
-      "directorateId": "dir-edets",
-      "generalManagerId": "user-gm-ict",
       "active": true
     },
     {
@@ -229,75 +245,83 @@
   ],
   "DEPARTMENTS": [
     {
-      "id": "dept-csp-research",
-      "name": "Research & Statistics",
-      "code": "CSP_RESEARCH",
-      "divisionId": "div-csp",
-      "assistantGeneralManagerId": "user-agm-csp-research",
+      "id": "dept-ports-eng",
+      "name": "Ports Engineering",
+      "code": "PORTS_ENG",
+      "divisionId": "div-engineering",
+      "assistantGeneralManagerId": "user-agm-ports-eng",
       "active": true
     },
     {
-      "id": "dept-csp-planning",
-      "name": "Planning & Monitoring",
-      "code": "CSP_PLANNING",
-      "divisionId": "div-csp",
-      "assistantGeneralManagerId": "user-agm-csp-planning",
+      "id": "dept-electrical",
+      "name": "Electrical & Corrosion",
+      "code": "ELECTRICAL",
+      "divisionId": "div-engineering",
+      "assistantGeneralManagerId": "user-agm-electrical",
       "active": true
     },
     {
-      "id": "dept-csp-imo",
-      "name": "Deputy Alternate, IMO London",
-      "code": "CSP_IMO",
-      "divisionId": "div-csp",
-      "assistantGeneralManagerId": "user-agm-csp-imo",
+      "id": "dept-hydrographic",
+      "name": "Hydrographic",
+      "code": "HYDROGRAPHIC",
+      "divisionId": "div-engineering",
+      "assistantGeneralManagerId": "user-agm-hydrographic",
       "active": true
     },
     {
-      "id": "dept-csc-media",
-      "name": "Media & Communication / Protocol",
-      "code": "CSC_MEDIA",
-      "divisionId": "div-csc",
-      "assistantGeneralManagerId": "user-agm-csc-media",
+      "id": "dept-civil",
+      "name": "Civil Engineering",
+      "code": "CIVIL",
+      "divisionId": "div-engineering",
+      "assistantGeneralManagerId": "user-agm-civil",
       "active": true
     },
     {
-      "id": "dept-csc-csr",
-      "name": "Corporate Social Responsibility",
-      "code": "CSC_CSR",
-      "divisionId": "div-csc",
-      "assistantGeneralManagerId": "user-agm-csc-csr",
+      "id": "dept-physical-planning-dev",
+      "name": "Physical planning And Development",
+      "code": "PPD",
+      "divisionId": "div-lands-assets",
+      "assistantGeneralManagerId": "user-agm-ppd",
       "active": true
     },
     {
-      "id": "dept-audit-finance",
-      "name": "Finance & Investment",
-      "code": "AUDIT_FINANCE",
-      "divisionId": "div-audit",
-      "assistantGeneralManagerId": "user-agm-audit-finance",
+      "id": "dept-land-estate",
+      "name": "Lands And Estate",
+      "code": "LE",
+      "divisionId": "div-lands-assets",
+      "assistantGeneralManagerId": "user-agm-lands-assets",
       "active": true
     },
     {
-      "id": "dept-audit-systems",
-      "name": "Systems / ICT",
-      "code": "AUDIT_SYSTEMS",
-      "divisionId": "div-audit",
-      "assistantGeneralManagerId": "user-agm-audit-systems",
+      "id": "dept-harbours",
+      "name": "Harbours",
+      "code": "HARBOURS",
+      "divisionId": "div-marine-ops",
+      "assistantGeneralManagerId": "user-agm-harbours",
       "active": true
     },
     {
-      "id": "dept-audit-policy",
-      "name": "Policy Compliance",
-      "code": "AUDIT_POLICY",
-      "divisionId": "div-audit",
-      "assistantGeneralManagerId": "user-agm-audit-policy",
+      "id": "dept-vessel",
+      "name": "Vessel Management",
+      "code": "VESSEL",
+      "divisionId": "div-marine-ops",
+      "assistantGeneralManagerId": "user-agm-vessel",
       "active": true
     },
     {
-      "id": "dept-legal",
-      "name": "Legal",
-      "code": "LEGAL",
-      "divisionId": "div-legal",
-      "assistantGeneralManagerId": "user-agm-legal",
+      "id": "dept-atons-vts",
+      "name": "Aids to Navigations & Vessel Traffic System",
+      "code": "ATONS_VTS",
+      "divisionId": "div-marine-ops",
+      "assistantGeneralManagerId": "user-agm-atons-vts",
+      "active": true
+    },
+    {
+      "id": "dept-operations",
+      "name": "Operations",
+      "code": "OPERATIONS",
+      "divisionId": "div-operations",
+      "assistantGeneralManagerId": "user-agm-operations",
       "active": true
     },
     {
@@ -309,80 +333,43 @@
       "active": true
     },
     {
-      "id": "dept-monitoring",
-      "name": "Monitoring",
-      "code": "MONITORING",
-      "divisionId": "div-monitoring",
-      "assistantGeneralManagerId": "user-agm-monitoring",
+      "id": "dept-environment",
+      "name": "Environment",
+      "code": "ENVIRONMENT",
+      "divisionId": "div-hse",
+      "assistantGeneralManagerId": "user-agm-environment",
       "active": true
     },
     {
-      "id": "dept-performance",
-      "name": "Performance Management",
-      "code": "PERFORMANCE",
-      "divisionId": "div-monitoring",
-      "assistantGeneralManagerId": "user-agm-performance",
+      "id": "dept-safety",
+      "name": "Safety",
+      "code": "SAFETY",
+      "divisionId": "div-hse",
+      "assistantGeneralManagerId": "user-agm-safety",
       "active": true
     },
     {
-      "id": "dept-servicom",
-      "name": "SERVICOM",
-      "code": "SERVICOM",
-      "divisionId": "div-servicom",
-      "assistantGeneralManagerId": "user-agm-servicom",
+      "id": "dept-fire-rescue",
+      "name": "Fire & Rescue",
+      "code": "FIRE_RESCUE",
+      "divisionId": "div-hse",
+      "assistantGeneralManagerId": "user-agm-fire-rescue",
       "active": true
     },
     {
-      "id": "dept-erm",
-      "name": "Risk Management",
-      "code": "ERM",
-      "divisionId": "div-erm",
-      "assistantGeneralManagerId": "user-agm-erm",
+      "id": "dept-security",
+      "name": "Security",
+      "code": "SECURITY",
+      "divisionId": "div-security",
+      "assistantGeneralManagerId": "user-agm-security",
       "active": true
     },
     {
-      "id": "dept-abuja",
-      "name": "Abuja Liaison Office",
-      "code": "ABUJA",
-      "divisionId": "div-liaison",
-      "assistantGeneralManagerId": "user-agm-abuja",
-      "active": true
-    },
-    {
-      "id": "dept-overseas",
-      "name": "Overseas Liaison Office",
-      "code": "OVERSEAS",
-      "divisionId": "div-liaison",
-      "assistantGeneralManagerId": "user-agm-overseas",
-      "active": true
-    },
-    {
-      "id": "dept-md-office",
-      "name": "MD's Office",
-      "code": "MD_OFFICE",
-      "divisionId": "div-special-duties",
-      "active": true
-    },
-    {
-      "id": "dept-board",
-      "name": "Board",
-      "code": "BOARD",
-      "divisionId": "div-special-duties",
-      "active": true
-    },
-    {
-      "id": "dept-special-performance",
-      "name": "Performance Management",
-      "code": "SPECIAL_PERFORMANCE",
-      "divisionId": "div-special-duties",
-      "active": true
-    },
-    {
-      "id": "dept-hr-operations",
-      "name": "HR Operations",
-      "code": "HR_OPS",
+      "id": "dept-hr-management",
+      "name": "HR Management",
+      "code": "HR_MGT",
       "divisionId": "div-hr",
-      "assistantGeneralManagerId": "user-agm-hr-ops",
+      "assistantGeneralManagerId": "user-agm-hr-mgt",
       "active": true
     },
     {
@@ -394,19 +381,19 @@
       "active": true
     },
     {
-      "id": "dept-hr-training",
-      "name": "Training & Capacity Development",
-      "code": "HR_TRAINING",
+      "id": "dept-performance",
+      "name": "Performance Management",
+      "code": "PERFORMANCE",
       "divisionId": "div-hr",
-      "assistantGeneralManagerId": "user-agm-hr-training",
+      "assistantGeneralManagerId": "user-agm-performance",
       "active": true
     },
     {
-      "id": "dept-finance",
-      "name": "Finance",
-      "code": "FINANCE",
-      "divisionId": "div-finance",
-      "assistantGeneralManagerId": "user-agm-finance",
+      "id": "dept-hr-learning-development",
+      "name": "Learning & Development",
+      "code": "HR_LD",
+      "divisionId": "div-hr",
+      "assistantGeneralManagerId": "user-agm-hr-ld",
       "active": true
     },
     {
@@ -418,27 +405,27 @@
       "active": true
     },
     {
+      "id": "dept-finance",
+      "name": "Finance",
+      "code": "FINANCE",
+      "divisionId": "div-finance",
+      "assistantGeneralManagerId": "user-agm-finance",
+      "active": true
+    },
+    {
+      "id": "dept-budget",
+      "name": "Budget",
+      "code": "BUDGET",
+      "divisionId": "div-finance",
+      "assistantGeneralManagerId": "user-agm-budget",
+      "active": true
+    },
+    {
       "id": "dept-tax",
       "name": "Tax",
       "code": "TAX",
       "divisionId": "div-finance",
       "assistantGeneralManagerId": "user-agm-tax",
-      "active": true
-    },
-    {
-      "id": "dept-investment",
-      "name": "Investment",
-      "code": "INVESTMENT",
-      "divisionId": "div-finance",
-      "assistantGeneralManagerId": "user-agm-investment",
-      "active": true
-    },
-    {
-      "id": "dept-procurement",
-      "name": "Procurement",
-      "code": "PROCUREMENT",
-      "divisionId": "div-procurement",
-      "assistantGeneralManagerId": "user-agm-procurement",
       "active": true
     },
     {
@@ -474,6 +461,22 @@
       "active": true
     },
     {
+      "id": "dept-superannuation",
+      "name": "Superannuation",
+      "code": "SUPERANNUATION",
+      "divisionId": "div-superannuation",
+      "assistantGeneralManagerId": "user-agm-superannuation",
+      "active": true
+    },
+    {
+      "id": "dept-investment",
+      "name": "Investment",
+      "code": "INVESTMENT",
+      "divisionId": "div-superannuation",
+      "assistantGeneralManagerId": "user-agm-investment",
+      "active": true
+    },
+    {
       "id": "dept-medical",
       "name": "Medical Services",
       "code": "MEDICAL",
@@ -498,123 +501,131 @@
       "active": true
     },
     {
-      "id": "dept-superannuation",
-      "name": "Superannuation",
-      "code": "SUPERANNUATION",
-      "divisionId": "div-superannuation",
-      "assistantGeneralManagerId": "user-agm-superannuation",
+      "id": "dept-nursing",
+      "name": "Nursing",
+      "code": "NURSING",
+      "divisionId": "div-medical",
+      "assistantGeneralManagerId": "user-agm-nursing",
       "active": true
     },
     {
-      "id": "dept-marine-ops",
-      "name": "Marine Operations",
-      "code": "MARINE_OPS",
-      "divisionId": "div-marine-ops",
-      "assistantGeneralManagerId": "user-agm-marine-ops",
+      "id": "dept-radiology",
+      "name": "Radiology",
+      "code": "RADIOLOGY",
+      "divisionId": "div-medical",
+      "assistantGeneralManagerId": "user-agm-radiology",
       "active": true
     },
     {
-      "id": "dept-vessel",
-      "name": "Vessel Management",
-      "code": "VESSEL",
-      "divisionId": "div-marine-ops",
-      "assistantGeneralManagerId": "user-agm-vessel",
+      "id": "dept-projects",
+      "name": "Projects",
+      "code": "PROJECTS",
+      "divisionId": "div-procurement",
+      "assistantGeneralManagerId": "user-agm-projects",
       "active": true
     },
     {
-      "id": "dept-hydrographic",
-      "name": "Hydrographic",
-      "code": "HYDROGRAPHIC",
-      "divisionId": "div-marine-ops",
-      "assistantGeneralManagerId": "user-agm-hydrographic",
+      "id": "dept-bids-mgt-selection",
+      "name": "Bids MGT & Selection",
+      "code": "BMS",
+      "divisionId": "div-procurement",
+      "assistantGeneralManagerId": "user-agm-bms",
       "active": true
     },
     {
-      "id": "dept-port-ops",
-      "name": "Port Operations",
-      "code": "PORT_OPS",
-      "divisionId": "div-marine-ops",
-      "assistantGeneralManagerId": "user-agm-port-ops",
+      "id": "dept-compliance-records",
+      "name": "Compliance & Records",
+      "code": "C_R",
+      "divisionId": "div-procurement",
+      "assistantGeneralManagerId": "user-agm-cr",
       "active": true
     },
     {
-      "id": "dept-security",
-      "name": "Security",
-      "code": "SECURITY",
-      "divisionId": "div-security",
-      "assistantGeneralManagerId": "user-agm-security",
+      "id": "dept-csc-csr",
+      "name": "Corporate Social Responsibility",
+      "code": "CSC_CSR",
+      "divisionId": "div-csc",
+      "assistantGeneralManagerId": "user-agm-csc-csr",
       "active": true
     },
     {
-      "id": "dept-environment",
-      "name": "Environment",
-      "code": "ENVIRONMENT",
-      "divisionId": "div-hse",
-      "assistantGeneralManagerId": "user-agm-environment",
+      "id": "dept-csc-pem",
+      "name": "Protocol & Events Management",
+      "code": "CSC_PEM",
+      "divisionId": "div-csc",
+      "assistantGeneralManagerId": "user-agm-csc-pem",
       "active": true
     },
     {
-      "id": "dept-safety",
-      "name": "Safety",
-      "code": "SAFETY",
-      "divisionId": "div-hse",
-      "assistantGeneralManagerId": "user-agm-safety",
+      "id": "dept-csp-research",
+      "name": "Research & Statistics",
+      "code": "CSP_RESEARCH",
+      "divisionId": "div-csp",
+      "assistantGeneralManagerId": "user-agm-csp-research",
       "active": true
     },
     {
-      "id": "dept-regulatory",
-      "name": "Regulatory Services",
-      "code": "REGULATORY",
-      "divisionId": "div-regulatory",
-      "assistantGeneralManagerId": "user-agm-regulatory",
+      "id": "dept-csp-planning",
+      "name": "Planning & Monitoring",
+      "code": "CSP_PLANNING",
+      "divisionId": "div-csp",
+      "assistantGeneralManagerId": "user-agm-csp-planning",
       "active": true
     },
     {
-      "id": "dept-ppp",
-      "name": "PPP",
+      "id": "dept-legal",
+      "name": "Legal",
+      "code": "LEGAL",
+      "divisionId": "div-legal",
+      "assistantGeneralManagerId": "user-agm-legal",
+      "active": true
+    },
+    {
+      "id": "dept-board-registry",
+      "name": "Board Registry",
+      "code": "BOARD_REGISTRY",
+      "divisionId": "div-legal",
+      "assistantGeneralManagerId": "user-agm-board-registry",
+      "active": true
+    },
+    {
+      "id": "dept-audit-finance",
+      "name": "Finance & Investment",
+      "code": "AUDIT_FINANCE",
+      "divisionId": "div-audit",
+      "assistantGeneralManagerId": "user-agm-audit-finance",
+      "active": true
+    },
+    {
+      "id": "dept-audit-systems",
+      "name": "Systems / ICT",
+      "code": "AUDIT_SYSTEMS",
+      "divisionId": "div-audit",
+      "assistantGeneralManagerId": "user-agm-audit-systems",
+      "active": true
+    },
+    {
+      "id": "dept-audit-policy",
+      "name": "Policy Compliance",
+      "code": "AUDIT_POLICY",
+      "divisionId": "div-audit",
+      "assistantGeneralManagerId": "user-agm-audit-policy",
+      "active": true
+    },
+    {
+      "id": "dept-public-private-partnership",
+      "name": "Public-Private Partnership",
       "code": "PPP",
       "divisionId": "div-ppp",
       "assistantGeneralManagerId": "user-agm-ppp",
       "active": true
     },
     {
-      "id": "dept-ports-eng",
-      "name": "Ports Engineering",
-      "code": "PORTS_ENG",
-      "divisionId": "div-engineering",
-      "assistantGeneralManagerId": "user-agm-ports-eng",
-      "active": true
-    },
-    {
-      "id": "dept-electrical",
-      "name": "Electrical & Corrosion",
-      "code": "ELECTRICAL",
-      "divisionId": "div-engineering",
-      "assistantGeneralManagerId": "user-agm-electrical",
-      "active": true
-    },
-    {
-      "id": "dept-civil",
-      "name": "Civil Engineering",
-      "code": "CIVIL",
-      "divisionId": "div-engineering",
-      "assistantGeneralManagerId": "user-agm-civil",
-      "active": true
-    },
-    {
-      "id": "dept-ict-software",
-      "name": "Software Applications & Database Management",
-      "code": "ICT_SOFTWARE",
-      "divisionId": "div-ict",
-      "assistantGeneralManagerId": "user-agm-software",
-      "active": true
-    },
-    {
-      "id": "dept-ict-hardware",
-      "name": "Hardware, Infrastructure & Support",
-      "code": "ICT_HARDWARE",
-      "divisionId": "div-ict",
-      "assistantGeneralManagerId": "user-agm-infra",
+      "id": "dept-new-business-venture",
+      "name": "New-Business-Venture",
+      "code": "NBV",
+      "divisionId": "div-ppp",
+      "assistantGeneralManagerId": "user-agm-nbv",
       "active": true
     },
     {
@@ -626,6 +637,14 @@
       "active": true
     },
     {
+      "id": "dept-ict-hardware",
+      "name": "Hardware, Infrastructure & Support",
+      "code": "ICT_HARDWARE",
+      "divisionId": "div-ict",
+      "assistantGeneralManagerId": "user-agm-infra",
+      "active": true
+    },
+    {
       "id": "dept-ict-research",
       "name": "Research & Special Projects",
       "code": "ICT_RESEARCH",
@@ -634,11 +653,51 @@
       "active": true
     },
     {
-      "id": "dept-assets",
-      "name": "Assets Administration",
-      "code": "ASSETS",
-      "divisionId": "div-lands-assets",
-      "assistantGeneralManagerId": "user-agm-assets",
+      "id": "dept-ict-software",
+      "name": "Software Applications & Database Management",
+      "code": "ICT_SOFTWARE",
+      "divisionId": "div-ict",
+      "assistantGeneralManagerId": "user-agm-software",
+      "active": true
+    },
+    {
+      "id": "dept-monitoring",
+      "name": "Monitoring",
+      "code": "MONITORING",
+      "divisionId": "div-monitoring",
+      "assistantGeneralManagerId": "user-agm-monitoring",
+      "active": true
+    },
+    {
+      "id": "dept-regulatory",
+      "name": "Regulatory Services",
+      "code": "REGULATORY",
+      "divisionId": "div-regulatory",
+      "assistantGeneralManagerId": "user-agm-regulatory",
+      "active": true
+    },
+    {
+      "id": "dept-servicom",
+      "name": "SERVICOM",
+      "code": "SERVICOM",
+      "divisionId": "div-servicom",
+      "assistantGeneralManagerId": "user-agm-servicom",
+      "active": true
+    },
+    {
+      "id": "dept-abuja",
+      "name": "Abuja Liaison Office",
+      "code": "ABUJA",
+      "divisionId": "div-liaison",
+      "assistantGeneralManagerId": "user-agm-abuja",
+      "active": true
+    },
+    {
+      "id": "dept-seaview-properties",
+      "name": "Seaview Properties Limited",
+      "code": "SEAVIEW",
+      "divisionId": "div-liaison",
+      "assistantGeneralManagerId": "user-agm-seaview-properties",
       "active": true
     }
   ],
