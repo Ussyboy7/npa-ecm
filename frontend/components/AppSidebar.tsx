@@ -25,6 +25,7 @@ import {
   FilePenLine,
   Activity,
   HelpCircle,
+  Shield,
 } from "lucide-react";
 import {
   Sidebar,
@@ -345,6 +346,15 @@ export function AppSidebar() {
                         <Link href="/admin/users">
                           <UserCog className="h-4 w-4" />
                           {!isCollapsed && <span>User Management</span>}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={isActive('/admin/roles')}>
+                        <Link href="/admin/roles">
+                          <Shield className="h-4 w-4" />
+                          {!isCollapsed && <span>Roles</span>}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

@@ -144,18 +144,28 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
           return;
         }
 
+        if (!formData.systemRole || !formData.employeeId) {
+          toast({
+            title: "Error",
+            description: "System role and employee ID are required",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
         await addUser({
           username: formData.username,
           email: formData.email,
           firstName: formData.firstName!,
           lastName: formData.lastName!,
           password: formData.password!,
-          systemRole: formData.systemRole || null,
+          systemRole: formData.systemRole,
           gradeLevel: formData.gradeLevel || null,
           directorateId: formData.directorateId || null,
           divisionId: formData.divisionId || null,
           departmentId: formData.departmentId || null,
-          employeeId: formData.employeeId || null,
+          employeeId: formData.employeeId,
           isActive: formData.isActive,
         });
 
@@ -268,7 +278,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
           )}
 
             <div className="space-y-2">
-              <Label htmlFor="systemRole">System Role</Label>
+              <Label htmlFor="systemRole">System Role {!user && '*'}</Label>
               <Select
                 value={formData.systemRole || "__custom"}
                 onValueChange={(value) => {
@@ -279,7 +289,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   }
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger id="systemRole" name="systemRole">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
@@ -293,11 +303,13 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
               </Select>
               <Input
                 id="customRole"
+                name="customRole"
                 placeholder="Enter custom role"
                 value={formData.systemRole}
                 onChange={(event) =>
                   setFormData((prev) => ({ ...prev, systemRole: event.target.value }))
                 }
+                required={!user}
               />
             </div>
 
@@ -417,12 +429,13 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
               </Select>
             </div>
 
-            {user && (
+            {user ? (
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
+                    name="email"
                     type="email"
                     value={formData.email}
                     onChange={(event) =>
@@ -432,18 +445,33 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="employeeId">Employee ID</Label>
+                  <Input
+                    id="employeeId"
+                    name="employeeId"
+                    value={formData.employeeId}
+                    onChange={(event) =>
+                      setFormData((prev) => ({ ...prev, employeeId: event.target.value }))
+                    }
+                    placeholder="e.g. NPA123"
+                  />
+                </div>
+              </div>
+            ) : (
               <div className="space-y-2">
-                <Label htmlFor="employeeId">Employee ID</Label>
+                <Label htmlFor="employeeId">Employee ID *</Label>
                 <Input
                   id="employeeId"
+                  name="employeeId"
                   value={formData.employeeId}
                   onChange={(event) =>
                     setFormData((prev) => ({ ...prev, employeeId: event.target.value }))
                   }
                   placeholder="e.g. NPA123"
+                  required
                 />
               </div>
-            </div>
             )}
 
             <DialogFooter>
