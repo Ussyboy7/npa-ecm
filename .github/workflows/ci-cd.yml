@@ -213,8 +213,8 @@ jobs:
         run: |
           echo "🧪 Running staging environment tests"
           
-          # Navigate to project directory
-          cd /srv/npa-ecm
+          # Navigate to project directory where services are deployed
+          cd /srv/npa-ecm || { echo "❌ Directory /srv/npa-ecm not found"; exit 1; }
           
           # Wait for services to be ready
           echo '⏳ Waiting for services to be ready...'
@@ -233,8 +233,13 @@ jobs:
           
           if [ $attempt -gt $max_attempts ]; then
             echo "❌ Services did not become ready in time"
+            echo "Current directory: $(pwd)"
+            echo "Checking container status..."
             docker compose -f docker-compose.stag.yml ps
-            docker compose -f docker-compose.stag.yml logs --tail=50 nginx_stag
+            echo "Checking nginx logs..."
+            docker compose -f docker-compose.stag.yml logs --tail=50 nginx_stag || true
+            echo "Checking nginx config..."
+            docker compose -f docker-compose.stag.yml exec nginx_stag nginx -t || true
             exit 1
           fi
 
