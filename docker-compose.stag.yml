@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres_stag:
     image: postgres:16-alpine
@@ -11,7 +9,7 @@ services:
     volumes:
       - postgres_stag_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U npa_ecm_staging"]
+      test: ["CMD-SHELL", "pg_isready -U ecmadmin"]
       interval: 30s
       timeout: 10s
       retries: 5

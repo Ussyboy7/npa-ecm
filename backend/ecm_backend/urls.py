@@ -6,9 +6,15 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
+from common.views import health_check
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+
+    # Health check endpoint
+    path("api/health/", health_check, name="health_check"),
+    path("health/", health_check, name="health_check_short"),
 
     # OpenAPI schema & docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
