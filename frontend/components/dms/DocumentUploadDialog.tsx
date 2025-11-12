@@ -331,8 +331,12 @@ export const DocumentUploadDialog = ({
         handleClose(false);
       }
     } catch (error) {
-      console.error(error);
-      toast.error('Failed to process document.');
+      console.error('Document upload error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process document. Please try again.';
+      toast.error('Failed to process document', {
+        description: errorMessage,
+        duration: 5000,
+      });
     } finally {
       setIsSubmitting(false);
     }

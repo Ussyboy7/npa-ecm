@@ -184,8 +184,37 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
   }
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `API request failed with status ${response.status}`);
+    let errorMessage = `API request failed with status ${response.status}`;
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json();
+        if (errorData.detail) {
+          errorMessage = errorData.detail;
+        } else if (errorData.message) {
+          errorMessage = errorData.message;
+        } else if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        } else if (errorData.non_field_errors) {
+          errorMessage = Array.isArray(errorData.non_field_errors) 
+            ? errorData.non_field_errors.join(', ') 
+            : String(errorData.non_field_errors);
+        } else {
+          errorMessage = JSON.stringify(errorData);
+        }
+      } else {
+        const body = await response.text();
+        if (body) {
+          errorMessage = body;
+        }
+      }
+    } catch (parseError) {
+      // If we can't parse the error, use the status text
+      errorMessage = response.statusText || `HTTP ${response.status}`;
+    }
+    const error = new Error(errorMessage);
+    (error as any).status = response.status;
+    throw error;
   }
 
   if (response.status === 204) {

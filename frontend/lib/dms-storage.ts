@@ -286,10 +286,15 @@ export const createDocument = async (
   updateDocumentsCache(document);
 
   const versionPayload = buildVersionPayload(document.id, versionInput);
-  await apiFetch('/dms/document-versions/', {
-    method: 'POST',
-    body: JSON.stringify(versionPayload),
-  });
+  try {
+    await apiFetch('/dms/versions/', {
+      method: 'POST',
+      body: JSON.stringify(versionPayload),
+    });
+  } catch (error) {
+    console.error('Failed to create document version:', error);
+    throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 
   return fetchDocumentById(document.id);
 };
@@ -303,10 +308,15 @@ export const createDocumentVersion = async (
   }
 
   const versionPayload = buildVersionPayload(documentId, versionInput);
-  await apiFetch('/dms/document-versions/', {
-    method: 'POST',
-    body: JSON.stringify(versionPayload),
-  });
+  try {
+    await apiFetch('/dms/versions/', {
+      method: 'POST',
+      body: JSON.stringify(versionPayload),
+    });
+  } catch (error) {
+    console.error('Failed to create document version:', error);
+    throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 
   return fetchDocumentById(documentId);
 };
