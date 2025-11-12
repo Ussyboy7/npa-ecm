@@ -191,9 +191,12 @@ jobs:
           echo '📥 Syncing latest code...'
           # Stop containers first to release file locks
           docker compose -f docker-compose.stag.yml down || true
-          # Clean up media directories that may have permission issues (created by containers)
-          rm -rf backend/media/correspondence_attachments/* 2>/dev/null || true
-          rm -rf backend/media/* 2>/dev/null || true
+          # Clean up media directories that may have permission issues (created by containers as root)
+          # Use sudo since directories were created by Docker containers
+          sudo rm -rf backend/media/correspondence_attachments 2>/dev/null || true
+          sudo rm -rf backend/media 2>/dev/null || true
+          # Ensure media directory exists with correct permissions
+          mkdir -p backend/media
           # Sync code
           git fetch --all --prune
           git reset --hard origin/main
