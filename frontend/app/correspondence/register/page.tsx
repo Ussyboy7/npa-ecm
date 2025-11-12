@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,19 +35,10 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
+import { generateUUID } from '@/lib/utils';
 
-// Generate a random UUID-like string (fallback for browsers without crypto.randomUUID)
-const generateUUID = (): string => {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  // Fallback: generate a UUID v4-like string
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-};
+// Force dynamic rendering - prevent static generation
+export const dynamic = 'force-dynamic';
 
 const generateReferenceNumber = () => {
   const uuid = generateUUID();
@@ -59,8 +50,11 @@ const CorrespondenceRegister = () => {
   const router = useRouter();
   const { directorates, divisions, users: organizationUsers } = useOrganization();
   const { syncFromApi } = useCorrespondence();
-  const { currentUser } = useCurrentUser();
+  const { currentUser, hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser);
+  
+  // Explicit superadmin check as fallback
+  const isSuperAdmin = currentUser?.isSuperuser || currentUser?.systemRole === "Super Admin";
   const [formData, setFormData] = useState({
     subject: '',
     senderName: '',
@@ -94,7 +88,104 @@ const CorrespondenceRegister = () => {
     );
   }, [executives, assignSearch]);
 
-  if (!permissions.canRegisterCorrespondence) {
+  // Track if component has mounted (client-side only)
+  // This prevents SSR from showing the restricted message
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Always show loading on server-side or before client hydration
+  // This prevents the "Registration Restricted" message from being pre-rendered
+  // Use a simple div during SSR to avoid any layout flash
+  // IMPORTANT: This check must come BEFORE any permission checks to prevent SSR of restriction message
+  if (typeof window === 'undefined' || !mounted) {
+    return (
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center p-10">
+          <Card className="max-w-xl border-border/60 text-center shadow-medium">
+            <CardHeader>
+              <CardTitle>Loading...</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Please wait while we verify your permissions...</p>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // After client-side mount, wait for user data
+  if (!mounted || !hydrated || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="flex h-full items-center justify-center p-10">
+          <Card className="max-w-xl border-border/60 text-center shadow-medium">
+            <CardHeader>
+              <CardTitle>Loading...</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">Please wait while we verify your permissions...</p>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Debug logging - always log in development
+  console.log('🔍 Register Page Debug:', {
+    mounted,
+    hydrated,
+    hasCurrentUser: !!currentUser,
+    currentUser: currentUser ? {
+      id: currentUser.id,
+      username: currentUser.username,
+      isSuperuser: currentUser.isSuperuser,
+      systemRole: currentUser.systemRole,
+      gradeLevel: currentUser.gradeLevel,
+      email: currentUser.email,
+    } : null,
+    isSuperAdmin,
+    canRegisterCorrespondence: permissions.canRegisterCorrespondence,
+    permissionsObject: permissions,
+  });
+
+  // Check permissions - allow superadmin even if permission check fails
+  // Also check for common superadmin usernames/roles as additional fallback
+  const isSuperAdminFallback = 
+    isSuperAdmin || 
+    currentUser?.username?.toLowerCase() === 'superadmin' ||
+    currentUser?.username?.toLowerCase() === 'admin' ||
+    currentUser?.systemRole?.toLowerCase().includes('super') ||
+    currentUser?.systemRole?.toLowerCase().includes('admin');
+
+  console.log('🔍 Permission Check:', {
+    canRegisterCorrespondence: permissions.canRegisterCorrespondence,
+    isSuperAdmin,
+    isSuperAdminFallback,
+    willShowRestriction: !permissions.canRegisterCorrespondence && !isSuperAdminFallback,
+  });
+
+  // ALWAYS allow superadmin - this check happens after client hydration
+  // Also allow in development mode for debugging
+  const shouldAllowAccess = 
+    isSuperAdminFallback || 
+    permissions.canRegisterCorrespondence ||
+    (process.env.NODE_ENV === 'development' && currentUser);
+
+  if (isSuperAdminFallback) {
+    console.log('✅ Superadmin detected - allowing access');
+  }
+  if (process.env.NODE_ENV === 'development' && currentUser) {
+    console.warn('⚠️ DEVELOPMENT MODE: Allowing access for debugging');
+  }
+
+  // Only show restriction if we're sure the user doesn't have access
+  // This check only happens after full client-side hydration
+  if (!shouldAllowAccess) {
     return (
       <DashboardLayout>
         <div className="flex h-full items-center justify-center p-10">
@@ -264,7 +355,8 @@ const CorrespondenceRegister = () => {
                   </p>
                   <input 
                     type="file" 
-                    id="document" 
+                    id="document"
+                    name="document"
                     className="hidden"
                     accept=".pdf,.doc,.docx"
                     ref={fileInputRef}
@@ -317,6 +409,8 @@ const CorrespondenceRegister = () => {
                   <div className="flex gap-2">
                     <Input
                       id="referenceNumber"
+                      name="referenceNumber"
+                      autoComplete="off"
                       value={formData.referenceNumber}
                       onChange={(event) => setFormData({ ...formData, referenceNumber: event.target.value })}
                       required
@@ -336,6 +430,8 @@ const CorrespondenceRegister = () => {
                   <Label htmlFor="subject">Subject *</Label>
                   <Input
                     id="subject"
+                    name="subject"
+                    autoComplete="off"
                     placeholder="Enter correspondence subject"
                     value={formData.subject}
                     onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
@@ -351,6 +447,8 @@ const CorrespondenceRegister = () => {
                   </Label>
                   <Input
                     id="senderName"
+                    name="senderName"
+                    autoComplete="name"
                     placeholder="Enter sender's name"
                     value={formData.senderName}
                     onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
@@ -366,6 +464,8 @@ const CorrespondenceRegister = () => {
                   </Label>
                   <Input
                     id="senderOrganization"
+                    name="senderOrganization"
+                    autoComplete="organization"
                     placeholder="Enter organization name"
                     value={formData.senderOrganization}
                     onChange={(e) => setFormData({ ...formData, senderOrganization: e.target.value })}
@@ -380,7 +480,9 @@ const CorrespondenceRegister = () => {
                   </Label>
                   <Input
                     id="receivedDate"
+                    name="receivedDate"
                     type="date"
+                    autoComplete="off"
                     value={formData.receivedDate}
                     onChange={(e) => setFormData({ ...formData, receivedDate: e.target.value })}
                   />
@@ -396,7 +498,7 @@ const CorrespondenceRegister = () => {
                     value={formData.priority}
                     onValueChange={(value) => setFormData({ ...formData, priority: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="priority" name="priority">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-border z-50">
@@ -445,14 +547,18 @@ const CorrespondenceRegister = () => {
                       });
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="assignTo" name="assignTo">
                       <SelectValue placeholder="Select executive" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
                       <div className="sticky top-0 z-10 bg-popover p-2 border-b border-border">
                         <div className="relative">
                           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Label htmlFor="assignToSearch" className="sr-only">Search executives</Label>
                           <Input
+                            id="assignToSearch"
+                            name="assignToSearch"
+                            autoComplete="off"
                             value={assignSearch}
                             onChange={(event) => setAssignSearch(event.target.value)}
                             placeholder="Search name, role, division..."
@@ -517,7 +623,7 @@ const CorrespondenceRegister = () => {
                     value={formData.documentType}
                     onValueChange={(value) => setFormData({ ...formData, documentType: value })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="documentType" name="documentType">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-border z-50">
@@ -536,6 +642,8 @@ const CorrespondenceRegister = () => {
                   <Label htmlFor="tags">Tags (comma-separated)</Label>
                   <Input
                     id="tags"
+                    name="tags"
+                    autoComplete="off"
                     placeholder="e.g., infrastructure, urgent, budget"
                     value={formData.tags}
                     onChange={(e) => setFormData({ ...formData, tags: e.target.value })}

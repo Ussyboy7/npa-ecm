@@ -21,11 +21,14 @@ export const useUserPermissions = (user?: User | null): PermissionProfile => {
       return baseProfile;
     }
 
+    // Preserve base profile permissions (especially for superadmin)
     const enhancedProfile: PermissionProfile = {
       ...baseProfile,
       allowedArchiveLevels: [...baseProfile.allowedArchiveLevels],
     };
 
+    // Only enhance permissions, never restrict them
+    // If baseProfile already has permissions (e.g., from superadmin), preserve them
     if (assignmentsForUser.some((assignment) => assignment.permissions.includes("forward"))) {
       enhancedProfile.canDistribute = true;
       enhancedProfile.canAccessApprovals = true;
@@ -36,6 +39,21 @@ export const useUserPermissions = (user?: User | null): PermissionProfile => {
     }
 
     if (assignmentsForUser.some((assignment) => assignment.permissions.includes("view") || assignment.permissions.includes("coordinate"))) {
+      enhancedProfile.canAccessDocumentManagement = true;
+    }
+
+    // Ensure superadmin permissions are always preserved
+    const isSuperAdmin = user.isSuperuser || user.systemRole === "Super Admin";
+    if (isSuperAdmin) {
+      // Superadmin should have all permissions
+      enhancedProfile.canRegisterCorrespondence = true;
+      enhancedProfile.canAccessApprovals = true;
+      enhancedProfile.canAccessAnalytics = true;
+      enhancedProfile.canAccessExecutiveDashboard = true;
+      enhancedProfile.canAccessAdministration = true;
+      enhancedProfile.canAccessReports = true;
+      enhancedProfile.canDistribute = true;
+      enhancedProfile.canViewCorrespondenceRegistry = true;
       enhancedProfile.canAccessDocumentManagement = true;
     }
 

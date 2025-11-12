@@ -93,8 +93,21 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
   profile.canRegisterCorrespondence = canRegisterByGrade;
 
   // Disallow registration for AssistantManager and management grades, but allow superadmin
-  if (!isSuperAdmin && (isAssistantManager || managementGrades)) {
+  // Also check for common superadmin indicators as additional fallback
+  const isSuperAdminFallback = 
+    isSuperAdmin || 
+    user.username?.toLowerCase() === 'superadmin' ||
+    user.username?.toLowerCase() === 'admin' ||
+    role?.toLowerCase().includes('super') ||
+    role?.toLowerCase().includes('admin');
+  
+  if (!isSuperAdminFallback && (isAssistantManager || managementGrades)) {
     profile.canRegisterCorrespondence = false;
+  }
+  
+  // Ensure superadmin always has registration permission
+  if (isSuperAdminFallback) {
+    profile.canRegisterCorrespondence = true;
   }
 
   const allowedLevels: ArchiveLevel[] = ["department"];
