@@ -4,8 +4,8 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Department, Directorate, Division
-from .serializers import DepartmentSerializer, DirectorateSerializer, DivisionSerializer
+from .models import Department, Directorate, Division, Role
+from .serializers import DepartmentSerializer, DirectorateSerializer, DivisionSerializer, RoleSerializer
 
 
 class DirectorateViewSet(viewsets.ModelViewSet):
@@ -39,3 +39,14 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ["division", "division__directorate", "is_active"]
     search_fields = ["name", "code", "division__name", "division__directorate__name"]
     ordering_fields = ["name", "code", "created_at"]
+
+
+class RoleViewSet(viewsets.ModelViewSet):
+    queryset = Role.objects.prefetch_related("users")
+    serializer_class = RoleSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["is_active"]
+    search_fields = ["name", "description"]
+    ordering_fields = ["name", "created_at"]

@@ -8,7 +8,13 @@ class User(AbstractUser):
     """User model augmented with NPA-specific metadata."""
 
     grade_level = models.CharField(max_length=50, blank=True)
-    system_role = models.CharField(max_length=100, blank=True)
+    system_role = models.ForeignKey(
+        "organization.Role",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users",
+    )
     directorate = models.ForeignKey(
         "organization.Directorate",
         on_delete=models.SET_NULL,
@@ -43,7 +49,7 @@ class User(AbstractUser):
     def display_role(self) -> str:
         """Return a human readable representation of the user's role."""
 
-        parts = [self.system_role or ""]
+        parts = [self.system_role.name if self.system_role else ""]
         if self.grade_level:
             parts.append(self.grade_level)
         return " - ".join(filter(None, parts))

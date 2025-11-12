@@ -16,46 +16,16 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganization, Role } from "@/contexts/OrganizationContext";
 import { RoleFormModal } from "@/components/admin/RoleFormModal";
 import { toast } from "@/hooks/use-toast";
-import { apiFetch } from "@/lib/api-client";
-
-type RoleInfo = {
-  name: string;
-  userCount: number;
-  userIds: string[];
-};
 
 const RolesManagementPage = () => {
-  const { users, refreshOrganizationData } = useOrganization();
+  const { roles, users, refreshOrganizationData, deleteRole } = useOrganization();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
-
-  // Extract unique roles from users
-  const roles = useMemo(() => {
-    const roleMap = new Map<string, RoleInfo>();
-    
-    users.forEach((user) => {
-      if (user.systemRole) {
-        const roleName = user.systemRole;
-        if (!roleMap.has(roleName)) {
-          roleMap.set(roleName, {
-            name: roleName,
-            userCount: 0,
-            userIds: [],
-          });
-        }
-        const roleInfo = roleMap.get(roleName)!;
-        roleInfo.userCount++;
-        roleInfo.userIds.push(user.id);
-      }
-    });
-
-    return Array.from(roleMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [users]);
 
   const filteredRoles = useMemo(() => {
     if (!searchQuery.trim()) {
@@ -65,14 +35,13 @@ const RolesManagementPage = () => {
     return roles.filter((role) => role.name.toLowerCase().includes(query));
   }, [roles, searchQuery]);
 
-
   const handleCreateRole = () => {
     setSelectedRole(null);
     setFormOpen(true);
   };
 
-  const handleEditRole = (roleName: string) => {
-    setSelectedRole(roleName);
+  const handleEditRole = (role: Role) => {
+    setSelectedRole(role);
     setFormOpen(true);
   };
 
@@ -81,33 +50,37 @@ const RolesManagementPage = () => {
     setSelectedRole(null);
   };
 
-  const handleDeleteRole = async (roleName: string) => {
-    const roleInfo = roles.find((r) => r.name === roleName);
-    if (!roleInfo) return;
+  const handleDeleteRole = async (role: Role) => {
+    const userCount = users.filter((u) => u.systemRole === role.id).length;
 
-    if (roleInfo.userCount > 0) {
+    if (userCount > 0) {
       const confirmed = window.confirm(
-        `This role is assigned to ${roleInfo.userCount} user(s). ` +
+        `This role is assigned to ${userCount} user(s). ` +
         `Deleting it will remove the role from all these users. Continue?`
       );
       if (!confirmed) return;
     }
 
-    setIsDeleting(roleName);
+    setIsDeleting(role.id);
     try {
-      // Update all users with this role to remove it
-      const updatePromises = roleInfo.userIds.map((userId) =>
-        apiFetch(`/accounts/users/${userId}/`, {
-          method: "PATCH",
-          body: JSON.stringify({ system_role: null }),
-        })
-      );
+      // First, remove role from all users
+      const usersWithRole = users.filter((u) => u.systemRole === role.id);
+      if (usersWithRole.length > 0) {
+        const updatePromises = usersWithRole.map((user) =>
+          apiFetch(`/accounts/users/${user.id}/`, {
+            method: "PATCH",
+            body: JSON.stringify({ system_role: null }),
+          })
+        );
+        await Promise.all(updatePromises);
+      }
 
-      await Promise.all(updatePromises);
+      // Then delete the role
+      await deleteRole(role.id);
       
       toast({
         title: "Role deleted",
-        description: `Role "${roleName}" has been removed from all users.`,
+        description: `Role "${role.name}" has been removed from all users and deleted.`,
       });
 
       await refreshOrganizationData();
@@ -179,48 +152,57 @@ const RolesManagementPage = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Role Name</TableHead>
+                    <TableHead>Description</TableHead>
                     <TableHead>Users</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRoles.map((role) => (
-                    <TableRow key={role.name}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Shield className="h-4 w-4 text-primary" />
-                          <span className="font-medium">{role.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="gap-1">
-                          <Users className="h-3 w-3" />
-                          {role.userCount} {role.userCount === 1 ? "user" : "users"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditRole(role.name)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteRole(role.name)}
-                            disabled={isDeleting === role.name}
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredRoles.map((role) => {
+                    const userCount = users.filter((u) => u.systemRole === role.id).length;
+                    return (
+                      <TableRow key={role.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-primary" />
+                            <span className="font-medium">{role.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {role.description || "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="gap-1">
+                            <Users className="h-3 w-3" />
+                            {userCount} {userCount === 1 ? "user" : "users"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditRole(role)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteRole(role)}
+                              disabled={isDeleting === role.id}
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

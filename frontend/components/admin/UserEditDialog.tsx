@@ -52,7 +52,7 @@ const EMPTY_VALUE = "__none";
 const GRADE_LEVEL_OPTIONS = GRADE_LEVELS.map((grade) => ({ code: grade.code, label: grade.name }));
 
 export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps) => {
-  const { directorates, divisions, departments, users, updateUser, addUser } = useOrganization();
+  const { directorates, divisions, departments, users, updateUser, addUser, roles } = useOrganization();
   const [formData, setFormData] = useState<FormState & { username?: string; firstName?: string; lastName?: string; password?: string }>(defaultState);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -83,14 +83,11 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
   }, [user, open]);
 
   const roleOptions = useMemo(() => {
-    const uniqueRoles = new Set<string>();
-    users.forEach((candidate) => {
-      if (candidate.systemRole) {
-        uniqueRoles.add(candidate.systemRole);
-      }
-    });
-    return Array.from(uniqueRoles).sort((a, b) => a.localeCompare(b));
-  }, [users]);
+    return roles.map((role) => ({
+      value: role.id,
+      label: role.name,
+    })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [roles]);
 
   const availableDivisions = useMemo(
     () =>
@@ -280,25 +277,21 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
             <div className="space-y-2">
               <Label htmlFor="systemRole">System Role {!user && '*'}</Label>
               <Select
-                value={formData.systemRole || "__custom"}
+                value={formData.systemRole || EMPTY_VALUE}
                 onValueChange={(value) => {
-                  if (value === "__custom") {
-                    setFormData((prev) => ({ ...prev, systemRole: prev.systemRole }));
-                  } else {
-                    setFormData((prev) => ({ ...prev, systemRole: value }));
-                  }
+                  setFormData((prev) => ({ ...prev, systemRole: value === EMPTY_VALUE ? '' : value }));
                 }}
               >
                 <SelectTrigger id="systemRole" name="systemRole">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={EMPTY_VALUE}>Not assigned</SelectItem>
                   {roleOptions.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {role}
+                    <SelectItem key={role.value} value={role.value}>
+                      {role.label}
                     </SelectItem>
                   ))}
-                  <SelectItem value="__custom">Custom (enter below)</SelectItem>
                 </SelectContent>
               </Select>
               <Input

@@ -20,7 +20,7 @@ from .serializers import UserSerializer
 class UserViewSet(viewsets.ModelViewSet):
     """CRUD endpoints for managing users within the demo environment."""
 
-    queryset = User.objects.select_related("directorate", "division", "department")
+    queryset = User.objects.select_related("directorate", "division", "department", "system_role")
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None

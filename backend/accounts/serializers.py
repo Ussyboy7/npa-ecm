@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from organization.models import Department, Directorate, Division
+from organization.models import Department, Directorate, Division, Role
 
 from .models import User
 
@@ -17,6 +17,10 @@ class UserSerializer(serializers.ModelSerializer):
     department = serializers.PrimaryKeyRelatedField(
         queryset=Department.objects.select_related("division", "division__directorate"), allow_null=True, required=False
     )
+    system_role = serializers.PrimaryKeyRelatedField(
+        queryset=Role.objects.all(), allow_null=True, required=False
+    )
+    system_role_name = serializers.CharField(source="system_role.name", read_only=True)
     directorate_name = serializers.CharField(source="directorate.name", read_only=True)
     division_name = serializers.CharField(source="division.name", read_only=True)
     department_name = serializers.CharField(source="department.name", read_only=True)
@@ -35,6 +39,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_management",
             "grade_level",
             "system_role",
+            "system_role_name",
             "employee_id",
             "directorate",
             "division",

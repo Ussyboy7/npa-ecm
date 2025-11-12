@@ -40,12 +40,26 @@ export interface AssistantAssignment {
   permissions: string[];
 }
 
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  userCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface OrganizationContextType {
   directorates: Directorate[];
   divisions: Division[];
   departments: Department[];
   assistantAssignments: AssistantAssignment[];
   users: User[];
+  roles: Role[];
+  addRole: (role: CreateRoleInput) => Promise<Role>;
+  updateRole: (id: string, updates: UpdateRoleInput) => Promise<Role | null>;
+  deleteRole: (id: string) => Promise<void>;
   addDirectorate: (directorate: CreateDirectorateInput) => Promise<Directorate>;
   updateDirectorate: (id: string, updates: UpdateDirectorateInput) => Promise<Directorate | null>;
   deleteDirectorate: (id: string) => Promise<Directorate | null>;
@@ -153,10 +167,10 @@ const mapApiUserToUser = (user: any): User => {
     email: user.email ?? '',
     employeeId: user.employee_id ?? '',
     gradeLevel: user.grade_level ?? '',
+    systemRole: user.system_role ? String(user.system_role) : undefined,
     directorate: normalizeId(user.directorate ?? user.directorate_id),
     division: normalizeId(user.division ?? user.division_id),
     department: normalizeId(user.department ?? user.department_id),
-    systemRole: user.system_role ?? '',
     avatar: undefined,
     active: user.is_active ?? true,
     isSuperuser: user.is_superuser ?? false,
@@ -211,6 +225,16 @@ const mapApiDelegation = (item: any): AssistantAssignment => {
     permissions: permissions.length > 0 ? permissions : ['view'],
   };
 };
+
+const mapApiRole = (item: any): Role => ({
+  id: String(item.id),
+  name: item.name ?? 'Role',
+  description: item.description ?? '',
+  isActive: item.is_active ?? true,
+  userCount: item.user_count ?? 0,
+  createdAt: item.created_at,
+  updatedAt: item.updated_at,
+});
 
 const cleanPayload = (payload: Record<string, unknown>) =>
   Object.fromEntries(
@@ -281,6 +305,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const [departments, setDepartments] = useState<Department[]>([]);
   const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
   const { currentUser, hydrated } = useCurrentUser();
@@ -329,6 +354,16 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     []
   );
 
+  const applyRoleUpdate = useCallback(
+    (role: Role) => {
+      setRoles((prev) => {
+        const next = upsertById(prev, role, sortByName);
+        return next;
+      });
+    },
+    []
+  );
+
   const refreshOrganizationData = useCallback(async () => {
     if (!hydrated || !currentUser || !hasTokens()) {
       return;
@@ -336,12 +371,13 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
     setIsSyncing(true);
     try {
-      const [usersDataRaw, directoratesRaw, divisionsRaw, departmentsRaw, delegationsRaw] = await Promise.all([
+      const [usersDataRaw, directoratesRaw, divisionsRaw, departmentsRaw, delegationsRaw, rolesRaw] = await Promise.all([
         apiFetch('/accounts/users/'),
         apiFetch('/organization/directorates/?ordering=name'),
         apiFetch('/organization/divisions/?ordering=name'),
         apiFetch('/organization/departments/?ordering=name'),
         apiFetch('/correspondence/delegations/'),
+        apiFetch('/organization/roles/?ordering=name'),
       ]);
 
       const apiUsers = dedupeUsers(unwrapResults<any>(usersDataRaw).map(mapApiUserToUser));
@@ -352,15 +388,18 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       const apiDivisions = unwrapResults<any>(divisionsRaw).map(mapApiDivision);
       const apiDepartments = unwrapResults<any>(departmentsRaw).map(mapApiDepartment);
       const apiDelegations = unwrapResults<any>(delegationsRaw).map(mapApiDelegation);
+      const apiRoles = unwrapResults<any>(rolesRaw).map(mapApiRole);
 
       const sortedDirectorates = sortByName(apiDirectorates);
       const sortedDivisions = sortByName(apiDivisions);
       const sortedDepartments = sortByName(apiDepartments);
+      const sortedRoles = sortByName(apiRoles);
 
       setDirectorates(sortedDirectorates);
       setDivisions(sortedDivisions);
       setDepartments(sortedDepartments);
       setAssistantAssignments(apiDelegations);
+      setRoles(sortedRoles);
       updateOrganizationCache({
         directorates: sortedDirectorates,
         divisions: sortedDivisions,
@@ -664,15 +703,56 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setAssistantAssignments((prev) => prev.filter((assign) => assign.id !== id));
   };
 
-  const resetOrganizationData = () => {
+  const addRole = async (role: CreateRoleInput): Promise<Role> => {
+    const response = await apiFetch('/organization/roles/', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: role.name,
+        description: role.description ?? '',
+        is_active: role.isActive ?? true,
+      }),
+    });
+    const created = mapApiRole(response);
+    applyRoleUpdate(created);
+    return created;
+  };
+
+  const updateRole = async (id: string, updates: UpdateRoleInput): Promise<Role | null> => {
+    try {
+      const response = await apiFetch(`/organization/roles/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: updates.name,
+          description: updates.description,
+          is_active: updates.isActive,
+        }),
+      });
+      const updated = mapApiRole(response);
+      applyRoleUpdate(updated);
+      return updated;
+    } catch (error) {
+      console.error('Failed to update role', error);
+      return null;
+    }
+  };
+
+  const deleteRole = async (id: string): Promise<void> => {
+    await apiFetch(`/organization/roles/${id}/`, {
+      method: 'DELETE',
+    });
+    setRoles((prev) => prev.filter((role) => role.id !== id));
+  };
+
+  const resetOrganizationData = useCallback(() => {
     setDirectorates([]);
     setDivisions([]);
     setDepartments([]);
     setAssistantAssignments([]);
     setUsers([]);
+    setRoles([]);
     setHasSynced(false);
     updateOrganizationCache({ directorates: [], divisions: [], departments: [], users: [] });
-  };
+  }, []);
 
   return (
     <OrganizationContext.Provider
@@ -682,6 +762,10 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         departments,
         assistantAssignments,
         users,
+        roles,
+        addRole,
+        updateRole,
+        deleteRole,
         addDirectorate,
         updateDirectorate,
         deleteDirectorate,

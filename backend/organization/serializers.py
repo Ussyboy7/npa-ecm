@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from .models import Department, Directorate, Division
+from .models import Department, Directorate, Division, Role
 
 
 class DirectorateSerializer(serializers.ModelSerializer):
@@ -68,4 +68,25 @@ class DepartmentSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at", "directorate", "directorate_name"]
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    user_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Role
+        fields = [
+            "id",
+            "name",
+            "description",
+            "is_active",
+            "user_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at", "user_count"]
+
+    def get_user_count(self, obj):
+        """Return the number of users assigned to this role."""
+        return obj.users.count()
 
