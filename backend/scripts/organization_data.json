@@ -1,4 +1,3 @@
-{
   "DIRECTORATES": [
     {
       "id": "dir-md",
@@ -31,9 +30,19 @@
       "executiveDirector": "Executive Director, Engineering & Technical Services",
       "executiveDirectorId": "user-ed-ets",
       "active": true
+    },
+    {
+      "id": "dir-oversea-liaison",
+      "name": "Oversea Liaison Office",
+      "code": "OVERSEA_LIAISON",
+      "executiveDirector": "Oversea Liaison Director",
+      "executiveDirectorId": "user-ed-oversea-liaison",
+      "active": true
     }
   ],
-  "DIVISIONS": [
+"DIVISIONS": [
+    
+MD
     {
       "id": "div-procurement",
       "name": "Procurement",
@@ -42,7 +51,7 @@
       "generalManagerId": "user-gm-procurement",
       "active": true
     },
-    {
+{
       "id": "div-csp",
       "name": "Corporate & Strategic Planning",
       "code": "C&SP",
@@ -65,7 +74,7 @@
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-audit",
       "active": true
-    },
+},
     {
       "id": "div-ict",
       "name": "Information & Communication Technology",
@@ -74,12 +83,21 @@
       "generalManagerId": "user-gm-ict",
       "active": true
     },
+
     {
       "id": "div-legal",
       "name": "Legal Services",
       "code": "LEGAL",
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-legal",
+      "active": true
+    },
+    {
+      "id": "div-legal-services",
+      "name": "Legal Services (Registry)",
+      "code": "LEGAL_SERVICES",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-legal-services",
       "active": true
     },
     {
@@ -97,7 +115,7 @@
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-servicom",
       "active": true
-    },
+},
     {
       "id": "div-liaison",
       "name": "Administrative Support & Liaison Offices",
@@ -106,20 +124,30 @@
       "generalManagerId": "user-gm-liaison",
       "active": true
     },
+
     {
       "id": "div-oversea",
       "name": "Oversea Liaison Office",
       "code": "OVERSEA",
-      "directorateId": "dir-md",
+      "directorateId": "dir-oversea-liaison",
       "generalManagerId": "user-gm-oversea-liaison",
       "active": true
     },
+
     {
       "id": "div-special-duties",
       "name": "Special Duties / Executive Support",
       "code": "SPECIAL_DUTIES",
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-special-duties",
+      "active": true
+    },
+    {
+      "id": "div-seaview-properties",
+      "name": "Seaview Properties Limited",
+      "code": "SEAVIEW_PROPERTIES",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-seaview-properties",
       "active": true
     },
     {
@@ -137,7 +165,10 @@
       "directorateId": "dir-edmo",
       "generalManagerId": "user-gm-ppp",
       "active": true
-    },
+},
+
+
+ED F&A
     {
       "id": "div-erm",
       "name": "Enterprise Risk Management",
@@ -177,7 +208,8 @@
       "directorateId": "dir-edfa",
       "generalManagerId": "user-gm-medical",
       "active": true
-    },
+},
+
     {
       "id": "div-superannuation",
       "name": "Superannuation",
@@ -187,6 +219,17 @@
       "active": true
     },
     {
+      "id": "div-S&I",
+      "name": "Superannuation & Investment",
+      "code": "S&I",
+      "directorateId": "dir-edfa",
+      "generalManagerId": "user-gm-superannuation-investment",
+      "active": true
+    },
+
+ED M&O
+
+    {
       "id": "div-marine-ops",
       "name": "Marine & Operations",
       "code": "MARINE_OPS",
@@ -195,11 +238,35 @@
       "active": true
     },
     {
+      "id": "div-marine",
+      "name": "Marine",
+      "code": "MARINE",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-marine-alt",
+      "active": true
+    },
+    {
       "id": "div-ops",
       "name": "Operations",
       "code": "OPS",
       "directorateId": "dir-edmo",
       "generalManagerId": "user-gm-ops",
+      "active": true
+    },
+    {
+      "id": "div-operations",
+      "name": "Operations",
+      "code": "OPERATIONS",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-operations",
+      "active": true
+    },
+    {
+      "id": "div-hydrographic",
+      "name": "Hydrographic",
+      "code": "HYDROGRAPHIC",
+      "directorateId": "dir-edmo",
+      "generalManagerId": "user-gm-hydrographic",
       "active": true
     },
     {
@@ -225,7 +292,9 @@
       "directorateId": "dir-edmo",
       "generalManagerId": "user-gm-hse",
       "active": true
-    },
+},
+
+ED E&TS
     {
       "id": "div-engineering",
       "name": "Engineering & Technical Services",
@@ -241,9 +310,19 @@
       "directorateId": "dir-edets",
       "generalManagerId": "user-gm-lands-assets",
       "active": true
+    },
+    {
+      "id": "div-lands-assets-admin",
+      "name": "Lands & Assets Administration (Planning & Development)",
+      "code": "LANDS_ASSETS_ADMIN",
+      "directorateId": "dir-edets",
+      "generalManagerId": "user-gm-lands-assets-admin",
+      "active": true
     }
   ],
-  "DEPARTMENTS": [
+
+  "DEPARTMENTS": [ 
+ENGINEERING 
     {
       "id": "dept-ports-eng",
       "name": "Ports Engineering",
@@ -264,10 +343,11 @@
       "id": "dept-hydrographic",
       "name": "Hydrographic",
       "code": "HYDROGRAPHIC",
-      "divisionId": "div-engineering",
+      "divisionId": "div-hydrographic",
       "assistantGeneralManagerId": "user-agm-hydrographic",
       "active": true
     },
+
     {
       "id": "dept-civil",
       "name": "Civil Engineering",
@@ -276,11 +356,13 @@
       "assistantGeneralManagerId": "user-agm-civil",
       "active": true
     },
+
+LAND & ASSET ADMINISTRATION
     {
       "id": "dept-physical-planning-dev",
       "name": "Physical planning And Development",
       "code": "PPD",
-      "divisionId": "div-lands-assets",
+      "divisionId": "div-lands-assets-admin",
       "assistantGeneralManagerId": "user-agm-ppd",
       "active": true
     },
@@ -292,11 +374,13 @@
       "assistantGeneralManagerId": "user-agm-lands-assets",
       "active": true
     },
+
+MARINE
     {
       "id": "dept-harbours",
       "name": "Harbours",
       "code": "HARBOURS",
-      "divisionId": "div-marine-ops",
+      "divisionId": "div-marine",
       "assistantGeneralManagerId": "user-agm-harbours",
       "active": true
     },
@@ -316,7 +400,9 @@
       "assistantGeneralManagerId": "user-agm-atons-vts",
       "active": true
     },
-    {
+
+OPERATIONS
+   {
       "id": "dept-operations",
       "name": "Operations",
       "code": "OPERATIONS",
@@ -324,6 +410,8 @@
       "assistantGeneralManagerId": "user-agm-operations",
       "active": true
     },
+
+TARIFF & BILLING 
     {
       "id": "dept-tariff",
       "name": "Tariff & Billing",
@@ -332,7 +420,10 @@
       "assistantGeneralManagerId": "user-agm-tariff",
       "active": true
     },
-    {
+
+
+HEALTH SAFETY & ENVIRONMENT
+   {
       "id": "dept-environment",
       "name": "Environment",
       "code": "ENVIRONMENT",
@@ -348,7 +439,7 @@
       "assistantGeneralManagerId": "user-agm-safety",
       "active": true
     },
-    {
+   {
       "id": "dept-fire-rescue",
       "name": "Fire & Rescue",
       "code": "FIRE_RESCUE",
@@ -356,7 +447,9 @@
       "assistantGeneralManagerId": "user-agm-fire-rescue",
       "active": true
     },
-    {
+
+SECURITY
+   {
       "id": "dept-security",
       "name": "Security",
       "code": "SECURITY",
@@ -364,7 +457,9 @@
       "assistantGeneralManagerId": "user-agm-security",
       "active": true
     },
-    {
+
+HR
+   {
       "id": "dept-hr-management",
       "name": "HR Management",
       "code": "HR_MGT",
@@ -372,15 +467,15 @@
       "assistantGeneralManagerId": "user-agm-hr-mgt",
       "active": true
     },
-    {
+   {
       "id": "dept-hr-labour",
       "name": "Employee & Labour Relations",
       "code": "HR_LABOUR",
       "divisionId": "div-hr",
       "assistantGeneralManagerId": "user-agm-hr-labour",
       "active": true
-    },
-    {
+    }, 
+   {
       "id": "dept-performance",
       "name": "Performance Management",
       "code": "PERFORMANCE",
@@ -396,6 +491,8 @@
       "assistantGeneralManagerId": "user-agm-hr-ld",
       "active": true
     },
+
+FINANCE
     {
       "id": "dept-accounts",
       "name": "Accounts",
@@ -412,7 +509,7 @@
       "assistantGeneralManagerId": "user-agm-finance",
       "active": true
     },
-    {
+   {
       "id": "dept-budget",
       "name": "Budget",
       "code": "BUDGET",
@@ -420,6 +517,8 @@
       "assistantGeneralManagerId": "user-agm-budget",
       "active": true
     },
+
+
     {
       "id": "dept-tax",
       "name": "Tax",
@@ -428,6 +527,7 @@
       "assistantGeneralManagerId": "user-agm-tax",
       "active": true
     },
+ADMINISTRATION 
     {
       "id": "dept-admin-general",
       "name": "Administration",
@@ -460,6 +560,8 @@
       "assistantGeneralManagerId": "user-agm-admin-risk",
       "active": true
     },
+
+SUPERANNUATION & INVESTMENT
     {
       "id": "dept-superannuation",
       "name": "Superannuation",
@@ -472,10 +574,13 @@
       "id": "dept-investment",
       "name": "Investment",
       "code": "INVESTMENT",
-      "divisionId": "div-superannuation",
+      "divisionId": "div-S&I",
       "assistantGeneralManagerId": "user-agm-investment",
       "active": true
     },
+
+
+MEDICAL SERVICES 
     {
       "id": "dept-medical",
       "name": "Medical Services",
@@ -508,7 +613,7 @@
       "assistantGeneralManagerId": "user-agm-nursing",
       "active": true
     },
-    {
+   {
       "id": "dept-radiology",
       "name": "Radiology",
       "code": "RADIOLOGY",
@@ -516,6 +621,8 @@
       "assistantGeneralManagerId": "user-agm-radiology",
       "active": true
     },
+
+PROCUREMENT 
     {
       "id": "dept-projects",
       "name": "Projects",
@@ -532,7 +639,7 @@
       "assistantGeneralManagerId": "user-agm-bms",
       "active": true
     },
-    {
+   {
       "id": "dept-compliance-records",
       "name": "Compliance & Records",
       "code": "C_R",
@@ -540,7 +647,9 @@
       "assistantGeneralManagerId": "user-agm-cr",
       "active": true
     },
-    {
+
+CORPORATE AFFAIRS
+       {
       "id": "dept-csc-csr",
       "name": "Corporate Social Responsibility",
       "code": "CSC_CSR",
@@ -556,7 +665,9 @@
       "assistantGeneralManagerId": "user-agm-csc-pem",
       "active": true
     },
-    {
+
+C&SP
+   {
       "id": "dept-csp-research",
       "name": "Research & Statistics",
       "code": "CSP_RESEARCH",
@@ -572,22 +683,28 @@
       "assistantGeneralManagerId": "user-agm-csp-planning",
       "active": true
     },
-    {
+
+LEGAL SERVICES
+   {
       "id": "dept-legal",
       "name": "Legal",
       "code": "LEGAL",
-      "divisionId": "div-legal",
+      "divisionId": "div-legal-services",
       "assistantGeneralManagerId": "user-agm-legal",
       "active": true
     },
-    {
+   {
       "id": "dept-board-registry",
       "name": "Board Registry",
       "code": "BOARD_REGISTRY",
-      "divisionId": "div-legal",
+      "divisionId": "div-legal-services",
       "assistantGeneralManagerId": "user-agm-board-registry",
       "active": true
     },
+
+
+
+AUDIT
     {
       "id": "dept-audit-finance",
       "name": "Finance & Investment",
@@ -612,22 +729,26 @@
       "assistantGeneralManagerId": "user-agm-audit-policy",
       "active": true
     },
-    {
+
+PUBLIC PRIVATE PARTNERSHIP (PPP)
+   {
       "id": "dept-public-private-partnership",
       "name": "Public-Private Partnership",
       "code": "PPP",
       "divisionId": "div-ppp",
       "assistantGeneralManagerId": "user-agm-ppp",
       "active": true
-    },
-    {
+},
+   {
       "id": "dept-new-business-venture",
       "name": "New-Business-Venture",
       "code": "NBV",
       "divisionId": "div-ppp",
       "assistantGeneralManagerId": "user-agm-nbv",
       "active": true
-    },
+},
+
+ICT
     {
       "id": "dept-ict-networks",
       "name": "Networks & Communication",
@@ -660,6 +781,8 @@
       "assistantGeneralManagerId": "user-agm-software",
       "active": true
     },
+
+MONIRORING
     {
       "id": "dept-monitoring",
       "name": "Monitoring",
@@ -668,6 +791,8 @@
       "assistantGeneralManagerId": "user-agm-monitoring",
       "active": true
     },
+
+REGULATORY SERVICE
     {
       "id": "dept-regulatory",
       "name": "Regulatory Services",
@@ -676,6 +801,8 @@
       "assistantGeneralManagerId": "user-agm-regulatory",
       "active": true
     },
+
+SERVICOM
     {
       "id": "dept-servicom",
       "name": "SERVICOM",
@@ -684,6 +811,8 @@
       "assistantGeneralManagerId": "user-agm-servicom",
       "active": true
     },
+
+ABUJA LIAISON OFFICE
     {
       "id": "dept-abuja",
       "name": "Abuja Liaison Office",
@@ -692,15 +821,18 @@
       "assistantGeneralManagerId": "user-agm-abuja",
       "active": true
     },
+
+SEAVIEW PROPERTIES LTD
     {
       "id": "dept-seaview-properties",
       "name": "Seaview Properties Limited",
       "code": "SEAVIEW",
-      "divisionId": "div-liaison",
+      "divisionId": "div-seaview-properties",
       "assistantGeneralManagerId": "user-agm-seaview-properties",
       "active": true
     }
   ],
+
   "MOCK_USERS": [
     {
       "id": "user-md",

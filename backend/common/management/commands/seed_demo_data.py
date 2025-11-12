@@ -84,7 +84,31 @@ class Command(BaseCommand):
         data_path = Path(__file__).resolve().parents[3] / "scripts" / "organization_data.json"
         if not data_path.exists():
             raise FileNotFoundError("Expected organization_data.json to seed organization structure")
-        data = json.loads(data_path.read_text())
+        
+        # Read file content
+        content = data_path.read_text()
+        
+        # Strip section header comments (standalone lines like "MD", "ED F&A", etc.)
+        # These are organizational markers but not valid JSON
+        import re
+        lines = content.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # Skip lines that are just uppercase text (section headers)
+            # Pattern: standalone uppercase text, possibly with spaces, &, parentheses
+            if re.match(r'^[A-Z][A-Z\s&()]+$', stripped) and not any(c in stripped for c in ['{', '}', '[', ']', '"', ',', ':']):
+                continue  # Skip this comment line
+            cleaned_lines.append(line)
+        
+        cleaned_content = '\n'.join(cleaned_lines)
+        
+        # Ensure file starts with { if it doesn't
+        if not cleaned_content.strip().startswith('{'):
+            cleaned_content = '{' + cleaned_content
+        
+        # Parse JSON
+        data = json.loads(cleaned_content)
         return data
 
     def _reset_organization_units(self) -> None:
