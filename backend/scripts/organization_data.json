@@ -1,3 +1,4 @@
+{
   "DIRECTORATES": [
     {
       "id": "dir-md",
@@ -42,7 +43,6 @@
   ],
 "DIVISIONS": [
     
-MD
     {
       "id": "div-procurement",
       "name": "Procurement",
@@ -168,7 +168,7 @@ MD
 },
 
 
-ED F&A
+
     {
       "id": "div-erm",
       "name": "Enterprise Risk Management",
@@ -227,7 +227,6 @@ ED F&A
       "active": true
     },
 
-ED M&O
 
     {
       "id": "div-marine-ops",
@@ -294,7 +293,7 @@ ED M&O
       "active": true
 },
 
-ED E&TS
+
     {
       "id": "div-engineering",
       "name": "Engineering & Technical Services",
@@ -322,7 +321,7 @@ ED E&TS
   ],
 
   "DEPARTMENTS": [ 
-ENGINEERING 
+
     {
       "id": "dept-ports-eng",
       "name": "Ports Engineering",
@@ -357,7 +356,7 @@ ENGINEERING
       "active": true
     },
 
-LAND & ASSET ADMINISTRATION
+
     {
       "id": "dept-physical-planning-dev",
       "name": "Physical planning And Development",
@@ -375,7 +374,7 @@ LAND & ASSET ADMINISTRATION
       "active": true
     },
 
-MARINE
+
     {
       "id": "dept-harbours",
       "name": "Harbours",
@@ -401,7 +400,7 @@ MARINE
       "active": true
     },
 
-OPERATIONS
+
    {
       "id": "dept-operations",
       "name": "Operations",
@@ -411,7 +410,7 @@ OPERATIONS
       "active": true
     },
 
-TARIFF & BILLING 
+
     {
       "id": "dept-tariff",
       "name": "Tariff & Billing",
@@ -422,7 +421,7 @@ TARIFF & BILLING
     },
 
 
-HEALTH SAFETY & ENVIRONMENT
+
    {
       "id": "dept-environment",
       "name": "Environment",
@@ -448,7 +447,7 @@ HEALTH SAFETY & ENVIRONMENT
       "active": true
     },
 
-SECURITY
+
    {
       "id": "dept-security",
       "name": "Security",
@@ -458,7 +457,7 @@ SECURITY
       "active": true
     },
 
-HR
+
    {
       "id": "dept-hr-management",
       "name": "HR Management",
@@ -492,7 +491,7 @@ HR
       "active": true
     },
 
-FINANCE
+
     {
       "id": "dept-accounts",
       "name": "Accounts",
@@ -527,7 +526,7 @@ FINANCE
       "assistantGeneralManagerId": "user-agm-tax",
       "active": true
     },
-ADMINISTRATION 
+
     {
       "id": "dept-admin-general",
       "name": "Administration",
@@ -561,7 +560,7 @@ ADMINISTRATION
       "active": true
     },
 
-SUPERANNUATION & INVESTMENT
+
     {
       "id": "dept-superannuation",
       "name": "Superannuation",
@@ -580,7 +579,6 @@ SUPERANNUATION & INVESTMENT
     },
 
 
-MEDICAL SERVICES 
     {
       "id": "dept-medical",
       "name": "Medical Services",
@@ -622,7 +620,7 @@ MEDICAL SERVICES
       "active": true
     },
 
-PROCUREMENT 
+
     {
       "id": "dept-projects",
       "name": "Projects",
@@ -648,7 +646,7 @@ PROCUREMENT
       "active": true
     },
 
-CORPORATE AFFAIRS
+
        {
       "id": "dept-csc-csr",
       "name": "Corporate Social Responsibility",
@@ -666,7 +664,7 @@ CORPORATE AFFAIRS
       "active": true
     },
 
-C&SP
+
    {
       "id": "dept-csp-research",
       "name": "Research & Statistics",
@@ -684,7 +682,7 @@ C&SP
       "active": true
     },
 
-LEGAL SERVICES
+
    {
       "id": "dept-legal",
       "name": "Legal",
@@ -704,7 +702,6 @@ LEGAL SERVICES
 
 
 
-AUDIT
     {
       "id": "dept-audit-finance",
       "name": "Finance & Investment",
@@ -730,7 +727,7 @@ AUDIT
       "active": true
     },
 
-PUBLIC PRIVATE PARTNERSHIP (PPP)
+
    {
       "id": "dept-public-private-partnership",
       "name": "Public-Private Partnership",
@@ -748,7 +745,7 @@ PUBLIC PRIVATE PARTNERSHIP (PPP)
       "active": true
 },
 
-ICT
+
     {
       "id": "dept-ict-networks",
       "name": "Networks & Communication",
@@ -782,7 +779,7 @@ ICT
       "active": true
     },
 
-MONIRORING
+
     {
       "id": "dept-monitoring",
       "name": "Monitoring",
@@ -792,7 +789,7 @@ MONIRORING
       "active": true
     },
 
-REGULATORY SERVICE
+
     {
       "id": "dept-regulatory",
       "name": "Regulatory Services",
@@ -802,7 +799,7 @@ REGULATORY SERVICE
       "active": true
     },
 
-SERVICOM
+
     {
       "id": "dept-servicom",
       "name": "SERVICOM",
@@ -812,7 +809,7 @@ SERVICOM
       "active": true
     },
 
-ABUJA LIAISON OFFICE
+
     {
       "id": "dept-abuja",
       "name": "Abuja Liaison Office",
@@ -822,7 +819,7 @@ ABUJA LIAISON OFFICE
       "active": true
     },
 
-SEAVIEW PROPERTIES LTD
+
     {
       "id": "dept-seaview-properties",
       "name": "Seaview Properties Limited",
@@ -841,6 +838,7 @@ SEAVIEW PROPERTIES LTD
       "employeeId": "NPA001",
       "gradeLevel": "MDCS",
       "systemRole": "Managing Director",
+      "directorate": "dir-md",
       "active": true
     },
     {
@@ -849,8 +847,8 @@ SEAVIEW PROPERTIES LTD
       "email": "ed.ets@npa.gov.ng",
       "employeeId": "NPA002",
       "gradeLevel": "EDCS",
-      "division": "div-ict",
       "systemRole": "Executive Director",
+      "directorate": "dir-edets",
       "active": true
     },
     {
@@ -859,8 +857,8 @@ SEAVIEW PROPERTIES LTD
       "email": "ed.mo@npa.gov.ng",
       "employeeId": "NPA003",
       "gradeLevel": "EDCS",
-      "division": "div-marine-ops",
       "systemRole": "Executive Director",
+      "directorate": "dir-edmo",
       "active": true
     },
     {
@@ -869,8 +867,8 @@ SEAVIEW PROPERTIES LTD
       "email": "ed.fa@npa.gov.ng",
       "employeeId": "NPA004",
       "gradeLevel": "EDCS",
-      "division": "div-finance",
       "systemRole": "Executive Director",
+      "directorate": "dir-edfa",
       "active": true
     },
     {
