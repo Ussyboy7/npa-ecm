@@ -1112,6 +1112,96 @@
       "active": true
     },
     {
+      "id": "user-gm-superannuation-investment",
+      "name": "Mr. Adewale Ogunleye",
+      "email": "gm.superannuation.investment@npa.gov.ng",
+      "employeeId": "NPA034",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-S&I",
+      "active": true
+    },
+    {
+      "id": "user-gm-hydrographic",
+      "name": "Capt. James Okonkwo",
+      "email": "gm.hydrographic@npa.gov.ng",
+      "employeeId": "NPA035",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-hydrographic",
+      "active": true
+    },
+    {
+      "id": "user-gm-lands-assets-admin",
+      "name": "Engr. Michael Adebayo",
+      "email": "gm.lands.assets.admin@npa.gov.ng",
+      "employeeId": "NPA036",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-lands-assets-admin",
+      "active": true
+    },
+    {
+      "id": "user-gm-legal-services",
+      "name": "Barr. Grace Okafor",
+      "email": "gm.legal.services@npa.gov.ng",
+      "employeeId": "NPA037",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-legal-services",
+      "active": true
+    },
+    {
+      "id": "user-gm-marine-alt",
+      "name": "Capt. David Okafor",
+      "email": "gm.marine.alt@npa.gov.ng",
+      "employeeId": "NPA038",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-marine",
+      "active": true
+    },
+    {
+      "id": "user-gm-operations",
+      "name": "Mr. Segun Adeyemi",
+      "email": "gm.operations@npa.gov.ng",
+      "employeeId": "NPA039",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-operations",
+      "active": true
+    },
+    {
+      "id": "user-gm-ops",
+      "name": "Mr. Babatunde Lawal",
+      "email": "gm.ops@npa.gov.ng",
+      "employeeId": "NPA040",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-ops",
+      "active": true
+    },
+    {
+      "id": "user-gm-oversea-liaison",
+      "name": "Mrs. Comfort Eze",
+      "email": "gm.oversea.liaison@npa.gov.ng",
+      "employeeId": "NPA041",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-oversea",
+      "active": true
+    },
+    {
+      "id": "user-gm-seaview-properties",
+      "name": "Mr. Johnson Nwankwo",
+      "email": "gm.seaview.properties@npa.gov.ng",
+      "employeeId": "NPA042",
+      "gradeLevel": "MSS1",
+      "systemRole": "General Manager",
+      "division": "div-seaview-properties",
+      "active": true
+    },
+    {
       "id": "user-agm-software",
       "name": "Mrs. Chiamaka Eze",
       "email": "agm.software@npa.gov.ng",
@@ -1812,12 +1902,211 @@
       "active": true
     },
     {
+      "id": "user-agm-atons-vts",
+      "name": "Engr. Stephen Okafor",
+      "email": "agm.atons.vts@npa.gov.ng",
+      "employeeId": "NPA100",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-marine-ops",
+      "department": "dept-atons-vts",
+      "active": true
+    },
+    {
+      "id": "user-agm-bms",
+      "name": "Mrs. Patricia Nwosu",
+      "email": "agm.bms@npa.gov.ng",
+      "employeeId": "NPA101",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-procurement",
+      "department": "dept-bids-mgt-selection",
+      "active": true
+    },
+    {
+      "id": "user-agm-board-registry",
+      "name": "Barr. Ifeoma Okoro",
+      "email": "agm.board.registry@npa.gov.ng",
+      "employeeId": "NPA102",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-legal-services",
+      "department": "dept-board-registry",
+      "active": true
+    },
+    {
+      "id": "user-agm-budget",
+      "name": "Mr. Collins Uche",
+      "email": "agm.budget@npa.gov.ng",
+      "employeeId": "NPA103",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-finance",
+      "department": "dept-budget",
+      "active": true
+    },
+    {
+      "id": "user-agm-cr",
+      "name": "Mrs. Adunni Adeyemi",
+      "email": "agm.cr@npa.gov.ng",
+      "employeeId": "NPA104",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-procurement",
+      "department": "dept-compliance-records",
+      "active": true
+    },
+    {
+      "id": "user-agm-csc-pem",
+      "name": "Mrs. Folake Adebayo",
+      "email": "agm.csc.pem@npa.gov.ng",
+      "employeeId": "NPA105",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-csc",
+      "department": "dept-csc-pem",
+      "active": true
+    },
+    {
+      "id": "user-agm-fire-rescue",
+      "name": "Mr. Emmanuel Okafor",
+      "email": "agm.fire.rescue@npa.gov.ng",
+      "employeeId": "NPA106",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-hse",
+      "department": "dept-fire-rescue",
+      "active": true
+    },
+    {
+      "id": "user-agm-harbours",
+      "name": "Capt. Andrew Nwankwo",
+      "email": "agm.harbours@npa.gov.ng",
+      "employeeId": "NPA107",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-marine",
+      "department": "dept-harbours",
+      "active": true
+    },
+    {
+      "id": "user-agm-hr-ld",
+      "name": "Mrs. Blessing Okonkwo",
+      "email": "agm.hr.ld@npa.gov.ng",
+      "employeeId": "NPA108",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-hr",
+      "department": "dept-hr-learning-development",
+      "active": true
+    },
+    {
+      "id": "user-agm-hr-mgt",
+      "name": "Mr. Daniel Okafor",
+      "email": "agm.hr.mgt@npa.gov.ng",
+      "employeeId": "NPA109",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-hr",
+      "department": "dept-hr-management",
+      "active": true
+    },
+    {
+      "id": "user-agm-lands-assets",
+      "name": "Engr. Victoria Okoro",
+      "email": "agm.lands.assets@npa.gov.ng",
+      "employeeId": "NPA110",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-lands-assets",
+      "department": "dept-land-estate",
+      "active": true
+    },
+    {
+      "id": "user-agm-nbv",
+      "name": "Mr. Peter Adeyemi",
+      "email": "agm.nbv@npa.gov.ng",
+      "employeeId": "NPA111",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-ppp",
+      "department": "dept-new-business-venture",
+      "active": true
+    },
+    {
+      "id": "user-agm-nursing",
+      "name": "Mrs. Florence Nwosu",
+      "email": "agm.nursing@npa.gov.ng",
+      "employeeId": "NPA112",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-medical",
+      "department": "dept-nursing",
+      "active": true
+    },
+    {
+      "id": "user-agm-operations",
+      "name": "Mr. Joseph Okonkwo",
+      "email": "agm.operations@npa.gov.ng",
+      "employeeId": "NPA113",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-operations",
+      "department": "dept-operations",
+      "active": true
+    },
+    {
+      "id": "user-agm-ppd",
+      "name": "Engr. Comfort Eze",
+      "email": "agm.ppd@npa.gov.ng",
+      "employeeId": "NPA114",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-lands-assets-admin",
+      "department": "dept-physical-planning-dev",
+      "active": true
+    },
+    {
+      "id": "user-agm-projects",
+      "name": "Engr. Michael Okafor",
+      "email": "agm.projects@npa.gov.ng",
+      "employeeId": "NPA115",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-procurement",
+      "department": "dept-projects",
+      "active": true
+    },
+    {
+      "id": "user-agm-radiology",
+      "name": "Dr. Mary Okonkwo",
+      "email": "agm.radiology@npa.gov.ng",
+      "employeeId": "NPA116",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-medical",
+      "department": "dept-radiology",
+      "active": true
+    },
+    {
+      "id": "user-agm-seaview-properties",
+      "name": "Mr. Benjamin Adeyemi",
+      "email": "agm.seaview.properties@npa.gov.ng",
+      "employeeId": "NPA117",
+      "gradeLevel": "MSS2",
+      "systemRole": "Assistant General Manager",
+      "division": "div-seaview-properties",
+      "department": "dept-seaview-properties",
+      "active": true
+    },
+    {
       "id": "user-super-admin",
       "name": "Mr. Admin System",
       "email": "admin@npa.gov.ng",
       "employeeId": "NPA099",
       "gradeLevel": "MSS1",
       "systemRole": "Super Admin",
+      "directorate": "dir-md",
       "active": true
     }
   ],
