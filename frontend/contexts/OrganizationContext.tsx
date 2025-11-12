@@ -50,6 +50,14 @@ export interface Role {
   updatedAt?: string;
 }
 
+type CreateRoleInput = {
+  name: string;
+  description?: string;
+  isActive?: boolean;
+};
+
+type UpdateRoleInput = Partial<CreateRoleInput>;
+
 interface OrganizationContextType {
   directorates: Directorate[];
   divisions: Division[];
@@ -167,7 +175,7 @@ const mapApiUserToUser = (user: any): User => {
     email: user.email ?? '',
     employeeId: user.employee_id ?? '',
     gradeLevel: user.grade_level ?? '',
-    systemRole: user.system_role ? String(user.system_role) : undefined,
+    systemRole: user.system_role ? String(user.system_role) : '',
     directorate: normalizeId(user.directorate ?? user.directorate_id),
     division: normalizeId(user.division ?? user.division_id),
     department: normalizeId(user.department ?? user.department_id),

@@ -19,6 +19,7 @@ import {
 import { useOrganization, Role } from "@/contexts/OrganizationContext";
 import { RoleFormModal } from "@/components/admin/RoleFormModal";
 import { toast } from "@/hooks/use-toast";
+import { apiFetch } from "@/lib/api-client";
 
 const RolesManagementPage = () => {
   const { roles, users, refreshOrganizationData, deleteRole } = useOrganization();
