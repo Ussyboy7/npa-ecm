@@ -212,6 +212,27 @@ jobs:
       - name: Run Staging Tests
         run: |
           echo "🧪 Running staging environment tests"
+          
+          # Wait for services to be ready
+          echo '⏳ Waiting for services to be ready...'
+          max_attempts=30
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            if curl -sf http://localhost:4646/health > /dev/null 2>&1; then
+              echo "✅ Services are ready!"
+              break
+            fi
+            echo "Attempt $attempt/$max_attempts: Services not ready yet, waiting 5 seconds..."
+            sleep 5
+            attempt=$((attempt + 1))
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+            echo "❌ Services did not become ready in time"
+            docker compose -f docker-compose.stag.yml ps
+            exit 1
+          fi
 
           # Test API health through Nginx
           echo 'Testing API health...'
