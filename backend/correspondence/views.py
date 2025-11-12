@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -33,7 +34,15 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     ).prefetch_related(
         "linked_documents",
         "attachments",
-        "distribution",
+        Prefetch(
+            "distribution",
+            queryset=CorrespondenceDistribution.objects.select_related(
+                "directorate",
+                "division",
+                "department",
+                "added_by",
+            ),
+        ),
         "minutes",
     )
     serializer_class = CorrespondenceSerializer
@@ -83,6 +92,7 @@ class CorrespondenceAttachmentViewSet(viewsets.ModelViewSet):
 class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
     queryset = CorrespondenceDistribution.objects.select_related(
         "correspondence",
+        "directorate",
         "division",
         "department",
         "added_by",

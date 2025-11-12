@@ -47,9 +47,9 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
     division = serializers.PrimaryKeyRelatedField(queryset=Division.objects.all(), allow_null=True, required=False)
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
     added_by = UserSerializer(read_only=True)
-    directorate_name = serializers.CharField(source="directorate.name", read_only=True)
-    division_name = serializers.CharField(source="division.name", read_only=True)
-    department_name = serializers.CharField(source="department.name", read_only=True)
+    directorate_name = serializers.CharField(source="directorate.name", read_only=True, allow_null=True, required=False)
+    division_name = serializers.CharField(source="division.name", read_only=True, allow_null=True, required=False)
+    department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True, required=False)
     added_by_id = serializers.PrimaryKeyRelatedField(
         source="added_by",
         queryset=CorrespondenceDistribution._meta.get_field("added_by").remote_field.model.objects.all(),

@@ -55,13 +55,14 @@ interface OrganizationContextType {
   addDepartment: (department: CreateDepartmentInput) => Promise<Department>;
   updateDepartment: (id: string, updates: UpdateDepartmentInput) => Promise<Department | null>;
   deleteDepartment: (id: string) => Promise<Department | null>;
-  addAssignment: (assignment: Omit<AssistantAssignment, 'id'>) => void;
-  updateAssignment: (id: string, updates: Partial<AssistantAssignment>) => void;
-  deleteAssignment: (id: string) => void;
+  addAssignment: (assignment: Omit<AssistantAssignment, 'id'>) => Promise<AssistantAssignment>;
+  updateAssignment: (id: string, updates: Partial<AssistantAssignment>) => Promise<AssistantAssignment>;
+  deleteAssignment: (id: string) => Promise<void>;
   resetOrganizationData: () => void;
   refreshOrganizationData: () => Promise<void>;
   isSyncing: boolean;
   updateUser: (id: string, updates: UpdateUserInput) => Promise<User>;
+  addUser: (user: CreateUserInput) => Promise<User>;
 }
 
 type CreateDirectorateInput = {
@@ -93,6 +94,21 @@ type CreateDepartmentInput = {
 };
 
 type UpdateDepartmentInput = Partial<CreateDepartmentInput>;
+type CreateUserInput = {
+  username: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  systemRole?: string | null;
+  gradeLevel?: string | null;
+  directorateId?: string | null;
+  divisionId?: string | null;
+  departmentId?: string | null;
+  isActive?: boolean;
+  employeeId?: string | null;
+};
+
 type UpdateUserInput = {
   systemRole?: string | null;
   gradeLevel?: string | null;
@@ -430,6 +446,22 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       employee_id: input.employeeId === undefined ? undefined : input.employeeId ?? null,
     });
 
+  const buildCreateUserPayload = (input: CreateUserInput) =>
+    cleanPayload({
+      username: input.username,
+      email: input.email,
+      first_name: input.firstName,
+      last_name: input.lastName,
+      password: input.password,
+      system_role: input.systemRole,
+      grade_level: input.gradeLevel,
+      directorate: input.directorateId === undefined ? undefined : input.directorateId || null,
+      division: input.divisionId === undefined ? undefined : input.divisionId || null,
+      department: input.departmentId === undefined ? undefined : input.departmentId || null,
+      is_active: input.isActive !== undefined ? input.isActive : true,
+      employee_id: input.employeeId === undefined ? undefined : input.employeeId ?? null,
+    });
+
   const addDirectorate = async (directorate: CreateDirectorateInput) => {
     const payload = buildDirectoratePayload(directorate);
     const response = await apiFetch('/organization/directorates/', {
@@ -535,6 +567,17 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     return updated;
   };
 
+  const addUser = async (user: CreateUserInput) => {
+    const payload = buildCreateUserPayload(user);
+    const response = await apiFetch('/accounts/users/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const created = mapApiUserToUser(response);
+    applyUserUpdate(created);
+    return created;
+  };
+
   const updateUser = async (id: string, updates: UpdateUserInput) => {
     const payload = buildUserPayload(updates);
     if (Object.keys(payload).length === 0) {
@@ -555,16 +598,69 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     return updatedUser;
   };
 
-  const addAssignment = (assignment: Omit<AssistantAssignment, 'id'>) => {
-    const newAssignment: AssistantAssignment = { ...assignment, id: `assign-${Date.now()}` };
-    setAssistantAssignments((prev) => [...prev, newAssignment]);
+  const applyAssignmentUpdate = useCallback(
+    (assignment: AssistantAssignment) => {
+      setAssistantAssignments((prev) => {
+        const next = upsertById(prev, assignment);
+        return next;
+      });
+    },
+    []
+  );
+
+  const buildDelegationPayload = (assignment: Omit<AssistantAssignment, 'id'> | Partial<AssistantAssignment>) => {
+    const permissions = ('permissions' in assignment && assignment.permissions) ? assignment.permissions : [];
+    const type = 'type' in assignment ? assignment.type : undefined;
+    
+    // Determine can_approve from type or permissions
+    const canApprove = type === 'TA' || (Array.isArray(permissions) && permissions.includes('approve'));
+    const canMinute = Array.isArray(permissions) && (permissions.includes('minute') || permissions.includes('view'));
+    const canForward = Array.isArray(permissions) && (permissions.includes('forward') || permissions.includes('view'));
+
+    return cleanPayload({
+      principal_id: 'executiveId' in assignment ? assignment.executiveId : undefined,
+      assistant_id: 'assistantId' in assignment ? assignment.assistantId : undefined,
+      can_approve: canApprove,
+      can_minute: canMinute,
+      can_forward: canForward,
+      active: 'permissions' in assignment ? true : undefined, // Default to active for new assignments
+    });
   };
 
-  const updateAssignment = (id: string, updates: Partial<AssistantAssignment>) => {
-    setAssistantAssignments((prev) => prev.map((assign) => (assign.id === id ? { ...assign, ...updates } : assign)));
+  const addAssignment = async (assignment: Omit<AssistantAssignment, 'id'>) => {
+    const payload = buildDelegationPayload(assignment);
+    const response = await apiFetch('/correspondence/delegations/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const created = mapApiDelegation(response);
+    applyAssignmentUpdate(created);
+    return created;
   };
 
-  const deleteAssignment = (id: string) => {
+  const updateAssignment = async (id: string, updates: Partial<AssistantAssignment>) => {
+    const existing = assistantAssignments.find((a) => a.id === id);
+    if (!existing) {
+      throw new Error('Assignment not found');
+    }
+
+    const merged = { ...existing, ...updates };
+    const payload = buildDelegationPayload(merged);
+    
+    const response = await apiFetch(`/correspondence/delegations/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    const updated = mapApiDelegation(response);
+    applyAssignmentUpdate(updated);
+    return updated;
+  };
+
+  const deleteAssignment = async (id: string) => {
+    // Soft delete by setting active to false, or hard delete
+    await apiFetch(`/correspondence/delegations/${id}/`, {
+      method: 'DELETE',
+    });
     setAssistantAssignments((prev) => prev.filter((assign) => assign.id !== id));
   };
 
@@ -602,6 +698,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         refreshOrganizationData,
         isSyncing,
         updateUser,
+        addUser,
       }}
     >
       {children}

@@ -52,8 +52,8 @@ const EMPTY_VALUE = "__none";
 const GRADE_LEVEL_OPTIONS = GRADE_LEVELS.map((grade) => ({ code: grade.code, label: grade.name }));
 
 export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps) => {
-  const { directorates, divisions, departments, users, updateUser } = useOrganization();
-  const [formData, setFormData] = useState<FormState>(defaultState);
+  const { directorates, divisions, departments, users, updateUser, addUser } = useOrganization();
+  const [formData, setFormData] = useState<FormState & { username?: string; firstName?: string; lastName?: string; password?: string }>(defaultState);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -67,6 +67,15 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
         email: user.email ?? "",
         employeeId: user.employeeId ?? "",
         isActive: user.active ?? true,
+      });
+    } else if (!user && open) {
+      // Creating new user - reset to defaults
+      setFormData({
+        ...defaultState,
+        username: '',
+        firstName: '',
+        lastName: '',
+        password: '',
       });
     } else if (!open) {
       setFormData(defaultState);
@@ -103,29 +112,62 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!user) return;
 
     setIsSubmitting(true);
     try {
-      await updateUser(user.id, {
-        systemRole: formData.systemRole || null,
-        gradeLevel: formData.gradeLevel || null,
-        directorateId: formData.directorateId || null,
-        divisionId: formData.divisionId || null,
-        departmentId: formData.departmentId || null,
-        email: formData.email || user.email,
-        employeeId: formData.employeeId || null,
-        isActive: formData.isActive,
-      });
+      if (user) {
+        // Update existing user
+        await updateUser(user.id, {
+          systemRole: formData.systemRole || null,
+          gradeLevel: formData.gradeLevel || null,
+          directorateId: formData.directorateId || null,
+          divisionId: formData.divisionId || null,
+          departmentId: formData.departmentId || null,
+          email: formData.email || user.email,
+          employeeId: formData.employeeId || null,
+          isActive: formData.isActive,
+        });
 
-      toast({
-        title: "User updated",
-        description: `${selectedUserName || "The user"} has been updated successfully.`,
-      });
+        toast({
+          title: "User updated",
+          description: `${selectedUserName || "The user"} has been updated successfully.`,
+        });
+      } else {
+        // Create new user
+        if (!formData.username || !formData.email || !formData.firstName || !formData.lastName || !formData.password) {
+          toast({
+            title: "Error",
+            description: "Username, email, first name, last name, and password are required",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
+        await addUser({
+          username: formData.username,
+          email: formData.email,
+          firstName: formData.firstName!,
+          lastName: formData.lastName!,
+          password: formData.password!,
+          systemRole: formData.systemRole || null,
+          gradeLevel: formData.gradeLevel || null,
+          directorateId: formData.directorateId || null,
+          divisionId: formData.divisionId || null,
+          departmentId: formData.departmentId || null,
+          employeeId: formData.employeeId || null,
+          isActive: formData.isActive,
+        });
+
+        toast({
+          title: "User created",
+          description: `User ${formData.username} has been created successfully.`,
+        });
+      }
       onOpenChange(false);
     } catch (error) {
-      const description = error instanceof Error ? error.message : "Unable to update user";
-      toast({ title: "Update failed", description, variant: "destructive" });
+      const description = error instanceof Error ? error.message : (user ? "Unable to update user" : "Unable to create user");
+      toast({ title: user ? "Update failed" : "Creation failed", description, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -135,16 +177,16 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit User Access</DialogTitle>
+          <DialogTitle>{user ? 'Edit User Access' : 'Create New User'}</DialogTitle>
           <DialogDescription>
             {user
               ? `Update role, grade, and organizational placement for ${user.name}.`
-              : "Select a user to begin editing."}
+              : "Create a new user account with role, grade, and organizational placement."}
           </DialogDescription>
         </DialogHeader>
 
-        {user && (
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {user && (
             <div className="rounded-md border bg-muted/30 p-3 space-y-1">
               <p className="text-sm font-semibold text-foreground">{user.name}</p>
               <p className="text-xs text-muted-foreground">{user.email}</p>
@@ -152,6 +194,78 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                 {user.active ? "Active" : "Inactive"}
               </Badge>
             </div>
+          )}
+
+          {!user && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="username">Username *</Label>
+                <Input
+                  id="username"
+                  value={formData.username || ''}
+                  onChange={(event) =>
+                    setFormData((prev) => ({ ...prev, username: event.target.value }))
+                  }
+                  placeholder="username"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(event) =>
+                    setFormData((prev) => ({ ...prev, email: event.target.value }))
+                  }
+                  placeholder="user@npa.gov.ng"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name *</Label>
+                <Input
+                  id="firstName"
+                  value={formData.firstName || ''}
+                  onChange={(event) =>
+                    setFormData((prev) => ({ ...prev, firstName: event.target.value }))
+                  }
+                  placeholder="First name"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name *</Label>
+                <Input
+                  id="lastName"
+                  value={formData.lastName || ''}
+                  onChange={(event) =>
+                    setFormData((prev) => ({ ...prev, lastName: event.target.value }))
+                  }
+                  placeholder="Last name"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={formData.password || ''}
+                  onChange={(event) =>
+                    setFormData((prev) => ({ ...prev, password: event.target.value }))
+                  }
+                  placeholder="Set initial password"
+                  required
+                />
+              </div>
+            </div>
+          )}
 
             <div className="space-y-2">
               <Label htmlFor="systemRole">System Role</Label>
@@ -303,19 +417,20 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
               </Select>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(event) =>
-                    setFormData((prev) => ({ ...prev, email: event.target.value }))
-                  }
-                  placeholder="user@npa.gov.ng"
-                />
-              </div>
+            {user && (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(event) =>
+                      setFormData((prev) => ({ ...prev, email: event.target.value }))
+                    }
+                    placeholder="user@npa.gov.ng"
+                  />
+                </div>
 
               <div className="space-y-2">
                 <Label htmlFor="employeeId">Employee ID</Label>
@@ -329,17 +444,17 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                 />
               </div>
             </div>
+            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving…" : "Save changes"}
+                {isSubmitting ? (user ? "Saving…" : "Creating…") : (user ? "Save changes" : "Create user")}
               </Button>
             </DialogFooter>
           </form>
-        )}
       </DialogContent>
     </Dialog>
   );

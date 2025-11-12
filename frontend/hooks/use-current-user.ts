@@ -78,6 +78,8 @@ export const useCurrentUser = () => {
       systemRole: remoteUser.systemRole || orgMatch.systemRole,
       gradeLevel: remoteUser.gradeLevel || orgMatch.gradeLevel,
       active: orgMatch.active,
+      // Preserve isSuperuser from remoteUser (API) as it's the source of truth
+      isSuperuser: remoteUser.isSuperuser ?? orgMatch.isSuperuser ?? false,
     } satisfies User;
   }, [remoteUser, users]);
 

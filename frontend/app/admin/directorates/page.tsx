@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { DirectorateLeadershipDialog } from "@/components/admin/DirectorateLeadershipDialog";
+import { DirectorateFormModal } from "@/components/admin/DirectorateFormModal";
 import {
   Building2,
   Search,
   Users,
   Network,
   UserCircle2,
+  Plus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useOrganization, type Directorate as OrgDirectorate } from "@/contexts/OrganizationContext";
@@ -24,6 +26,7 @@ const DirectoratesManagement = () => {
   const [mounted, setMounted] = useState(false);
   const [selectedDirectorate, setSelectedDirectorate] = useState<OrgDirectorate | null>(null);
   const [leadershipDialogOpen, setLeadershipDialogOpen] = useState(false);
+  const [formModalOpen, setFormModalOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -85,7 +88,15 @@ const DirectoratesManagement = () => {
               Overview of NPA organizational structure: Managing Director Office, Executive Directorates, their divisions, and departments
             </p>
           </div>
-          <ContextualHelp
+          <div className="flex items-center gap-2">
+            <Button onClick={() => {
+              setSelectedDirectorate(null);
+              setFormModalOpen(true);
+            }} className="bg-gradient-primary">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Directorate
+            </Button>
+            <ContextualHelp
             title="Directorate hierarchy overview"
             description="Review each executive directorate, confirm leadership, and inspect the divisions and departments underneath before making organizational changes."
             steps={[
@@ -93,7 +104,8 @@ const DirectoratesManagement = () => {
               'Use Assign Leader to update executive responsibilities.',
               'Drill into a division to confirm general manager and department coverage.'
             ]}
-          />
+            />
+          </div>
         </div>
 
         <HelpGuideCard
@@ -312,6 +324,17 @@ const DirectoratesManagement = () => {
             }
           }}
           directorate={selectedDirectorate}
+        />
+
+        <DirectorateFormModal
+          open={formModalOpen}
+          onOpenChange={(open) => {
+            setFormModalOpen(open);
+            if (!open) {
+              setSelectedDirectorate(null);
+            }
+          }}
+          directorate={selectedDirectorate || undefined}
         />
       </div>
     </DashboardLayout>

@@ -49,13 +49,21 @@ export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const { currentUser, hydrated } = useCurrentUser();
-  const { users } = useOrganization();
+  const { users, isSyncing } = useOrganization();
 
   const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
   const effectiveUser = useMemo(() => {
+    // Always prefer currentUser if available and hydrated
+    if (hydrated && currentUser) return currentUser;
+    // Only fall back to activeUsers if currentUser is definitely not available
+    if (hydrated && !currentUser) return activeUsers[0] ?? null;
+    // While hydrating, return currentUser if it exists (even if not fully hydrated)
     if (currentUser) return currentUser;
-    return activeUsers[0] ?? null;
-  }, [currentUser, activeUsers]);
+    return null;
+  }, [currentUser, activeUsers, hydrated]);
+  
+  // Calculate permissions - use effectiveUser even while syncing to prevent flashing
+  // The permission calculation will handle missing data gracefully
   const permissions = useUserPermissions(effectiveUser ?? undefined);
 
   const isActive = (path: string) => pathname === path;

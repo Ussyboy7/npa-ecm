@@ -92,7 +92,8 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
 
   profile.canRegisterCorrespondence = canRegisterByGrade;
 
-  if (isAssistantManager || managementGrades) {
+  // Disallow registration for AssistantManager and management grades, but allow superadmin
+  if (!isSuperAdmin && (isAssistantManager || managementGrades)) {
     profile.canRegisterCorrespondence = false;
   }
 

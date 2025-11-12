@@ -133,6 +133,16 @@ const scopedTemplates = useMemo(() => {
     }
   }, [activeScope, departments, directorates, divisions, personalTemplateUsers]);
 
+  useEffect(() => {
+    if (activeScope === 'organization') {
+      setSelectedScopeId(null);
+      return;
+    }
+    if (!selectedScopeId && scopeOptions.length > 0) {
+      setSelectedScopeId(scopeOptions[0].id);
+    }
+  }, [activeScope, scopeOptions, selectedScopeId]);
+
   if (!userHydrated || isSyncing) {
     return (
       <DashboardLayout>
@@ -160,16 +170,6 @@ const scopedTemplates = useMemo(() => {
       </DashboardLayout>
     );
   }
-
-  useEffect(() => {
-    if (activeScope === 'organization') {
-      setSelectedScopeId(null);
-      return;
-    }
-    if (!selectedScopeId && scopeOptions.length > 0) {
-      setSelectedScopeId(scopeOptions[0].id);
-    }
-  }, [activeScope, scopeOptions, selectedScopeId]);
 
   const handleTemplateSelect = (templateId: string) => {
     const template = templates.find((item) => item.id === templateId);

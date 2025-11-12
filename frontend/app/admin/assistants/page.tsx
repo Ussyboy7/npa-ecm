@@ -100,12 +100,17 @@ const AssistantsManagement = () => {
     setRemoveDialogOpen(true);
   };
 
-  const confirmRemove = () => {
+  const confirmRemove = async () => {
     if (assignmentToRemove) {
-      deleteAssignment(assignmentToRemove);
-      toast({ title: "Success", description: "Assistant removed successfully" });
-      setRemoveDialogOpen(false);
-      setAssignmentToRemove('');
+      try {
+        await deleteAssignment(assignmentToRemove);
+        toast({ title: "Success", description: "Assistant removed successfully" });
+        setRemoveDialogOpen(false);
+        setAssignmentToRemove('');
+      } catch (error) {
+        const description = error instanceof Error ? error.message : 'Unable to remove assistant';
+        toast({ title: 'Request failed', description, variant: 'destructive' });
+      }
     }
   };
 

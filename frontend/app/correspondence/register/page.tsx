@@ -36,7 +36,24 @@ import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 
-const generateReferenceNumber = () => `NPA/REG/${new Date().getFullYear()}/${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+// Generate a random UUID-like string (fallback for browsers without crypto.randomUUID)
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback: generate a UUID v4-like string
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+const generateReferenceNumber = () => {
+  const uuid = generateUUID();
+  const shortId = uuid.replace(/-/g, '').slice(0, 8).toUpperCase();
+  return `NPA/REG/${new Date().getFullYear()}/${shortId}`;
+};
 
 const CorrespondenceRegister = () => {
   const router = useRouter();
@@ -62,8 +79,9 @@ const CorrespondenceRegister = () => {
   const [assignSearch, setAssignSearch] = useState('');
 
   const executives = useMemo(() => {
+    if (!Array.isArray(organizationUsers)) return [];
     const eligibleGrades = new Set(['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3', 'MSS4']);
-    return organizationUsers.filter((user) => eligibleGrades.has(user.gradeLevel));
+    return organizationUsers.filter((user) => user && user.gradeLevel && eligibleGrades.has(user.gradeLevel));
   }, [organizationUsers]);
 
   const filteredExecutives = useMemo(() => {
@@ -447,10 +465,13 @@ const CorrespondenceRegister = () => {
                       <SelectItem value={ASSIGN_PLACEHOLDER} disabled>
                         Select executive
                       </SelectItem>
-                      {directorates.map((dir) => {
-                        const dirDivisions = divisions.filter((div) => div.directorateId === dir.id);
+                      {Array.isArray(directorates) && directorates.map((dir) => {
+                        if (!dir || !dir.id) return null;
+                        const dirDivisions = Array.isArray(divisions) 
+                          ? divisions.filter((div) => div && div.directorateId === dir.id)
+                          : [];
                         const dirUsers = filteredExecutives.filter((user) =>
-                          dirDivisions.some((div) => div.id === user.division),
+                          user && user.division && dirDivisions.some((div) => div && div.id === user.division),
                         );
                         if (dirUsers.length === 0) return null;
                         return (
@@ -459,17 +480,20 @@ const CorrespondenceRegister = () => {
                               {dir.name}
                             </div>
                             {dirUsers.map((user) => {
-                              const division = divisions.find((div) => div.id === user.division);
+                              if (!user || !user.id) return null;
+                              const division = Array.isArray(divisions) 
+                                ? divisions.find((div) => div && div.id === user.division)
+                                : undefined;
                               return (
                                 <SelectItem
                                   key={user.id}
                                   value={user.id}
                                   className="flex flex-col items-start gap-1 px-3 py-2"
                                 >
-                                  <span className="font-medium">{user.name}</span>
+                                  <span className="font-medium">{user.name || 'Unknown'}</span>
                                   <span className="text-xs text-muted-foreground">
-                                    {user.systemRole} • {user.gradeLevel}
-                                    {division ? ` • ${division.name}` : ''}
+                                    {[user.systemRole, user.gradeLevel].filter(Boolean).join(' • ')}
+                                    {division && division.name ? ` • ${division.name}` : ''}
                                   </span>
                                 </SelectItem>
                               );
@@ -550,13 +574,13 @@ const CorrespondenceRegister = () => {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Assigned to:</span>
                       <span className="font-medium">
-                        {executives.find(u => u.id === formData.assignTo)?.name}
+                        {Array.isArray(executives) ? executives.find(u => u && u.id === formData.assignTo)?.name : ''}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Division:</span>
                       <span className="font-medium">
-                        {divisions.find(d => d.id === formData.divisionId)?.name}
+                        {Array.isArray(divisions) ? divisions.find(d => d && d.id === formData.divisionId)?.name : ''}
                       </span>
                     </div>
                   </div>

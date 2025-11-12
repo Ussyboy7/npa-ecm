@@ -67,7 +67,9 @@ export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assi
     return base.sort((a, b) => a.name.localeCompare(b.name));
   }, [users, executiveId, assignedAssistantIds, assignment]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.assistantId) {
@@ -91,15 +93,22 @@ export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assi
       return;
     }
 
-    if (assignment) {
-      updateAssignment(assignment.id, { ...formData });
-      toast({ title: "Success", description: "Assignment updated successfully" });
-    } else {
-      addAssignment({ executiveId, ...formData });
-      toast({ title: "Success", description: "Assistant assigned successfully" });
+    setIsSubmitting(true);
+    try {
+      if (assignment) {
+        await updateAssignment(assignment.id, { ...formData });
+        toast({ title: "Success", description: "Assignment updated successfully" });
+      } else {
+        await addAssignment({ executiveId, ...formData });
+        toast({ title: "Success", description: "Assistant assigned successfully" });
+      }
+      onOpenChange(false);
+    } catch (error) {
+      const description = error instanceof Error ? error.message : (assignment ? 'Unable to update assignment' : 'Unable to create assignment');
+      toast({ title: 'Request failed', description, variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    onOpenChange(false);
   };
 
   const togglePermission = (permissionId: string) => {
@@ -176,8 +185,10 @@ export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assi
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit">{assignment ? 'Update' : 'Assign'}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (assignment ? 'Updating…' : 'Assigning…') : (assignment ? 'Update' : 'Assign')}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

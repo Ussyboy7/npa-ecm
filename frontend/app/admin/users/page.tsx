@@ -17,6 +17,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Plus,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
@@ -157,6 +158,13 @@ const UserManagementPage = () => {
               View key users across the NPA organizational structure and their assignments.
             </p>
           </div>
+          <Button onClick={() => {
+            setSelectedUser(null);
+            setEditOpen(true);
+          }} className="bg-gradient-primary">
+            <Plus className="h-4 w-4 mr-2" />
+            Create User
+          </Button>
         </div>
 
         <HelpGuideCard
