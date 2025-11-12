@@ -195,12 +195,13 @@ jobs:
           # Use sudo since directories were created by Docker containers
           sudo rm -rf backend/media/correspondence_attachments 2>/dev/null || true
           sudo rm -rf backend/media 2>/dev/null || true
-          # Ensure media directory exists with correct permissions
-          mkdir -p backend/media
-          # Sync code
+          # Sync code first (before recreating media directory)
           git fetch --all --prune
           git reset --hard origin/main
           git clean -fd
+          # Ensure media directory exists with correct permissions (owned by current user)
+          mkdir -p backend/media
+          chmod 755 backend/media || true
 
           echo '🧹 Cleaning up unused images...'
           docker image prune -f
