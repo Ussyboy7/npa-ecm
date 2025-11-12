@@ -143,6 +143,7 @@ const mapApiUserToUser = (user: any): User => {
     systemRole: user.system_role ?? '',
     avatar: undefined,
     active: user.is_active ?? true,
+    isSuperuser: user.is_superuser ?? false,
   };
 };
 

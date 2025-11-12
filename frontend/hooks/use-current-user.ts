@@ -25,6 +25,7 @@ const mapApiUserToUser = (data: any): User => {
     systemRole: data.system_role ?? "",
     avatar: undefined,
     active: data.is_active ?? true,
+    isSuperuser: data.is_superuser ?? false,
   };
 };
 

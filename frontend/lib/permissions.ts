@@ -38,7 +38,7 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
   const grade = user.gradeLevel;
   const role = user.systemRole;
 
-  const isSuperAdmin = role === "Super Admin";
+  const isSuperAdmin = user.isSuperuser || role === "Super Admin";
   const isMD = grade === "MDCS";
   const isED = grade === "EDCS";
   const isGM = grade === "MSS1";

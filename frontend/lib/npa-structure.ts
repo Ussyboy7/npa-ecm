@@ -144,6 +144,7 @@ export type User = {
   avatar?: string;
   active: boolean;
   username?: string;
+  isSuperuser?: boolean;
 };
 
 export const GRADE_LEVELS: GradeLevel[] = [
