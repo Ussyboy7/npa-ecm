@@ -58,8 +58,10 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
 
   useEffect(() => {
     if (user && open) {
+      // Find role ID from role name (user.systemRole is the name, but form needs ID)
+      const roleId = roles.find((r) => r.name === user.systemRole)?.id ?? "";
       setFormData({
-        systemRole: user.systemRole ?? "",
+        systemRole: roleId, // Store role ID for form submission
         gradeLevel: user.gradeLevel ?? "",
         directorateId: user.directorate ?? "",
         divisionId: user.division ?? "",
@@ -80,7 +82,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
     } else if (!open) {
       setFormData(defaultState);
     }
-  }, [user, open]);
+  }, [user, open, roles]);
 
   const roleOptions = useMemo(() => {
     return roles.map((role) => ({

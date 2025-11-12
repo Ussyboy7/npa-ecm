@@ -168,6 +168,9 @@ const normalizeId = (value: unknown): string | undefined => {
 
 const mapApiUserToUser = (user: any): User => {
   const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim();
+  // system_role is now a ForeignKey (UUID), but we need the name for display
+  // Backend returns system_role_name for the role name
+  const roleName = user.system_role_name ?? (user.system_role?.name ?? '');
   return {
     id: String(user.id ?? user.username),
     username: user.username ?? undefined,
@@ -175,7 +178,7 @@ const mapApiUserToUser = (user: any): User => {
     email: user.email ?? '',
     employeeId: user.employee_id ?? '',
     gradeLevel: user.grade_level ?? '',
-    systemRole: user.system_role ? String(user.system_role) : '',
+    systemRole: roleName, // Use role name for display, but store ID internally if needed
     directorate: normalizeId(user.directorate ?? user.directorate_id),
     division: normalizeId(user.division ?? user.division_id),
     department: normalizeId(user.department ?? user.department_id),

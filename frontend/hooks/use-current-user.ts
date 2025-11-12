@@ -12,6 +12,8 @@ const toOptionalString = (value: unknown): string | undefined => {
 
 const mapApiUserToUser = (data: any): User => {
   const name = `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim();
+  // system_role is now a ForeignKey (UUID), but backend returns system_role_name for display
+  const roleName = data.system_role_name ?? (data.system_role?.name ?? "");
   return {
     id: String(data.id ?? data.username),
     username: data.username ?? undefined,
@@ -22,7 +24,7 @@ const mapApiUserToUser = (data: any): User => {
     directorate: toOptionalString(data.directorate ?? data.directorate_id),
     division: toOptionalString(data.division ?? data.division_id),
     department: toOptionalString(data.department ?? data.department_id),
-    systemRole: data.system_role ?? "",
+    systemRole: roleName, // Use role name for display
     avatar: undefined,
     active: data.is_active ?? true,
     isSuperuser: data.is_superuser ?? false,
