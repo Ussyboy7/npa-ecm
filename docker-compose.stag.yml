@@ -85,6 +85,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.stag
+      args:
+        NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
+        NEXT_PUBLIC_ENVIRONMENT: staging
     container_name: ecm-frontend-stag
     environment:
       NEXT_PUBLIC_API_URL: http://172.16.0.46:4646/api
