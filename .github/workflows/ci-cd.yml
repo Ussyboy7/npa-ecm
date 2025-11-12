@@ -189,15 +189,15 @@ jobs:
           cd /srv/npa-ecm
 
           echo '📥 Syncing latest code...'
-          # Clean up media directories that may have permission issues
-          sudo rm -rf backend/media/correspondence_attachments/* 2>/dev/null || true
-          sudo rm -rf backend/media/* 2>/dev/null || true
+          # Stop containers first to release file locks
+          docker compose -f docker-compose.stag.yml down || true
+          # Clean up media directories that may have permission issues (created by containers)
+          rm -rf backend/media/correspondence_attachments/* 2>/dev/null || true
+          rm -rf backend/media/* 2>/dev/null || true
+          # Sync code
           git fetch --all --prune
           git reset --hard origin/main
           git clean -fd
-
-          echo '🛑 Stopping existing containers...'
-          docker compose -f docker-compose.stag.yml down || true
 
           echo '🧹 Cleaning up unused images...'
           docker image prune -f
