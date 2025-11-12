@@ -72,7 +72,7 @@ const CorrespondenceRegister = () => {
     return executives.filter((user) =>
       [user.name, user.systemRole, user.email]
         .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(query)),
+        .some((value) => value && typeof value === 'string' && value.toLowerCase().includes(query)),
     );
   }, [executives, assignSearch]);
 
