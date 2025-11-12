@@ -213,6 +213,9 @@ jobs:
         run: |
           echo "🧪 Running staging environment tests"
           
+          # Navigate to project directory
+          cd /srv/npa-ecm
+          
           # Wait for services to be ready
           echo '⏳ Waiting for services to be ready...'
           max_attempts=30
@@ -231,6 +234,7 @@ jobs:
           if [ $attempt -gt $max_attempts ]; then
             echo "❌ Services did not become ready in time"
             docker compose -f docker-compose.stag.yml ps
+            docker compose -f docker-compose.stag.yml logs --tail=50 nginx_stag
             exit 1
           fi
 
