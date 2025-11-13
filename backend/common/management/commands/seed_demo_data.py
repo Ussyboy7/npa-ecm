@@ -150,8 +150,31 @@ class Command(BaseCommand):
 
         for department_data in data.get("DEPARTMENTS", []):
             division = division_map.get(department_data.get("divisionId"))
-            if not division:
+            
+            # Handle departments directly under directorate (no division)
+            if not division and department_data.get("directorateId"):
+                directorate = directorate_map.get(department_data.get("directorateId"))
+                if directorate:
+                    # Create or get a placeholder division for direct-report departments
+                    placeholder_name = f"{directorate.name} - Direct Reports"
+                    placeholder_code = f"{directorate.code}_DIRECT"
+                    division, _ = Division.objects.get_or_create(
+                        code=placeholder_code,
+                        directorate=directorate,
+                        defaults={
+                            "name": placeholder_name,
+                            "is_active": True,
+                        },
+                    )
+                    # Add to division_map to avoid recreating for other departments
+                    placeholder_key = f"placeholder-{directorate.code}"
+                    if placeholder_key not in division_map:
+                        division_map[placeholder_key] = division
+                else:
+                    continue
+            elif not division:
                 continue
+                
             department, _ = Department.objects.update_or_create(
                 code=department_data.get("code", ""),
                 division=division,
