@@ -60,8 +60,8 @@ export const DocumentCommentsDialog = ({
         const ordered = [...results].sort(
           (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
         );
-        setComments(ordered);
-        onCommentsUpdated?.(ordered);
+    setComments(ordered);
+    onCommentsUpdated?.(ordered);
       } catch (error) {
         console.error('Failed to load document comments', error);
         setComments([]);
@@ -105,13 +105,13 @@ export const DocumentCommentsDialog = ({
   const handleResolveToggle = async (commentId: string, resolved: boolean) => {
     try {
       const updated = await resolveDocumentComment(commentId, resolved);
-      if (!updated) return;
-      setComments((prev) => {
-        const next = prev.map((item) => (item.id === commentId ? updated : item));
-        onCommentsUpdated?.(next);
-        return next;
-      });
-      toast.success(resolved ? 'Comment marked as resolved' : 'Comment re-opened');
+    if (!updated) return;
+    setComments((prev) => {
+      const next = prev.map((item) => (item.id === commentId ? updated : item));
+      onCommentsUpdated?.(next);
+      return next;
+    });
+    toast.success(resolved ? 'Comment marked as resolved' : 'Comment re-opened');
     } catch (error) {
       console.error('Failed to toggle comment resolution', error);
       toast.error('Unable to update comment status');
@@ -121,12 +121,12 @@ export const DocumentCommentsDialog = ({
   const handleDelete = async (commentId: string) => {
     try {
       await deleteDocumentComment(commentId);
-      setComments((prev) => {
-        const next = prev.filter((item) => item.id !== commentId && item.parentId !== commentId);
-        onCommentsUpdated?.(next);
-        return next;
-      });
-      toast.success('Comment removed');
+    setComments((prev) => {
+      const next = prev.filter((item) => item.id !== commentId && item.parentId !== commentId);
+      onCommentsUpdated?.(next);
+      return next;
+    });
+    toast.success('Comment removed');
     } catch (error) {
       console.error('Failed to delete comment', error);
       toast.error('Unable to delete comment');

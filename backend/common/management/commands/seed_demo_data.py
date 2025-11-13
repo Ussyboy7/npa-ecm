@@ -231,6 +231,13 @@ class Command(BaseCommand):
         if created or not superadmin.has_usable_password():
             superadmin.set_password("ChangeMe123!")
             superadmin.save(update_fields=["password"])
+        # Assign superadmin to MD's directorate
+        directorate_md = directorates.get("dir-md")
+        if directorate_md:
+            superadmin.directorate = directorate_md
+            superadmin.division = None
+            superadmin.department = None
+            superadmin.save(update_fields=["directorate", "division", "department"])
         created_users["superadmin"] = superadmin
 
         # Apply organizational placement

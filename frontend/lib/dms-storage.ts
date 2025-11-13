@@ -259,13 +259,13 @@ const buildDocumentPayload = (input: CreateDocumentInput) => {
 
 const buildVersionPayload = (documentId: string, version: CreateDocumentVersionInput) => {
   const payload: Record<string, unknown> = {
-    document: documentId,
-    file_name: version.fileName,
-    file_type: version.fileType,
-    file_size: version.fileSize,
-    content_html: version.contentHtml ?? '',
-    content_json: version.contentJson ?? null,
-    notes: version.notes ?? '',
+  document: documentId,
+  file_name: version.fileName,
+  file_type: version.fileType,
+  file_size: version.fileSize,
+  content_html: version.contentHtml ?? '',
+  content_json: version.contentJson ?? null,
+  notes: version.notes ?? '',
     file_url: '', // Default to empty, only set if it's a valid short URL
   };
 
@@ -308,9 +308,9 @@ export const createDocument = async (
   const versionPayload = buildVersionPayload(document.id, versionInput);
   try {
     await apiFetch('/dms/versions/', {
-      method: 'POST',
-      body: JSON.stringify(versionPayload),
-    });
+    method: 'POST',
+    body: JSON.stringify(versionPayload),
+  });
   } catch (error) {
     console.error('Failed to create document version:', error);
     throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -330,9 +330,9 @@ export const createDocumentVersion = async (
   const versionPayload = buildVersionPayload(documentId, versionInput);
   try {
     await apiFetch('/dms/versions/', {
-      method: 'POST',
-      body: JSON.stringify(versionPayload),
-    });
+    method: 'POST',
+    body: JSON.stringify(versionPayload),
+  });
   } catch (error) {
     console.error('Failed to create document version:', error);
     throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : 'Unknown error'}`);

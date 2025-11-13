@@ -31,14 +31,6 @@
       "executiveDirector": "Executive Director, Engineering & Technical Services",
       "executiveDirectorId": "user-ed-ets",
       "active": true
-    },
-    {
-      "id": "dir-oversea-liaison",
-      "name": "Oversea Liaison Office",
-      "code": "OVERSEA_LIAISON",
-      "executiveDirector": "Oversea Liaison Director",
-      "executiveDirectorId": "user-ed-oversea-liaison",
-      "active": true
     }
   ],
 "DIVISIONS": [
@@ -93,14 +85,6 @@
       "active": true
     },
     {
-      "id": "div-legal-services",
-      "name": "Legal Services (Registry)",
-      "code": "LEGAL_SERVICES",
-      "directorateId": "dir-md",
-      "generalManagerId": "user-gm-legal-services",
-      "active": true
-    },
-    {
       "id": "div-monitoring",
       "name": "Monitoring",
       "code": "MONITORING",
@@ -117,9 +101,9 @@
       "active": true
 },
     {
-      "id": "div-liaison",
-      "name": "Administrative Support & Liaison Offices",
-      "code": "LIAISON",
+      "id": "div-abuja",
+      "name": "Abuja Liaison Office",
+      "code": "ABUJA",
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-liaison",
       "active": true
@@ -129,17 +113,25 @@
       "id": "div-oversea",
       "name": "Oversea Liaison Office",
       "code": "OVERSEA",
-      "directorateId": "dir-oversea-liaison",
+      "directorateId": "dir-md",
       "generalManagerId": "user-gm-oversea-liaison",
       "active": true
     },
 
     {
       "id": "div-special-duties",
-      "name": "Special Duties / Executive Support",
+      "name": "Special Duties",
       "code": "SPECIAL_DUTIES",
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-special-duties",
+      "active": true
+    },
+    {
+      "id": "div-gm-md-office",
+      "name": "GM MD's Office",
+      "code": "GM_MD_OFFICE",
+      "directorateId": "dir-md",
+      "generalManagerId": "user-gm-md-office",
       "active": true
     },
     {
@@ -154,7 +146,7 @@
       "id": "div-regulatory",
       "name": "Regulatory Services",
       "code": "REGULATORY",
-      "directorateId": "dir-edmo",
+      "directorateId": "dir-md",
       "generalManagerId": "user-gm-regulatory",
       "active": true
     },
@@ -162,21 +154,13 @@
       "id": "div-ppp",
       "name": "Public-Private Partnership",
       "code": "PPP",
-      "directorateId": "dir-edmo",
+      "directorateId": "dir-md",
       "generalManagerId": "user-gm-ppp",
       "active": true
-},
-
-
-
-    {
-      "id": "div-erm",
-      "name": "Enterprise Risk Management",
-      "code": "ERM",
-      "directorateId": "dir-edfa",
-      "generalManagerId": "user-gm-erm",
-      "active": true
     },
+
+
+
     {
       "id": "div-hr",
       "name": "Human Resources",
@@ -195,8 +179,8 @@
     },
     {
       "id": "div-admin",
-      "name": "GM Administration",
-      "code": "GM_ADMIN",
+      "name": "Administration",
+      "code": "ADMIN",
       "directorateId": "dir-edfa",
       "generalManagerId": "user-gm-admin",
       "active": true
@@ -211,14 +195,6 @@
 },
 
     {
-      "id": "div-superannuation",
-      "name": "Superannuation",
-      "code": "SUPERANNUATION",
-      "directorateId": "dir-edfa",
-      "generalManagerId": "user-gm-superannuation",
-      "active": true
-    },
-    {
       "id": "div-S&I",
       "name": "Superannuation & Investment",
       "code": "S&I",
@@ -229,14 +205,6 @@
 
 
     {
-      "id": "div-marine-ops",
-      "name": "Marine & Operations",
-      "code": "MARINE_OPS",
-      "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-marine",
-      "active": true
-    },
-    {
       "id": "div-marine",
       "name": "Marine",
       "code": "MARINE",
@@ -245,27 +213,11 @@
       "active": true
     },
     {
-      "id": "div-ops",
-      "name": "Operations",
-      "code": "OPS",
-      "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-ops",
-      "active": true
-    },
-    {
       "id": "div-operations",
       "name": "Operations",
       "code": "OPERATIONS",
       "directorateId": "dir-edmo",
       "generalManagerId": "user-gm-operations",
-      "active": true
-    },
-    {
-      "id": "div-hydrographic",
-      "name": "Hydrographic",
-      "code": "HYDROGRAPHIC",
-      "directorateId": "dir-edmo",
-      "generalManagerId": "user-gm-hydrographic",
       "active": true
     },
     {
@@ -309,14 +261,6 @@
       "directorateId": "dir-edets",
       "generalManagerId": "user-gm-lands-assets",
       "active": true
-    },
-    {
-      "id": "div-lands-assets-admin",
-      "name": "Lands & Assets Administration (Planning & Development)",
-      "code": "LANDS_ASSETS_ADMIN",
-      "directorateId": "dir-edets",
-      "generalManagerId": "user-gm-lands-assets-admin",
-      "active": true
     }
   ],
 
@@ -342,7 +286,7 @@
       "id": "dept-hydrographic",
       "name": "Hydrographic",
       "code": "HYDROGRAPHIC",
-      "divisionId": "div-hydrographic",
+      "divisionId": "div-engineering",
       "assistantGeneralManagerId": "user-agm-hydrographic",
       "active": true
     },
@@ -359,9 +303,9 @@
 
     {
       "id": "dept-physical-planning-dev",
-      "name": "Physical planning And Development",
+      "name": "Physical Planning & Development",
       "code": "PPD",
-      "divisionId": "div-lands-assets-admin",
+      "divisionId": "div-lands-assets",
       "assistantGeneralManagerId": "user-agm-ppd",
       "active": true
     },
@@ -387,15 +331,15 @@
       "id": "dept-vessel",
       "name": "Vessel Management",
       "code": "VESSEL",
-      "divisionId": "div-marine-ops",
+      "divisionId": "div-marine",
       "assistantGeneralManagerId": "user-agm-vessel",
       "active": true
     },
     {
       "id": "dept-atons-vts",
-      "name": "Aids to Navigations & Vessel Traffic System",
+      "name": "Aids to Navigation & Vessel Traffic System",
       "code": "ATONS_VTS",
-      "divisionId": "div-marine-ops",
+      "divisionId": "div-marine",
       "assistantGeneralManagerId": "user-agm-atons-vts",
       "active": true
     },
@@ -552,11 +496,12 @@
       "active": true
     },
     {
-      "id": "dept-admin-risk",
-      "name": "Risk Management",
-      "code": "ADMIN_RISK",
-      "divisionId": "div-admin",
-      "assistantGeneralManagerId": "user-agm-admin-risk",
+      "id": "dept-erm",
+      "name": "Enterprise Risk Management",
+      "code": "ERM",
+      "directorateId": "dir-edfa",
+      "divisionId": null,
+      "assistantGeneralManagerId": "user-agm-erm",
       "active": true
     },
 
@@ -565,7 +510,7 @@
       "id": "dept-superannuation",
       "name": "Superannuation",
       "code": "SUPERANNUATION",
-      "divisionId": "div-superannuation",
+      "divisionId": "div-S&I",
       "assistantGeneralManagerId": "user-agm-superannuation",
       "active": true
     },
@@ -683,19 +628,19 @@
     },
 
 
-   {
+    {
       "id": "dept-legal",
-      "name": "Legal",
+      "name": "Legal Services",
       "code": "LEGAL",
-      "divisionId": "div-legal-services",
+      "divisionId": "div-legal",
       "assistantGeneralManagerId": "user-agm-legal",
       "active": true
     },
    {
       "id": "dept-board-registry",
-      "name": "Board Registry",
-      "code": "BOARD_REGISTRY",
-      "divisionId": "div-legal-services",
+      "name": "Board Secretary",
+      "code": "BOARD_SECRETARY",
+      "divisionId": "div-legal",
       "assistantGeneralManagerId": "user-agm-board-registry",
       "active": true
     },
@@ -712,7 +657,7 @@
     },
     {
       "id": "dept-audit-systems",
-      "name": "Systems / ICT",
+      "name": "System & ICT",
       "code": "AUDIT_SYSTEMS",
       "divisionId": "div-audit",
       "assistantGeneralManagerId": "user-agm-audit-systems",
@@ -814,7 +759,7 @@
       "id": "dept-abuja",
       "name": "Abuja Liaison Office",
       "code": "ABUJA",
-      "divisionId": "div-liaison",
+      "divisionId": "div-abuja",
       "assistantGeneralManagerId": "user-agm-abuja",
       "active": true
     },
@@ -887,7 +832,7 @@
       "email": "gm.marine@npa.gov.ng",
       "employeeId": "NPA011",
       "gradeLevel": "MSS1",
-      "division": "div-marine-ops",
+      "division": "div-marine",
       "systemRole": "General Manager",
       "active": true
     },
@@ -1087,7 +1032,7 @@
       "email": "gm.superannuation@npa.gov.ng",
       "employeeId": "NPA031",
       "gradeLevel": "MSS1",
-      "division": "div-superannuation",
+      "division": "div-S&I",
       "systemRole": "General Manager",
       "active": true
     },
@@ -1097,7 +1042,17 @@
       "email": "gm.liaison@npa.gov.ng",
       "employeeId": "NPA032",
       "gradeLevel": "MSS1",
-      "division": "div-liaison",
+      "division": "div-abuja",
+      "systemRole": "General Manager",
+      "active": true
+    },
+    {
+      "id": "user-gm-md-office",
+      "name": "Mr. MD Office Manager",
+      "email": "gm.md.office@npa.gov.ng",
+      "employeeId": "NPA043",
+      "gradeLevel": "MSS1",
+      "division": "div-gm-md-office",
       "systemRole": "General Manager",
       "active": true
     },
@@ -1128,7 +1083,7 @@
       "employeeId": "NPA035",
       "gradeLevel": "MSS1",
       "systemRole": "General Manager",
-      "division": "div-hydrographic",
+      "division": "div-engineering",
       "active": true
     },
     {
@@ -1138,7 +1093,7 @@
       "employeeId": "NPA036",
       "gradeLevel": "MSS1",
       "systemRole": "General Manager",
-      "division": "div-lands-assets-admin",
+      "division": "div-lands-assets",
       "active": true
     },
     {
@@ -1148,7 +1103,7 @@
       "employeeId": "NPA037",
       "gradeLevel": "MSS1",
       "systemRole": "General Manager",
-      "division": "div-legal-services",
+      "division": "div-legal",
       "active": true
     },
     {
@@ -1240,7 +1195,7 @@
       "email": "agm.marine@npa.gov.ng",
       "employeeId": "NPA043",
       "gradeLevel": "MSS2",
-      "division": "div-marine-ops",
+      "division": "div-marine",
       "department": "dept-marine-ops",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1251,7 +1206,7 @@
       "email": "agm.vessel@npa.gov.ng",
       "employeeId": "NPA044",
       "gradeLevel": "MSS2",
-      "division": "div-marine-ops",
+      "division": "div-marine",
       "department": "dept-vessel",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1438,7 +1393,7 @@
       "email": "agm.hydrographic@npa.gov.ng",
       "employeeId": "NPA061",
       "gradeLevel": "MSS2",
-      "division": "div-marine-ops",
+      "division": "div-marine",
       "department": "dept-hydrographic",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1449,7 +1404,7 @@
       "email": "agm.portops@npa.gov.ng",
       "employeeId": "NPA062",
       "gradeLevel": "MSS2",
-      "division": "div-marine-ops",
+      "division": "div-marine",
       "department": "dept-port-ops",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1724,7 +1679,7 @@
       "email": "agm.superannuation@npa.gov.ng",
       "employeeId": "NPA087",
       "gradeLevel": "MSS2",
-      "division": "div-superannuation",
+      "division": "div-S&I",
       "department": "dept-superannuation",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1735,7 +1690,7 @@
       "email": "agm.erm@npa.gov.ng",
       "employeeId": "NPA088",
       "gradeLevel": "MSS2",
-      "division": "div-erm",
+      "directorate": "dir-edfa",
       "department": "dept-erm",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1908,7 +1863,7 @@
       "employeeId": "NPA100",
       "gradeLevel": "MSS2",
       "systemRole": "Assistant General Manager",
-      "division": "div-marine-ops",
+      "division": "div-marine",
       "department": "dept-atons-vts",
       "active": true
     },
@@ -1930,7 +1885,7 @@
       "employeeId": "NPA102",
       "gradeLevel": "MSS2",
       "systemRole": "Assistant General Manager",
-      "division": "div-legal-services",
+      "division": "div-legal",
       "department": "dept-board-registry",
       "active": true
     },
@@ -2062,7 +2017,7 @@
       "employeeId": "NPA114",
       "gradeLevel": "MSS2",
       "systemRole": "Assistant General Manager",
-      "division": "div-lands-assets-admin",
+      "division": "div-lands-assets",
       "department": "dept-physical-planning-dev",
       "active": true
     },
