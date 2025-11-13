@@ -27,7 +27,7 @@ from dms.models import (
     DocumentVersion,
     DocumentWorkspace,
 )
-from organization.models import Department, Directorate, Division
+from organization.models import Department, Directorate, Division, Role
 from support.models import FaqEntry, HelpGuide, SupportTicket
 from workflow.models import ApprovalTask, TaskAction, WorkflowStep, WorkflowTemplate
 
@@ -190,11 +190,20 @@ class Command(BaseCommand):
             first_name = name_parts[0] if name_parts else username
             last_name = name_parts[-1] if len(name_parts) > 1 else ""
 
+            # Look up or create Role object by name
+            system_role = None
+            system_role_name = entry.get("systemRole", "").strip()
+            if system_role_name:
+                system_role, _ = Role.objects.get_or_create(
+                    name=system_role_name,
+                    defaults={"description": f"System role: {system_role_name}"}
+                )
+
             defaults = {
                 "email": entry.get("email") or f"{username}@npa.gov.ng",
                 "first_name": first_name,
                 "last_name": last_name,
-                "system_role": entry.get("systemRole", ""),
+                "system_role": system_role,
                 "grade_level": entry.get("gradeLevel", ""),
                 "employee_id": entry.get("employeeId", ""),
                 "is_management": entry.get("gradeLevel", "") in management_grades,
@@ -214,13 +223,17 @@ class Command(BaseCommand):
             )
 
         # Ensure super admin account
+        superadmin_role, _ = Role.objects.get_or_create(
+            name="Super Admin",
+            defaults={"description": "Super Administrator with full system access"}
+        )
         superadmin_defaults = {
             "email": "superadmin@npa.gov.ng",
             "first_name": "Super",
             "last_name": "Admin",
             "is_staff": True,
             "is_superuser": True,
-            "system_role": "Super Admin",
+            "system_role": superadmin_role,
             "grade_level": "MDCS",
             "is_management": True,
         }
@@ -259,11 +272,15 @@ class Command(BaseCommand):
 
         # Ensure personal assistant demo account exists even if missing from source data
         if "user-pa-md" not in created_users:
+            pa_role, _ = Role.objects.get_or_create(
+                name="Personal Assistant",
+                defaults={"description": "Personal Assistant role"}
+            )
             pamd_defaults = {
                 "email": "pa.md@npa.gov.ng",
                 "first_name": "Grace",
                 "last_name": "Nnaji",
-                "system_role": "Personal Assistant",
+                "system_role": pa_role,
                 "grade_level": "SSS2",
                 "employee_id": "NPA-PA-001",
                 "is_management": False,
