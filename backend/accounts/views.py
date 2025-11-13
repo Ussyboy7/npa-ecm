@@ -64,8 +64,8 @@ class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
     def get_token(cls, user):
         token = super().get_token(user)
         token["username"] = user.username
-        token["system_role"] = getattr(user, "system_role", "")
-        token["grade_level"] = getattr(user, "grade_level", "")
+        token["system_role"] = user.system_role.name if user.system_role else ""
+        token["grade_level"] = getattr(user, "grade_level", "") or ""
         return token
 
     def validate(self, attrs):

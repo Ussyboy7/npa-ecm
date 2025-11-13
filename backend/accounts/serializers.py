@@ -20,10 +20,22 @@ class UserSerializer(serializers.ModelSerializer):
     system_role = serializers.PrimaryKeyRelatedField(
         queryset=Role.objects.all(), allow_null=True, required=False
     )
-    system_role_name = serializers.CharField(source="system_role.name", read_only=True)
-    directorate_name = serializers.CharField(source="directorate.name", read_only=True)
-    division_name = serializers.CharField(source="division.name", read_only=True)
-    department_name = serializers.CharField(source="department.name", read_only=True)
+    system_role_name = serializers.SerializerMethodField()
+    directorate_name = serializers.SerializerMethodField()
+    division_name = serializers.SerializerMethodField()
+    department_name = serializers.SerializerMethodField()
+    
+    def get_system_role_name(self, obj):
+        return obj.system_role.name if obj.system_role else ""
+    
+    def get_directorate_name(self, obj):
+        return obj.directorate.name if obj.directorate else ""
+    
+    def get_division_name(self, obj):
+        return obj.division.name if obj.division else ""
+    
+    def get_department_name(self, obj):
+        return obj.department.name if obj.department else ""
 
     class Meta:
         model = User
