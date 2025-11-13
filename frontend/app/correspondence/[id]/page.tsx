@@ -78,6 +78,7 @@ const CorrespondenceDetail = () => {
   const [showMinuteDetail, setShowMinuteDetail] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showDocumentPreview, setShowDocumentPreview] = useState(false);
+  const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
   const [showLinkDocumentDialog, setShowLinkDocumentDialog] = useState(false);
   const [linkedDocuments, setLinkedDocuments] = useState<DocumentRecord[]>([]);
 
@@ -362,7 +363,20 @@ const CorrespondenceDetail = () => {
                   <DropdownMenuItem
                     onClick={() => {
                       if (correspondence && minutes) {
-                        downloadAsPDF({ correspondence, minutes });
+                        // Get document content
+                        const firstAttachment = correspondence.attachments && correspondence.attachments.length > 0 
+                          ? correspondence.attachments[0] 
+                          : null;
+                        const latestVersion = linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1];
+                        const documentContentHtml = latestVersion?.contentHtml;
+                        
+                        downloadAsPDF({ 
+                          correspondence, 
+                          minutes,
+                          documentContentHtml,
+                          attachmentUrl: firstAttachment?.fileUrl,
+                          attachmentFileName: firstAttachment?.fileName
+                        });
                         toast.success('Downloading as PDF...');
                       }
                     }}
@@ -373,7 +387,20 @@ const CorrespondenceDetail = () => {
                   <DropdownMenuItem
                     onClick={() => {
                       if (correspondence && minutes) {
-                        downloadAsWord({ correspondence, minutes });
+                        // Get document content
+                        const firstAttachment = correspondence.attachments && correspondence.attachments.length > 0 
+                          ? correspondence.attachments[0] 
+                          : null;
+                        const latestVersion = linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1];
+                        const documentContentHtml = latestVersion?.contentHtml;
+                        
+                        downloadAsWord({ 
+                          correspondence, 
+                          minutes,
+                          documentContentHtml,
+                          attachmentUrl: firstAttachment?.fileUrl,
+                          attachmentFileName: firstAttachment?.fileName
+                        });
                         toast.success('Downloading as Word document...');
                       }
                     }}
@@ -474,55 +501,72 @@ const CorrespondenceDetail = () => {
                 </Card>
 
                 <div className="aspect-[8.5/11] bg-white border-2 border-border rounded-lg overflow-hidden shadow-lg">
-                  <div className="p-6 h-full overflow-auto text-xs leading-relaxed">
-                    <div className="mb-4 text-center">
-                      <img src="/api/placeholder/100/50" alt="NPA Logo" className="mx-auto mb-2" />
-                      <h2 className="font-bold text-sm">NIGERIAN PORTS AUTHORITY</h2>
-                      <p className="text-xs text-muted-foreground">
-                        {correspondence.senderOrganization || 'Head Office, Marina, Lagos'}
-                      </p>
-                    </div>
-                    <div className="mb-4">
-                      <p className="font-semibold">Ref: {correspondence.referenceNumber}</p>
-                      <p>
-                        Date:{' '}
-                        {new Date(correspondence.receivedDate).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })}
-                      </p>
-                    </div>
-                    <div className="mb-4">
-                      <p className="font-semibold">To: {division?.name}</p>
-                      <p>From: {correspondence.senderName}</p>
-                      {correspondence.senderOrganization && (
-                        <p className="text-muted-foreground">{correspondence.senderOrganization}</p>
-                      )}
-                    </div>
-                    <div className="mb-4">
-                      <p className="font-bold underline">Subject: {correspondence.subject}</p>
-                    </div>
-                    <div className="space-y-3">
-                      <p>Dear Sir/Madam,</p>
-                      <p className="indent-8">
-                        This is to formally bring to your attention the matter referenced above. Following our previous
-                        communications and in accordance with established procedures, we hereby request your urgent
-                        attention and appropriate action.
-                      </p>
-                      <p className="indent-8">
-                        The details of this correspondence require careful review and consideration by your office. We
-                        trust that you will give this matter the priority it deserves and provide the necessary guidance
-                        and approval as required.
-                      </p>
-                      <p className="indent-8">
-                        We await your favorable response and remain available for any clarifications that may be
-                        required.
-                      </p>
-                      <p className="mt-6">Yours faithfully,</p>
-                      <p className="mt-4 font-semibold">{correspondence.senderName}</p>
-                    </div>
-                  </div>
+                  {(() => {
+                    // Check for uploaded attachments first
+                    const firstAttachment = correspondence.attachments && correspondence.attachments.length > 0 
+                      ? correspondence.attachments[0] 
+                      : null;
+                    
+                    // Check for linked DMS document content
+                    const linkedDoc = linkedDocuments.length > 0 ? linkedDocuments[0] : null;
+                    const latestVersion = linkedDoc?.versions && linkedDoc.versions.length > 0
+                      ? linkedDoc.versions[linkedDoc.versions.length - 1]
+                      : null;
+                    const documentContentHtml = latestVersion?.contentHtml;
+
+                    // If we have an attachment, show it
+                    if (firstAttachment?.fileUrl) {
+                      if (firstAttachment.fileType === 'application/pdf') {
+                        return (
+                          <object
+                            data={firstAttachment.fileUrl}
+                            type="application/pdf"
+                            className="w-full h-full border-0"
+                            title="Original Document"
+                          />
+                        );
+                      } else if (firstAttachment.fileType?.startsWith('image/')) {
+                        return (
+                          <div className="h-full flex items-center justify-center p-4 bg-muted/30">
+                            <img
+                              src={firstAttachment.fileUrl}
+                              alt={firstAttachment.fileName}
+                              className="max-w-full max-h-full object-contain"
+                            />
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-muted/30">
+                            <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                            <p className="text-sm font-medium mb-2">{firstAttachment.fileName || 'Document'}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Use the Preview button above to view this file
+                            </p>
+                          </div>
+                        );
+                      }
+                    }
+                    
+                    // If we have DMS document content (from editor), show it
+                    if (documentContentHtml) {
+                      return (
+                        <div className="h-full overflow-auto p-6 text-xs leading-relaxed">
+                          <div dangerouslySetInnerHTML={{ __html: documentContentHtml }} />
+                        </div>
+                      );
+                    }
+                    
+                    // No document available
+                    return (
+                      <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-muted/30">
+                        <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                        <p className="text-sm font-medium text-muted-foreground">
+                          No document preview available
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {correspondence.attachments && correspondence.attachments.length > 0 && (
@@ -544,21 +588,23 @@ const CorrespondenceDetail = () => {
                                 </p>
                               )}
                             </div>
-                            <Download className="h-4 w-4 text-muted-foreground" />
+                            <Eye className="h-4 w-4 text-muted-foreground" />
                           </div>
                         );
 
                         if (attachment.fileUrl) {
                           return (
-                            <a
+                            <button
                               key={attachment.id}
-                              href={attachment.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 p-2 bg-background border border-border rounded hover:bg-muted/50"
+                              onClick={() => {
+                                const attachmentIndex = correspondence.attachments?.findIndex(a => a.id === attachment.id) ?? 0;
+                                setSelectedAttachmentIndex(attachmentIndex);
+                                setShowDocumentPreview(true);
+                              }}
+                              className="w-full flex items-center gap-2 p-2 bg-background border border-border rounded hover:bg-muted/50 cursor-pointer text-left"
                             >
                               {content}
-                            </a>
+                            </button>
                           );
                         }
 
@@ -655,7 +701,12 @@ const CorrespondenceDetail = () => {
                     const ActionIcon = getActionIcon(minuteItem.actionType);
                     const isDownward = minuteItem.direction === 'downward';
                     const displayName = user?.name ?? minuteItem.userName ?? 'Unknown user';
-                    const systemRole = user?.systemRole ?? minuteItem.userSystemRole ?? 'Team Member';
+                    // Ensure we never display UUIDs as role names
+                    let systemRole = user?.systemRole ?? minuteItem.userSystemRole ?? 'Team Member';
+                    // Filter out UUIDs (strings with dashes and length > 30)
+                    if (systemRole && systemRole.includes('-') && systemRole.length > 30) {
+                      systemRole = user?.systemRole ?? 'Team Member';
+                    }
 
                     return (
                       <div key={minuteItem.id} className="relative">
@@ -900,7 +951,14 @@ const CorrespondenceDetail = () => {
                                     {user?.name ?? minuteEntry.userName ?? 'Unknown User'}
                                   </p>
                                   <p className="text-[10px] text-muted-foreground">
-                                    {user?.systemRole ?? minuteEntry.userSystemRole ?? 'Team Member'}
+                                    {(() => {
+                                      let role = user?.systemRole ?? minuteEntry.userSystemRole ?? 'Team Member';
+                                      // Filter out UUIDs (strings with dashes and length > 30)
+                                      if (role && role.includes('-') && role.length > 30) {
+                                        role = user?.systemRole ?? 'Team Member';
+                                      }
+                                      return role;
+                                    })()}
                                   </p>
                                   {showRoutingDetails && (
                                     <>
@@ -1004,7 +1062,21 @@ const CorrespondenceDetail = () => {
         correspondence={correspondence}
         minutes={minutes}
         isOpen={showDocumentPreview}
-        onClose={() => setShowDocumentPreview(false)}
+        onClose={() => {
+          setShowDocumentPreview(false);
+          setSelectedAttachmentIndex(null);
+        }}
+        documentContentHtml={linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1]?.contentHtml}
+        attachmentUrl={
+          selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
+            ? correspondence.attachments[selectedAttachmentIndex].fileUrl
+            : correspondence.attachments?.[0]?.fileUrl
+        }
+        attachmentFileName={
+          selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
+            ? correspondence.attachments[selectedAttachmentIndex].fileName
+            : correspondence.attachments?.[0]?.fileName
+        }
       />
 
       <PrintPreviewModal
@@ -1012,6 +1084,9 @@ const CorrespondenceDetail = () => {
         minutes={minutes}
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
+        documentContentHtml={linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1]?.contentHtml}
+        attachmentUrl={correspondence.attachments?.[0]?.fileUrl}
+        attachmentFileName={correspondence.attachments?.[0]?.fileName}
       />
 
       <DelegateModal

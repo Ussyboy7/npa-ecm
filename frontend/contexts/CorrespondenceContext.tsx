@@ -125,33 +125,50 @@ const mapApiCorrespondence = (item: any): Correspondence => ({
   updatedAt: item.updated_at ?? undefined,
 });
 
-const mapApiMinute = (item: any): Minute => ({
-  id: String(item.id),
-  correspondenceId: item.correspondence ?? item.correspondence_id ?? '',
-  userId: normalizeId(item.user ?? item.user_id) ?? '',
-  userName:
-    typeof item.user === 'object' && item.user
-      ? (() => {
-          const fullName = `${item.user.first_name ?? ''} ${item.user.last_name ?? ''}`.trim();
-          if (fullName.length > 0) return fullName;
-          return item.user.username ?? '';
-        })()
-      : undefined,
-  userEmail: typeof item.user === 'object' ? item.user.email ?? undefined : undefined,
-  userSystemRole: typeof item.user === 'object' ? item.user.system_role ?? undefined : undefined,
-  gradeLevel: item.grade_level ?? '',
-  actionType: item.action_type ?? 'minute',
-  minuteText: item.minute_text ?? '',
-  direction: item.direction ?? 'downward',
-  stepNumber: item.step_number ?? 1,
-  timestamp: item.timestamp ?? new Date().toISOString(),
-  actedBySecretary: item.acted_by_secretary ?? false,
-  actedByAssistant: item.acted_by_assistant ?? false,
-  assistantType: item.assistant_type ?? undefined,
-  readAt: item.read_at ?? undefined,
-  mentions: Array.isArray(item.mentions) ? item.mentions : [],
-  signature: item.signature_payload ?? undefined,
-});
+const mapApiMinute = (item: any): Minute => {
+  // Extract user system role name (not UUID)
+  let userSystemRole: string | undefined = undefined;
+  if (typeof item.user === 'object' && item.user) {
+    // Prefer system_role_name (the role name string)
+    userSystemRole = item.user.system_role_name ?? undefined;
+    // Fallback to system_role.name if it's an object
+    if (!userSystemRole && item.user.system_role && typeof item.user.system_role === 'object' && item.user.system_role.name) {
+      userSystemRole = item.user.system_role.name;
+    }
+    // Never use the UUID - if it looks like a UUID, set to undefined
+    if (userSystemRole && userSystemRole.includes('-') && userSystemRole.length > 30) {
+      userSystemRole = undefined;
+    }
+  }
+  
+  return {
+    id: String(item.id),
+    correspondenceId: item.correspondence ?? item.correspondence_id ?? '',
+    userId: normalizeId(item.user ?? item.user_id) ?? '',
+    userName:
+      typeof item.user === 'object' && item.user
+        ? (() => {
+            const fullName = `${item.user.first_name ?? ''} ${item.user.last_name ?? ''}`.trim();
+            if (fullName.length > 0) return fullName;
+            return item.user.username ?? '';
+          })()
+        : undefined,
+    userEmail: typeof item.user === 'object' ? item.user.email ?? undefined : undefined,
+    userSystemRole: userSystemRole,
+    gradeLevel: item.grade_level ?? '',
+    actionType: item.action_type ?? 'minute',
+    minuteText: item.minute_text ?? '',
+    direction: item.direction ?? 'downward',
+    stepNumber: item.step_number ?? 1,
+    timestamp: item.timestamp ?? new Date().toISOString(),
+    actedBySecretary: item.acted_by_secretary ?? false,
+    actedByAssistant: item.acted_by_assistant ?? false,
+    assistantType: item.assistant_type ?? undefined,
+    readAt: item.read_at ?? undefined,
+    mentions: Array.isArray(item.mentions) ? item.mentions : [],
+    signature: item.signature_payload ?? undefined,
+  };
+};
 
 const mapApiDelegation = (item: any): Delegation => ({
   id: String(item.id),

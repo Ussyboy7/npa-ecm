@@ -8,6 +8,7 @@ import {
   Users,
   Filter,
   Shield,
+  Search,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { User } from "@/lib/npa-structure";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -45,6 +47,7 @@ export const RoleSwitcher = () => {
   const [selectedDirectorate, setSelectedDirectorate] = useState<string | null>(null);
   const [selectedDivision, setSelectedDivision] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
   const directorateMap = useMemo(
@@ -156,6 +159,40 @@ export const RoleSwitcher = () => {
       pool = pool.filter((user) => matchesDepartment(user, selectedDepartment));
     }
 
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      pool = pool.filter((user) => {
+        const nameMatch = user.name?.toLowerCase().includes(query);
+        const emailMatch = user.email?.toLowerCase().includes(query);
+        const systemRoleMatch = user.systemRole?.toLowerCase().includes(query);
+        const usernameMatch = user.username?.toLowerCase().includes(query);
+        const employeeIdMatch = user.employeeId?.toLowerCase().includes(query);
+        const gradeLevelMatch = user.gradeLevel?.toLowerCase().includes(query);
+        
+        // Also search in division/department names
+        const divisionName = user.division ? divisionMap.get(user.division)?.name?.toLowerCase() : '';
+        const departmentName = user.department ? departmentMap.get(user.department)?.name?.toLowerCase() : '';
+        const directorateName = getDirectorateNameForUser(user)?.toLowerCase() ?? '';
+        
+        const divisionMatch = divisionName?.includes(query);
+        const departmentMatch = departmentName?.includes(query);
+        const directorateMatch = directorateName?.includes(query);
+
+        return (
+          nameMatch ||
+          emailMatch ||
+          systemRoleMatch ||
+          usernameMatch ||
+          employeeIdMatch ||
+          gradeLevelMatch ||
+          divisionMatch ||
+          departmentMatch ||
+          directorateMatch
+        );
+      });
+    }
+
     return pool;
   }, [
     activeUsers,
@@ -163,9 +200,11 @@ export const RoleSwitcher = () => {
     selectedDirectorate,
     selectedDivision,
     selectedDepartment,
+    searchQuery,
     directorateMap,
     divisionMap,
     departmentMap,
+    getDirectorateNameForUser,
   ]);
 
   const resetFilters = () => {
@@ -173,6 +212,7 @@ export const RoleSwitcher = () => {
     setSelectedDirectorate(null);
     setSelectedDivision(null);
     setSelectedDepartment(null);
+    setSearchQuery("");
   };
 
   if (!hydrated || !currentUser) {
@@ -295,6 +335,38 @@ export const RoleSwitcher = () => {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-96 max-h-[600px] overflow-y-auto">
         <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        
+        {/* Search Input */}
+        <div className="px-2 py-1.5">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search by name, email, role..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 h-9 text-sm"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+        
+        {searchQuery.trim() && (
+          <div className="px-2 pb-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSearchQuery("");
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear search
+            </button>
+          </div>
+        )}
+        
         <DropdownMenuSeparator />
 
         <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-2">

@@ -41,6 +41,9 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
     )
+    # Override file_url to allow data URLs (which are longer than 200 chars)
+    # The view will convert data URLs to proper file URLs before saving
+    file_url = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=None)
 
     class Meta:
         model = DocumentVersion

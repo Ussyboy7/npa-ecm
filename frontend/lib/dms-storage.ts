@@ -266,24 +266,26 @@ const buildVersionPayload = (documentId: string, version: CreateDocumentVersionI
   content_html: version.contentHtml ?? '',
   content_json: version.contentJson ?? null,
   notes: version.notes ?? '',
-    file_url: '', // Default to empty, only set if it's a valid short URL
+    file_url: '', // Default to empty
   };
 
-  // Only include file_url if it's a valid URL (not a data URL) and under 200 characters
-  // Data URLs (base64) are too long and should not be stored in file_url field
-  if (version.fileUrl && !version.fileUrl.startsWith('data:') && version.fileUrl.length <= 200) {
-    // Only include actual HTTP/HTTPS URLs that are under 200 characters
-    try {
-      const url = new URL(version.fileUrl);
-      if (url.protocol === 'http:' || url.protocol === 'https:') {
-        payload.file_url = version.fileUrl;
+  // Include file_url if it exists - backend will handle data URLs and convert them to file paths
+  if (version.fileUrl) {
+    // Send data URLs to backend - backend will decode and save to disk
+    if (version.fileUrl.startsWith('data:')) {
+      payload.file_url = version.fileUrl;
+    } else {
+      // For regular URLs, include them as-is
+      try {
+        const url = new URL(version.fileUrl);
+        if (url.protocol === 'http:' || url.protocol === 'https:') {
+          payload.file_url = version.fileUrl;
+        }
+      } catch {
+        // Invalid URL, leave file_url empty
       }
-    } catch {
-      // Invalid URL, leave file_url empty
     }
   }
-  // For data URLs or long URLs, we don't include them in file_url
-  // The content should be in content_html for HTML files or handled separately for binary files
 
   return payload;
 };
@@ -402,6 +404,66 @@ export const shareDocumentWithUsers = async (
   return fetchDocumentById(documentId);
 };
 
+export const shareDocument = async (
+  documentId: string,
+  options: {
+    userIds?: string[];
+    divisionIds?: string[];
+    departmentIds?: string[];
+    shareToAll?: boolean;
+    access?: PermissionAccess;
+  },
+): Promise<DocumentRecord> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const { userIds = [], divisionIds = [], departmentIds = [], shareToAll = false, access = 'read' } = options;
+
+  if (shareToAll) {
+    // Share to all users - get all active user IDs
+    const allUsersRaw = await apiFetch<any>('/accounts/users/');
+    // Handle both wrapped and unwrapped responses
+    const allUsers = Array.isArray(allUsersRaw) 
+      ? allUsersRaw 
+      : (allUsersRaw?.results || allUsersRaw?.raw || []);
+    const allUserIds = Array.isArray(allUsers)
+      ? allUsers.filter((u) => u.active !== false).map((u) => String(u.id))
+      : [];
+    
+    if (allUserIds.length === 0) {
+      throw new Error('No active users found');
+    }
+    
+    await apiFetch('/dms/permissions/', {
+      method: 'POST',
+      body: JSON.stringify({
+        document: documentId,
+        access,
+        user_ids: allUserIds,
+      }),
+    });
+  } else {
+    const hasSelection = userIds.length > 0 || divisionIds.length > 0 || departmentIds.length > 0;
+    if (!hasSelection) {
+      throw new Error('Select at least one recipient, division, or department');
+    }
+
+    await apiFetch('/dms/permissions/', {
+      method: 'POST',
+      body: JSON.stringify({
+        document: documentId,
+        access,
+        user_ids: Array.from(new Set(userIds.filter(Boolean))),
+        division_ids: Array.from(new Set(divisionIds.filter(Boolean))),
+        department_ids: Array.from(new Set(departmentIds.filter(Boolean))),
+      }),
+    });
+  }
+
+  return fetchDocumentById(documentId);
+};
+
 const userHasWorkspaceAccess = (user: User, document: DocumentRecord) => {
   if (document.divisionId && user.division && document.divisionId === user.division) return true;
   if (document.departmentId && user.department && document.departmentId === user.department) return true;
@@ -439,22 +501,293 @@ export const getAccessibleDocumentsForUser = (user: User): DocumentRecord[] => {
   return documentsCache.filter((document) => userHasPermission(user, document));
 };
 
-// Legacy helpers retained as no-ops while the comment/discussion UI is reworked.
-export const getDocumentComments = async (_documentId: string, _versionId?: string | null): Promise<DocumentComment[]> => [];
-export const addDocumentComment = async (_payload: CreateDocumentCommentPayload): Promise<DocumentComment> => {
-  throw new Error('Document comments API integration not yet implemented');
+// Document Comments API
+export const getDocumentComments = async (documentId: string, versionId?: string | null): Promise<DocumentComment[]> => {
+  if (!hasTokens()) return [];
+  
+  const params = new URLSearchParams({ document: documentId });
+  if (versionId) params.append('version', versionId);
+  
+  const payload = await apiFetch<ApiPayload>(`/dms/comments/?${params.toString()}`);
+  const results = unwrapResults<any>(payload);
+  
+  return results.map((item: any) => ({
+    id: String(item.id),
+    documentId: String(item.document ?? item.document_id ?? documentId),
+    authorId: String(item.author?.id ?? item.author_id ?? item.author ?? ''),
+    content: item.content ?? '',
+    createdAt: item.created_at ?? new Date().toISOString(),
+    resolved: item.resolved ?? false,
+    parentId: item.parent ? String(item.parent) : item.parent_id ? String(item.parent_id) : null,
+    versionId: item.version ? String(item.version) : item.version_id ? String(item.version_id) : null,
+  }));
 };
-export const resolveDocumentComment = async (_commentId: string, _resolved: boolean): Promise<DocumentComment | null> => {
-  throw new Error('Document comments API integration not yet implemented');
+
+export const addDocumentComment = async (payload: CreateDocumentCommentPayload): Promise<DocumentComment> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  const body: any = {
+    document: payload.documentId,
+    author_id: payload.authorId,
+    content: payload.content,
+  };
+  
+  if (payload.versionId) body.version = payload.versionId;
+  if (payload.parentId) body.parent = payload.parentId;
+  
+  const response = await apiFetch<any>('/dms/comments/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  
+  return {
+    id: String(response.id),
+    documentId: String(response.document ?? payload.documentId),
+    authorId: String(response.author?.id ?? response.author_id ?? payload.authorId),
+    content: response.content ?? payload.content,
+    createdAt: response.created_at ?? new Date().toISOString(),
+    resolved: response.resolved ?? false,
+    parentId: response.parent ? String(response.parent) : response.parent_id ? String(response.parent_id) : payload.parentId ?? null,
+    versionId: response.version ? String(response.version) : response.version_id ? String(response.version_id) : payload.versionId ?? null,
+  };
 };
-export const deleteDocumentComment = async (_commentId: string): Promise<void> => {
-  throw new Error('Document comments API integration not yet implemented');
+
+export const resolveDocumentComment = async (commentId: string, resolved: boolean): Promise<DocumentComment | null> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  const response = await apiFetch<any>(`/dms/comments/${commentId}/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ resolved }),
+  });
+  
+  return {
+    id: String(response.id),
+    documentId: String(response.document ?? response.document_id ?? ''),
+    authorId: String(response.author?.id ?? response.author_id ?? response.author ?? ''),
+    content: response.content ?? '',
+    createdAt: response.created_at ?? new Date().toISOString(),
+    resolved: response.resolved ?? resolved,
+    parentId: response.parent ? String(response.parent) : response.parent_id ? String(response.parent_id) : null,
+    versionId: response.version ? String(response.version) : response.version_id ? String(response.version_id) : null,
+  };
 };
-export const getDiscussionMessages = async () => [] as never[];
-export const addDiscussionMessage = async () => {
-  throw new Error('Document discussion API integration not yet implemented');
+
+export const deleteDocumentComment = async (commentId: string): Promise<void> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  await apiFetch(`/dms/comments/${commentId}/`, {
+    method: 'DELETE',
+  });
 };
-export const logDocumentAccess = async () => undefined;
+
+// Document Discussions API
+export interface DocumentDiscussion {
+  id: string;
+  documentId: string;
+  authorId: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface CreateDiscussionPayload {
+  documentId: string;
+  authorId: string;
+  message: string;
+}
+
+export const getDocumentDiscussions = async (documentId: string): Promise<DocumentDiscussion[]> => {
+  if (!hasTokens()) return [];
+  
+  const payload = await apiFetch<ApiPayload>(`/dms/discussions/?document=${documentId}`);
+  const results = unwrapResults<any>(payload);
+  
+  return results.map((item: any) => ({
+    id: String(item.id),
+    documentId: String(item.document ?? item.document_id ?? documentId),
+    authorId: String(item.author?.id ?? item.author_id ?? item.author ?? ''),
+    message: item.message ?? '',
+    createdAt: item.created_at ?? new Date().toISOString(),
+  }));
+};
+
+export const addDocumentDiscussion = async (payload: CreateDiscussionPayload): Promise<DocumentDiscussion> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  const body = {
+    document: payload.documentId,
+    author_id: payload.authorId,
+    message: payload.message,
+  };
+  
+  const response = await apiFetch<any>('/dms/discussions/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  
+  return {
+    id: String(response.id),
+    documentId: String(response.document ?? payload.documentId),
+    authorId: String(response.author?.id ?? response.author_id ?? payload.authorId),
+    message: response.message ?? payload.message,
+    createdAt: response.created_at ?? new Date().toISOString(),
+  };
+};
+
+// Editor Sessions API
+export interface EditorSession {
+  id: string;
+  documentId: string;
+  userId: string;
+  since: string;
+  note?: string;
+  isActive: boolean;
+}
+
+export const getActiveEditorSessions = async (documentId: string): Promise<EditorSession[]> => {
+  if (!hasTokens()) return [];
+  
+  try {
+    const payload = await apiFetch<ApiPayload>(`/dms/editor-sessions/?document=${documentId}&is_active=true`);
+    const results = unwrapResults<any>(payload);
+    
+    console.log('getActiveEditorSessions API response:', { payload, results, documentId });
+    
+    const sessions = results.map((item: any) => {
+      const session = {
+        id: String(item.id),
+        documentId: String(item.document ?? item.document_id ?? documentId),
+        userId: String(item.user?.id ?? item.user_id ?? item.user ?? ''),
+        since: item.since ?? item.created_at ?? new Date().toISOString(),
+        note: item.note ?? undefined,
+        isActive: item.is_active ?? true,
+      };
+      console.log('Mapped editor session:', session, 'from item:', item);
+      return session;
+    });
+    
+    console.log('Returning active editor sessions:', sessions);
+    return sessions;
+  } catch (error) {
+    console.error('Error fetching active editor sessions:', error);
+    return [];
+  }
+};
+
+export const getEditorSessionForUser = async (documentId: string, userId: string): Promise<EditorSession | null> => {
+  if (!hasTokens()) return null;
+  
+  try {
+    const payload = await apiFetch<ApiPayload>(`/dms/editor-sessions/?document=${documentId}&user=${userId}`);
+    const results = unwrapResults<any>(payload);
+    
+    if (results.length > 0) {
+      const item = results[0];
+      return {
+        id: String(item.id),
+        documentId: String(item.document ?? item.document_id ?? documentId),
+        userId: String(item.user?.id ?? item.user_id ?? item.user ?? userId),
+        since: item.since ?? item.created_at ?? new Date().toISOString(),
+        note: item.note ?? undefined,
+        isActive: item.is_active ?? true,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to get editor session for user', error);
+    return null;
+  }
+};
+
+export const createEditorSession = async (documentId: string, userId: string, note?: string): Promise<EditorSession> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  const body: any = { 
+    document: documentId,
+    user_id: userId,
+  };
+  if (note) body.note = note;
+  
+  const response = await apiFetch<any>('/dms/editor-sessions/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  
+  return {
+    id: String(response.id),
+    documentId: String(response.document ?? response.document_id ?? documentId),
+    userId: String(response.user?.id ?? response.user_id ?? response.user ?? userId),
+    since: response.since ?? response.created_at ?? new Date().toISOString(),
+    note: response.note ?? note ?? undefined,
+    isActive: response.is_active ?? true,
+  };
+};
+
+export const endEditorSession = async (sessionId: string): Promise<void> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  await apiFetch(`/dms/editor-sessions/${sessionId}/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ is_active: false }),
+  });
+};
+
+// Document Access Logs API
+export interface DocumentAccessLog {
+  id: string;
+  documentId: string;
+  userId: string;
+  action: 'view' | 'download' | 'attempted-download';
+  sensitivity: string;
+  timestamp: string;
+}
+
+export interface CreateAccessLogPayload {
+  documentId: string;
+  userId: string;
+  action: 'view' | 'download' | 'attempted-download';
+  sensitivity: string;
+}
+
+export const getDocumentAccessLogs = async (documentId: string): Promise<DocumentAccessLog[]> => {
+  if (!hasTokens()) return [];
+  
+  const payload = await apiFetch<ApiPayload>(`/dms/access-logs/?document=${documentId}`);
+  const results = unwrapResults<any>(payload);
+  
+  return results.map((item: any) => ({
+    id: String(item.id),
+    documentId: String(item.document ?? item.document_id ?? documentId),
+    userId: String(item.user?.id ?? item.user_id ?? item.user ?? ''),
+    action: item.action ?? 'view',
+    sensitivity: item.sensitivity ?? 'internal',
+    timestamp: item.timestamp ?? new Date().toISOString(),
+  }));
+};
+
+export const logDocumentAccess = async (payload: CreateAccessLogPayload): Promise<DocumentAccessLog> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  const body = {
+    document: payload.documentId,
+    user_id: payload.userId,
+    action: payload.action,
+    sensitivity: payload.sensitivity,
+  };
+  
+  const response = await apiFetch<any>('/dms/access-logs/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  
+  return {
+    id: String(response.id),
+    documentId: String(response.document ?? response.document_id ?? payload.documentId),
+    userId: String(response.user?.id ?? response.user_id ?? payload.userId),
+    action: response.action ?? payload.action,
+    sensitivity: response.sensitivity ?? payload.sensitivity,
+    timestamp: response.timestamp ?? new Date().toISOString(),
+  };
+};
 export const getAccessLogsForDocument = async () => [] as never[];
 export const isSensitiveAccessAllowed = (document: DocumentRecord, user: User | null) => {
   if (!user) return document.sensitivity === 'public';

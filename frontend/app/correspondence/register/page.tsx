@@ -73,19 +73,29 @@ const CorrespondenceRegister = () => {
   const [assignSearch, setAssignSearch] = useState('');
 
   const executives = useMemo(() => {
-    if (!Array.isArray(organizationUsers)) return [];
+    if (!Array.isArray(organizationUsers)) {
+      console.log('organizationUsers is not an array:', organizationUsers);
+      return [];
+    }
     const eligibleGrades = new Set(['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3', 'MSS4']);
-    return organizationUsers.filter((user) => user && user.gradeLevel && eligibleGrades.has(user.gradeLevel));
+    const filtered = organizationUsers.filter((user) => user && user.gradeLevel && eligibleGrades.has(user.gradeLevel));
+    console.log('Executives filtered:', { total: organizationUsers.length, eligible: filtered.length, sample: filtered[0] });
+    return filtered;
   }, [organizationUsers]);
 
   const filteredExecutives = useMemo(() => {
-    if (!assignSearch.trim()) return executives;
+    if (!assignSearch.trim()) {
+      console.log('No search query, showing all executives:', executives.length);
+      return executives;
+    }
     const query = assignSearch.toLowerCase();
-    return executives.filter((user) =>
+    const filtered = executives.filter((user) =>
       [user.name, user.systemRole, user.email]
         .filter(Boolean)
         .some((value) => value && typeof value === 'string' && value.toLowerCase().includes(query)),
     );
+    console.log('Filtered executives by search:', { query, total: executives.length, filtered: filtered.length });
+    return filtered;
   }, [executives, assignSearch]);
 
   // Track if component has mounted (client-side only)
@@ -576,10 +586,20 @@ const CorrespondenceRegister = () => {
                         const dirDivisions = Array.isArray(divisions) 
                           ? divisions.filter((div) => div && div.directorateId === dir.id)
                           : [];
-                        const dirUsers = filteredExecutives.filter((user) =>
-                          user && user.division && dirDivisions.some((div) => div && div.id === user.division),
-                        );
+                        const dirUsers = filteredExecutives.filter((user) => {
+                          if (!user || !user.id) return false;
+                          // Include users whose division belongs to this directorate
+                          if (user.division && dirDivisions.some((div) => div && div.id === user.division)) {
+                            return true;
+                          }
+                          // Also include users whose directorate matches but have no division
+                          if (user.directorate === dir.id && !user.division) {
+                            return true;
+                          }
+                          return false;
+                        });
                         if (dirUsers.length === 0) return null;
+                        console.log(`Directorate ${dir.name}: ${dirUsers.length} users`);
                         return (
                           <div key={dir.id} className="border border-border rounded-lg my-1">
                             <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/70">
@@ -598,7 +618,7 @@ const CorrespondenceRegister = () => {
                                 >
                                   <span className="font-medium">{user.name || 'Unknown'}</span>
                                   <span className="text-xs text-muted-foreground">
-                                    {[user.systemRole, user.gradeLevel].filter(Boolean).join(' • ')}
+                                    {[user.systemRole, user.gradeLevel].filter(Boolean).filter(role => !role.includes('-') || role.length < 30).join(' • ')}
                                     {division && division.name ? ` • ${division.name}` : ''}
                                   </span>
                                 </SelectItem>
@@ -607,6 +627,38 @@ const CorrespondenceRegister = () => {
                           </div>
                         );
                       })}
+                      {/* Show users without a directorate or division assignment */}
+                      {(() => {
+                        const unassignedUsers = filteredExecutives.filter((user) => 
+                          user && user.id && !user.directorate && !user.division
+                        );
+                        if (unassignedUsers.length > 0) {
+                          console.log(`Unassigned users: ${unassignedUsers.length}`, unassignedUsers.map(u => u.name));
+                        }
+                        if (unassignedUsers.length === 0) return null;
+                        return (
+                          <div key="unassigned" className="border border-border rounded-lg my-1">
+                            <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/70">
+                              Unassigned
+                            </div>
+                            {unassignedUsers.map((user) => {
+                              if (!user || !user.id) return null;
+                              return (
+                                <SelectItem
+                                  key={user.id}
+                                  value={user.id}
+                                  className="flex flex-col items-start gap-1 px-3 py-2"
+                                >
+                                  <span className="font-medium">{user.name || 'Unknown'}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {[user.systemRole, user.gradeLevel].filter(Boolean).filter(role => !role.includes('-') || role.length < 30).join(' • ')}
+                                  </span>
+                                </SelectItem>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                       {filteredExecutives.length === 0 && (
                         <SelectItem value="none" disabled>
                           No executives match your search

@@ -170,7 +170,16 @@ const mapApiUserToUser = (user: any): User => {
   const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim();
   // system_role is now a ForeignKey (UUID), but we need the name for display
   // Backend returns system_role_name for the role name
-  const roleName = user.system_role_name ?? (user.system_role?.name ?? '');
+  // Ensure we never use the UUID as the role name - only use system_role_name
+  let roleName = user.system_role_name ?? '';
+  // If system_role_name is missing but we have system_role as an object with name
+  if (!roleName && user.system_role && typeof user.system_role === 'object' && user.system_role.name) {
+    roleName = user.system_role.name;
+  }
+  // If roleName is still empty or looks like a UUID, set to empty string
+  if (!roleName || (roleName.includes('-') && roleName.length > 30)) {
+    roleName = '';
+  }
   return {
     id: String(user.id ?? user.username),
     username: user.username ?? undefined,
@@ -178,7 +187,7 @@ const mapApiUserToUser = (user: any): User => {
     email: user.email ?? '',
     employeeId: user.employee_id ?? '',
     gradeLevel: user.grade_level ?? '',
-    systemRole: roleName, // Use role name for display, but store ID internally if needed
+    systemRole: roleName, // Use role name for display, never the UUID
     directorate: normalizeId(user.directorate ?? user.directorate_id),
     division: normalizeId(user.division ?? user.division_id),
     department: normalizeId(user.department ?? user.department_id),
@@ -377,9 +386,11 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const refreshOrganizationData = useCallback(async () => {
     if (!hydrated || !currentUser || !hasTokens()) {
+      console.log('Skipping organization data refresh:', { hydrated, hasCurrentUser: !!currentUser, hasTokens: hasTokens() });
       return;
     }
 
+    console.log('Refreshing organization data...');
     setIsSyncing(true);
     try {
       const [usersDataRaw, directoratesRaw, divisionsRaw, departmentsRaw, delegationsRaw, rolesRaw] = await Promise.all([
@@ -391,8 +402,11 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         apiFetch('/organization/roles/?ordering=name'),
       ]);
 
-      const apiUsers = dedupeUsers(unwrapResults<any>(usersDataRaw).map(mapApiUserToUser));
+      const unwrappedUsers = unwrapResults<any>(usersDataRaw);
+      console.log('Users API response:', { raw: usersDataRaw, unwrapped: unwrappedUsers, count: unwrappedUsers.length });
+      const apiUsers = dedupeUsers(unwrappedUsers.map(mapApiUserToUser));
       const sortedUsers = sortByName(apiUsers);
+      console.log('Mapped users:', { count: sortedUsers.length, sample: sortedUsers[0] });
       setUsers(sortedUsers);
 
       const apiDirectorates = unwrapResults<any>(directoratesRaw).map(mapApiDirectorate);
@@ -419,8 +433,12 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       });
 
       setHasSynced(true);
+      console.log('Organization data loaded successfully:', { users: sortedUsers.length, directorates: sortedDirectorates.length, divisions: sortedDivisions.length, departments: sortedDepartments.length });
     } catch (error) {
       console.error('Failed to load organization data from API', error);
+      if (error instanceof Error) {
+        console.error('Error details:', { message: error.message, stack: error.stack });
+      }
     } finally {
       setIsSyncing(false);
     }

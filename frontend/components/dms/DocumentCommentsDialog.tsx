@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -51,6 +51,7 @@ export const DocumentCommentsDialog = ({
 
   const userLookup = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
 
+  // Load comments when dialog opens
   useEffect(() => {
     if (!open) return;
 
@@ -60,8 +61,7 @@ export const DocumentCommentsDialog = ({
         const ordered = [...results].sort(
           (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
         );
-    setComments(ordered);
-    onCommentsUpdated?.(ordered);
+        setComments(ordered);
       } catch (error) {
         console.error('Failed to load document comments', error);
         setComments([]);
@@ -69,7 +69,29 @@ export const DocumentCommentsDialog = ({
     };
 
     void loadComments();
-  }, [open, documentId, version?.id, onCommentsUpdated]);
+  }, [open, documentId, version?.id]);
+
+  // Sync comments to parent component after state updates
+  // Use a ref to track if this is the initial load to avoid calling on mount
+  const isInitialLoad = useRef(true);
+  
+  useEffect(() => {
+    if (!open) {
+      isInitialLoad.current = true;
+      return;
+    }
+    
+    // Skip callback on initial load (comments are loaded separately)
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    
+    // Call callback after state updates (not during render)
+    if (onCommentsUpdated) {
+      onCommentsUpdated(comments);
+    }
+  }, [comments, onCommentsUpdated, open]);
 
   const resolvedCount = useMemo(() => comments.filter((item) => item.resolved).length, [comments]);
 
@@ -91,9 +113,7 @@ export const DocumentCommentsDialog = ({
         versionId: version?.id ?? null,
       });
       setComments((prev) => {
-        const next = [...prev, newComment];
-        onCommentsUpdated?.(next);
-        return next;
+        return [...prev, newComment];
       });
       setComment('');
       toast.success('Comment added');
@@ -107,9 +127,7 @@ export const DocumentCommentsDialog = ({
       const updated = await resolveDocumentComment(commentId, resolved);
     if (!updated) return;
     setComments((prev) => {
-      const next = prev.map((item) => (item.id === commentId ? updated : item));
-      onCommentsUpdated?.(next);
-      return next;
+      return prev.map((item) => (item.id === commentId ? updated : item));
     });
     toast.success(resolved ? 'Comment marked as resolved' : 'Comment re-opened');
     } catch (error) {
@@ -122,9 +140,7 @@ export const DocumentCommentsDialog = ({
     try {
       await deleteDocumentComment(commentId);
     setComments((prev) => {
-      const next = prev.filter((item) => item.id !== commentId && item.parentId !== commentId);
-      onCommentsUpdated?.(next);
-      return next;
+      return prev.filter((item) => item.id !== commentId && item.parentId !== commentId);
     });
     toast.success('Comment removed');
     } catch (error) {

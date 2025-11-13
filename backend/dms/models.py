@@ -94,7 +94,7 @@ class DocumentVersion(UUIDModel, TimeStampedModel):
     file_name = models.CharField(max_length=255)
     file_type = models.CharField(max_length=100)
     file_size = models.BigIntegerField(help_text="Size in bytes")
-    file_url = models.URLField(blank=True)
+    file_url = models.CharField(max_length=2000, blank=True)
     content_html = models.TextField(blank=True)
     content_json = models.JSONField(blank=True, null=True)
     content_text = models.TextField(blank=True)
