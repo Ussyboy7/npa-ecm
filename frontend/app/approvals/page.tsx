@@ -1,4 +1,5 @@
 "use client";
+import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -152,7 +153,7 @@ const ApprovalsInbox = () => {
       });
       await syncFromApi();
     } catch (error) {
-      console.error('Failed to approve correspondence', error);
+      logError('Failed to approve correspondence', error);
       toast.error('Unable to approve correspondence', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });
@@ -174,7 +175,7 @@ const ApprovalsInbox = () => {
       });
       await syncFromApi();
     } catch (error) {
-      console.error('Failed to reject correspondence', error);
+      logError('Failed to reject correspondence', error);
       toast.error('Unable to reject correspondence', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });

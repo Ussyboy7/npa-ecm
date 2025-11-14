@@ -1,3 +1,4 @@
+import { logError, logInfo } from '@/lib/client-logger';
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import type { User } from '@/lib/npa-structure';
 import { updateOrganizationCache } from '@/lib/npa-structure';
@@ -386,11 +387,11 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const refreshOrganizationData = useCallback(async () => {
     if (!hydrated || !currentUser || !hasTokens()) {
-      console.log('Skipping organization data refresh:', { hydrated, hasCurrentUser: !!currentUser, hasTokens: hasTokens() });
+      logInfo('Skipping organization data refresh:', { hydrated, hasCurrentUser: !!currentUser, hasTokens: hasTokens() });
       return;
     }
 
-    console.log('Refreshing organization data...');
+    logInfo('Refreshing organization data...');
     setIsSyncing(true);
     try {
       const [usersDataRaw, directoratesRaw, divisionsRaw, departmentsRaw, delegationsRaw, rolesRaw] = await Promise.all([
@@ -403,10 +404,10 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       ]);
 
       const unwrappedUsers = unwrapResults<any>(usersDataRaw);
-      console.log('Users API response:', { raw: usersDataRaw, unwrapped: unwrappedUsers, count: unwrappedUsers.length });
+      logInfo('Users API response:', { raw: usersDataRaw, unwrapped: unwrappedUsers, count: unwrappedUsers.length });
       const apiUsers = dedupeUsers(unwrappedUsers.map(mapApiUserToUser));
       const sortedUsers = sortByName(apiUsers);
-      console.log('Mapped users:', { count: sortedUsers.length, sample: sortedUsers[0] });
+      logInfo('Mapped users:', { count: sortedUsers.length, sample: sortedUsers[0] });
       setUsers(sortedUsers);
 
       const apiDirectorates = unwrapResults<any>(directoratesRaw).map(mapApiDirectorate);
@@ -433,11 +434,11 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       });
 
       setHasSynced(true);
-      console.log('Organization data loaded successfully:', { users: sortedUsers.length, directorates: sortedDirectorates.length, divisions: sortedDivisions.length, departments: sortedDepartments.length });
+      logInfo('Organization data loaded successfully:', { users: sortedUsers.length, directorates: sortedDirectorates.length, divisions: sortedDivisions.length, departments: sortedDepartments.length });
     } catch (error) {
-      console.error('Failed to load organization data from API', error);
+      logError('Failed to load organization data from API', error);
       if (error instanceof Error) {
-        console.error('Error details:', { message: error.message, stack: error.stack });
+        logError('Error details:', { message: error.message, stack: error.stack });
       }
     } finally {
       setIsSyncing(false);
@@ -760,7 +761,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       applyRoleUpdate(updated);
       return updated;
     } catch (error) {
-      console.error('Failed to update role', error);
+      logError('Failed to update role', error);
       return null;
     }
   };

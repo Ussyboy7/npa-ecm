@@ -1,5 +1,6 @@
 "use client";
 
+import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
@@ -63,7 +64,7 @@ export const DocumentCommentsDialog = ({
         );
         setComments(ordered);
       } catch (error) {
-        console.error('Failed to load document comments', error);
+        logError('Failed to load document comments', error);
         setComments([]);
       }
     };
@@ -131,7 +132,7 @@ export const DocumentCommentsDialog = ({
     });
     toast.success(resolved ? 'Comment marked as resolved' : 'Comment re-opened');
     } catch (error) {
-      console.error('Failed to toggle comment resolution', error);
+      logError('Failed to toggle comment resolution', error);
       toast.error('Unable to update comment status');
     }
   };
@@ -144,7 +145,7 @@ export const DocumentCommentsDialog = ({
     });
     toast.success('Comment removed');
     } catch (error) {
-      console.error('Failed to delete comment', error);
+      logError('Failed to delete comment', error);
       toast.error('Unable to delete comment');
     }
   };

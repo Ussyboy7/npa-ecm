@@ -87,7 +87,7 @@ docker exec -it dms-backend-dev python manage.py createsuperuser
 
 5. **Access the applications**
 - Frontend: http://localhost:3001
-- Backend API: http://localhost:8000/api
+- Backend API: http://localhost:8000/api/v1
 - API Docs: http://localhost:8000/api/docs
 - Admin Panel: http://localhost:8000/admin
 
@@ -197,6 +197,11 @@ AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 AWS_STORAGE_BUCKET_NAME=dms-documents
 AWS_S3_ENDPOINT_URL=http://localhost:9000
+
+# Upload Safety
+MAX_UPLOAD_SIZE_MB=10
+CLAMAV_SCAN_ENABLED=false
+CLAMAV_BINARY_PATH=clamscan
 ```
 
 #### Frontend (.env.local)

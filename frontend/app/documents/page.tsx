@@ -1,5 +1,6 @@
 "use client";
 
+import { logError } from '@/lib/client-logger';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -147,7 +148,7 @@ const MyDocuments = () => {
           setWorkspaces(spaces.value);
         }
       } catch (error) {
-        console.error('Failed to load My Documents data', error);
+        logError('Failed to load My Documents data', error);
       }
     };
 

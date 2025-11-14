@@ -13,6 +13,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from audit.services import AuditService
 from .models import User
 from .serializers import UserSerializer
 
@@ -77,6 +78,32 @@ class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
 class AuthTokenObtainPairView(TokenObtainPairView):
     serializer_class = AuthTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        """Handle login and create audit log."""
+        # Get username from request to look up user for audit log
+        username = request.data.get('username')
+        user = None
+        if username:
+            try:
+                user = User.objects.get(username=username)
+            except User.DoesNotExist:
+                pass
+        
+        response = super().post(request, *args, **kwargs)
+        
+        if response.status_code == 200 and user:
+            # Login successful - create audit log
+            from audit.models import ActivityLog
+            AuditService.log_user_activity(
+                user=user,
+                action=ActivityLog.ActionType.USER_LOGIN,
+                target_user=None,
+                request=request,
+                description="User logged in successfully",
+            )
+        
+        return response
+
 
 class AuthImpersonateView(APIView):
     """Allow super administrators to impersonate another user."""
@@ -97,11 +124,33 @@ class AuthImpersonateView(APIView):
             try:
                 target = User.objects.get(username=identifier)
             except User.DoesNotExist as exc:
+                # Create audit log for failed impersonation attempt
+                from audit.models import ActivityLog
+                AuditService.log_user_activity(
+                    user=request.user,
+                    action=ActivityLog.ActionType.USER_IMPERSONATED,
+                    target_user=None,
+                    request=request,
+                    description=f"Failed impersonation attempt for user: {identifier}",
+                    success=False,
+                    error_message=str(exc),
+                )
                 raise NotFound("User not found") from exc
 
         refresh = RefreshToken.for_user(target)
         access_lifetime: timedelta | None = settings.SIMPLE_JWT.get("ACCESS_TOKEN_LIFETIME")
         expires_in = int(access_lifetime.total_seconds()) if access_lifetime else None
+
+        # Create audit log for successful impersonation
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_IMPERSONATED,
+            target_user=target,
+            request=request,
+            description=f"Impersonated user: {target.username}",
+            metadata={"target_username": target.username, "target_id": str(target.id)},
+        )
 
         data = {
             "access": str(refresh.access_token),

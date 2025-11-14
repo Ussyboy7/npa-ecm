@@ -2,6 +2,7 @@
 
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
+import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Toaster as ToastToaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CorrespondenceProvider } from "@/contexts/CorrespondenceContext";
@@ -17,11 +18,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <OrganizationProvider>
         <CorrespondenceProvider>
-          <TooltipProvider>
-            {children}
-            <Toaster />
-            <ToastToaster />
-          </TooltipProvider>
+          <ClientErrorBoundary>
+            <TooltipProvider>
+              {children}
+              <Toaster />
+              <ToastToaster />
+            </TooltipProvider>
+          </ClientErrorBoundary>
         </CorrespondenceProvider>
       </OrganizationProvider>
     </ThemeProvider>

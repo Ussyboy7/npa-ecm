@@ -172,6 +172,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "attachments",
             "distribution",
             "minutes",
+            "completed_at",
             "created_at",
             "updated_at",
         ]
@@ -182,6 +183,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "attachments",
             "distribution",
             "minutes",
+            "completed_at",
             "created_at",
             "updated_at",
         ]

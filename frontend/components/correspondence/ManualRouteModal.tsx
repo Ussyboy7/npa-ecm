@@ -1,3 +1,4 @@
+import { logError } from '@/lib/client-logger';
 import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -162,7 +163,7 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
         description: `Manually routed to ${recipient?.name ?? 'selected user'}`,
       });
     } catch (error) {
-      console.error('Failed to route correspondence', error);
+      logError('Failed to route correspondence', error);
       toast.error('Unable to route correspondence', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });

@@ -80,3 +80,30 @@ class SupportTicket(UUIDModel, TimeStampedModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class ClientLogEntry(UUIDModel, TimeStampedModel):
+    """Captured client-side log payloads."""
+
+    class Level(models.TextChoices):
+        DEBUG = 'debug', 'Debug'
+        INFO = 'info', 'Info'
+        WARN = 'warn', 'Warn'
+        ERROR = 'error', 'Error'
+
+    level = models.CharField(max_length=10, choices=Level.choices)
+    message = models.CharField(max_length=500, blank=True)
+    payload = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='client_log_entries',
+    )
+    user_agent = models.CharField(max_length=255, blank=True)
+    request_path = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']

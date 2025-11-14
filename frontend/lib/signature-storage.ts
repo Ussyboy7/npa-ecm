@@ -1,3 +1,4 @@
+import { logError } from '@/lib/client-logger';
 export type StoredSignature = {
   imageData: string;
   fileName?: string;
@@ -71,7 +72,7 @@ export const saveUserSignature = (userId: string, signature: StoredSignature) =>
   try {
     localStorage.setItem(getSignatureStorageKey(userId), JSON.stringify(signature));
   } catch (error) {
-    console.error('Failed to save signature:', error);
+    logError('Failed to save signature:', error);
   }
 };
 
@@ -82,7 +83,7 @@ export const loadUserSignature = (userId: string): StoredSignature | null => {
     if (!data) return null;
     return JSON.parse(data) as StoredSignature;
   } catch (error) {
-    console.error('Failed to load signature:', error);
+    logError('Failed to load signature:', error);
     return null;
   }
 };
@@ -92,7 +93,7 @@ export const deleteUserSignature = (userId: string) => {
   try {
     localStorage.removeItem(getSignatureStorageKey(userId));
   } catch (error) {
-    console.error('Failed to delete signature:', error);
+    logError('Failed to delete signature:', error);
   }
 };
 
@@ -103,7 +104,7 @@ export const loadSignatureTemplates = (): SignatureTemplate[] => {
     if (!data) return [];
     return JSON.parse(data) as SignatureTemplate[];
   } catch (error) {
-    console.error('Failed to load templates:', error);
+    logError('Failed to load templates:', error);
     return [];
   }
 };
@@ -113,7 +114,7 @@ export const saveSignatureTemplates = (templates: SignatureTemplate[]) => {
   try {
     localStorage.setItem(TEMPLATE_KEY, JSON.stringify(templates));
   } catch (error) {
-    console.error('Failed to save templates:', error);
+    logError('Failed to save templates:', error);
   }
 };
 
@@ -133,7 +134,7 @@ export const loadUserSignaturePreferences = (userId: string): UserSignaturePrefe
     if (!data) return null;
     return JSON.parse(data) as UserSignaturePreferences;
   } catch (error) {
-    console.error('Failed to load signature preferences:', error);
+    logError('Failed to load signature preferences:', error);
     return null;
   }
 };
@@ -143,6 +144,6 @@ export const saveUserSignaturePreferences = (userId: string, prefs: UserSignatur
   try {
     localStorage.setItem(getUserPrefKey(userId), JSON.stringify(prefs));
   } catch (error) {
-    console.error('Failed to save signature preferences:', error);
+    logError('Failed to save signature preferences:', error);
   }
 };

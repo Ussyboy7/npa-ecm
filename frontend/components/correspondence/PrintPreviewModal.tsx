@@ -1,5 +1,6 @@
 "use client";
 
+import { logError } from '@/lib/client-logger';
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -66,7 +67,7 @@ export const PrintPreviewModal = ({
                 setLoading(false);
               })
               .catch(err => {
-                console.error('Error converting Word document:', err);
+                logError('Error converting Word document:', err);
                 setError(`Failed to convert Word document: ${err.message}`);
                 setLoading(false);
               });
@@ -75,7 +76,7 @@ export const PrintPreviewModal = ({
           }
         })
         .catch(err => {
-          console.error('Error loading file:', err);
+          logError('Error loading file:', err);
           setError(err.message);
           setLoading(false);
         });
@@ -267,4 +268,3 @@ export const PrintPreviewModal = ({
     </Dialog>
   );
 };
-

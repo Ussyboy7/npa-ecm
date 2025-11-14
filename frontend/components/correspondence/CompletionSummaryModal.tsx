@@ -1,3 +1,4 @@
+import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -97,7 +98,7 @@ export const CompletionSummaryModal = ({
 
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to archive correspondence', error);
+      logError('Failed to archive correspondence', error);
       toast.error('Unable to archive correspondence', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });

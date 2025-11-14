@@ -1,5 +1,6 @@
 "use client";
 
+import { logError } from '@/lib/client-logger';
 import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -177,7 +178,7 @@ export default function SettingsPage() {
       setSignature(stored);
       toast.success('Signature uploaded successfully');
     } catch (error) {
-      console.error(error);
+      logError(error);
       toast.error('Failed to upload signature');
     } finally {
       setIsUploading(false);
@@ -855,4 +856,3 @@ export default function SettingsPage() {
     </DashboardLayout>
   );
 }
-

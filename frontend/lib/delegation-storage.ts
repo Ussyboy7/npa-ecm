@@ -1,3 +1,4 @@
+import { logError } from '@/lib/client-logger';
 // Delegation management functions
 
 export type Delegation = {
@@ -19,7 +20,7 @@ export const loadDelegations = (): Delegation[] => {
     const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error loading delegations:', error);
+    logError('Error loading delegations:', error);
     return [];
   }
 };
@@ -28,7 +29,7 @@ export const saveDelegations = (delegations: Delegation[]): void => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(delegations));
   } catch (error) {
-    console.error('Error saving delegations:', error);
+    logError('Error saving delegations:', error);
   }
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,184 +8,88 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { TrendingUp, TrendingDown, Clock, Users, Target, Award } from 'lucide-react';
-import { useCorrespondence } from '@/contexts/CorrespondenceContext';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { fetchPerformanceAnalytics, type PerformanceAnalytics } from '@/lib/analytics-client';
 
 const Performance = () => {
-  const { correspondence, minutes } = useCorrespondence();
-  const { divisions } = useOrganization();
   const [selectedPeriod, setSelectedPeriod] = useState<string>('30');
+  const [data, setData] = useState<PerformanceAnalytics | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Filter correspondence based on selected period
-  const filteredCorrespondence = useMemo(() => {
-    const periodDays = parseInt(selectedPeriod);
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - periodDays);
-
-    return correspondence.filter(item => new Date(item.receivedDate) >= cutoffDate);
-  }, [correspondence, selectedPeriod]);
-
-  // SLA Compliance Metrics (assuming 5 days standard, 2 days urgent)
-  const slaMetrics = useMemo(() => {
-    const completed = filteredCorrespondence.filter(c => c.status === 'completed');
-    
-    const slaCompliant = completed.filter(c => {
-      const daysTaken = Math.floor(
-        (new Date().getTime() - new Date(c.receivedDate).getTime()) / (1000 * 60 * 60 * 24)
-      );
-      const slaTarget = c.priority === 'urgent' ? 2 : c.priority === 'high' ? 3 : 5;
-      return daysTaken <= slaTarget;
-    });
-
-    const complianceRate = completed.length > 0 
-      ? Math.round((slaCompliant.length / completed.length) * 100)
-      : 0;
-
-    return {
-      total: completed.length,
-      compliant: slaCompliant.length,
-      breached: completed.length - slaCompliant.length,
-      complianceRate,
-    };
-  }, [filteredCorrespondence]);
-
-  // Turnaround Time Analytics
-  const turnaroundMetrics = useMemo(() => {
-    const completed = filteredCorrespondence.filter(c => c.status === 'completed');
-    
-    const times = completed.map(c => {
-      return Math.floor(
-        (new Date().getTime() - new Date(c.receivedDate).getTime()) / (1000 * 60 * 60 * 24)
-      );
-    });
-
-    const avgTurnaround = times.length > 0 
-      ? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
-      : 0;
-
-    const fastestTurnaround = times.length > 0 ? Math.min(...times) : 0;
-    const slowestTurnaround = times.length > 0 ? Math.max(...times) : 0;
-
-    return {
-      average: avgTurnaround,
-      fastest: fastestTurnaround,
-      slowest: slowestTurnaround,
-    };
-  }, [filteredCorrespondence]);
-
-  // Division Performance Comparison
-  const divisionPerformance = useMemo(() => {
-    return divisions.map(division => {
-      const divisionCorr = filteredCorrespondence.filter(c => c.divisionId === division.id);
-      const completed = divisionCorr.filter(c => c.status === 'completed');
-      
-      const avgTurnaround = completed.length > 0
-        ? Math.round(
-            completed.reduce((acc, c) => {
-              const days = Math.floor(
-                (new Date().getTime() - new Date(c.receivedDate).getTime()) / (1000 * 60 * 60 * 24)
-              );
-              return acc + days;
-            }, 0) / completed.length
-          )
-        : 0;
-
-      const workload = divisionCorr.length;
-      const completionRate = divisionCorr.length > 0 
-        ? Math.round((completed.length / divisionCorr.length) * 100)
-        : 0;
-
-      return {
-        name: division.code ?? division.name,
-        fullName: division.name,
-        workload,
-        completed: completed.length,
-        completionRate,
-        avgTurnaround,
-        efficiency: completionRate > 0 ? Math.round((completionRate / (avgTurnaround || 1)) * 10) : 0,
-      };
-    }).filter(d => d.workload > 0);
-  }, [filteredCorrespondence, divisions]);
-
-  // Response Time Distribution
-  const responseDistribution = useMemo(() => {
-    const completed = filteredCorrespondence.filter(c => c.status === 'completed');
-    
-    const ranges = [
-      { name: '0-2 days', min: 0, max: 2, count: 0 },
-      { name: '3-5 days', min: 3, max: 5, count: 0 },
-      { name: '6-10 days', min: 6, max: 10, count: 0 },
-      { name: '11-15 days', min: 11, max: 15, count: 0 },
-      { name: '15+ days', min: 16, max: Infinity, count: 0 },
-    ];
-
-    completed.forEach(c => {
-      const days = Math.floor(
-        (new Date().getTime() - new Date(c.receivedDate).getTime()) / (1000 * 60 * 60 * 24)
-      );
-      
-      for (const range of ranges) {
-        if (days >= range.min && days <= range.max) {
-          range.count++;
-          break;
+  useEffect(() => {
+    let ignore = false;
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetchPerformanceAnalytics(selectedPeriod);
+        if (!ignore) {
+          setData(response);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setError(err instanceof Error ? err.message : 'Failed to load analytics');
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
         }
       }
-    });
+    };
 
-    return ranges;
-  }, [filteredCorrespondence]);
+    void load();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedPeriod]);
 
-  // User/Role Performance
-  const rolePerformance = useMemo(() => {
-    const secretaryActions = minutes.filter(m => m.actedBySecretary).length;
-    const assistantActions = minutes.filter(m => m.actedByAssistant).length;
-    const totalActions = minutes.length;
-    const executiveActions = totalActions - secretaryActions - assistantActions;
-    
-    return [
-      {
-        role: 'Secretary',
-        actions: secretaryActions,
-        avgResponseTime: 2.5,
-      },
-      {
-        role: 'Assistant',
-        actions: assistantActions,
-        avgResponseTime: 3.0,
-      },
-      {
-        role: 'Executive',
-        actions: executiveActions,
-        avgResponseTime: 4.0,
-      },
-    ];
-  }, [minutes]);
+  const slaMetrics = data?.sla ?? { total: 0, compliant: 0, breached: 0, complianceRate: 0 };
+  const turnaroundMetrics = data?.turnaround ?? { average: 0, fastest: 0, slowest: 0 };
+  const divisionPerformance = data?.divisionPerformance ?? [];
+  const responseDistribution = data?.responseDistribution ?? [];
+  const rolePerformance = data?.rolePerformance ?? [];
 
-  // Radar chart data for division comparison
   const radarData = useMemo(() => {
-    return divisionPerformance.slice(0, 6).map(div => ({
-      division: div.name,
-      completionRate: div.completionRate,
-      efficiency: div.efficiency,
-      workload: Math.min(div.workload * 10, 100), // Normalize to 100
+    return divisionPerformance.slice(0, 6).map((division) => ({
+      division: division.name,
+      completionRate: division.completionRate,
+      efficiency: division.efficiency,
+      workload: Math.min(division.workload * 10, 100),
     }));
   }, [divisionPerformance]);
+
+  const totalActions = rolePerformance.reduce((sum, role) => sum + role.actions, 0);
 
   return (
     <DashboardLayout>
       <div className="container mx-auto p-6 space-y-6">
-        {/* Header */}
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold">Performance Analytics</h1>
             <p className="text-muted-foreground mt-1">
-              SLA compliance, turnaround times, and efficiency metrics
+              SLA compliance, turnaround times, and efficiency metrics powered by real-time backend analytics
             </p>
           </div>
           <div className="w-48">
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={loading}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -200,14 +104,21 @@ const Performance = () => {
 
         <HelpGuideCard
           title="Understand Performance Trends"
-          description="Adjust the reporting window to monitor SLA compliance, turnaround time, and divisional efficiency. Explore the tabs below to switch between KPIs, response time distribution, and division leaderboards."
+          description="Adjust the reporting window to monitor SLA compliance, turnaround time, and divisional efficiency."
           links={[
-            { label: "Executive Dashboard", href: "/analytics/executive" },
-            { label: "Help & Guides", href: "/help" },
+            { label: 'Executive Dashboard', href: '/analytics/executive' },
+            { label: 'Help & Guides', href: '/help' },
           ]}
         />
 
-        {/* SLA Metrics */}
+        {error && (
+          <Card>
+            <CardContent className="py-6">
+              <p className="text-destructive text-sm">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -236,9 +147,7 @@ const Performance = () => {
                 ) : (
                   <TrendingDown className="h-4 w-4 text-red-500" />
                 )}
-                <p className="text-xs text-muted-foreground">
-                  Target: 5 days
-                </p>
+                <p className="text-xs text-muted-foreground">Target: 5 days</p>
               </div>
             </CardContent>
           </Card>
@@ -262,15 +171,12 @@ const Performance = () => {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{rolePerformance.reduce((a, b) => a + b.actions, 0)}</div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Total actions taken
-              </p>
+              <div className="text-2xl font-bold">{totalActions}</div>
+              <p className="text-xs text-muted-foreground mt-2">Total actions recorded</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Tabs */}
         <Tabs defaultValue="sla" className="space-y-4">
           <TabsList>
             <TabsTrigger value="sla">SLA & Turnaround</TabsTrigger>
@@ -292,15 +198,12 @@ const Performance = () => {
                       <span className="text-sm text-muted-foreground">{slaMetrics.compliant}</span>
                     </div>
                     <Progress value={(slaMetrics.compliant / (slaMetrics.total || 1)) * 100} className="h-2" />
-                    
+
                     <div className="flex items-center justify-between mt-4">
                       <span className="text-sm font-medium">SLA Breached</span>
                       <span className="text-sm text-muted-foreground">{slaMetrics.breached}</span>
                     </div>
-                    <Progress 
-                      value={(slaMetrics.breached / (slaMetrics.total || 1)) * 100} 
-                      className="h-2"
-                    />
+                    <Progress value={(slaMetrics.breached / (slaMetrics.total || 1)) * 100} className="h-2" />
                   </div>
                 </CardContent>
               </Card>
@@ -354,14 +257,13 @@ const Performance = () => {
               <CardContent>
                 <div className="space-y-4">
                   {divisionPerformance
+                    .slice()
                     .sort((a, b) => b.completionRate - a.completionRate)
                     .map((division, index) => (
                       <div key={division.name} className="space-y-2">
                         <div className="flex justify-between items-center text-sm">
                           <div className="flex items-center gap-3">
-                            <Badge variant={index === 0 ? "default" : "secondary"}>
-                              #{index + 1}
-                            </Badge>
+                            <Badge variant={index === 0 ? 'default' : 'secondary'}>#{index + 1}</Badge>
                             <span className="font-medium">{division.fullName}</span>
                           </div>
                           <div className="text-muted-foreground">
@@ -389,21 +291,20 @@ const Performance = () => {
                       <PolarGrid />
                       <PolarAngleAxis dataKey="division" />
                       <PolarRadiusAxis />
-                      <Radar 
-                        name="Completion Rate" 
-                        dataKey="completionRate" 
-                        stroke="hsl(var(--chart-1))" 
-                        fill="hsl(var(--chart-1))" 
-                        fillOpacity={0.6} 
+                      <Radar
+                        name="Completion Rate"
+                        dataKey="completionRate"
+                        stroke="hsl(var(--chart-1))"
+                        fill="hsl(var(--chart-1))"
+                        fillOpacity={0.6}
                       />
-                      <Radar 
-                        name="Efficiency Score" 
-                        dataKey="efficiency" 
-                        stroke="hsl(var(--chart-2))" 
-                        fill="hsl(var(--chart-2))" 
-                        fillOpacity={0.6} 
+                      <Radar
+                        name="Efficiency Score"
+                        dataKey="efficiency"
+                        stroke="hsl(var(--chart-2))"
+                        fill="hsl(var(--chart-2))"
+                        fillOpacity={0.4}
                       />
-                      <Legend />
                     </RadarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -412,31 +313,32 @@ const Performance = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>Role Performance</CardTitle>
-                  <CardDescription>Activity and response time by role</CardDescription>
+                  <CardDescription>Breakdown of recorded actions per role</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-6">
-                    {rolePerformance.map(role => (
-                      <div key={role.role} className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">{role.role}</span>
-                          <Badge variant="outline">{role.actions} actions</Badge>
+                  <div className="space-y-4">
+                    {rolePerformance.map((role) => (
+                      <div key={role.role} className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{role.role}</p>
+                          <p className="text-xs text-muted-foreground">Avg response {role.avgResponseTime} days</p>
                         </div>
-                        <div className="text-sm text-muted-foreground">
-                          Avg Response: {role.avgResponseTime} days
-                        </div>
-                        <Progress 
-                          value={Math.min((role.actions / 10) * 100, 100)} 
-                          className="h-2"
-                        />
+                        <Badge variant="outline">{role.actions} actions</Badge>
                       </div>
                     ))}
+                    {rolePerformance.length === 0 && (
+                      <p className="text-sm text-muted-foreground">No role activity recorded for this window.</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
         </Tabs>
+
+        {loading && (
+          <p className="text-xs text-muted-foreground">Refreshing analytics…</p>
+        )}
       </div>
     </DashboardLayout>
   );

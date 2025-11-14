@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.db import models
 
-from common.models import TimeStampedModel, UUIDModel
+from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 
 
 class DocumentWorkspace(UUIDModel, TimeStampedModel):
@@ -28,7 +28,7 @@ class DocumentWorkspace(UUIDModel, TimeStampedModel):
         return self.name
 
 
-class Document(UUIDModel, TimeStampedModel):
+class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
     """Primary document metadata."""
 
     class DocumentType(models.TextChoices):

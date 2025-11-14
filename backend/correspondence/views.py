@@ -7,10 +7,16 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.db.models import Prefetch
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from common.upload_validators import validate_file_upload
 from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+
+from audit.services import AuditService
+from notifications.models import Notification
+from notifications.services import NotificationService
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -33,7 +39,8 @@ from .serializers import (
 
 
 class CorrespondenceViewSet(viewsets.ModelViewSet):
-    queryset = Correspondence.objects.select_related(
+    queryset = Correspondence.objects.none()
+    base_queryset = Correspondence.all_objects.select_related(
         "division",
         "department",
         "created_by",
@@ -69,6 +76,18 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     ordering_fields = ["created_at", "updated_at", "received_date"]
     ordering = ["-created_at"]
 
+    def get_queryset(self):
+        qs = self.base_queryset
+        request = getattr(self, 'request', None)
+        if request:
+            only_deleted = request.query_params.get('only_deleted') == 'true'
+            include_deleted = request.query_params.get('include_deleted') == 'true'
+            if only_deleted:
+                return qs.filter(is_deleted=True)
+            if include_deleted:
+                return qs
+        return qs.filter(is_deleted=False)
+
     def create(self, request, *args, **kwargs):
         # Extract file attachments from request (before serializer processes data)
         attachments = request.FILES.getlist('attachments', [])
@@ -84,7 +103,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         priority = validated_data.get("priority") or Correspondence.Priority.MEDIUM
 
         if not validated_data.get("reference_number"):
-            count = Correspondence.objects.count() + 1
+            count = Correspondence.all_objects.count() + 1
             reference_number = f"NPA/REG/{request.user.username.upper()}/{count:04d}"
         else:
             reference_number = validated_data["reference_number"]
@@ -94,6 +113,17 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             created_by=creator,
             priority=priority,
             reference_number=reference_number,
+        )
+        self._sync_completed_timestamp(correspondence, None)
+        
+        # Create audit log
+        from audit.models import ActivityLog
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_CREATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Created correspondence: {correspondence.reference_number} - {correspondence.subject}",
         )
 
         # Handle file uploads
@@ -106,13 +136,24 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             for file in attachments:
                 # Generate file path
                 file_path = os.path.join('correspondence_attachments', str(correspondence.id), file.name)
-                
-                # Save file to storage
-                # Reset file pointer to beginning in case it was read before
+
+                # Validate the upload before persisting
                 if hasattr(file, 'seek'):
                     file.seek(0)
+                file_bytes = file.read()
+                validate_file_upload(
+                    file_name=file.name,
+                    mime_type=getattr(file, 'content_type', None),
+                    file_bytes=file_bytes,
+                    field_name='attachments',
+                )
+                file_size = len(file_bytes)
+                if hasattr(file, 'seek'):
+                    file.seek(0)
+
+                # Save file to storage
                 saved_path = default_storage.save(file_path, file)
-                
+
                 # Build full URL for the file
                 # Use request.build_absolute_uri for proper URL construction
                 try:
@@ -127,8 +168,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 CorrespondenceAttachment.objects.create(
                     correspondence=correspondence,
                     file_name=file.name,
-                    file_type=file.content_type or 'application/octet-stream',
-                    file_size=file.size,
+                    file_type=getattr(file, 'content_type', None) or 'application/octet-stream',
+                    file_size=file_size,
                     file_url=file_url,
                 )
 
@@ -137,6 +178,21 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(output_serializer.data)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        previous_status = instance.status
+        correspondence = serializer.save()
+        self._sync_completed_timestamp(correspondence, previous_status)
+
+    def _sync_completed_timestamp(self, correspondence, previous_status):
+        if correspondence.status == Correspondence.Status.COMPLETED:
+            if not correspondence.completed_at:
+                correspondence.completed_at = timezone.now()
+                correspondence.save(update_fields=["completed_at"])
+        elif previous_status == Correspondence.Status.COMPLETED and correspondence.completed_at is not None:
+            correspondence.completed_at = None
+            correspondence.save(update_fields=["completed_at"])
 
 class CorrespondenceAttachmentViewSet(viewsets.ModelViewSet):
     queryset = CorrespondenceAttachment.objects.select_related("correspondence")
@@ -186,7 +242,43 @@ class MinuteViewSet(viewsets.ModelViewSet):
     ordering = ["timestamp"]
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        minute = serializer.save(user=self.request.user)
+        correspondence = minute.correspondence
+        
+        # Create audit log
+        from audit.models import ActivityLog
+        action_type = ActivityLog.ActionType.CORRESPONDENCE_MINUTED
+        if minute.action_type == Minute.ActionType.APPROVE:
+            action_type = ActivityLog.ActionType.CORRESPONDENCE_APPROVED
+        elif minute.action_type == Minute.ActionType.REJECT:
+            action_type = ActivityLog.ActionType.CORRESPONDENCE_REJECTED
+        elif minute.action_type == Minute.ActionType.TREAT:
+            action_type = ActivityLog.ActionType.CORRESPONDENCE_ROUTED
+        
+        AuditService.log_correspondence_activity(
+            user=self.request.user,
+            action=action_type,
+            correspondence=correspondence,
+            request=self.request,
+            description=f"{minute.get_action_type_display()} on correspondence: {correspondence.reference_number}",
+            metadata={"minute_id": str(minute.id), "action_type": minute.action_type},
+        )
+        
+        # Send notification to current approver if different from minute author
+        if correspondence.current_approver and correspondence.current_approver.id != self.request.user.id:
+            NotificationService.create_notification(
+                recipient=correspondence.current_approver,
+                title=f"New {minute.get_action_type_display()} on {correspondence.reference_number}",
+                message=f"{self.request.user.get_full_name() or self.request.user.username} added a {minute.get_action_type_display().lower()} on correspondence: {correspondence.subject}",
+                notification_type=Notification.NotificationType.CORRESPONDENCE,
+                priority=Notification.Priority.HIGH if correspondence.priority == Correspondence.Priority.URGENT else Notification.Priority.NORMAL,
+                sender=self.request.user,
+                module="correspondence",
+                related_object_type="correspondence",
+                related_object_id=str(correspondence.id),
+                action_url=f"/correspondence/{correspondence.id}",
+                action_required=correspondence.status == Correspondence.Status.PENDING,
+            )
 
 
 class DelegationViewSet(viewsets.ModelViewSet):

@@ -1,5 +1,6 @@
 "use client";
 
+import { logError, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -99,7 +100,7 @@ const CorrespondenceDetail = () => {
               const document = await fetchDocumentById(docId);
               return document;
             } catch (error) {
-              console.warn(`Failed to load linked document ${docId}`, error);
+              logWarn(`Failed to load linked document ${docId}`, error);
               return null;
             }
           }),
@@ -109,7 +110,7 @@ const CorrespondenceDetail = () => {
           setLinkedDocuments(results.filter((doc): doc is DocumentRecord => Boolean(doc)));
         }
       } catch (error) {
-        console.error('Failed to load linked documents', error);
+        logError('Failed to load linked documents', error);
       }
     };
 
@@ -186,7 +187,7 @@ const CorrespondenceDetail = () => {
         description: notes ? `Instructions recorded: ${notes}` : undefined,
       });
     } catch (error) {
-      console.error('Failed to delegate correspondence', error);
+      logError('Failed to delegate correspondence', error);
       toast.error('Unable to delegate correspondence', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });
@@ -258,7 +259,7 @@ const CorrespondenceDetail = () => {
       toast.success('Linked documents updated');
       await syncFromApi();
     } catch (error) {
-      console.error('Failed to update linked documents', error);
+      logError('Failed to update linked documents', error);
       toast.error('Unable to update linked documents', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });
@@ -272,7 +273,7 @@ const CorrespondenceDetail = () => {
       toast.success('Document unlinked');
       await syncFromApi();
     } catch (error) {
-      console.error('Failed to unlink document', error);
+      logError('Failed to unlink document', error);
       toast.error('Unable to unlink document', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });

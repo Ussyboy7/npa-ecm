@@ -1,0 +1,20 @@
+NPA Electronic Content Management System
+========================================
+
+{{ notification.get_priority_display|upper }} - {{ notification.title }}
+
+{{ notification.message }}
+
+{% if notification.action_url %}
+View Details: {{ notification.action_url }}
+{% endif %}
+
+---
+Type: {{ notification.get_notification_type_display }}
+{% if notification.module %}Module: {{ notification.module|upper }}{% endif %}
+Date: {{ notification.created_at|date:"F d, Y g:i A" }}
+
+---
+This is an automated notification from the NPA ECM system.
+You are receiving this because you have email notifications enabled in your preferences.
+

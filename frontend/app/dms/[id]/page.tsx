@@ -1,5 +1,6 @@
 "use client";
 
+import { logError, logInfo, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -126,7 +127,7 @@ const DocumentDetailPage = () => {
         const ws = await fetchWorkspaces();
         setWorkspaces(ws);
       } catch (error) {
-        console.error('Failed to load workspaces', error);
+        logError('Failed to load workspaces', error);
       }
     };
     void loadWorkspaces();
@@ -173,7 +174,7 @@ const DocumentDetailPage = () => {
                 if (!ignore && existingSession) {
                   setCurrentEditorSession(existingSession);
                 } else {
-                  console.error('Failed to create/reactivate editor session', createError);
+                  logError('Failed to create/reactivate editor session', createError);
                 }
               }
             } else {
@@ -183,19 +184,19 @@ const DocumentDetailPage = () => {
                 if (!ignore) setCurrentEditorSession(session);
               } catch (createError: any) {
                 // If creation fails, it's okay - we'll just not track the session
-                console.warn('Failed to create editor session (non-critical)', createError);
+                logWarn('Failed to create editor session (non-critical)', createError);
               }
             }
           } catch (error) {
-            console.error('Failed to handle editor session', error);
+            logError('Failed to handle editor session', error);
           }
 
           // Load active editors
           const editors = await getActiveEditorSessions(params.id);
-          console.log('Loaded active editors:', editors, 'for document:', params.id);
+          logInfo('Loaded active editors:', editors, 'for document:', params.id);
           if (!ignore) {
             setActiveEditorSessions(editors);
-            console.log('Set active editors state:', editors);
+            logInfo('Set active editors state:', editors);
           }
 
           // Load comments
@@ -216,7 +217,7 @@ const DocumentDetailPage = () => {
                 sensitivity: doc.sensitivity,
               });
             } catch (error) {
-              console.error('Failed to log document access', error);
+              logError('Failed to log document access', error);
             }
           }
 
@@ -309,7 +310,7 @@ const DocumentDetailPage = () => {
                       linkNotes: link.notes,
                     };
                   } catch (error) {
-                    console.error('Failed to load related correspondence', error);
+                    logError('Failed to load related correspondence', error);
                     return null;
                   }
                 })
@@ -321,12 +322,12 @@ const DocumentDetailPage = () => {
               if (!ignore) setRelatedCorrespondence([]);
             }
           } catch (error) {
-            console.error('Failed to load related correspondence', error);
+            logError('Failed to load related correspondence', error);
             if (!ignore) setRelatedCorrespondence([]);
           }
         }
       } catch (error) {
-        console.error('Failed to load document', error);
+        logError('Failed to load document', error);
         toast.error('Unable to load document');
         router.push('/dms');
       }
@@ -343,7 +344,7 @@ const DocumentDetailPage = () => {
   useEffect(() => {
     return () => {
       if (currentEditorSession) {
-        endEditorSession(currentEditorSession.id).catch(console.error);
+        endEditorSession(currentEditorSession.id).catch(logError);
       }
     };
   }, [currentEditorSession]);
@@ -355,13 +356,13 @@ const DocumentDetailPage = () => {
     const pollEditors = async () => {
       try {
         const editors = await getActiveEditorSessions(params.id);
-        console.log('Polled active editors:', editors, 'for document:', params.id);
+        logInfo('Polled active editors:', editors, 'for document:', params.id);
         if (editors && editors.length > 0) {
-          console.log('Setting active editors:', editors);
+          logInfo('Setting active editors:', editors);
         }
         setActiveEditorSessions(editors);
       } catch (error) {
-        console.error('Failed to poll active editors', error);
+        logError('Failed to poll active editors', error);
       }
     };
 
@@ -394,7 +395,7 @@ const DocumentDetailPage = () => {
       setDocument(updated);
       toast.success('Document details updated');
     } catch (error) {
-      console.error('Failed to update metadata', error);
+      logError('Failed to update metadata', error);
       toast.error('Unable to update document');
     }
   };
@@ -430,7 +431,7 @@ const DocumentDetailPage = () => {
       setDocument(updated);
       toast.success('Workspace added');
     } catch (error) {
-      console.error('Failed to add workspace', error);
+      logError('Failed to add workspace', error);
       toast.error('Unable to add workspace');
     }
   };
@@ -445,7 +446,7 @@ const DocumentDetailPage = () => {
       setDocument(updated);
       toast.success('Workspace removed');
     } catch (error) {
-      console.error('Failed to remove workspace', error);
+      logError('Failed to remove workspace', error);
       toast.error('Unable to remove workspace');
     }
   };
@@ -463,7 +464,7 @@ const DocumentDetailPage = () => {
       setNewDiscussionMessage('');
       toast.success('Discussion message added');
     } catch (error) {
-      console.error('Failed to add discussion', error);
+      logError('Failed to add discussion', error);
       toast.error('Unable to add discussion message');
     }
   };

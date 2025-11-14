@@ -1,5 +1,6 @@
 "use client";
 
+import { logError, logWarn } from '@/lib/client-logger';
 const ACCESS_TOKEN_KEY = "npa_ecm_access_token";
 const REFRESH_TOKEN_KEY = "npa_ecm_refresh_token";
 const ACCESS_TOKEN_EXP_KEY = "npa_ecm_access_exp";
@@ -8,7 +9,7 @@ const ORIGINAL_REFRESH_TOKEN_KEY = "npa_ecm_original_refresh";
 const ORIGINAL_ACCESS_EXP_KEY = "npa_ecm_original_access_exp";
 
 const getBaseUrl = () => {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
   return base.endsWith("/") ? base.slice(0, -1) : base;
 };
 
@@ -16,6 +17,7 @@ const isBrowser = () => typeof window !== "undefined";
 
 type FetchOptions = RequestInit & {
   skipAuth?: boolean;
+  responseType?: "json" | "text" | "blob";
 };
 
 export const getStoredAccessToken = () => {
@@ -127,7 +129,7 @@ const refreshAccessToken = async (): Promise<string | null> => {
     storeTokens(data.access, data.refresh ?? refreshToken, data.expires_in);
     return data.access;
   } catch (error) {
-    console.error("Failed to refresh access token", error);
+    logError("Failed to refresh access token", error);
   }
 
   return null;
@@ -140,7 +142,7 @@ const ensureAccessToken = async (): Promise<string | null> => {
 };
 
 export const apiFetch = async <T = unknown>(path: string, options: FetchOptions = {}): Promise<T> => {
-  const { skipAuth, headers, ...rest } = options;
+  const { skipAuth, headers, responseType = "json", ...rest } = options;
   const requestHeaders = new Headers(headers);
 
   if (!skipAuth) {
@@ -221,6 +223,14 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
     return undefined as T;
   }
 
+  if (responseType === "blob") {
+    return (await response.blob()) as T;
+  }
+
+  if (responseType === "text") {
+    return (await response.text()) as T;
+  }
+
   return response.json() as Promise<T>;
 };
 
@@ -264,7 +274,7 @@ export const logout = async () => {
         credentials: "include",
       });
     } catch (error) {
-      console.warn("Failed to blacklist token", error);
+      logWarn("Failed to blacklist token", error);
     }
   }
   clearTokens();

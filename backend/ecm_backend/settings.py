@@ -73,6 +73,8 @@ LOCAL_APPS = [
     "workflow",
     "analytics",
     "support",
+    "notifications",
+    "audit",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -119,30 +121,30 @@ ASGI_APPLICATION = "ecm_backend.asgi.application"
 # Database
 # ---------------------------------------------------------------------------
 
+# Always use PostgreSQL - never SQLite
 DB_ENGINE = os.getenv("DB_ENGINE", "postgres").lower()
 
+# Force PostgreSQL - remove SQLite option
 if DB_ENGINE == "sqlite":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.getenv("SQLITE_DB_NAME", BASE_DIR / "db.sqlite3"),
-        }
+    raise ValueError(
+        "SQLite is not supported. This project requires PostgreSQL. "
+        "Please set DB_ENGINE=postgres in your environment configuration."
+    )
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("DB_NAME", "npa_ecm"),
+        "USER": os.getenv("DB_USER", "npa_ecm_user"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "npa_ecm_password"),
+        "HOST": os.getenv("DB_HOST", "localhost"),
+        "PORT": os.getenv("DB_PORT", "5432"),
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        "OPTIONS": {
+            "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5")),
+        },
     }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("DB_NAME", "npa_ecm"),
-            "USER": os.getenv("DB_USER", "npa_ecm_user"),
-            "PASSWORD": os.getenv("DB_PASSWORD", "npa_ecm_password"),
-            "HOST": os.getenv("DB_HOST", "localhost"),
-            "PORT": os.getenv("DB_PORT", "5432"),
-            "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
-            "OPTIONS": {
-                "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "5")),
-            },
-        }
-    }
+}
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +182,10 @@ STATICFILES_DIRS: list[str] = []
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+CLAMAV_SCAN_ENABLED = os.getenv("CLAMAV_SCAN_ENABLED", "false").lower() == "true"
+CLAMAV_BINARY_PATH = os.getenv("CLAMAV_BINARY_PATH", "clamscan")
 
 # ---------------------------------------------------------------------------
 # Django REST Framework & OpenAPI
@@ -196,6 +202,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": int(os.getenv("PAGINATION_PAGE_SIZE", "20")),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "ecm_backend.exception_handler.custom_exception_handler",
 }
 
 SPECTACULAR_SETTINGS = {
@@ -210,7 +217,7 @@ SPECTACULAR_SETTINGS = {
 # CORS & Security
 # ---------------------------------------------------------------------------
 
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",") if origin.strip()]
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3002,http://127.0.0.1:3002,http://localhost:3000,http://127.0.0.1:3000").split(",") if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
 
 
@@ -281,6 +288,24 @@ LOGGING = {
         "level": LOG_LEVEL,
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Email Configuration
+# ---------------------------------------------------------------------------
+
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() == "true"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@npa.gov.ng")
+SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+
+# Email templates
+EMAIL_TEMPLATE_DIR = BASE_DIR / "notifications" / "templates" / "emails"
 
 
 # ---------------------------------------------------------------------------

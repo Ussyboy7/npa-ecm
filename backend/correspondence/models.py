@@ -5,10 +5,10 @@ from __future__ import annotations
 from django.conf import settings
 from django.db import models
 
-from common.models import TimeStampedModel, UUIDModel
+from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 
 
-class Correspondence(UUIDModel, TimeStampedModel):
+class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     """Represents an incoming or outgoing correspondence item."""
 
     class Source(models.TextChoices):
@@ -83,6 +83,7 @@ class Correspondence(UUIDModel, TimeStampedModel):
         blank=True,
         related_name="correspondence_items",
     )
+    completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

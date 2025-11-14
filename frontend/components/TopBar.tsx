@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { RoleSwitcher } from "./RoleSwitcher";
-import { NotificationBadge } from "./correspondence/NotificationBadge";
+import { NotificationBell } from "./notifications/NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { hasTokens, logout } from "@/lib/api-client";
@@ -51,7 +51,7 @@ export const TopBar = () => {
         {/* Right Actions */}
         <div className="flex items-center gap-3">
           {/* Notifications */}
-          <NotificationBadge />
+          <NotificationBell />
 
           {/* Theme Toggle */}
           <ThemeToggle />

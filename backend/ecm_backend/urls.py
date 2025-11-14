@@ -9,28 +9,34 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 from common.views import health_check
 
 
-urlpatterns = [
-    path("admin/", admin.site.urls),
-
-    # Health check endpoint
-    path("api/health/", health_check, name="health_check"),
-    path("health/", health_check, name="health_check_short"),
-
-    # OpenAPI schema & docs
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
-
-    # Application endpoints
-    path("api/accounts/", include("accounts.urls")),
-    path("api/organization/", include("organization.urls")),
-    path("api/correspondence/", include("correspondence.urls")),
-    path("api/dms/", include("dms.urls")),
-    path("api/workflow/", include("workflow.urls")),
-    path("api/analytics/", include("analytics.urls")),
-    path("api/support/", include("support.urls")),
+api_v1_patterns = [
+    path('health/', health_check, name='health_check'),
+    path('accounts/', include('accounts.urls')),
+    path('organization/', include('organization.urls')),
+    path('correspondence/', include('correspondence.urls')),
+    path('dms/', include('dms.urls')),
+    path('workflow/', include('workflow.urls')),
+    path('analytics/', include('analytics.urls')),
+    path('support/', include('support.urls')),
+    path('notifications/', include('notifications.urls')),
+    path('audit/', include('audit.urls')),
 ]
 
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('health/', health_check, name='health_check_short'),
+
+    # OpenAPI schema & docs
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+
+    # Versioned application endpoints
+    path('api/v1/', include((api_v1_patterns, 'api'), namespace='api_v1')),
+
+    # Legacy alias to keep existing clients working temporarily
+    path('api/', include((api_v1_patterns, 'api'), namespace='api_legacy')),
+]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

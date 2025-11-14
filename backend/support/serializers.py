@@ -6,7 +6,7 @@ from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
 
-from .models import FaqEntry, HelpGuide, SupportTicket
+from .models import ClientLogEntry, FaqEntry, HelpGuide, SupportTicket
 
 
 class HelpGuideSerializer(serializers.ModelSerializer):
@@ -80,3 +80,14 @@ class SupportTicketSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_by", "assigned_to", "resolved_at", "created_at", "updated_at"]
+
+
+class ClientLogPayloadSerializer(serializers.Serializer):
+    level = serializers.ChoiceField(choices=ClientLogEntry.Level.choices)
+    message = serializers.CharField(required=False, allow_blank=True, max_length=500)
+    args = serializers.ListField(child=serializers.JSONField(), required=False)
+    context = serializers.DictField(child=serializers.JSONField(), required=False)
+
+
+class ClientLogBatchSerializer(serializers.Serializer):
+    entries = ClientLogPayloadSerializer(many=True)

@@ -1,3 +1,4 @@
+import { logError } from '@/lib/client-logger';
 // Document generation utilities for PDF and Word export
 
 import { Correspondence, Minute } from './npa-structure';
@@ -311,7 +312,7 @@ export function downloadAsPDF(content: DocumentContent): void {
         setTimeout(() => URL.revokeObjectURL(url), 500);
       })
       .catch(err => {
-        console.error('Error downloading PDF:', err);
+        logError('Error downloading PDF:', err);
         // Fallback to print preview method
         const html = generateDocumentHTML(content);
         const iframe = document.createElement('iframe');
@@ -422,7 +423,7 @@ export function downloadAsWord(content: DocumentContent): void {
         setTimeout(() => URL.revokeObjectURL(url), 500);
       })
       .catch(err => {
-        console.error('Error downloading Word document:', err);
+        logError('Error downloading Word document:', err);
         // Fallback to generating Word document from HTML
         const html = generateDocumentHTML(content);
         const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
@@ -470,4 +471,3 @@ export function showPrintPreview(content: DocumentContent): void {
   previewWindow.document.write(html);
   previewWindow.document.close();
 }
-

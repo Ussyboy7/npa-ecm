@@ -1,3 +1,4 @@
+import { logError, logInfo } from '@/lib/client-logger';
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { Correspondence, Minute } from '@/lib/npa-structure';
 import {
@@ -48,6 +49,7 @@ const mapApiCorrespondence = (item: any): Correspondence => ({
   subject: item.subject ?? '',
   source: item.source ?? 'internal',
   receivedDate: item.received_date ?? '',
+  completedAt: item.completed_at ?? undefined,
   senderName: item.sender_name ?? '',
   senderOrganization: item.sender_organization ?? '',
   status: item.status ?? 'pending',
@@ -279,9 +281,9 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       setDelegations(delegationsList);
     } catch (error) {
       if (error instanceof Error && error.message.toLowerCase().includes('auth')) {
-        console.info('Correspondence data will sync after authentication is available.');
+        logInfo('Correspondence data will sync after authentication is available.');
       } else {
-        console.error('Failed to load correspondence from API', error);
+        logError('Failed to load correspondence from API', error);
       }
     }
   }, [hydrated, currentUser]);
@@ -329,7 +331,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         return updated;
       });
     } catch (error) {
-      console.error('Failed to add minute via API', error);
+      logError('Failed to add minute via API', error);
       throw error;
     }
   };
@@ -353,7 +355,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         return updatedList;
       });
     } catch (error) {
-      console.error('Failed to update correspondence via API', error);
+      logError('Failed to update correspondence via API', error);
       throw error;
     }
   };
@@ -373,7 +375,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       });
       return created;
     } catch (error) {
-      console.error('Failed to create correspondence via API', error);
+      logError('Failed to create correspondence via API', error);
       throw error;
     }
   };

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
+import { logInfo } from "../lib/client-logger";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,4 +18,4 @@ fs.writeFileSync(
   outputPath,
   JSON.stringify({ GRADE_LEVELS }, null, 2)
 );
-console.log(`Wrote organization data to ${outputPath}`);
+logInfo(`Wrote organization data to ${outputPath}`);

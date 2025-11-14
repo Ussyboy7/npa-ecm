@@ -1,5 +1,6 @@
 "use client";
 
+import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -149,7 +150,7 @@ const DocumentManagementPage = () => {
           setWorkspaces(spaces.value);
         }
       } catch (error) {
-        console.error('Failed to load DMS data', error);
+        logError('Failed to load DMS data', error);
       }
     };
 

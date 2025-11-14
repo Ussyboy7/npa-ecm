@@ -1,5 +1,6 @@
 "use client";
 
+import { logError } from '@/lib/client-logger';
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -77,7 +78,7 @@ export const DocumentPreviewModal = ({
                 setLoading(false);
               })
               .catch(err => {
-                console.error('Error converting Word document:', err);
+                logError('Error converting Word document:', err);
                 setError(`Failed to convert Word document: ${err.message}`);
                 setLoading(false);
               });
@@ -87,7 +88,7 @@ export const DocumentPreviewModal = ({
           }
         })
         .catch(err => {
-          console.error('Error loading file:', err);
+          logError('Error loading file:', err);
           setError(err.message);
           setLoading(false);
         });

@@ -1,5 +1,6 @@
 "use client";
 
+import { logWarn } from '@/lib/client-logger';
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
@@ -48,7 +49,7 @@ export const useCurrentUser = () => {
       const response = await apiFetch("/accounts/auth/me/");
       setRemoteUser(mapApiUserToUser(response));
     } catch (error) {
-      console.warn("Failed to hydrate current user from API", error);
+      logWarn("Failed to hydrate current user from API", error);
       setRemoteUser(null);
     } finally {
       setHydrated(true);
@@ -97,4 +98,3 @@ export const useCurrentUser = () => {
     isImpersonating: hasOriginalTokens(),
   };
 };
-

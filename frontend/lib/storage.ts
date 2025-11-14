@@ -1,3 +1,4 @@
+import { logError } from '@/lib/client-logger';
 // localStorage utilities for data persistence
 
 import { Correspondence, Minute } from './npa-structure';
@@ -15,7 +16,7 @@ export const getFromStorage = <T>(key: string): T | null => {
   try {
     return JSON.parse(raw) as T;
   } catch (error) {
-    console.error(`Failed to parse storage item for key ${key}`, error);
+    logError(`Failed to parse storage item for key ${key}`, error);
     return null;
   }
 };

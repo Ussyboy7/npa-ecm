@@ -1,8 +1,9 @@
 """URL routes for the support app."""
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import FaqEntryViewSet, HelpGuideViewSet, SupportTicketViewSet
+from .views import ClientLogIngestView, FaqEntryViewSet, HelpGuideViewSet, SupportTicketViewSet
 
 
 router = DefaultRouter()
@@ -11,5 +12,7 @@ router.register(r"faqs", FaqEntryViewSet, basename="faq-entry")
 router.register(r"tickets", SupportTicketViewSet, basename="support-ticket")
 
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path('client-logs/', ClientLogIngestView.as_view(), name='client-log-ingest'),
+]
 

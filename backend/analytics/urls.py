@@ -1,14 +1,24 @@
 """URL routes for the analytics app."""
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import ReportSnapshotViewSet, UsageMetricViewSet
-
+from .views import (
+    AnalyticsExportView,
+    ExecutiveAnalyticsView,
+    PerformanceAnalyticsView,
+    ReportSnapshotViewSet,
+    ReportsAnalyticsView,
+    UsageMetricViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"reports", ReportSnapshotViewSet, basename="report-snapshot")
 router.register(r"metrics", UsageMetricViewSet, basename="usage-metric")
 
-
-urlpatterns = router.urls
-
+urlpatterns = router.urls + [
+    path("performance/", PerformanceAnalyticsView.as_view(), name="analytics-performance"),
+    path("executive/", ExecutiveAnalyticsView.as_view(), name="analytics-executive"),
+    path("insights/", ReportsAnalyticsView.as_view(), name="analytics-insights"),
+    path("export/", AnalyticsExportView.as_view(), name="analytics-export"),
+]

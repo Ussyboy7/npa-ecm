@@ -1,4 +1,5 @@
 "use client";
+import { logInfo, logWarn } from '@/lib/client-logger';
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -74,18 +75,18 @@ const CorrespondenceRegister = () => {
 
   const executives = useMemo(() => {
     if (!Array.isArray(organizationUsers)) {
-      console.log('organizationUsers is not an array:', organizationUsers);
+      logInfo('organizationUsers is not an array:', organizationUsers);
       return [];
     }
     const eligibleGrades = new Set(['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3', 'MSS4']);
     const filtered = organizationUsers.filter((user) => user && user.gradeLevel && eligibleGrades.has(user.gradeLevel));
-    console.log('Executives filtered:', { total: organizationUsers.length, eligible: filtered.length, sample: filtered[0] });
+    logInfo('Executives filtered:', { total: organizationUsers.length, eligible: filtered.length, sample: filtered[0] });
     return filtered;
   }, [organizationUsers]);
 
   const filteredExecutives = useMemo(() => {
     if (!assignSearch.trim()) {
-      console.log('No search query, showing all executives:', executives.length);
+      logInfo('No search query, showing all executives:', executives.length);
       return executives;
     }
     const query = assignSearch.toLowerCase();
@@ -94,7 +95,7 @@ const CorrespondenceRegister = () => {
         .filter(Boolean)
         .some((value) => value && typeof value === 'string' && value.toLowerCase().includes(query)),
     );
-    console.log('Filtered executives by search:', { query, total: executives.length, filtered: filtered.length });
+    logInfo('Filtered executives by search:', { query, total: executives.length, filtered: filtered.length });
     return filtered;
   }, [executives, assignSearch]);
 
@@ -146,7 +147,7 @@ const CorrespondenceRegister = () => {
   }
 
   // Debug logging - always log in development
-  console.log('🔍 Register Page Debug:', {
+  logInfo('🔍 Register Page Debug:', {
     mounted,
     hydrated,
     hasCurrentUser: !!currentUser,
@@ -172,7 +173,7 @@ const CorrespondenceRegister = () => {
     currentUser?.systemRole?.toLowerCase().includes('super') ||
     currentUser?.systemRole?.toLowerCase().includes('admin');
 
-  console.log('🔍 Permission Check:', {
+  logInfo('🔍 Permission Check:', {
     canRegisterCorrespondence: permissions.canRegisterCorrespondence,
     isSuperAdmin,
     isSuperAdminFallback,
@@ -187,10 +188,10 @@ const CorrespondenceRegister = () => {
     (process.env.NODE_ENV === 'development' && currentUser);
 
   if (isSuperAdminFallback) {
-    console.log('✅ Superadmin detected - allowing access');
+    logInfo('✅ Superadmin detected - allowing access');
   }
   if (process.env.NODE_ENV === 'development' && currentUser) {
-    console.warn('⚠️ DEVELOPMENT MODE: Allowing access for debugging');
+    logWarn('⚠️ DEVELOPMENT MODE: Allowing access for debugging');
   }
 
   // Only show restriction if we're sure the user doesn't have access
@@ -599,7 +600,7 @@ const CorrespondenceRegister = () => {
                           return false;
                         });
                         if (dirUsers.length === 0) return null;
-                        console.log(`Directorate ${dir.name}: ${dirUsers.length} users`);
+                        logInfo(`Directorate ${dir.name}: ${dirUsers.length} users`);
                         return (
                           <div key={dir.id} className="border border-border rounded-lg my-1">
                             <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/70">
@@ -633,7 +634,7 @@ const CorrespondenceRegister = () => {
                           user && user.id && !user.directorate && !user.division
                         );
                         if (unassignedUsers.length > 0) {
-                          console.log(`Unassigned users: ${unassignedUsers.length}`, unassignedUsers.map(u => u.name));
+                          logInfo(`Unassigned users: ${unassignedUsers.length}`, unassignedUsers.map(u => u.name));
                         }
                         if (unassignedUsers.length === 0) return null;
                         return (

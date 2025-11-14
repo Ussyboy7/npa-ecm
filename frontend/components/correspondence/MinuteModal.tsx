@@ -1,3 +1,4 @@
+import { logError } from '@/lib/client-logger';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -717,7 +718,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
         description: `Forwarded to ${forwardUser?.name ?? 'selected user'}`,
       });
     } catch (error) {
-      console.error('Failed to record minute', error);
+      logError('Failed to record minute', error);
       toast.error('Unable to save minute', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });
@@ -1394,4 +1395,3 @@ const [newTemplateName, setNewTemplateName] = useState('');
     </Dialog>
   );
 };
-

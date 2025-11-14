@@ -81,6 +81,7 @@ export type Correspondence = {
   subject: string;
   source: 'internal' | 'external';
   receivedDate: string;
+  completedAt?: string;
   senderName: string;
   senderOrganization: string;
   status: 'pending' | 'in-progress' | 'completed' | 'archived';

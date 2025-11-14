@@ -1,5 +1,6 @@
 "use client";
 
+import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -107,7 +108,7 @@ export default function LoginPage() {
       toast.success("Signed in successfully");
       router.push("/dashboard");
     } catch (error) {
-      console.error(error);
+      logError(error);
       clearTokens();
       toast.error(
         error instanceof Error ? error.message : "Unable to sign in. Please check your credentials."

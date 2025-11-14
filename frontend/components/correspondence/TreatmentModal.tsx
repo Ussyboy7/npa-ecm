@@ -1,3 +1,4 @@
+import { logError } from '@/lib/client-logger';
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -283,7 +284,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           : `Sent to ${recipient?.name ?? 'selected user'}`,
       });
     } catch (error) {
-      console.error('Failed to process treatment', error);
+      logError('Failed to process treatment', error);
       toast.error('Unable to send response', {
         description: error instanceof Error ? error.message : 'Please try again.',
       });

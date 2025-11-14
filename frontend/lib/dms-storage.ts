@@ -1,3 +1,4 @@
+import { logError, logInfo } from '@/lib/client-logger';
 import { apiFetch, hasTokens } from './api-client';
 import type { User } from './npa-structure';
 
@@ -314,7 +315,7 @@ export const createDocument = async (
     body: JSON.stringify(versionPayload),
   });
   } catch (error) {
-    console.error('Failed to create document version:', error);
+    logError('Failed to create document version:', error);
     throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
@@ -336,7 +337,7 @@ export const createDocumentVersion = async (
     body: JSON.stringify(versionPayload),
   });
   } catch (error) {
-    console.error('Failed to create document version:', error);
+    logError('Failed to create document version:', error);
     throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
@@ -650,7 +651,7 @@ export const getActiveEditorSessions = async (documentId: string): Promise<Edito
     const payload = await apiFetch<ApiPayload>(`/dms/editor-sessions/?document=${documentId}&is_active=true`);
     const results = unwrapResults<any>(payload);
     
-    console.log('getActiveEditorSessions API response:', { payload, results, documentId });
+    logInfo('getActiveEditorSessions API response:', { payload, results, documentId });
     
     const sessions = results.map((item: any) => {
       const session = {
@@ -661,14 +662,14 @@ export const getActiveEditorSessions = async (documentId: string): Promise<Edito
         note: item.note ?? undefined,
         isActive: item.is_active ?? true,
       };
-      console.log('Mapped editor session:', session, 'from item:', item);
+      logInfo('Mapped editor session:', session, 'from item:', item);
       return session;
     });
     
-    console.log('Returning active editor sessions:', sessions);
+    logInfo('Returning active editor sessions:', sessions);
     return sessions;
   } catch (error) {
-    console.error('Error fetching active editor sessions:', error);
+    logError('Error fetching active editor sessions:', error);
     return [];
   }
 };
@@ -693,7 +694,7 @@ export const getEditorSessionForUser = async (documentId: string, userId: string
     }
     return null;
   } catch (error) {
-    console.error('Failed to get editor session for user', error);
+    logError('Failed to get editor session for user', error);
     return null;
   }
 };

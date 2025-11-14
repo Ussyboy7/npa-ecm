@@ -7,6 +7,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from audit.services import AuditService
+from notifications.models import Notification
+from notifications.services import NotificationService
+
 from .models import ApprovalTask, TaskAction, WorkflowStep, WorkflowTemplate
 from .serializers import (
     ApprovalTaskSerializer,
@@ -81,4 +85,36 @@ class TaskActionViewSet(viewsets.ModelViewSet):
     ordering = ["-created_at"]
 
     def perform_create(self, serializer):
-        serializer.save(actor=self.request.user)
+        action = serializer.save(actor=self.request.user)
+        task = action.task
+        
+        # Create audit log
+        from audit.models import ActivityLog
+        action_type = ActivityLog.ActionType.WORKFLOW_APPROVED if action.action == TaskAction.Action.APPROVE else ActivityLog.ActionType.WORKFLOW_REJECTED
+        AuditService.log_activity(
+            user=self.request.user,
+            action=action_type,
+            object_type="workflow_task",
+            object_id=str(task.id),
+            object_repr=f"Task {task.id}",
+            module="workflow",
+            description=f"{action.get_action_display()} workflow task",
+            request=self.request,
+            metadata={"task_id": str(task.id), "action": action.action},
+        )
+        
+        # Send notification to task assignee if different from actor
+        if task.assignee and task.assignee.id != self.request.user.id:
+            NotificationService.create_notification(
+                recipient=task.assignee,
+                title=f"Workflow Task {action.get_action_display()}",
+                message=f"{self.request.user.get_full_name() or self.request.user.username} {action.get_action_display().lower()}d a workflow task assigned to you.",
+                notification_type=Notification.NotificationType.WORKFLOW,
+                priority=Notification.Priority.HIGH if action.action == TaskAction.Action.REJECT else Notification.Priority.NORMAL,
+                sender=self.request.user,
+                module="workflow",
+                related_object_type="workflow_task",
+                related_object_id=str(task.id),
+                action_url=f"/workflows/tasks/{task.id}",
+                action_required=action.action == TaskAction.Action.APPROVE,
+            )

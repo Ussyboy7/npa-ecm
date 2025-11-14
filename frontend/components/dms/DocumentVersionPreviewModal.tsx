@@ -1,5 +1,6 @@
 "use client";
 
+import { logError, logInfo } from '@/lib/client-logger';
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -48,7 +49,7 @@ export const DocumentVersionPreviewModal = ({
       
       // If there's a fileUrl, fetch it
       if (version.fileUrl && version.fileUrl.trim() !== '') {
-        console.log('DocumentVersionPreviewModal: Fetching file', {
+        logInfo('DocumentVersionPreviewModal: Fetching file', {
           fileUrl: version.fileUrl,
           fileName: version.fileName,
           fileType: version.fileType,
@@ -83,7 +84,7 @@ export const DocumentVersionPreviewModal = ({
                   setLoading(false);
                 })
                 .catch(err => {
-                  console.error('Error converting Word document:', err);
+                  logError('Error converting Word document:', err);
                   setError(`Failed to convert Word document: ${err.message}`);
                   setLoading(false);
                 });
@@ -93,13 +94,13 @@ export const DocumentVersionPreviewModal = ({
             }
           })
           .catch(err => {
-            console.error('Error loading file:', err);
+            logError('Error loading file:', err);
             setError(err.message);
             setLoading(false);
           });
       } else {
         // No fileUrl and no contentHtml
-        console.log('DocumentVersionPreviewModal: No fileUrl or contentHtml', {
+        logInfo('DocumentVersionPreviewModal: No fileUrl or contentHtml', {
           hasFileUrl: !!version.fileUrl,
           fileUrl: version.fileUrl,
           hasContentHtml: !!(version.contentHtml && version.contentHtml.trim() !== ''),
@@ -397,5 +398,4 @@ export const DocumentVersionPreviewModal = ({
     </Dialog>
   );
 };
-
 
