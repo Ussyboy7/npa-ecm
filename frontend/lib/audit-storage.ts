@@ -33,6 +33,7 @@ export const getActivityLogs = async (params?: {
   user?: string;
   action?: string;
   objectType?: string;
+  objectId?: string;
   module?: string;
   severity?: string;
   success?: boolean;
@@ -46,6 +47,7 @@ export const getActivityLogs = async (params?: {
   if (params?.user) queryParams.append('user', params.user);
   if (params?.action) queryParams.append('action', params.action);
   if (params?.objectType) queryParams.append('object_type', params.objectType);
+  if (params?.objectId) queryParams.append('object_id', params.objectId);
   if (params?.module) queryParams.append('module', params.module);
   if (params?.severity) queryParams.append('severity', params.severity);
   if (params?.success !== undefined) queryParams.append('success', String(params.success));
