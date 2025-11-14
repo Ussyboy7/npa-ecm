@@ -103,6 +103,8 @@ services:
     volumes:
       - ./nginx/stag.conf:/etc/nginx/conf.d/default.conf
       - ./nginx/ssl:/etc/nginx/ssl
+      - ./backend/media:/app/media:ro
+      - ./backend/staticfiles:/app/staticfiles:ro
       - nginx_logs_stag:/var/log/nginx
     depends_on:
       frontend_stag:
