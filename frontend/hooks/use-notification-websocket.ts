@@ -17,8 +17,13 @@ interface UseNotificationWebSocketOptions {
   onUnreadCountChange?: (count: number) => void;
 }
 
+const WS_DISABLED =
+  typeof process !== 'undefined' &&
+  process.env.NEXT_PUBLIC_NOTIFICATIONS_WS_DISABLED === 'true';
+
 export const useNotificationWebSocket = (options: UseNotificationWebSocketOptions = {}) => {
   const { enabled = true, onNotification, onUnreadCountChange } = options;
+  const isWsEnabled = enabled && !WS_DISABLED;
   const { currentUser } = useCurrentUser();
   const [isConnected, setIsConnected] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -45,7 +50,7 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
   }, []);
 
   const connect = useCallback(() => {
-    if (!enabled || !currentUser || wsRef.current?.readyState === WebSocket.OPEN) {
+    if (!isWsEnabled || !currentUser || wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
 
@@ -115,7 +120,7 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
       };
 
       ws.onerror = (error) => {
-        logError('WebSocket error:', error);
+        logWarn('Notifications WebSocket error; falling back to polling.', error);
         setIsConnected(false);
       };
 
@@ -125,7 +130,7 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
         wsRef.current = null;
 
         // Attempt to reconnect
-        if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        if (isWsEnabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
           const delay = reconnectDelay * reconnectAttemptsRef.current;
           logInfo(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
@@ -134,16 +139,16 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
             connect();
           }, delay);
         } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-          logError('Max reconnection attempts reached');
+          logWarn('Max WebSocket reconnection attempts reached; continuing with polling only.');
         }
       };
 
       wsRef.current = ws;
     } catch (error) {
-      logError('Failed to create WebSocket connection:', error);
+      logWarn('Failed to create WebSocket connection; continuing with polling only.', error);
       setIsConnected(false);
     }
-  }, [enabled, currentUser, getWebSocketUrl, onNotification, onUnreadCountChange]);
+  }, [isWsEnabled, currentUser, getWebSocketUrl, onNotification, onUnreadCountChange, maxReconnectAttempts, reconnectDelay]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -182,14 +187,21 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
 
   // Initial connection and cleanup
   useEffect(() => {
-    if (enabled && currentUser) {
+    if (!isWsEnabled) {
+      if (enabled && WS_DISABLED) {
+        logInfo('Notifications WebSocket disabled via NEXT_PUBLIC_NOTIFICATIONS_WS_DISABLED');
+      }
+      return;
+    }
+
+    if (currentUser) {
       connect();
     }
 
     return () => {
       disconnect();
     };
-  }, [enabled, currentUser, connect, disconnect]);
+  }, [isWsEnabled, enabled, currentUser, connect, disconnect]);
 
   // Load initial unread count
   useEffect(() => {
