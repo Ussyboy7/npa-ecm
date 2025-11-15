@@ -190,7 +190,7 @@ const DepartmentFilesPage = () => {
               {completionPackageUrl && (
                 <Button
                   variant="secondary"
-                  size="xs"
+                  size="sm"
                   asChild
                   className="text-xs h-7 px-3"
                   onClick={(event) => event.stopPropagation()}
