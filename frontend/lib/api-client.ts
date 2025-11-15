@@ -187,10 +187,12 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
 
   if (!response.ok) {
     let errorMessage = `API request failed with status ${response.status}`;
+    let errorDetails: unknown = undefined;
     try {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const errorData = await response.json();
+        errorDetails = (errorData as Record<string, unknown> | undefined)?.details;
         if (errorData.detail) {
           errorMessage = errorData.detail;
         } else if (errorData.message) {
@@ -214,6 +216,25 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
       // If we can't parse the error, use the status text
       errorMessage = response.statusText || `HTTP ${response.status}`;
     }
+
+    if (errorDetails && typeof errorDetails === "object") {
+      const flattened = Object.entries(errorDetails)
+        .map(([key, value]) => {
+          if (Array.isArray(value)) {
+            return `${key}: ${value.join(", ")}`;
+          }
+          if (typeof value === "string") {
+            return `${key}: ${value}`;
+          }
+          return `${key}: ${JSON.stringify(value)}`;
+        })
+        .filter(Boolean)
+        .join(" | ");
+      if (flattened) {
+        errorMessage = `${errorMessage} — ${flattened}`;
+      }
+    }
+
     const error = new Error(errorMessage);
     (error as any).status = response.status;
     throw error;

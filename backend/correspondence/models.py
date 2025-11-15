@@ -6,6 +6,7 @@ from django.conf import settings
 from django.db import models
 
 from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
+from dms.models import Document
 
 
 class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
@@ -116,6 +117,14 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         blank=True,
         related_name="correspondence_items",
     )
+    completion_package = models.ForeignKey(
+        Document,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="completion_packages",
+    )
+    completion_summary_generated_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

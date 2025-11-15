@@ -3785,6 +3785,42 @@
       "canApprove": true
     },
     {
+      "officeId": "office-dir-md",
+      "userId": "user-secretary-md",
+      "assignmentRole": "secretariat",
+      "isPrimary": false,
+      "canRegister": true,
+      "canRoute": false,
+      "canApprove": false
+    },
+    {
+      "officeId": "office-dir-edfa",
+      "userId": "user-secretary-ed",
+      "assignmentRole": "secretariat",
+      "isPrimary": false,
+      "canRegister": true,
+      "canRoute": false,
+      "canApprove": false
+    },
+    {
+      "officeId": "office-dir-edmo",
+      "userId": "user-secretary-ed",
+      "assignmentRole": "secretariat",
+      "isPrimary": false,
+      "canRegister": true,
+      "canRoute": false,
+      "canApprove": false
+    },
+    {
+      "officeId": "office-dir-edets",
+      "userId": "user-secretary-ed",
+      "assignmentRole": "secretariat",
+      "isPrimary": false,
+      "canRegister": true,
+      "canRoute": false,
+      "canApprove": false
+    },
+    {
       "officeId": "office-div-S&I",
       "userId": "user-gm-superannuation-investment",
       "assignmentRole": "principal",

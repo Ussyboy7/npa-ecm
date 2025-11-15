@@ -34,7 +34,7 @@ const ExecutiveInbox = () => {
 
     return correspondence
       .filter((item) => {
-        if (item.status === 'completed') return false;
+        if (item.status === 'archived') return false;
         if (item.currentApproverId === currentUser.id) return true;
         if (userDivisionId && item.divisionId === userDivisionId) return true;
         return false;
@@ -66,8 +66,9 @@ const ExecutiveInbox = () => {
     const total = inboxItems.length;
     const pending = inboxItems.filter((item) => item.status === 'pending').length;
     const inProgress = inboxItems.filter((item) => item.status === 'in-progress').length;
+    const completed = inboxItems.filter((item) => item.status === 'completed').length;
     const urgent = inboxItems.filter((item) => item.priority === 'urgent').length;
-    return { total, pending, inProgress, urgent };
+    return { total, pending, inProgress, urgent, completed };
   }, [inboxItems]);
 
   if (!hydrated) {
@@ -264,6 +265,9 @@ const ExecutiveInbox = () => {
             <TabsTrigger value="in-progress">
               In Progress ({filterByStatus('in-progress').length})
             </TabsTrigger>
+            <TabsTrigger value="completed">
+              Completed ({filterByStatus('completed').length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="space-y-3">
@@ -291,6 +295,20 @@ const ExecutiveInbox = () => {
             {filterByStatus('in-progress').map(corr => (
               <ItemCard key={corr.id} corr={corr} />
             ))}
+          </TabsContent>
+
+          <TabsContent value="completed" className="space-y-3">
+            {filterByStatus('completed').length === 0 ? (
+              <Card>
+                <CardContent className="text-center py-12 text-muted-foreground">
+                  No completed items available.
+                </CardContent>
+              </Card>
+            ) : (
+              filterByStatus('completed').map(corr => (
+                <ItemCard key={corr.id} corr={corr} />
+              ))
+            )}
           </TabsContent>
 
         </Tabs>

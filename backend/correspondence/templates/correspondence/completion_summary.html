@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Completion Summary</title>
+    <style>
+      body {
+        font-family: "Helvetica Neue", Arial, sans-serif;
+        color: #0f172a;
+        padding: 32px;
+        line-height: 1.5;
+      }
+      h1,
+      h2,
+      h3 {
+        color: #111827;
+      }
+      .meta {
+        margin-bottom: 24px;
+      }
+      .meta dt {
+        font-weight: 600;
+        color: #334155;
+      }
+      .meta dd {
+        margin: 0 0 12px 0;
+        color: #0f172a;
+      }
+      .section {
+        margin-top: 32px;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 24px;
+      }
+      .minute {
+        margin-bottom: 20px;
+        padding: 16px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fafc;
+      }
+      .minute-header {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .small {
+        font-size: 12px;
+        color: #475569;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 8px;
+      }
+      th,
+      td {
+        border: 1px solid #e2e8f0;
+        padding: 8px;
+        text-align: left;
+        font-size: 14px;
+      }
+      th {
+        background: #f1f5f9;
+        font-weight: 600;
+      }
+      .muted {
+        color: #475569;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Correspondence Completion Summary</h1>
+    <div class="meta">
+      <dl>
+        <dt>Reference</dt>
+        <dd>{{ correspondence.reference_number|default:"—" }}</dd>
+        <dt>Subject</dt>
+        <dd>{{ correspondence.subject }}</dd>
+        <dt>Owning office</dt>
+        <dd>{{ correspondence.owning_office.name|default:"Unassigned" }}</dd>
+        <dt>Current office</dt>
+        <dd>{{ correspondence.current_office.name|default:"Unassigned" }}</dd>
+        <dt>Priority</dt>
+        <dd>{{ correspondence.get_priority_display }}</dd>
+        <dt>Archive level</dt>
+        <dd>{{ correspondence.get_archive_level_display|default:"Department" }}</dd>
+        <dt>Generated</dt>
+        <dd>
+          {{ generated_at|date:"F j, Y H:i" }}
+          {% if generated_by %}
+            · {{ generated_by.get_full_name|default:generated_by.username }}
+          {% endif %}
+        </dd>
+      </dl>
+    </div>
+
+    <div class="section">
+      <h2>Minutes & Decisions</h2>
+      {% if minutes %}
+        {% for minute in minutes %}
+          <div class="minute">
+            <div class="minute-header">
+              {{ minute.get_action_type_display }} by
+              {{ minute.user.get_full_name|default:minute.user.username }}
+            </div>
+            <div class="small">
+              {{ minute.timestamp|date:"F j, Y H:i" }} ·
+              Direction: {{ minute.get_direction_display }}
+            </div>
+            <p>{{ minute.minute_text|linebreaksbr }}</p>
+            {% if minute.to_office %}
+              <div class="small">
+                Routed to: {{ minute.to_office.name }}
+              </div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="muted">No minutes were recorded for this correspondence.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Distribution</h2>
+      {% if distribution %}
+        <table>
+          <thead>
+            <tr>
+              <th>Recipient</th>
+              <th>Type</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in distribution %}
+              <tr>
+                <td>
+                  {{ entry.directorate.name|default:entry.division.name|default:entry.department.name|default:"—" }}
+                </td>
+                <td>{{ entry.get_recipient_type_display }}</td>
+                <td>{{ entry.get_purpose_display }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No distribution list captured.</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>Attachments</h2>
+      {% if attachments %}
+        <table>
+          <thead>
+            <tr>
+              <th>File name</th>
+              <th>Type</th>
+              <th>Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for attachment in attachments %}
+              <tr>
+                <td>{{ attachment.file_name }}</td>
+                <td>{{ attachment.file_type|default:"—" }}</td>
+                <td>
+                  {% if attachment.file_size %}
+                    {{ attachment.file_size|filesizeformat }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No attachments were linked to this correspondence.</p>
+      {% endif %}
+    </div>
+  </body>
+</html>
+

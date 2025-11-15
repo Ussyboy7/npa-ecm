@@ -313,3 +313,6 @@ EMAIL_TEMPLATE_DIR = BASE_DIR / "notifications" / "templates" / "emails"
 # ---------------------------------------------------------------------------
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Application URLs
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3002")

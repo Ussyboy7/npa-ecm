@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -26,6 +27,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 
 from organization.models import Office, OfficeMembership
+from dms.models import DocumentVersion
 
 from .models import (
     Correspondence,
@@ -43,8 +45,10 @@ from .serializers import (
     DelegationSerializer,
     MinuteSerializer,
 )
+from .services import CompletionPackageService
 
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -63,6 +67,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         "current_approver",
         "owning_office",
         "current_office",
+        "completion_package",
     ).prefetch_related(
         "linked_documents",
         "attachments",
@@ -76,6 +81,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             ),
         ),
         "minutes",
+        Prefetch(
+            "completion_package__versions",
+            queryset=DocumentVersion.objects.order_by("-version_number"),
+        ),
     )
     serializer_class = CorrespondenceSerializer
     permission_classes = [IsAuthenticated]
@@ -207,8 +216,21 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         instance = self.get_object()
         previous_status = instance.status
+        if previous_status == Correspondence.Status.COMPLETED:
+            raise ValidationError({"detail": "Completed correspondence is read-only."})
         correspondence = serializer.save()
         self._sync_completed_timestamp(correspondence, previous_status)
+        if (
+            correspondence.status == Correspondence.Status.COMPLETED
+            and previous_status != Correspondence.Status.COMPLETED
+        ):
+            try:
+                CompletionPackageService.generate_completion_package(correspondence, self.request.user)
+            except Exception:
+                logger.exception(
+                    "Failed to generate completion package for correspondence %s",
+                    correspondence.id,
+                )
 
     def _sync_completed_timestamp(self, correspondence, previous_status):
         if correspondence.status == Correspondence.Status.COMPLETED:
@@ -317,6 +339,17 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if current_office:
             self._notify_office_members(current_office, correspondence, request.user, reason)
 
+        serializer = self.get_serializer(correspondence)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="completion-package")
+    def regenerate_completion_package(self, request, pk=None):
+        correspondence = self.get_object()
+        if correspondence.status != Correspondence.Status.COMPLETED:
+            raise ValidationError(
+                {"detail": "Only completed correspondence can generate completion packages."}
+            )
+        CompletionPackageService.generate_completion_package(correspondence, request.user)
         serializer = self.get_serializer(correspondence)
         return Response(serializer.data)
 
@@ -784,6 +817,8 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         correspondence = serializer.validated_data["correspondence"]
+        if correspondence.status == Correspondence.Status.COMPLETED:
+            raise ValidationError({"detail": "Completed correspondence cannot be updated."})
         current_office = correspondence.current_office
         minute = serializer.save(user=self.request.user, from_office=current_office)
         correspondence = minute.correspondence

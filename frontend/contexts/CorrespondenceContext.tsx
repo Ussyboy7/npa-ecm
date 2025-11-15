@@ -139,6 +139,15 @@ export const mapApiCorrespondence = (item: any): Correspondence => ({
     : [],
   createdAt: item.created_at ?? undefined,
   updatedAt: item.updated_at ?? undefined,
+  completionPackage: item.completion_package
+    ? {
+        documentId: item.completion_package.document_id,
+        title: item.completion_package.title,
+        fileUrl: item.completion_package.file_url,
+        generatedAt: item.completion_package.generated_at,
+      }
+    : null,
+  completionSummaryGeneratedAt: item.completion_summary_generated_at ?? undefined,
 });
 
 const mapApiMinute = (item: any): Minute => {

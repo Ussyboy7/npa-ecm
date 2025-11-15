@@ -178,7 +178,7 @@ const CorrespondenceRegister = () => {
         .map((value) => value!.toLowerCase());
       return candidates.some((candidate) => candidate.includes(query));
     });
-  }, [activeOffices, officeSearch]);
+  }, [membershipOffices, officeSearch]);
 
   // Track if component has mounted (client-side only)
   // This prevents SSR from showing the restricted message

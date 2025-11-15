@@ -2,7 +2,7 @@
 
 import { logError, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,7 +40,7 @@ import {
   X,
   Eye,
 } from 'lucide-react';
-import type { Minute, DistributionRecipient } from '@/lib/npa-structure';
+import type { Minute, DistributionRecipient, Correspondence } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
 import { getDelegationByCorrespondence } from '@/lib/delegation-storage';
@@ -60,15 +60,39 @@ import { LinkDocumentDialog } from '@/components/correspondence/LinkDocumentDial
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+const buildDownloadUrl = (path?: string | null) => {
+  if (!path) return undefined;
+  if (path.startsWith('http')) return path;
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${normalized}`;
+};
 const CorrespondenceDetail = () => {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
-  const { getCorrespondenceById, getMinutesByCorrespondenceId, updateCorrespondence, refreshData, syncFromApi } = useCorrespondence();
-  const correspondence = id ? getCorrespondenceById(id) : null;
+  const { getCorrespondenceById, getMinutesByCorrespondenceId, updateCorrespondence, refreshData, syncFromApi } =
+    useCorrespondence();
+  const cachedCorrespondence = id ? getCorrespondenceById(id) : null;
   const minutes = id ? getMinutesByCorrespondenceId(id) : [];
   const { currentUser: activeUser } = useCurrentUser();
-  const { directorates, divisions, departments, users: organizationUsers, assistantAssignments, refreshOrganizationData } = useOrganization();
+  const {
+    directorates,
+    divisions,
+    departments,
+    users: organizationUsers,
+    assistantAssignments,
+    refreshOrganizationData,
+  } = useOrganization();
+  const [remoteCorrespondence, setRemoteCorrespondence] = useState<Correspondence | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const searchParams = useSearchParams();
+  const statusParam = searchParams?.get('status');
+  const initialStatus = statusParam ?? cachedCorrespondence?.status;
+  const correspondence = remoteCorrespondence ?? cachedCorrespondence;
+  const isCompleted = (remoteCorrespondence?.status ?? initialStatus) === 'completed';
 
   const [showMinuteModal, setShowMinuteModal] = useState(false);
   const [showTreatmentModal, setShowTreatmentModal] = useState(false);
@@ -122,6 +146,38 @@ const CorrespondenceDetail = () => {
       ignore = true;
     };
   }, [correspondence?.linkedDocumentIds]);
+
+  useEffect(() => {
+    if (!id) return;
+    let ignore = false;
+    const hydrateFromApi = async () => {
+      setDetailLoading(true);
+      try {
+        const response = await apiFetch(`/correspondence/items/${id}/`);
+        if (!ignore) {
+          setRemoteCorrespondence(mapApiCorrespondence(response));
+        }
+      } catch (error) {
+        logWarn('Failed to refresh correspondence detail', error);
+      } finally {
+        if (!ignore) {
+          setDetailLoading(false);
+        }
+      }
+    };
+    void hydrateFromApi();
+    return () => {
+      ignore = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!isCompleted) return;
+    setShowMinuteModal(false);
+    setShowTreatmentModal(false);
+    setShowManualRouteModal(false);
+    setShowDelegateModal(false);
+  }, [isCompleted]);
 
   const handleMinuteClose = () => {
     setShowMinuteModal(false);
@@ -200,7 +256,11 @@ const CorrespondenceDetail = () => {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full">
-          <p>Correspondence not found</p>
+          {detailLoading ? (
+            <p className="text-sm text-muted-foreground">Loading correspondence…</p>
+          ) : (
+            <p>Correspondence not found</p>
+          )}
         </div>
       </DashboardLayout>
     );
@@ -218,6 +278,13 @@ const CorrespondenceDetail = () => {
     : null;
   const isCurrentUserTurn = correspondence.currentApproverId === activeUser.id;
   const activeDelegation = getDelegationByCorrespondence(correspondence.id);
+  const actionsDisabled = detailLoading || isCompleted;
+  const turnRestrictedDisabled = actionsDisabled || !isCurrentUserTurn;
+  const completionPackageUrl = buildDownloadUrl(correspondence.completionPackage?.fileUrl ?? null);
+  const completionGeneratedAt =
+    correspondence.completionPackage?.generatedAt ??
+    correspondence.completionSummaryGeneratedAt ??
+    correspondence.completedAt;
 
   const lookupUser = (userId?: string) => {
     if (!userId) return undefined;
@@ -823,107 +890,129 @@ const CorrespondenceDetail = () => {
               </h3>
             </div>
             <div className="p-4 space-y-4">
-              {isCurrentUserTurn && (
-                <div className="p-3 bg-accent/10 border border-accent/20 rounded-lg">
-                  <p className="text-sm font-medium text-accent flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4" />
-                    Your Turn to Act
-                  </p>
+              {isCompleted ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-muted/50 border border-border rounded-lg">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      This correspondence is locked. No further routing or minutes are permitted.
+                    </p>
+                  </div>
+                  {completionPackageUrl && (
+                    <Button variant="secondary" className="w-full" asChild>
+                      <a href={completionPackageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Download completion package
+                      </a>
+                    </Button>
+                  )}
                 </div>
-              )}
-
-              {activeUser.gradeLevel === 'MDCS' ? (
-                <>
-                  <Button
-                    className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
-                    onClick={() => setShowMinuteModal(true)}
-                    disabled={!isCurrentUserTurn}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Review & Approve
-                  </Button>
-                  <Button
-                    className="w-full"
-                    variant="secondary"
-                    onClick={() => setShowTreatmentModal(true)}
-                    disabled={!isCurrentUserTurn}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Treat & Respond
-                  </Button>
-                </>
-              ) : correspondence.direction === 'downward' ? (
-                <>
-                  <Button
-                    className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
-                    onClick={() => setShowMinuteModal(true)}
-                    disabled={!isCurrentUserTurn}
-                  >
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    Minute & Forward Down
-                  </Button>
-                  <Button
-                    className="w-full"
-                    variant="secondary"
-                    onClick={() => setShowTreatmentModal(true)}
-                    disabled={!isCurrentUserTurn}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Treat & Respond
-                  </Button>
-                </>
               ) : (
-                <Button
-                  className="w-full bg-gradient-success hover:opacity-90 transition-opacity"
-                  onClick={() => setShowMinuteModal(true)}
-                  disabled={!isCurrentUserTurn}
-                >
-                  <ArrowUp className="h-4 w-4 mr-2" />
-                  Review & Forward Up
-                </Button>
+                <>
+                  {isCurrentUserTurn && (
+                    <div className="p-3 bg-accent/10 border border-accent/20 rounded-lg">
+                      <p className="text-sm font-medium text-accent flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        Your Turn to Act
+                      </p>
+                    </div>
+                  )}
+
+                  {activeUser.gradeLevel === 'MDCS' ? (
+                    <>
+                      <Button
+                        className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
+                        onClick={() => setShowMinuteModal(true)}
+                        disabled={turnRestrictedDisabled}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Review & Approve
+                      </Button>
+                      <Button
+                        className="w-full"
+                        variant="secondary"
+                        onClick={() => setShowTreatmentModal(true)}
+                        disabled={turnRestrictedDisabled}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Treat & Respond
+                      </Button>
+                    </>
+                  ) : correspondence.direction === 'downward' ? (
+                    <>
+                      <Button
+                        className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
+                        onClick={() => setShowMinuteModal(true)}
+                        disabled={turnRestrictedDisabled}
+                      >
+                        <MessageSquare className="h-4 w-4 mr-2" />
+                        Minute & Forward Down
+                      </Button>
+                      <Button
+                        className="w-full"
+                        variant="secondary"
+                        onClick={() => setShowTreatmentModal(true)}
+                        disabled={turnRestrictedDisabled}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Treat & Respond
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      className="w-full bg-gradient-success hover:opacity-90 transition-opacity"
+                      onClick={() => setShowMinuteModal(true)}
+                      disabled={turnRestrictedDisabled}
+                    >
+                      <ArrowUp className="h-4 w-4 mr-2" />
+                      Review & Forward Up
+                    </Button>
+                  )}
+
+                  <Button
+                    className="w-full mt-3"
+                    variant="outline"
+                    onClick={() => setShowCompletionModal(true)}
+                    disabled={turnRestrictedDisabled}
+                  >
+                    <Archive className="h-4 w-4 mr-2" />
+                    Mark Complete & Archive
+                  </Button>
+
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => setShowReassignModal(true)}
+                      disabled={actionsDisabled}
+                    >
+                      <Building2 className="h-4 w-4 mr-2" />
+                      Reassign Office / Approver
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => setShowManualRouteModal(true)}
+                      disabled={turnRestrictedDisabled}
+                    >
+                      <Send className="h-4 w-4 mr-2" />
+                      Manual Route
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => setShowDelegateModal(true)}
+                      disabled={turnRestrictedDisabled || !!activeDelegation}
+                    >
+                      <UserIcon className="h-4 w-4 mr-2" />
+                      {activeDelegation ? 'Already Delegated' : 'Delegate to TA/PA'}
+                    </Button>
+                  </div>
+
+                  <Separator />
+                </>
               )}
-
-              <Button
-                className="w-full mt-3"
-                variant="outline"
-                onClick={() => setShowCompletionModal(true)}
-                disabled={!isCurrentUserTurn || correspondence.status === 'completed'}
-              >
-                <Archive className="h-4 w-4 mr-2" />
-                {correspondence.status === 'completed' ? 'Completed' : 'Mark Complete & Archive'}
-              </Button>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => setShowReassignModal(true)}
-                >
-                  <Building2 className="h-4 w-4 mr-2" />
-                  Reassign Office / Approver
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => setShowManualRouteModal(true)}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Manual Route
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => setShowDelegateModal(true)}
-                  disabled={!isCurrentUserTurn || !!activeDelegation}
-                >
-                  <UserIcon className="h-4 w-4 mr-2" />
-                  {activeDelegation ? 'Already Delegated' : 'Delegate to TA/PA'}
-                </Button>
-              </div>
-
-              <Separator />
 
               <Card>
                 <CardHeader className="pb-3">
@@ -1038,6 +1127,29 @@ const CorrespondenceDetail = () => {
           </div>
         </div>
       </div>
+
+        {isCompleted && (
+          <div className="mx-6 mt-4 rounded-lg border border-success/30 bg-success/5 p-4 flex flex-wrap items-center gap-3">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-success flex items-center gap-2">
+                <CheckCircle className="h-4 w-4" />
+                Completed{' '}
+                {completionGeneratedAt ? formatDateShort(completionGeneratedAt) : ''}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                This correspondence is locked for auditing. Download the completion package below.
+              </p>
+            </div>
+            {completionPackageUrl && (
+              <Button variant="secondary" asChild className="text-sm h-9">
+                <a href={completionPackageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Download completion package
+                </a>
+              </Button>
+            )}
+          </div>
+        )}
 
       <MinuteModal
         correspondence={correspondence}

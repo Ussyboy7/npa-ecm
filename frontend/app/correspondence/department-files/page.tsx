@@ -17,6 +17,7 @@ import {
   ArrowDown,
   ArrowUp,
   Archive,
+  FileText,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -28,6 +29,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 
 const PAGE_SIZE = 25;
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+const buildDownloadUrl = (path?: string | null) => {
+  if (!path) return undefined;
+  if (path.startsWith('http')) return path;
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${normalized}`;
+};
 
 const DepartmentFilesPage = () => {
   const { currentUser } = useCurrentUser();
@@ -151,6 +159,7 @@ const DepartmentFilesPage = () => {
       const owningOffice = item.owningOfficeId
         ? offices.find((office) => office.id === item.owningOfficeId)
         : undefined;
+      const completionPackageUrl = buildDownloadUrl(item.completionPackage?.fileUrl ?? null);
 
       return (
         <Link
@@ -169,6 +178,36 @@ const DepartmentFilesPage = () => {
           <p className="text-xs text-muted-foreground">
             Received: {item.receivedDate ? formatDateShort(item.receivedDate) : '—'}
           </p>
+          {item.completionPackage && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline">Completion package</Badge>
+              <span>
+                Generated{' '}
+                {item.completionPackage.generatedAt
+                  ? formatDateShort(item.completionPackage.generatedAt)
+                  : 'recently'}
+              </span>
+              {completionPackageUrl && (
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  asChild
+                  className="text-xs h-7 px-3"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <a
+                    href={completionPackageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Download PDF
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
           {owningOffice && (
             <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
               <Building2 className="h-3.5 w-3.5" />

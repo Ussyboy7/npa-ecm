@@ -440,15 +440,19 @@ const [newTemplateName, setNewTemplateName] = useState('');
       activeDirectoryUsers
         .filter((user) => {
           if (!higherGrades.includes(user.gradeLevel)) return false;
-          if (!user.division) return false;
 
-          const userDivision = getDivisionById(user.division);
-          const userDirectorate = userDivision?.directorateId;
+          const userDivision = user.division ? getDivisionById(user.division) : null;
+          const userDirectorate = userDivision?.directorateId ?? user.directorate ?? null;
 
-          const sameDivision = user.division === currentUser?.division;
-          const sameDirectorate = currentDirectorate && userDirectorate === currentDirectorate;
+          const currentDivision = currentUser?.division;
+          const userBelongsToDivision = Boolean(user.division && currentDivision && user.division === currentDivision);
+          const userBelongsToDirectorate =
+            Boolean(currentDirectorate && userDirectorate && userDirectorate === currentDirectorate) ||
+            Boolean(currentUser?.directorate && userDirectorate && userDirectorate === currentUser.directorate);
 
-          return sameDivision || Boolean(sameDirectorate);
+          const isExecutiveGrade = ['MDCS', 'EDCS'].includes(user.gradeLevel);
+
+          return userBelongsToDivision || userBelongsToDirectorate || isExecutiveGrade;
         })
         .forEach(addCandidate);
     }

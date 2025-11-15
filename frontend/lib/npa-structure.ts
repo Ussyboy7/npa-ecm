@@ -138,6 +138,13 @@ export type Correspondence = {
   distribution?: DistributionRecipient[];
   archiveLevel?: 'department' | 'division' | 'directorate';
   linkedDocumentIds?: string[];
+  completionPackage?: {
+    documentId: string;
+    title: string;
+    fileUrl?: string;
+    generatedAt?: string;
+  } | null;
+  completionSummaryGeneratedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 };

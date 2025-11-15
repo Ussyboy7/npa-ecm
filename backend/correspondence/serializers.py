@@ -175,6 +175,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         queryset=Correspondence._meta.get_field("linked_documents").remote_field.model.objects.all(),
         required=False,
     )
+    completion_package = serializers.SerializerMethodField()
 
     class Meta:
         model = Correspondence
@@ -214,6 +215,8 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "distribution",
             "minutes",
             "completed_at",
+            "completion_package",
+            "completion_summary_generated_at",
             "created_at",
             "updated_at",
         ]
@@ -229,7 +232,30 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "updated_at",
             "owning_office_name",
             "current_office_name",
+            "completion_package",
+            "completion_summary_generated_at",
         ]
+
+    def get_completion_package(self, obj):
+        document = getattr(obj, "completion_package", None)
+        if not document:
+            return None
+        version = None
+        prefetched = getattr(document, "_prefetched_objects_cache", {}).get("versions")
+        if prefetched:
+            version = prefetched[0]
+        if version is None:
+            version = document.versions.order_by("-version_number").first()
+        file_url = version.file_url if version else ""
+        return {
+            "document_id": str(document.id),
+            "title": document.title,
+            "file_url": file_url,
+            "generated_at": (
+                getattr(obj, "completion_summary_generated_at", None)
+                or (version.uploaded_at if version else None)
+            ),
+        }
 
 
 class DelegationSerializer(serializers.ModelSerializer):
