@@ -126,8 +126,7 @@ export function AppSidebar() {
 
   const hasCorrespondenceAccess =
     permissions.canViewCorrespondenceRegistry ||
-    permissions.canRouteCorrespondence ||
-    permissions.canApproveCorrespondence ||
+    permissions.canDistribute ||
     userOfficeIds.length > 0;
 
   const shouldShowDepartmentFiles =

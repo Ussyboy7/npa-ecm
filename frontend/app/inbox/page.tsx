@@ -105,6 +105,12 @@ const ExecutiveInbox = () => {
         : corr.status === 'in-progress'
         ? { label: 'In progress', variant: 'info' as const }
         : { label: corr.status, variant: 'outline' as const };
+    const statusBadgeVariant: 'destructive' | 'secondary' | 'default' | 'outline' =
+      statusBadge.variant === 'warning'
+        ? 'destructive'
+        : statusBadge.variant === 'info'
+          ? 'secondary'
+          : 'outline';
 
     return (
       <div
@@ -121,7 +127,7 @@ const ExecutiveInbox = () => {
                 {corr.direction === 'downward' ? '↓ Downward' : '↑ Upward'}
               </Badge>
               <Badge
-                variant={statusBadge.variant === 'warning' ? 'destructive' : statusBadge.variant}
+                variant={statusBadgeVariant}
                 className={
                   statusBadge.variant === 'warning'
                     ? 'bg-warning/10 text-warning gap-1'
