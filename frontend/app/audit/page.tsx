@@ -116,12 +116,17 @@ export default function AuditTrailPage() {
                   className="pl-8"
                 />
               </div>
-              <Select value={filters.action} onValueChange={(value) => setFilters({ ...filters, action: value })}>
+              <Select
+                value={filters.action || '__all__'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, action: value === '__all__' ? '' : value })
+                }
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Action" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Actions</SelectItem>
+                  <SelectItem value="__all__">All Actions</SelectItem>
                   {actionTypes.map((action) => (
                     <SelectItem key={action} value={action}>
                       {action.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
@@ -130,25 +135,32 @@ export default function AuditTrailPage() {
                 </SelectContent>
               </Select>
               <Select
-                value={filters.objectType}
-                onValueChange={(value) => setFilters({ ...filters, objectType: value })}
+                value={filters.objectType || '__all__'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, objectType: value === '__all__' ? '' : value })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Object Type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Types</SelectItem>
+                  <SelectItem value="__all__">All Types</SelectItem>
                   <SelectItem value="document">Document</SelectItem>
                   <SelectItem value="correspondence">Correspondence</SelectItem>
                   <SelectItem value="user">User</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={filters.module} onValueChange={(value) => setFilters({ ...filters, module: value })}>
+              <Select
+                value={filters.module || '__all__'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, module: value === '__all__' ? '' : value })
+                }
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Module" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Modules</SelectItem>
+                  <SelectItem value="__all__">All Modules</SelectItem>
                   {modules.map((module) => (
                     <SelectItem key={module} value={module}>
                       {module.toUpperCase()}
@@ -157,14 +169,16 @@ export default function AuditTrailPage() {
                 </SelectContent>
               </Select>
               <Select
-                value={filters.severity}
-                onValueChange={(value) => setFilters({ ...filters, severity: value })}
+                value={filters.severity || '__all__'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, severity: value === '__all__' ? '' : value })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Severity" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Severities</SelectItem>
+                  <SelectItem value="__all__">All Severities</SelectItem>
                   <SelectItem value="info">Info</SelectItem>
                   <SelectItem value="warning">Warning</SelectItem>
                   <SelectItem value="error">Error</SelectItem>
@@ -172,14 +186,16 @@ export default function AuditTrailPage() {
                 </SelectContent>
               </Select>
               <Select
-                value={filters.success}
-                onValueChange={(value) => setFilters({ ...filters, success: value })}
+                value={filters.success || '__all__'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, success: value === '__all__' ? '' : value })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="__all__">All</SelectItem>
                   <SelectItem value="true">Success</SelectItem>
                   <SelectItem value="false">Failed</SelectItem>
                 </SelectContent>

@@ -34,7 +34,7 @@ import {
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
-import { ArrowLeft, FileText, Download, Layers, Filter, User as UserIcon, Tag, Pencil, FilePlus, Clock, Eye, MessageSquare, Users, Plus, X, CheckCircle2, Circle, Activity } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Layers, Filter, User as UserIcon, Tag, Pencil, FilePlus, Clock, Eye, MessageSquare, Users, Plus, X, CheckCircle2, Circle, Activity, Shield } from 'lucide-react';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -119,6 +119,18 @@ const DocumentDetailPage = () => {
     () => currentUser ?? organizationUsers.find((user) => user.active) ?? null,
     [currentUser, organizationUsers],
   );
+  const permissionSummaries = useMemo(() => {
+    if (!document) return [];
+    return document.permissions.map((permission, index) => ({
+      key: permission.id ?? `${permission.access}-${index}`,
+      access: permission.access,
+      userNames: permission.userIds.map((id) => userLookup.get(id)?.name ?? `User ${id}`),
+      divisionNames: permission.divisionIds.map((id) => divisionLookup.get(id) ?? `Division ${id}`),
+      departmentNames: permission.departmentIds.map((id) => departmentLookup.get(id) ?? `Department ${id}`),
+      gradeLevels: permission.gradeLevels ?? [],
+      createdAt: permission.createdAt ?? permission.updatedAt ?? document.updatedAt,
+    }));
+  }, [document, userLookup, divisionLookup, departmentLookup]);
 
   // Load workspaces lookup
   useEffect(() => {
@@ -689,6 +701,64 @@ const DocumentDetailPage = () => {
                   Save Changes
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Shield className="h-4 w-4 text-primary" />
+                  Access & Permissions
+                </CardTitle>
+                <CardDescription>Track who currently has visibility into this record.</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)}>
+                Manage Access
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {permissionSummaries.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No explicit share rules exist yet. Use the Share button to grant targeted access.
+                </p>
+              ) : (
+                permissionSummaries.map((entry) => (
+                  <div key={entry.key} className="rounded-lg border border-border/70 p-4 space-y-3">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium capitalize">{entry.access} access</p>
+                        <p className="text-xs text-muted-foreground">
+                          {entry.createdAt ? `Updated ${formatDateTime(entry.createdAt)}` : 'Inherited rule'}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        <span>{entry.userNames.length} users</span>
+                        <span>• {entry.divisionNames.length} divisions</span>
+                        <span>• {entry.departmentNames.length} departments</span>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
+                      <div>
+                        <p className="font-medium text-foreground text-xs mb-1">Users</p>
+                        <p>{entry.userNames.length ? entry.userNames.join(', ') : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground text-xs mb-1">Divisions</p>
+                        <p>{entry.divisionNames.length ? entry.divisionNames.join(', ') : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground text-xs mb-1">Departments</p>
+                        <p>{entry.departmentNames.length ? entry.departmentNames.join(', ') : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground text-xs mb-1">Grade Levels</p>
+                        <p>{entry.gradeLevels.length ? entry.gradeLevels.join(', ') : '—'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users } from "lucide-react";
+import { Building2, CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -14,14 +14,14 @@ import { apiFetch, hasTokens } from "@/lib/api-client";
 
 const quickStartSteps = [
   {
-    title: "Choose a demo persona",
+    title: "Choose an office or persona",
     detail:
-      "Use the Role Switcher (top right) to step into MD, ED, GM, AGM, divisional, or departmental perspectives.",
+      "Use the Role Switcher (top right) to step into MD, ED, GM, AGM, divisional, or departmental perspectives and inherit their office queue.",
   },
   {
-    title: "Review inbound correspondence",
+    title: "Confirm the owning office",
     detail:
-      "Visit Correspondence Inbox to see routing chains, signatures, distribution (CC), and linked DMS documents.",
+      "In Correspondence Inbox, filter by office to see what Registry has assigned to MD/ED/GM/AGM seats, including acting officers.",
   },
   {
     title: "Process an approval or minute",
@@ -29,9 +29,9 @@ const quickStartSteps = [
       "Open an item, launch the Minute/Approve modal, apply digital signatures, and try upward/downward routing.",
   },
   {
-    title: "Explore analytics & archives",
+    title: "Explore DMS links, analytics & archives",
     detail:
-      "Check Reports and Performance Analytics for turnaround metrics, then validate archive access (department, division, directorate).",
+      "Open linked DMS documents, then review Reports/Analytics for SLAs by office before verifying archive access (department, division, directorate).",
   },
 ];
 
@@ -55,6 +55,16 @@ const workspaceHighlights = [
     links: [
       { label: "Document Library", href: "/dms" },
       { label: "My Documents", href: "/documents" },
+    ],
+  },
+  {
+    icon: Building2,
+    title: "Office Queues",
+    description:
+      "See what is currently sitting with MD, ED, GM, and AGM offices—acting officers inherit the same queue automatically.",
+    links: [
+      { label: "Correspondence Inbox", href: "/correspondence/inbox" },
+      { label: "Register Office Items", href: "/correspondence/register" },
     ],
   },
   {
@@ -127,6 +137,11 @@ const faqItems = [
     question: "How do archives respect hierarchy?",
     answer:
       "When completing a correspondence you choose Departmental, Divisional, or Directorate archive. Access is automatically limited: department members, division heads, or directorate heads respectively.",
+  },
+  {
+    question: "What happens when an office head changes?",
+    answer:
+      "Correspondence is owned by the office, not the individual. When a GM/ED/MD seat changes hands (or someone acts in the role), the successor inherits the same office queue, minutes, and history automatically.",
   },
   {
     question: "Where can I update signature templates or organization branding?",

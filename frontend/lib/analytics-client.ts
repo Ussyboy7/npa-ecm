@@ -76,6 +76,83 @@ export interface ExecutiveAnalytics {
   sensitivityBreakdown: { sensitivity: string; label: string; count: number; avgTurnaround: number }[];
 }
 
+export interface ExecutivePortfolioSummary {
+  totalQueue: number;
+  urgent: number;
+  slaBreaches: number;
+  approachingSLA: number;
+  completionRate?: number;
+  ownedTotal?: number;
+}
+
+export interface ExecutivePortfolioOffice {
+  id: string;
+  name: string;
+  code: string;
+  officeType: string;
+  total: number;
+  urgent: number;
+  slaBreaches: number;
+  approachingSLA: number;
+  owned: number;
+}
+
+export interface ExecutivePortfolioItem {
+  id: string;
+  referenceNumber: string;
+  subject: string;
+  priority: string;
+  status: string;
+  officeName?: string | null;
+  receivedDate?: string | null;
+  currentApprover?: string | null;
+  agingDays: number;
+  slaStatus: 'breach' | 'approaching' | 'ok';
+}
+
+export interface ExecutiveDelegation {
+  officeId: string;
+  officeName: string;
+  members: {
+    userId: string;
+    name: string;
+    role: string;
+    isPrimary: boolean;
+    canApprove: boolean;
+  }[];
+}
+
+export interface ExecutiveRecord {
+  id: string;
+  referenceNumber: string;
+  subject: string;
+  priority: string;
+  owningOffice?: string | null;
+  updatedAt?: string | null;
+  archiveLevel?: string | null;
+}
+
+export interface ExecutivePortfolio {
+  metadata: AnalyticsMetadata & { officeCount: number; executive: string };
+  summary: ExecutivePortfolioSummary;
+  offices: ExecutivePortfolioOffice[];
+  trend: { week: string; completed: number; pending: number }[];
+  inboxPreview: ExecutivePortfolioItem[];
+  escalations: ExecutivePortfolioItem[];
+  approvals: ExecutivePortfolioItem[];
+  delegations: ExecutiveDelegation[];
+  records: ExecutiveRecord[];
+}
+
+export interface ExecutiveRecordSearchResponse {
+  metadata: {
+    officeCount: number;
+    query: string;
+    returned: number;
+  };
+  results: ExecutiveRecord[];
+}
+
 export interface ReportsAnalytics {
   metadata: AnalyticsMetadata;
   metrics: {
@@ -101,6 +178,34 @@ export const fetchPerformanceAnalytics = async (range: string | number = '30') =
 export const fetchExecutiveAnalytics = async (range: string | number = '30') => {
   const query = buildQuery({ range });
   return apiFetch<ExecutiveAnalytics>(`/analytics/executive/?${query}`);
+};
+
+export const fetchExecutivePortfolio = async ({
+  range = '30',
+  records = 8,
+  recordsQuery,
+}: {
+  range?: string | number;
+  records?: number;
+  recordsQuery?: string;
+} = {}) => {
+  const query = buildQuery({
+    range,
+    records,
+    records_query: recordsQuery,
+  });
+  return apiFetch<ExecutivePortfolio>(`/analytics/executive/portfolio/?${query}`);
+};
+
+export const searchExecutiveRecords = async ({
+  query,
+  limit = 20,
+}: {
+  query: string;
+  limit?: number;
+}) => {
+  const search = buildQuery({ query, limit });
+  return apiFetch<ExecutiveRecordSearchResponse>(`/analytics/executive/records/?${search}`);
 };
 
 export const fetchReportsAnalytics = async ({ range = '30', divisionId }: { range?: string | number; divisionId?: string }) => {

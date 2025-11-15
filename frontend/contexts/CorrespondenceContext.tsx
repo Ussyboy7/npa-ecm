@@ -43,12 +43,18 @@ const normalizeId = (value: unknown): string | undefined => {
   return String(value);
 };
 
-const mapApiCorrespondence = (item: any): Correspondence => ({
+export const mapApiCorrespondence = (item: any): Correspondence => ({
   id: String(item.id),
   referenceNumber: item.reference_number ?? '',
   subject: item.subject ?? '',
+  documentType: item.document_type ?? 'letter',
+  senderReference: item.sender_reference ?? '',
+  letterDate: item.letter_date ?? undefined,
+  dispatchDate: item.dispatch_date ?? undefined,
   source: item.source ?? 'internal',
   receivedDate: item.received_date ?? '',
+  recipientName: item.recipient_name ?? '',
+  remarks: item.remarks ?? '',
   completedAt: item.completed_at ?? undefined,
   senderName: item.sender_name ?? '',
   senderOrganization: item.sender_organization ?? '',
@@ -75,6 +81,14 @@ const mapApiCorrespondence = (item: any): Correspondence => ({
         })()
       : undefined,
   direction: item.direction ?? 'upward',
+  owningOfficeId: normalizeId(item.owning_office ?? item.owning_office_id),
+  owningOfficeName:
+    item.owning_office_name ??
+    (typeof item.owning_office === 'object' && item.owning_office ? item.owning_office.name : undefined),
+  currentOfficeId: normalizeId(item.current_office ?? item.current_office_id),
+  currentOfficeName:
+    item.current_office_name ??
+    (typeof item.current_office === 'object' && item.current_office ? item.current_office.name : undefined),
   attachments: Array.isArray(item.attachments)
     ? item.attachments.map((attachment: any) => ({
         id: normalizeId(attachment.id) ?? `${item.id}-att-${Math.random().toString(36).slice(2)}`,
@@ -169,6 +183,13 @@ const mapApiMinute = (item: any): Minute => {
     readAt: item.read_at ?? undefined,
     mentions: Array.isArray(item.mentions) ? item.mentions : [],
     signature: item.signature_payload ?? undefined,
+    fromOfficeId: normalizeId(item.from_office ?? item.from_office_id),
+    fromOfficeName:
+      item.from_office_name ??
+      (typeof item.from_office === 'object' && item.from_office ? item.from_office.name : undefined),
+    toOfficeId: normalizeId(item.to_office ?? item.to_office_id),
+    toOfficeName:
+      item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? item.to_office.name : undefined),
   };
 };
 
@@ -188,9 +209,17 @@ const buildCorrespondencePatchPayload = (updates: Partial<Correspondence>): Reco
   const payload: Record<string, unknown> = {};
   if (updates.status !== undefined) payload.status = updates.status;
   if (updates.direction !== undefined) payload.direction = updates.direction;
+  if (updates.documentType !== undefined) payload.document_type = updates.documentType;
+  if (updates.senderReference !== undefined) payload.sender_reference = updates.senderReference;
+  if (updates.letterDate !== undefined) payload.letter_date = updates.letterDate || null;
+  if (updates.dispatchDate !== undefined) payload.dispatch_date = updates.dispatchDate || null;
+  if (updates.recipientName !== undefined) payload.recipient_name = updates.recipientName;
+  if (updates.remarks !== undefined) payload.remarks = updates.remarks;
   if (updates.currentApproverId !== undefined) payload.current_approver_id = updates.currentApproverId || null;
   if (updates.divisionId !== undefined) payload.division = updates.divisionId || null;
   if (updates.departmentId !== undefined) payload.department = updates.departmentId || null;
+  if (updates.owningOfficeId !== undefined) payload.owning_office = updates.owningOfficeId || null;
+  if (updates.currentOfficeId !== undefined) payload.current_office = updates.currentOfficeId || null;
   if (updates.priority !== undefined) payload.priority = updates.priority;
   if (updates.referenceNumber !== undefined) payload.reference_number = updates.referenceNumber;
   if (updates.linkedDocumentIds !== undefined) payload.linked_document_ids = updates.linkedDocumentIds;
@@ -207,11 +236,19 @@ const buildCorrespondenceCreatePayload = (correspondence: Correspondence): Recor
     received_date: correspondence.receivedDate,
     sender_name: correspondence.senderName,
     sender_organization: correspondence.senderOrganization,
+    sender_reference: correspondence.senderReference ?? '',
+    letter_date: correspondence.letterDate ?? null,
+    dispatch_date: correspondence.dispatchDate ?? null,
+    recipient_name: correspondence.recipientName ?? '',
+    remarks: correspondence.remarks ?? '',
     status: correspondence.status,
     priority: correspondence.priority,
+    document_type: correspondence.documentType ?? 'letter',
     direction: correspondence.direction,
     division: correspondence.divisionId ?? null,
     department: correspondence.departmentId ?? null,
+    owning_office: correspondence.owningOfficeId ?? null,
+    current_office: correspondence.currentOfficeId ?? correspondence.owningOfficeId ?? null,
     current_approver_id: correspondence.currentApproverId ?? null,
     archive_level: correspondence.archiveLevel ?? null,
     linked_document_ids: correspondence.linkedDocumentIds ?? [],
@@ -235,6 +272,9 @@ const buildMinuteCreatePayload = (minute: Minute): Record<string, unknown> => {
 
   if (minute.assistantType) {
     payload.assistant_type = minute.assistantType;
+  }
+  if (minute.toOfficeId) {
+    payload.to_office = minute.toOfficeId;
   }
 
   return payload;

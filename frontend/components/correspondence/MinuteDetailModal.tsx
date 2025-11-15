@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
-import { FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon } from "lucide-react";
+import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon } from "lucide-react";
 import { Minute } from "@/lib/npa-structure";
 
 interface MinuteDetailModalProps {
@@ -100,6 +100,26 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName }: Mi
                   <h4 className="font-semibold text-foreground mb-1">Step Number</h4>
                   <p className="text-muted-foreground">Step {minute.stepNumber}</p>
                 </div>
+                
+                {minute.fromOfficeName && (
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-1 flex items-center gap-1">
+                      <Building2 className="h-3.5 w-3.5" />
+                      From Office
+                    </h4>
+                    <p className="text-muted-foreground">{minute.fromOfficeName}</p>
+                  </div>
+                )}
+                
+                {minute.toOfficeName && (
+                  <div>
+                    <h4 className="font-semibold text-foreground mb-1 flex items-center gap-1">
+                      <Building2 className="h-3.5 w-3.5" />
+                      To Office
+                    </h4>
+                    <p className="text-muted-foreground">{minute.toOfficeName}</p>
+                  </div>
+                )}
                 
                 {minute.actedBySecretary && (
                   <div>

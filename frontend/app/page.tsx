@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, FileStack, ShieldCheck, Workflow, BarChart3 } from "lucide-react";
+import { ArrowRight, FileStack, ShieldCheck, Workflow, BarChart3, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
@@ -9,7 +9,7 @@ const features = [
   {
     title: "Unified Correspondence",
     description:
-      "Digitize incoming and outgoing memos with routing intelligence, distribution controls, and digital signatures.",
+      "Digitize inbound/outbound memos with linked DMS files, distribution controls, and signature-ready audit trails.",
     icon: FileStack,
   },
   {
@@ -17,6 +17,12 @@ const features = [
     description:
       "Configurable approval paths, escalations, and audit trails ensure accountability across directorates.",
     icon: Workflow,
+  },
+  {
+    title: "Office-Based Routing",
+    description:
+      "Queues follow MD, ED, GM, and AGM offices—acting officers and successors inherit the same backlog automatically.",
+    icon: Building2,
   },
   {
     title: "Enterprise Security",
@@ -33,16 +39,16 @@ const features = [
 ];
 
 const stats = [
-  { value: "14+", label: "Directorates and divisions represented" },
-  { value: "200+", label: "Documents & correspondence managed" },
-  { value: "24/7", label: "Access to routing, approvals, and archives" },
+  { value: "40+", label: "Executive & departmental offices on ECM" },
+  { value: "200+", label: "Documents & correspondence linked to workflows" },
+  { value: "24/7", label: "Real-time routing, approvals, and archives" },
 ];
 
 const modules = [
   {
     title: "Document Management",
     description:
-      "Create, upload, version, and classify official documents with revision history, comments, and workspace collaboration.",
+      "Draft, upload, version, and classify official documents with instant linkage to correspondence and approvals.",
   },
   {
     title: "Digital Signatures",
@@ -110,11 +116,11 @@ export default function LandingPage() {
           Digital Transformation
         </span>
         <h1 className="max-w-4xl text-balance text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-          Streamline NPA correspondence, decisions, and records on a single modern platform.
+          Keep correspondence, documents, and office handovers in lockstep.
         </h1>
         <p className="max-w-3xl text-balance text-base text-muted-foreground sm:text-lg">
-          NPA ECM unifies routing, approvals, document management, and analytics to give every directorate clarity,
-          accountability, and immediate access to institutional memory.
+          NPA ECM routes every memo through the MD/ED/GM/AGM office structure, links DMS files to actions, and captures
+          the full audit trail so successors inherit the same queue on day one.
         </p>
         <div className="flex flex-col gap-4 sm:flex-row">
           <Button asChild size="lg" className="gap-2">
@@ -208,8 +214,8 @@ export default function LandingPage() {
             Ready to experience the NPA ECM workspace?
           </h2>
           <p className="mt-4 text-base text-muted-foreground sm:text-lg">
-            Sign in to explore the digital signature module, hierarchical archives, and live analytics dashboards built
-            for MD, ED, GM, and AGM flows.
+            Sign in to experience office-based inboxes, linked DMS records, and analytics tailored for MD, ED, GM, and AGM
+            leadership flows.
           </p>
           <div className="mt-6 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Button asChild size="lg" className="gap-2">

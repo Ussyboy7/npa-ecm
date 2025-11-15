@@ -5,7 +5,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from organization.models import Department, Division, Directorate
+from organization.models import Department, Division, Directorate, Office
 
 from .models import (
     Correspondence,
@@ -92,6 +92,18 @@ class MinuteSerializer(serializers.ModelSerializer):
         required=False,
     )
 
+    from_office = serializers.PrimaryKeyRelatedField(read_only=True)
+    from_office_name = serializers.CharField(source="from_office.name", read_only=True)
+    to_office = serializers.PrimaryKeyRelatedField(read_only=True)
+    to_office_id = serializers.PrimaryKeyRelatedField(
+        source="to_office",
+        queryset=Office.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
+    to_office_name = serializers.CharField(source="to_office.name", read_only=True)
+
     class Meta:
         model = Minute
         fields = [
@@ -111,10 +123,25 @@ class MinuteSerializer(serializers.ModelSerializer):
             "read_at",
             "mentions",
             "signature_payload",
+            "from_office",
+            "from_office_name",
+            "to_office",
+            "to_office_id",
+            "to_office_name",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "user", "timestamp", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "user",
+            "timestamp",
+            "created_at",
+            "updated_at",
+            "from_office",
+            "from_office_name",
+            "to_office",
+            "to_office_name",
+        ]
 
 
 class CorrespondenceSerializer(serializers.ModelSerializer):
@@ -135,6 +162,10 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     )
     division = serializers.PrimaryKeyRelatedField(queryset=Division.objects.all(), allow_null=True, required=False)
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
+    owning_office = serializers.PrimaryKeyRelatedField(queryset=Office.objects.all(), allow_null=True, required=False)
+    current_office = serializers.PrimaryKeyRelatedField(queryset=Office.objects.all(), allow_null=True, required=False)
+    owning_office_name = serializers.CharField(source="owning_office.name", read_only=True)
+    current_office_name = serializers.CharField(source="current_office.name", read_only=True)
     attachments = CorrespondenceAttachmentSerializer(many=True, read_only=True)
     distribution = CorrespondenceDistributionSerializer(many=True, read_only=True)
     minutes = MinuteSerializer(many=True, read_only=True)
@@ -157,12 +188,22 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "received_date",
             "sender_name",
             "sender_organization",
+            "sender_reference",
             "status",
             "priority",
+            "document_type",
             "direction",
             "archive_level",
             "division",
             "department",
+            "owning_office",
+            "owning_office_name",
+            "current_office",
+            "current_office_name",
+            "letter_date",
+            "dispatch_date",
+            "recipient_name",
+            "remarks",
             "tags",
             "created_by",
             "created_by_id",
@@ -186,6 +227,8 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "completed_at",
             "created_at",
             "updated_at",
+            "owning_office_name",
+            "current_office_name",
         ]
 
 
@@ -221,3 +264,4 @@ class DelegationSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "principal", "assistant", "created_at", "updated_at"]
+

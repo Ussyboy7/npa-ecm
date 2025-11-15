@@ -8,12 +8,13 @@ import os
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils.text import slugify
 from common.upload_validators import validate_file_upload
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -63,6 +64,12 @@ class DocumentWorkspaceViewSet(viewsets.ModelViewSet):
         serializer.save(slug=slug)
 
 
+class DocumentPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.none()
     base_queryset = Document.all_objects.select_related("author", "division", "department").prefetch_related(
@@ -72,6 +79,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
     )
     serializer_class = DocumentSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = DocumentPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = [
         "document_type",
@@ -86,15 +94,49 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = self.base_queryset
-        request = getattr(self, 'request', None)
+        request = getattr(self, "request", None)
         if request:
-            only_deleted = request.query_params.get('only_deleted') == 'true'
-            include_deleted = request.query_params.get('include_deleted') == 'true'
+            only_deleted = request.query_params.get("only_deleted") == "true"
+            include_deleted = request.query_params.get("include_deleted") == "true"
             if only_deleted:
-                return qs.filter(is_deleted=True)
-            if include_deleted:
-                return qs
-        return qs.filter(is_deleted=False)
+                qs = qs.filter(is_deleted=True)
+            elif include_deleted:
+                qs = qs
+            else:
+                qs = qs.filter(is_deleted=False)
+        else:
+            qs = qs.filter(is_deleted=False)
+
+        user = getattr(self.request, "user", None)
+        if not user or not user.is_authenticated or user.is_superuser:
+            return qs.distinct()
+
+        visibility_filter = Q(author=user) | Q(workspaces__members=user) | Q(permissions__users=user)
+
+        if user.division_id:
+            visibility_filter |= Q(permissions__divisions=user.division_id)
+        if user.department_id:
+            visibility_filter |= Q(permissions__departments=user.department_id)
+        if user.grade_level:
+            visibility_filter |= Q(permissions__grade_levels__contains=[user.grade_level])
+
+        visibility_filter |= Q(sensitivity__in=[Document.Sensitivity.PUBLIC, Document.Sensitivity.INTERNAL])
+
+        high_confidential_grades = {"MSS5", "MSS4", "MSS3", "MSS2", "MSS1", "EDCS", "MDCS"}
+        high_restricted_grades = {"MSS1", "EDCS", "MDCS"}
+
+        if user.grade_level in high_confidential_grades:
+            visibility_filter |= Q(sensitivity=Document.Sensitivity.CONFIDENTIAL)
+        if user.grade_level in high_restricted_grades:
+            visibility_filter |= Q(sensitivity=Document.Sensitivity.RESTRICTED)
+
+        # Published documents with public/internal sensitivity are generally accessible
+        visibility_filter |= Q(
+            status=Document.DocumentStatus.PUBLISHED,
+            sensitivity__in=[Document.Sensitivity.PUBLIC, Document.Sensitivity.INTERNAL],
+        )
+
+        return qs.filter(visibility_filter).distinct()
 
     def perform_create(self, serializer):
         author = serializer.validated_data.get("author") or self.request.user

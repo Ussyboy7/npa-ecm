@@ -8,11 +8,14 @@ export type DocumentSensitivity = 'public' | 'internal' | 'confidential' | 'rest
 export type PermissionAccess = 'read' | 'write' | 'admin';
 
 export interface DocumentPermission {
+  id?: string;
   access: PermissionAccess;
   divisionIds: string[];
   departmentIds: string[];
   gradeLevels: string[];
   userIds: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface DocumentVersion {
@@ -84,6 +87,24 @@ export interface DocumentWorkspace {
   memberIds: string[];
 }
 
+export interface DocumentQueryParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: DocumentStatus | 'all';
+  documentType?: DocumentType | 'all';
+  divisionId?: string;
+  departmentId?: string;
+  ordering?: string;
+}
+
+export interface PaginatedDocuments {
+  results: DocumentRecord[];
+  count: number;
+  next: string | null;
+  previous: string | null;
+}
+
 type ApiPayload = Record<string, unknown> | Record<string, unknown>[] | { results?: unknown };
 
 const unwrapResults = <T,>(payload: ApiPayload): T[] => {
@@ -96,11 +117,14 @@ const unwrapResults = <T,>(payload: ApiPayload): T[] => {
 };
 
 const mapDocumentPermission = (data: any): DocumentPermission => ({
+  id: data.id ? String(data.id) : undefined,
   access: data.access ?? 'read',
   divisionIds: (data.division_ids ?? data.divisions ?? []).map(String),
   departmentIds: (data.department_ids ?? data.departments ?? []).map(String),
   gradeLevels: Array.isArray(data.grade_levels) ? data.grade_levels.map(String) : [],
   userIds: (data.user_ids ?? data.users ?? []).map(String),
+  createdAt: data.created_at ?? undefined,
+  updatedAt: data.updated_at ?? undefined,
 });
 
 const mapDocumentVersion = (data: any): DocumentVersion => ({
@@ -178,14 +202,50 @@ const updateDocumentsCache = (document: DocumentRecord) => {
 export const getCachedDocuments = () => documentsCache;
 export const getCachedWorkspaces = () => workspacesCache;
 
+const buildDocumentQueryString = (params: DocumentQueryParams) => {
+  const searchParams = new URLSearchParams();
+  if (params.page) searchParams.set('page', String(params.page));
+  if (params.pageSize) searchParams.set('page_size', String(params.pageSize));
+  if (params.search?.trim()) searchParams.set('search', params.search.trim());
+  if (params.status && params.status !== 'all') searchParams.set('status', params.status);
+  if (params.documentType && params.documentType !== 'all') searchParams.set('document_type', params.documentType);
+  if (params.divisionId && params.divisionId !== 'all') searchParams.set('division', params.divisionId);
+  if (params.departmentId && params.departmentId !== 'all') searchParams.set('department', params.departmentId);
+  if (params.ordering) searchParams.set('ordering', params.ordering);
+  return searchParams.toString();
+};
+
+export const queryDocuments = async (params: DocumentQueryParams = {}): Promise<PaginatedDocuments> => {
+  if (!hasTokens()) {
+    return { results: [], count: 0, next: null, previous: null };
+  }
+
+  const query = buildDocumentQueryString(params);
+  const payload = await apiFetch<any>(
+    query ? `/dms/documents/?${query}` : '/dms/documents/',
+  );
+
+  const results = unwrapResults<any>(payload).map(mapDocument);
+  const count = typeof payload?.count === 'number' ? payload.count : results.length;
+  const next = typeof payload?.next === 'string' ? payload.next : null;
+  const previous = typeof payload?.previous === 'string' ? payload.previous : null;
+
+  return {
+    results,
+    count,
+    next,
+    previous,
+  };
+};
+
 export const fetchDocuments = async (): Promise<DocumentRecord[]> => {
   if (!hasTokens()) {
     documentsCache = [];
     return documentsCache;
   }
 
-  const payload = await apiFetch<ApiPayload>('/dms/documents/');
-  documentsCache = unwrapResults<any>(payload).map(mapDocument);
+  const response = await queryDocuments({ page: 1, pageSize: 100 });
+  documentsCache = response.results;
   return documentsCache;
 };
 

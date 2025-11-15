@@ -52,6 +52,36 @@ export type Department = {
   isActive?: boolean;
 };
 
+export type Office = {
+  id: string;
+  name: string;
+  code: string;
+  officeType: string;
+  directorateId?: string | null;
+  divisionId?: string | null;
+  departmentId?: string | null;
+  parentId?: string | null;
+  description?: string;
+  isActive: boolean;
+  allowExternalIntake: boolean;
+  allowLateralRouting: boolean;
+};
+
+export type OfficeMembership = {
+  id: string;
+  officeId: string;
+  officeName?: string;
+  userId: string;
+  assignmentRole: string;
+  isPrimary: boolean;
+  canRegister: boolean;
+  canRoute: boolean;
+  canApprove: boolean;
+  startsAt?: string;
+  endsAt?: string;
+  isActive: boolean;
+};
+
 export type DistributionRecipient = {
   id: string;
   type: 'division' | 'department' | 'directorate';
@@ -79,6 +109,10 @@ export type Correspondence = {
   id: string;
   referenceNumber: string;
   subject: string;
+  documentType?: string;
+  senderReference?: string;
+  letterDate?: string;
+  dispatchDate?: string;
   source: 'internal' | 'external';
   receivedDate: string;
   completedAt?: string;
@@ -94,6 +128,12 @@ export type Correspondence = {
   direction: 'upward' | 'downward';
   currentApproverName?: string;
   createdByName?: string;
+  owningOfficeId?: string;
+  owningOfficeName?: string;
+  currentOfficeId?: string;
+  currentOfficeName?: string;
+  recipientName?: string;
+  remarks?: string;
   attachments?: CorrespondenceAttachment[];
   distribution?: DistributionRecipient[];
   archiveLevel?: 'department' | 'division' | 'directorate';
@@ -130,6 +170,10 @@ export type Minute = {
   readAt?: string;
   mentions?: string[];
   signature?: MinuteSignaturePayload;
+  fromOfficeId?: string;
+  fromOfficeName?: string;
+  toOfficeId?: string;
+  toOfficeName?: string;
 };
 
 export type User = {

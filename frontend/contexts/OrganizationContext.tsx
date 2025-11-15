@@ -32,6 +32,36 @@ export interface Department {
   isActive: boolean;
 }
 
+export interface Office {
+  id: string;
+  name: string;
+  code: string;
+  officeType: string;
+  directorateId?: string | null;
+  divisionId?: string | null;
+  departmentId?: string | null;
+  parentId?: string | null;
+  description?: string;
+  isActive: boolean;
+  allowExternalIntake: boolean;
+  allowLateralRouting: boolean;
+}
+
+export interface OfficeMembership {
+  id: string;
+  officeId: string;
+  officeName?: string;
+  userId: string;
+  assignmentRole: string;
+  isPrimary: boolean;
+  canRegister: boolean;
+  canRoute: boolean;
+  canApprove: boolean;
+  startsAt?: string;
+  endsAt?: string;
+  isActive: boolean;
+}
+
 export interface AssistantAssignment {
   id: string;
   executiveId: string;
@@ -64,6 +94,8 @@ interface OrganizationContextType {
   divisions: Division[];
   departments: Department[];
   assistantAssignments: AssistantAssignment[];
+  offices: Office[];
+  officeMemberships: OfficeMembership[];
   users: User[];
   roles: Role[];
   addRole: (role: CreateRoleInput) => Promise<Role>;
@@ -257,6 +289,36 @@ const mapApiRole = (item: any): Role => ({
   updatedAt: item.updated_at,
 });
 
+const mapApiOffice = (item: any): Office => ({
+  id: String(item.id),
+  name: item.name ?? 'Office',
+  code: item.code ?? `OFF-${String(item.id).slice(0, 6).toUpperCase()}`,
+  officeType: item.office_type ?? 'custom',
+  directorateId: normalizeId(item.directorate ?? item.directorate_id),
+  divisionId: normalizeId(item.division ?? item.division_id),
+  departmentId: normalizeId(item.department ?? item.department_id),
+  parentId: normalizeId(item.parent ?? item.parent_id),
+  description: item.description ?? '',
+  isActive: item.is_active ?? true,
+  allowExternalIntake: item.allow_external_intake ?? true,
+  allowLateralRouting: item.allow_lateral_routing ?? true,
+});
+
+const mapApiOfficeMembership = (item: any): OfficeMembership => ({
+  id: String(item.id),
+  officeId: normalizeId(item.office ?? item.office_id) ?? '',
+  officeName: item.office_name ?? item.office?.name ?? '',
+  userId: normalizeId(item.user ?? item.user_id) ?? '',
+  assignmentRole: item.assignment_role ?? 'staff',
+  isPrimary: item.is_primary ?? false,
+  canRegister: item.can_register ?? false,
+  canRoute: item.can_route ?? true,
+  canApprove: item.can_approve ?? false,
+  startsAt: item.starts_at ?? undefined,
+  endsAt: item.ends_at ?? undefined,
+  isActive: item.is_active ?? true,
+});
+
 const cleanPayload = (payload: Record<string, unknown>) =>
   Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined)
@@ -325,6 +387,8 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>([]);
+  const [offices, setOffices] = useState<Office[]>([]);
+  const [officeMemberships, setOfficeMemberships] = useState<OfficeMembership[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -394,13 +458,24 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     logInfo('Refreshing organization data...');
     setIsSyncing(true);
     try {
-      const [usersDataRaw, directoratesRaw, divisionsRaw, departmentsRaw, delegationsRaw, rolesRaw] = await Promise.all([
+      const [
+        usersDataRaw,
+        directoratesRaw,
+        divisionsRaw,
+        departmentsRaw,
+        delegationsRaw,
+        rolesRaw,
+        officesRaw,
+        officeMembershipsRaw,
+      ] = await Promise.all([
         apiFetch('/accounts/users/'),
-        apiFetch('/organization/directorates/?ordering=name'),
-        apiFetch('/organization/divisions/?ordering=name'),
-        apiFetch('/organization/departments/?ordering=name'),
+        apiFetch('/organization/directorates/?ordering=name&page_size=500'),
+        apiFetch('/organization/divisions/?ordering=name&page_size=500'),
+        apiFetch('/organization/departments/?ordering=name&page_size=500'),
         apiFetch('/correspondence/delegations/'),
         apiFetch('/organization/roles/?ordering=name'),
+        apiFetch('/organization/offices/?ordering=name&page_size=500'),
+        apiFetch('/organization/office-memberships/?ordering=office__name&page_size=500'),
       ]);
 
       const unwrappedUsers = unwrapResults<any>(usersDataRaw);
@@ -415,6 +490,8 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       const apiDepartments = unwrapResults<any>(departmentsRaw).map(mapApiDepartment);
       const apiDelegations = unwrapResults<any>(delegationsRaw).map(mapApiDelegation);
       const apiRoles = unwrapResults<any>(rolesRaw).map(mapApiRole);
+      const apiOffices = unwrapResults<any>(officesRaw).map(mapApiOffice);
+      const apiOfficeMemberships = unwrapResults<any>(officeMembershipsRaw).map(mapApiOfficeMembership);
 
       const sortedDirectorates = sortByName(apiDirectorates);
       const sortedDivisions = sortByName(apiDivisions);
@@ -425,11 +502,16 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       setDivisions(sortedDivisions);
       setDepartments(sortedDepartments);
       setAssistantAssignments(apiDelegations);
+      const sortedOffices = sortByName(apiOffices);
+      setOffices(sortedOffices);
+      setOfficeMemberships(apiOfficeMemberships);
       setRoles(sortedRoles);
       updateOrganizationCache({
         directorates: sortedDirectorates,
         divisions: sortedDivisions,
         departments: sortedDepartments,
+        offices: sortedOffices,
+        officeMemberships: apiOfficeMemberships,
         users: sortedUsers,
       });
 
@@ -778,10 +860,19 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setDivisions([]);
     setDepartments([]);
     setAssistantAssignments([]);
+    setOffices([]);
+    setOfficeMemberships([]);
     setUsers([]);
     setRoles([]);
     setHasSynced(false);
-    updateOrganizationCache({ directorates: [], divisions: [], departments: [], users: [] });
+    updateOrganizationCache({
+      directorates: [],
+      divisions: [],
+      departments: [],
+      offices: [],
+      officeMemberships: [],
+      users: [],
+    });
   }, []);
 
   return (
@@ -791,6 +882,8 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         divisions,
         departments,
         assistantAssignments,
+        offices,
+        officeMemberships,
         users,
         roles,
         addRole,

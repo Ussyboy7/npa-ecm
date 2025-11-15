@@ -1,7 +1,7 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,11 +11,8 @@ import { Input } from '@/components/ui/input';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  fetchDocuments,
-  getCachedDocuments,
-  getAccessibleDocumentsForUser,
+  queryDocuments,
   type DocumentRecord,
   type DocumentType,
   type DocumentStatus,
@@ -30,11 +27,10 @@ import {
   Filter,
   Calendar,
   Hash,
-  Tag,
   User as UserIcon,
   BarChart2,
   FilePlus,
-  BookOpen,
+  Loader2,
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
@@ -109,7 +105,12 @@ const DocumentManagementPage = () => {
   const router = useRouter();
   const { currentUser } = useCurrentUser();
   const { users: organizationUsers, divisions, departments } = useOrganization();
-  const [documents, setDocuments] = useState<DocumentRecord[]>(() => getCachedDocuments());
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<DocumentType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | 'all'>('all');
@@ -119,6 +120,32 @@ const DocumentManagementPage = () => {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<DocumentRecord | null>(null);
   const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>(() => getCachedWorkspaces());
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const loadDocuments = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await queryDocuments({
+        page,
+        pageSize,
+        search: searchQuery.trim() || undefined,
+        status: statusFilter,
+        documentType: typeFilter,
+        divisionId: divisionFilter,
+        departmentId: departmentFilter,
+        ordering: '-updated_at',
+      });
+      setDocuments(response.results);
+      setTotalCount(response.count);
+    } catch (err) {
+      logError('Failed to load DMS documents', err);
+      setDocuments([]);
+      setTotalCount(0);
+      setError('Unable to load documents right now.');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter]);
 
   const effectiveUser = useMemo(() => {
     if (currentUser) return currentUser;
@@ -133,72 +160,45 @@ const DocumentManagementPage = () => {
 
   useEffect(() => {
     let ignore = false;
-
-    const load = async () => {
+    const loadWorkspaces = async () => {
       try {
-        const [docs, spaces] = await Promise.allSettled([
-          fetchDocuments(),
-          fetchWorkspaces(),
-        ]);
-
-        if (ignore) return;
-
-        if (docs.status === 'fulfilled') {
-          setDocuments(docs.value);
-        }
-        if (spaces.status === 'fulfilled') {
-          setWorkspaces(spaces.value);
+        const spaces = await fetchWorkspaces();
+        if (!ignore) {
+          setWorkspaces(spaces);
         }
       } catch (error) {
-        logError('Failed to load DMS data', error);
+        logError('Failed to load workspaces', error);
       }
     };
-
-    void load();
-
+    void loadWorkspaces();
     return () => {
       ignore = true;
     };
   }, []);
 
-  const filteredDocuments = useMemo(() => {
-    const list = effectiveUser ? getAccessibleDocumentsForUser(effectiveUser) : documents;
-    return list
-      .filter((doc) => {
-        if (typeFilter !== 'all' && doc.documentType !== typeFilter) return false;
-        if (statusFilter !== 'all' && doc.status !== statusFilter) return false;
-        if (divisionFilter !== 'all' && doc.divisionId !== divisionFilter) return false;
-        if (departmentFilter !== 'all' && doc.departmentId !== departmentFilter) return false;
-        if (!searchQuery.trim()) return true;
-        const query = searchQuery.toLowerCase();
-        return (
-          doc.title.toLowerCase().includes(query) ||
-          (doc.referenceNumber ?? '').toLowerCase().includes(query) ||
-          (doc.description ?? '').toLowerCase().includes(query) ||
-          doc.tags?.some((tag) => tag.toLowerCase().includes(query)) ||
-          doc.versions.some((version) => version.contentText?.toLowerCase().includes(query))
-        );
-      })
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [effectiveUser, documents, searchQuery, typeFilter, statusFilter, divisionFilter, departmentFilter]);
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter]);
 
-  const draftDocuments = filteredDocuments.filter((doc) => doc.status === 'draft');
-  const publishedDocuments = filteredDocuments.filter((doc) => doc.status === 'published');
-  const archivedDocuments = filteredDocuments.filter((doc) => doc.status === 'archived');
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
 
   const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
   const departmentLookup = useMemo(() => new Map(departments.map((department) => [department.id, department.name])), [departments]);
   const userLookup = useMemo(() => new Map(organizationUsers.map((user) => [user.id, user])), [organizationUsers]);
+  const pageStats = useMemo(
+    () => ({
+      draft: documents.filter((doc) => doc.status === 'draft').length,
+      published: documents.filter((doc) => doc.status === 'published').length,
+      archived: documents.filter((doc) => doc.status === 'archived').length,
+    }),
+    [documents],
+  );
 
   const renderDocumentList = (list: DocumentRecord[]) => (
-    list.length === 0 ? (
-      <Card>
-        <CardContent className="py-12 text-center text-sm text-muted-foreground">
-          No documents found for the current filters.
-        </CardContent>
-      </Card>
-    ) : (
-      list.map((document) => {
+    <div className="space-y-3">
+      {list.map((document) => {
         const latestVersion = document.versions[0];
         const author = userLookup.get(document.authorId);
         return (
@@ -309,8 +309,8 @@ const DocumentManagementPage = () => {
             </div>
           </div>
         );
-      })
-    )
+      })}
+    </div>
   );
 
   return (
@@ -422,30 +422,56 @@ const DocumentManagementPage = () => {
           </Select>
         </div>
 
-        <Tabs defaultValue="all" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="published">Published ({publishedDocuments.length})</TabsTrigger>
-            <TabsTrigger value="drafts">Drafts ({draftDocuments.length})</TabsTrigger>
-            <TabsTrigger value="archived">Archived ({archivedDocuments.length})</TabsTrigger>
-            <TabsTrigger value="all">All ({filteredDocuments.length})</TabsTrigger>
-          </TabsList>
+        {error && (
+          <Card>
+            <CardContent className="py-6 text-sm text-destructive">{error}</CardContent>
+          </Card>
+        )}
 
-          <TabsContent value="published" className="space-y-3">
-            {renderDocumentList(publishedDocuments)}
-          </TabsContent>
+        {loading ? (
+          <Card>
+            <CardContent className="py-12 flex items-center justify-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading documents…
+            </CardContent>
+          </Card>
+        ) : documents.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              No documents found for the current filters.
+            </CardContent>
+          </Card>
+        ) : (
+          renderDocumentList(documents)
+        )}
 
-          <TabsContent value="drafts" className="space-y-3">
-            {renderDocumentList(draftDocuments)}
-          </TabsContent>
-
-          <TabsContent value="archived" className="space-y-3">
-            {renderDocumentList(archivedDocuments)}
-          </TabsContent>
-
-          <TabsContent value="all" className="space-y-3">
-            {renderDocumentList(filteredDocuments)}
-          </TabsContent>
-        </Tabs>
+        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing{' '}
+            {totalCount === 0
+              ? 0
+              : `${(page - 1) * pageSize + 1}-${Math.min(totalCount, (page - 1) * pageSize + documents.length)}`}{' '}
+            of {totalCount} documents
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page === 1 || loading}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={page >= totalPages || loading}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
 
         <Card>
           <CardHeader>
@@ -458,15 +484,15 @@ const DocumentManagementPage = () => {
           <CardContent className="grid gap-3 sm:grid-cols-3">
             <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
               <p className="text-xs text-muted-foreground">Published</p>
-              <p className="text-2xl font-bold text-primary">{publishedDocuments.length}</p>
+              <p className="text-2xl font-bold text-primary">{pageStats.published}</p>
             </div>
             <div className="p-3 rounded-lg bg-warning/5 border border-warning/20">
               <p className="text-xs text-muted-foreground">Drafts</p>
-              <p className="text-2xl font-bold text-warning">{draftDocuments.length}</p>
+              <p className="text-2xl font-bold text-warning">{pageStats.draft}</p>
             </div>
             <div className="p-3 rounded-lg bg-secondary/10 border border-secondary/20">
               <p className="text-xs text-muted-foreground">Archived</p>
-              <p className="text-2xl font-bold text-secondary">{archivedDocuments.length}</p>
+              <p className="text-2xl font-bold text-secondary">{pageStats.archived}</p>
             </div>
           </CardContent>
         </Card>
@@ -479,7 +505,7 @@ const DocumentManagementPage = () => {
           mode="create"
           currentUser={effectiveUser}
           onComplete={() => {
-            setDocuments(getCachedDocuments());
+            void loadDocuments();
           }}
         />
       )}
@@ -492,7 +518,7 @@ const DocumentManagementPage = () => {
         document={shareTarget}
         currentUserId={currentUser?.id}
         onShared={() => {
-          setDocuments(getCachedDocuments());
+          void loadDocuments();
         }}
       />
     </DashboardLayout>

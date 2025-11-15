@@ -5,14 +5,16 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
+from django.db import models
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 
 from accounts.models import User
 from correspondence.models import Correspondence, Minute
 from dms.models import Document
+from organization.models import Office, OfficeMembership
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,12 @@ class AnalyticsService:
         {"name": "15+ days", "min": 16, "max": None},
     ]
     LEADERSHIP_GRADES = {"MDCS", "EDCS", "MSS1", "MSS2"}
+    EXECUTIVE_OFFICE_TIERS = {
+        Office.OfficeTier.MANAGING_DIRECTOR,
+        Office.OfficeTier.EXECUTIVE_DIRECTOR,
+        Office.OfficeTier.GENERAL_MANAGER,
+        Office.OfficeTier.ASSISTANT_GENERAL_MANAGER,
+    }
 
     # ------------------------------------------------------------------ #
     # Public builders
@@ -100,6 +108,139 @@ class AnalyticsService:
             "pendingLeadership": pending_leadership,
             "weeklyTrend": weekly_trend,
             "sensitivityBreakdown": sensitivity_breakdown,
+        }
+
+    @classmethod
+    def build_executive_portfolio(
+        cls,
+        *,
+        user: User,
+        range_days: int = 30,
+        records_limit: int = 8,
+        records_query: str | None = None,
+    ) -> dict[str, Any]:
+        offices = cls._executive_offices_for_user(user)
+        office_ids = [office.id for office in offices]
+        metadata = cls._metadata(range_days)
+        metadata["officeCount"] = len(offices)
+        metadata["executive"] = user.get_full_name() or user.username
+
+        if not office_ids:
+            return {
+                "metadata": metadata,
+                "summary": {"totalQueue": 0, "urgent": 0, "slaBreaches": 0, "approachingSLA": 0},
+                "offices": [],
+                "trend": [],
+                "inboxPreview": [],
+                "escalations": [],
+                "approvals": [],
+                "delegations": [],
+                "records": [],
+            }
+
+        inbox_items = list(
+            cls._fetch_office_correspondence(
+                office_ids,
+                range_days=range_days,
+                relation="current_office",
+                exclude_completed=False,
+            )
+        )
+        owned_items = list(
+            cls._fetch_office_correspondence(
+                office_ids,
+                range_days=range_days,
+                relation="owning_office",
+                exclude_completed=False,
+            )
+        )
+
+        now = timezone.now()
+        office_metrics = cls._initialize_office_metrics(offices)
+        summary = {"totalQueue": 0, "urgent": 0, "slaBreaches": 0, "approachingSLA": 0}
+
+        preview_candidates: list[Correspondence] = []
+        escalations: list[Correspondence] = []
+        approvals: list[Correspondence] = []
+
+        for item in inbox_items:
+            if item.status == Correspondence.Status.COMPLETED:
+                continue
+            office_id = str(item.current_office_id)
+            if office_id not in office_metrics:
+                continue
+            metrics = office_metrics[office_id]
+            metrics["total"] += 1
+            summary["totalQueue"] += 1
+            if item.priority == Correspondence.Priority.URGENT:
+                metrics["urgent"] += 1
+                summary["urgent"] += 1
+
+            sla_status = cls._sla_status(item, now)
+            if sla_status == "breach":
+                metrics["slaBreaches"] += 1
+                summary["slaBreaches"] += 1
+            elif sla_status == "approaching":
+                metrics["approachingSLA"] += 1
+                summary["approachingSLA"] += 1
+
+            preview_candidates.append(item)
+
+            if sla_status == "breach" or item.priority in {
+                Correspondence.Priority.URGENT,
+                Correspondence.Priority.HIGH,
+            }:
+                escalations.append(item)
+
+            if item.current_approver_id == user.id or (
+                item.current_approver
+                and item.current_approver.grade_level
+                and item.current_approver.grade_level in cls.LEADERSHIP_GRADES
+            ):
+                approvals.append(item)
+
+        owned_counts = Counter(item.owning_office_id for item in owned_items if item.owning_office_id)
+        for office_id, count in owned_counts.items():
+            office_key = str(office_id)
+            if office_key in office_metrics:
+                office_metrics[office_key]["owned"] = count
+
+        trend = cls._compute_weekly_trend(
+            [
+                item
+                for item in owned_items
+                if item.status
+                in {Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS, Correspondence.Status.COMPLETED}
+            ]
+        )
+
+        summary["ownedTotal"] = len(owned_items)
+        completed_owned = sum(1 for item in owned_items if item.status == Correspondence.Status.COMPLETED)
+        summary["completionRate"] = round((completed_owned / summary["ownedTotal"]) * 100) if summary["ownedTotal"] else 0
+
+        preview = cls._serialize_correspondence_preview(preview_candidates, now, limit=8)
+        escalation_payload = cls._serialize_correspondence_preview(escalations, now, limit=6)
+        approvals_payload = cls._serialize_correspondence_preview(approvals, now, limit=6)
+
+        delegations = cls._build_delegation_snapshot(offices)
+
+        records = cls._build_records_payload(
+            user=user,
+            office_ids=office_ids,
+            limit=records_limit,
+            query=records_query,
+        )
+
+        return {
+            "metadata": metadata,
+            "summary": summary,
+            "offices": list(office_metrics.values()),
+            "trend": trend,
+            "inboxPreview": preview,
+            "escalations": escalation_payload,
+            "approvals": approvals_payload,
+            "delegations": delegations,
+            "records": records,
         }
 
     @classmethod
@@ -179,6 +320,200 @@ class AnalyticsService:
         start = cls._start_datetime(correspondence)
         end = correspondence.completed_at or now
         return max(0.0, (end - start).total_seconds() / 86400.0)
+
+    @classmethod
+    def _fetch_office_correspondence(
+        cls,
+        office_ids: Sequence[Any],
+        *,
+        range_days: int,
+        relation: str,
+        exclude_completed: bool = False,
+    ) -> QuerySet[Correspondence]:
+        assert relation in {"current_office", "owning_office"}
+        field_lookup = f"{relation}_id__in"
+        filters: dict[str, Any] = {field_lookup: office_ids, "is_deleted": False}
+        if range_days:
+            start_date = timezone.now().date() - timedelta(days=range_days)
+            filters["received_date__gte"] = start_date
+        if exclude_completed:
+            filters["status__in"] = [
+                Correspondence.Status.PENDING,
+                Correspondence.Status.IN_PROGRESS,
+            ]
+        qs = Correspondence.objects.filter(**filters)
+        return qs.select_related("current_office", "owning_office", "current_approver", "division")
+
+    @classmethod
+    def _executive_offices_for_user(cls, user: User) -> list[Office]:
+        if user.is_superuser:
+            return list(
+                Office.objects.filter(is_active=True, office_type__in=cls.EXECUTIVE_OFFICE_TIERS).order_by("name")
+            )
+
+        memberships = (
+            OfficeMembership.objects.filter(user=user, is_active=True, office__is_active=True)
+            .select_related("office")
+            .order_by("office__name")
+        )
+        offices: list[Office] = []
+        for membership in memberships:
+            office = membership.office
+            if office.office_type in cls.EXECUTIVE_OFFICE_TIERS:
+                offices.append(office)
+        return offices
+
+    @staticmethod
+    def _initialize_office_metrics(offices: Iterable[Office]) -> dict[str, dict[str, Any]]:
+        metrics: dict[str, dict[str, Any]] = {}
+        for office in offices:
+            metrics[str(office.id)] = {
+                "id": str(office.id),
+                "name": office.name,
+                "code": office.code,
+                "officeType": office.office_type,
+                "total": 0,
+                "urgent": 0,
+                "slaBreaches": 0,
+                "approachingSLA": 0,
+                "owned": 0,
+            }
+        return metrics
+
+    @classmethod
+    def _sla_status(cls, correspondence: Correspondence, now: datetime) -> str:
+        if not correspondence.received_date:
+            return "ok"
+        target = cls.SLA_TARGETS.get(correspondence.priority, 5)
+        days_open = (now.date() - correspondence.received_date).days
+        if days_open > target:
+            return "breach"
+        if target - days_open <= 1:
+            return "approaching"
+        return "ok"
+
+    @classmethod
+    def _serialize_correspondence_preview(
+        cls,
+        items: Sequence[Correspondence],
+        now: datetime,
+        *,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        ordered = sorted(
+            items,
+            key=lambda item: (
+                0 if item.priority == Correspondence.Priority.URGENT else 1,
+                cls._start_datetime(item),
+            ),
+        )
+        payload = []
+        for item in ordered[:limit]:
+            payload.append(
+                {
+                    "id": str(item.id),
+                    "referenceNumber": item.reference_number,
+                    "subject": item.subject,
+                    "priority": item.priority,
+                    "status": item.status,
+                    "officeName": item.current_office.name if item.current_office else None,
+                    "receivedDate": item.received_date.isoformat() if item.received_date else None,
+                    "currentApprover": item.current_approver.get_full_name()
+                    if item.current_approver
+                    else None,
+                    "agingDays": round(cls._turnaround_days(item, now), 1),
+                    "slaStatus": cls._sla_status(item, now),
+                }
+            )
+        return payload
+
+    @staticmethod
+    def _build_delegation_snapshot(offices: Sequence[Office]) -> list[dict[str, Any]]:
+        office_ids = [office.id for office in offices]
+        memberships = (
+            OfficeMembership.objects.filter(office_id__in=office_ids, is_active=True)
+            .select_related("office", "user")
+            .order_by("office__name", "-is_primary", "assignment_role")
+        )
+        snapshot: dict[str, dict[str, Any]] = {}
+        for membership in memberships:
+            office_id = str(membership.office_id)
+            entry = snapshot.setdefault(
+                office_id,
+                {
+                    "officeId": office_id,
+                    "officeName": membership.office.name,
+                    "members": [],
+                },
+            )
+            entry["members"].append(
+                {
+                    "userId": str(membership.user_id),
+                    "name": membership.user.get_full_name() or membership.user.username,
+                    "role": membership.assignment_role,
+                    "isPrimary": membership.is_primary,
+                    "canApprove": membership.can_approve,
+                }
+            )
+        return list(snapshot.values())
+
+    @classmethod
+    def _build_records_payload(
+        cls,
+        *,
+        user: User,
+        office_ids: Sequence[Any],
+        limit: int,
+        query: str | None = None,
+    ) -> list[dict[str, Any]]:
+        filters: dict[str, Any] = {
+            "owning_office_id__in": office_ids,
+            "status": Correspondence.Status.ARCHIVED,
+            "is_deleted": False,
+        }
+        qs = Correspondence.objects.filter(**filters).select_related("owning_office").order_by("-updated_at")
+        if query:
+            qs = qs.filter(
+                (
+                    models.Q(subject__icontains=query)
+                    | models.Q(reference_number__icontains=query)
+                    | models.Q(sender_name__icontains=query)
+                )
+            )
+        records = []
+        for item in qs[:limit]:
+            records.append(
+                {
+                    "id": str(item.id),
+                    "referenceNumber": item.reference_number,
+                    "subject": item.subject,
+                    "priority": item.priority,
+                    "owningOffice": item.owning_office.name if item.owning_office else None,
+                    "updatedAt": item.updated_at.isoformat() if item.updated_at else None,
+                    "archiveLevel": item.archive_level,
+                }
+            )
+        return records
+
+    @classmethod
+    def search_executive_records(cls, *, user: User, query: str, limit: int = 20) -> dict[str, Any]:
+        offices = cls._executive_offices_for_user(user)
+        office_ids = [office.id for office in offices]
+        metadata = {
+            "officeCount": len(offices),
+            "query": query,
+        }
+        if not office_ids:
+            return {"metadata": metadata, "results": []}
+
+        records = cls._build_records_payload(
+            user=user,
+            office_ids=office_ids,
+            limit=min(limit, 50),
+            query=query,
+        )
+        metadata["returned"] = len(records)
+        return {"metadata": metadata, "results": records}
 
     # ------------------------------------------------------------------ #
     # Metric builders shared across payloads

@@ -33,8 +33,7 @@
       "active": true
     }
   ],
-"DIVISIONS": [
-    
+  "DIVISIONS": [
     {
       "id": "div-procurement",
       "name": "Procurement",
@@ -43,7 +42,7 @@
       "generalManagerId": "user-gm-procurement",
       "active": true
     },
-{
+    {
       "id": "div-csp",
       "name": "Corporate & Strategic Planning",
       "code": "C&SP",
@@ -66,7 +65,7 @@
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-audit",
       "active": true
-},
+    },
     {
       "id": "div-ict",
       "name": "Information & Communication Technology",
@@ -75,7 +74,6 @@
       "generalManagerId": "user-gm-ict",
       "active": true
     },
-
     {
       "id": "div-legal",
       "name": "Legal Services",
@@ -99,7 +97,7 @@
       "directorateId": "dir-md",
       "generalManagerId": "user-gm-servicom",
       "active": true
-},
+    },
     {
       "id": "div-abuja",
       "name": "Abuja Liaison Office",
@@ -108,7 +106,6 @@
       "generalManagerId": "user-gm-liaison",
       "active": true
     },
-
     {
       "id": "div-oversea",
       "name": "Oversea Liaison Office",
@@ -117,7 +114,6 @@
       "generalManagerId": "user-gm-oversea-liaison",
       "active": true
     },
-
     {
       "id": "div-special-duties",
       "name": "Special Duties",
@@ -158,9 +154,6 @@
       "generalManagerId": "user-gm-ppp",
       "active": true
     },
-
-
-
     {
       "id": "div-hr",
       "name": "Human Resources",
@@ -192,8 +185,7 @@
       "directorateId": "dir-edfa",
       "generalManagerId": "user-gm-medical",
       "active": true
-},
-
+    },
     {
       "id": "div-S&I",
       "name": "Superannuation & Investment",
@@ -202,8 +194,6 @@
       "generalManagerId": "user-gm-superannuation-investment",
       "active": true
     },
-
-
     {
       "id": "div-marine",
       "name": "Marine",
@@ -243,9 +233,7 @@
       "directorateId": "dir-edmo",
       "generalManagerId": "user-gm-hse",
       "active": true
-},
-
-
+    },
     {
       "id": "div-engineering",
       "name": "Engineering & Technical Services",
@@ -263,9 +251,7 @@
       "active": true
     }
   ],
-
-  "DEPARTMENTS": [ 
-
+  "DEPARTMENTS": [
     {
       "id": "dept-ports-eng",
       "name": "Ports Engineering",
@@ -290,7 +276,6 @@
       "assistantGeneralManagerId": "user-agm-hydrographic",
       "active": true
     },
-
     {
       "id": "dept-civil",
       "name": "Civil Engineering",
@@ -299,8 +284,6 @@
       "assistantGeneralManagerId": "user-agm-civil",
       "active": true
     },
-
-
     {
       "id": "dept-physical-planning-dev",
       "name": "Physical Planning & Development",
@@ -317,8 +300,6 @@
       "assistantGeneralManagerId": "user-agm-lands-assets",
       "active": true
     },
-
-
     {
       "id": "dept-harbours",
       "name": "Harbours",
@@ -343,9 +324,7 @@
       "assistantGeneralManagerId": "user-agm-atons-vts",
       "active": true
     },
-
-
-   {
+    {
       "id": "dept-operations",
       "name": "Operations",
       "code": "OPERATIONS",
@@ -353,8 +332,6 @@
       "assistantGeneralManagerId": "user-agm-operations",
       "active": true
     },
-
-
     {
       "id": "dept-tariff",
       "name": "Tariff & Billing",
@@ -363,10 +340,7 @@
       "assistantGeneralManagerId": "user-agm-tariff",
       "active": true
     },
-
-
-
-   {
+    {
       "id": "dept-environment",
       "name": "Environment",
       "code": "ENVIRONMENT",
@@ -382,7 +356,7 @@
       "assistantGeneralManagerId": "user-agm-safety",
       "active": true
     },
-   {
+    {
       "id": "dept-fire-rescue",
       "name": "Fire & Rescue",
       "code": "FIRE_RESCUE",
@@ -390,9 +364,7 @@
       "assistantGeneralManagerId": "user-agm-fire-rescue",
       "active": true
     },
-
-
-   {
+    {
       "id": "dept-security",
       "name": "Security",
       "code": "SECURITY",
@@ -400,9 +372,7 @@
       "assistantGeneralManagerId": "user-agm-security",
       "active": true
     },
-
-
-   {
+    {
       "id": "dept-hr-management",
       "name": "HR Management",
       "code": "HR_MGT",
@@ -410,15 +380,15 @@
       "assistantGeneralManagerId": "user-agm-hr-mgt",
       "active": true
     },
-   {
+    {
       "id": "dept-hr-labour",
       "name": "Employee & Labour Relations",
       "code": "HR_LABOUR",
       "divisionId": "div-hr",
       "assistantGeneralManagerId": "user-agm-hr-labour",
       "active": true
-    }, 
-   {
+    },
+    {
       "id": "dept-performance",
       "name": "Performance Management",
       "code": "PERFORMANCE",
@@ -434,8 +404,6 @@
       "assistantGeneralManagerId": "user-agm-hr-ld",
       "active": true
     },
-
-
     {
       "id": "dept-accounts",
       "name": "Accounts",
@@ -452,7 +420,7 @@
       "assistantGeneralManagerId": "user-agm-finance",
       "active": true
     },
-   {
+    {
       "id": "dept-budget",
       "name": "Budget",
       "code": "BUDGET",
@@ -460,8 +428,6 @@
       "assistantGeneralManagerId": "user-agm-budget",
       "active": true
     },
-
-
     {
       "id": "dept-tax",
       "name": "Tax",
@@ -470,7 +436,6 @@
       "assistantGeneralManagerId": "user-agm-tax",
       "active": true
     },
-
     {
       "id": "dept-admin-general",
       "name": "Administration",
@@ -504,8 +469,6 @@
       "assistantGeneralManagerId": "user-agm-erm",
       "active": true
     },
-
-
     {
       "id": "dept-superannuation",
       "name": "Superannuation",
@@ -522,8 +485,6 @@
       "assistantGeneralManagerId": "user-agm-investment",
       "active": true
     },
-
-
     {
       "id": "dept-medical",
       "name": "Medical Services",
@@ -556,7 +517,7 @@
       "assistantGeneralManagerId": "user-agm-nursing",
       "active": true
     },
-   {
+    {
       "id": "dept-radiology",
       "name": "Radiology",
       "code": "RADIOLOGY",
@@ -564,8 +525,6 @@
       "assistantGeneralManagerId": "user-agm-radiology",
       "active": true
     },
-
-
     {
       "id": "dept-projects",
       "name": "Projects",
@@ -582,7 +541,7 @@
       "assistantGeneralManagerId": "user-agm-bms",
       "active": true
     },
-   {
+    {
       "id": "dept-compliance-records",
       "name": "Compliance & Records",
       "code": "C_R",
@@ -590,9 +549,7 @@
       "assistantGeneralManagerId": "user-agm-cr",
       "active": true
     },
-
-
-       {
+    {
       "id": "dept-csc-csr",
       "name": "Corporate Social Responsibility",
       "code": "CSC_CSR",
@@ -608,9 +565,7 @@
       "assistantGeneralManagerId": "user-agm-csc-pem",
       "active": true
     },
-
-
-   {
+    {
       "id": "dept-csp-research",
       "name": "Research & Statistics",
       "code": "CSP_RESEARCH",
@@ -626,8 +581,6 @@
       "assistantGeneralManagerId": "user-agm-csp-planning",
       "active": true
     },
-
-
     {
       "id": "dept-legal",
       "name": "Legal Services",
@@ -636,7 +589,7 @@
       "assistantGeneralManagerId": "user-agm-legal",
       "active": true
     },
-   {
+    {
       "id": "dept-board-registry",
       "name": "Board Secretary",
       "code": "BOARD_SECRETARY",
@@ -644,9 +597,6 @@
       "assistantGeneralManagerId": "user-agm-board-registry",
       "active": true
     },
-
-
-
     {
       "id": "dept-audit-finance",
       "name": "Finance & Investment",
@@ -671,26 +621,22 @@
       "assistantGeneralManagerId": "user-agm-audit-policy",
       "active": true
     },
-
-
-   {
+    {
       "id": "dept-public-private-partnership",
       "name": "Public-Private Partnership",
       "code": "PPP",
       "divisionId": "div-ppp",
       "assistantGeneralManagerId": "user-agm-ppp",
       "active": true
-},
-   {
+    },
+    {
       "id": "dept-new-business-venture",
       "name": "New-Business-Venture",
       "code": "NBV",
       "divisionId": "div-ppp",
       "assistantGeneralManagerId": "user-agm-nbv",
       "active": true
-},
-
-
+    },
     {
       "id": "dept-ict-networks",
       "name": "Networks & Communication",
@@ -723,8 +669,6 @@
       "assistantGeneralManagerId": "user-agm-software",
       "active": true
     },
-
-
     {
       "id": "dept-monitoring",
       "name": "Monitoring",
@@ -733,8 +677,6 @@
       "assistantGeneralManagerId": "user-agm-monitoring",
       "active": true
     },
-
-
     {
       "id": "dept-regulatory",
       "name": "Regulatory Services",
@@ -743,8 +685,6 @@
       "assistantGeneralManagerId": "user-agm-regulatory",
       "active": true
     },
-
-
     {
       "id": "dept-servicom",
       "name": "SERVICOM",
@@ -753,8 +693,6 @@
       "assistantGeneralManagerId": "user-agm-servicom",
       "active": true
     },
-
-
     {
       "id": "dept-abuja",
       "name": "Abuja Liaison Office",
@@ -763,8 +701,6 @@
       "assistantGeneralManagerId": "user-agm-abuja",
       "active": true
     },
-
-
     {
       "id": "dept-seaview-properties",
       "name": "Seaview Properties Limited",
@@ -774,7 +710,6 @@
       "active": true
     }
   ],
-
   "MOCK_USERS": [
     {
       "id": "user-md",
@@ -2063,6 +1998,2034 @@
       "systemRole": "Super Admin",
       "directorate": "dir-md",
       "active": true
+    }
+  ],
+  "OFFICES": [
+    {
+      "id": "office-dept-abuja",
+      "name": "Abuja Liaison Office Department Office",
+      "code": "OFF_DEPT_ABUJA",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-abuja",
+      "departmentId": "dept-abuja",
+      "parentId": "office-div-abuja",
+      "description": "Assistant GM queue for Abuja Liaison Office",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-accounts",
+      "name": "Accounts Department Office",
+      "code": "OFF_DEPT_ACCOUNTS",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-finance",
+      "departmentId": "dept-accounts",
+      "parentId": "office-div-finance",
+      "description": "Assistant GM queue for Accounts",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-admin-general",
+      "name": "Administration Department Office",
+      "code": "OFF_DEPT_ADMIN_GENERAL",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-admin",
+      "departmentId": "dept-admin-general",
+      "parentId": "office-div-admin",
+      "description": "Assistant GM queue for Administration",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-atons-vts",
+      "name": "Aids to Navigation & Vessel Traffic System Department Office",
+      "code": "OFF_DEPT_ATONS_VTS",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-marine",
+      "departmentId": "dept-atons-vts",
+      "parentId": "office-div-marine",
+      "description": "Assistant GM queue for Aids to Navigation & Vessel Traffic System",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-admin-archives",
+      "name": "Archives & Records Management Department Office",
+      "code": "OFF_DEPT_ADMIN_ARCHIVES",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-admin",
+      "departmentId": "dept-admin-archives",
+      "parentId": "office-div-admin",
+      "description": "Assistant GM queue for Archives & Records Management",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-bids-mgt-selection",
+      "name": "Bids MGT & Selection Department Office",
+      "code": "OFF_DEPT_BMS",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-procurement",
+      "departmentId": "dept-bids-mgt-selection",
+      "parentId": "office-div-procurement",
+      "description": "Assistant GM queue for Bids MGT & Selection",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-board-registry",
+      "name": "Board Secretary Department Office",
+      "code": "OFF_DEPT_BOARD_SECRETARY",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-legal",
+      "departmentId": "dept-board-registry",
+      "parentId": "office-div-legal",
+      "description": "Assistant GM queue for Board Secretary",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-budget",
+      "name": "Budget Department Office",
+      "code": "OFF_DEPT_BUDGET",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-finance",
+      "departmentId": "dept-budget",
+      "parentId": "office-div-finance",
+      "description": "Assistant GM queue for Budget",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-civil",
+      "name": "Civil Engineering Department Office",
+      "code": "OFF_DEPT_CIVIL",
+      "officeType": "agm",
+      "directorateId": "dir-edets",
+      "divisionId": "div-engineering",
+      "departmentId": "dept-civil",
+      "parentId": "office-div-engineering",
+      "description": "Assistant GM queue for Civil Engineering",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-compliance-records",
+      "name": "Compliance & Records Department Office",
+      "code": "OFF_DEPT_C_R",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-procurement",
+      "departmentId": "dept-compliance-records",
+      "parentId": "office-div-procurement",
+      "description": "Assistant GM queue for Compliance & Records",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-csc-csr",
+      "name": "Corporate Social Responsibility Department Office",
+      "code": "OFF_DEPT_CSC_CSR",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-csc",
+      "departmentId": "dept-csc-csr",
+      "parentId": "office-div-csc",
+      "description": "Assistant GM queue for Corporate Social Responsibility",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-electrical",
+      "name": "Electrical & Corrosion Department Office",
+      "code": "OFF_DEPT_ELECTRICAL",
+      "officeType": "agm",
+      "directorateId": "dir-edets",
+      "divisionId": "div-engineering",
+      "departmentId": "dept-electrical",
+      "parentId": "office-div-engineering",
+      "description": "Assistant GM queue for Electrical & Corrosion",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-hr-labour",
+      "name": "Employee & Labour Relations Department Office",
+      "code": "OFF_DEPT_HR_LABOUR",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-hr",
+      "departmentId": "dept-hr-labour",
+      "parentId": "office-div-hr",
+      "description": "Assistant GM queue for Employee & Labour Relations",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-erm",
+      "name": "Enterprise Risk Management Department Office",
+      "code": "OFF_DEPT_ERM",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": null,
+      "departmentId": "dept-erm",
+      "parentId": "office-dir-edfa",
+      "description": "Assistant GM queue for Enterprise Risk Management",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-environment",
+      "name": "Environment Department Office",
+      "code": "OFF_DEPT_ENVIRONMENT",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-hse",
+      "departmentId": "dept-environment",
+      "parentId": "office-div-hse",
+      "description": "Assistant GM queue for Environment",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-admin-facility",
+      "name": "Facility Management Department Office",
+      "code": "OFF_DEPT_ADMIN_FACILITY",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-admin",
+      "departmentId": "dept-admin-facility",
+      "parentId": "office-div-admin",
+      "description": "Assistant GM queue for Facility Management",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-audit-finance",
+      "name": "Finance & Investment Department Office",
+      "code": "OFF_DEPT_AUDIT_FINANCE",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-audit",
+      "departmentId": "dept-audit-finance",
+      "parentId": "office-div-audit",
+      "description": "Assistant GM queue for Finance & Investment",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-finance",
+      "name": "Finance Department Office",
+      "code": "OFF_DEPT_FINANCE",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-finance",
+      "departmentId": "dept-finance",
+      "parentId": "office-div-finance",
+      "description": "Assistant GM queue for Finance",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-fire-rescue",
+      "name": "Fire & Rescue Department Office",
+      "code": "OFF_DEPT_FIRE_RESCUE",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-hse",
+      "departmentId": "dept-fire-rescue",
+      "parentId": "office-div-hse",
+      "description": "Assistant GM queue for Fire & Rescue",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-hr-management",
+      "name": "HR Management Department Office",
+      "code": "OFF_DEPT_HR_MGT",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-hr",
+      "departmentId": "dept-hr-management",
+      "parentId": "office-div-hr",
+      "description": "Assistant GM queue for HR Management",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-harbours",
+      "name": "Harbours Department Office",
+      "code": "OFF_DEPT_HARBOURS",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-marine",
+      "departmentId": "dept-harbours",
+      "parentId": "office-div-marine",
+      "description": "Assistant GM queue for Harbours",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-ict-hardware",
+      "name": "Hardware, Infrastructure & Support Department Office",
+      "code": "OFF_DEPT_ICT_HARDWARE",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-ict",
+      "departmentId": "dept-ict-hardware",
+      "parentId": "office-div-ict",
+      "description": "Assistant GM queue for Hardware, Infrastructure & Support",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-hydrographic",
+      "name": "Hydrographic Department Office",
+      "code": "OFF_DEPT_HYDROGRAPHIC",
+      "officeType": "agm",
+      "directorateId": "dir-edets",
+      "divisionId": "div-engineering",
+      "departmentId": "dept-hydrographic",
+      "parentId": "office-div-engineering",
+      "description": "Assistant GM queue for Hydrographic",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-investment",
+      "name": "Investment Department Office",
+      "code": "OFF_DEPT_INVESTMENT",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-S&I",
+      "departmentId": "dept-investment",
+      "parentId": "office-div-S&I",
+      "description": "Assistant GM queue for Investment",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-land-estate",
+      "name": "Lands And Estate Department Office",
+      "code": "OFF_DEPT_LE",
+      "officeType": "agm",
+      "directorateId": "dir-edets",
+      "divisionId": "div-lands-assets",
+      "departmentId": "dept-land-estate",
+      "parentId": "office-div-lands-assets",
+      "description": "Assistant GM queue for Lands And Estate",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-hr-learning-development",
+      "name": "Learning & Development Department Office",
+      "code": "OFF_DEPT_HR_LD",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-hr",
+      "departmentId": "dept-hr-learning-development",
+      "parentId": "office-div-hr",
+      "description": "Assistant GM queue for Learning & Development",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-legal",
+      "name": "Legal Services Department Office",
+      "code": "OFF_DEPT_LEGAL",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-legal",
+      "departmentId": "dept-legal",
+      "parentId": "office-div-legal",
+      "description": "Assistant GM queue for Legal Services",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-medical",
+      "name": "Medical Services Department Office",
+      "code": "OFF_DEPT_MEDICAL",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-medical",
+      "departmentId": "dept-medical",
+      "parentId": "office-div-medical",
+      "description": "Assistant GM queue for Medical Services",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-monitoring",
+      "name": "Monitoring Department Office",
+      "code": "OFF_DEPT_MONITORING",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-monitoring",
+      "departmentId": "dept-monitoring",
+      "parentId": "office-div-monitoring",
+      "description": "Assistant GM queue for Monitoring",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-ict-networks",
+      "name": "Networks & Communication Department Office",
+      "code": "OFF_DEPT_ICT_NETWORKS",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-ict",
+      "departmentId": "dept-ict-networks",
+      "parentId": "office-div-ict",
+      "description": "Assistant GM queue for Networks & Communication",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-new-business-venture",
+      "name": "New-Business-Venture Department Office",
+      "code": "OFF_DEPT_NBV",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-ppp",
+      "departmentId": "dept-new-business-venture",
+      "parentId": "office-div-ppp",
+      "description": "Assistant GM queue for New-Business-Venture",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-nursing",
+      "name": "Nursing Department Office",
+      "code": "OFF_DEPT_NURSING",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-medical",
+      "departmentId": "dept-nursing",
+      "parentId": "office-div-medical",
+      "description": "Assistant GM queue for Nursing",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-occupational",
+      "name": "Occupational Health Department Office",
+      "code": "OFF_DEPT_OCCUPATIONAL",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-medical",
+      "departmentId": "dept-occupational",
+      "parentId": "office-div-medical",
+      "description": "Assistant GM queue for Occupational Health",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-operations",
+      "name": "Operations Department Office",
+      "code": "OFF_DEPT_OPERATIONS",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-operations",
+      "departmentId": "dept-operations",
+      "parentId": "office-div-operations",
+      "description": "Assistant GM queue for Operations",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-performance",
+      "name": "Performance Management Department Office",
+      "code": "OFF_DEPT_PERFORMANCE",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-hr",
+      "departmentId": "dept-performance",
+      "parentId": "office-div-hr",
+      "description": "Assistant GM queue for Performance Management",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-pharmacy",
+      "name": "Pharmacy Department Office",
+      "code": "OFF_DEPT_PHARMACY",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-medical",
+      "departmentId": "dept-pharmacy",
+      "parentId": "office-div-medical",
+      "description": "Assistant GM queue for Pharmacy",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-physical-planning-dev",
+      "name": "Physical Planning & Development Department Office",
+      "code": "OFF_DEPT_PPD",
+      "officeType": "agm",
+      "directorateId": "dir-edets",
+      "divisionId": "div-lands-assets",
+      "departmentId": "dept-physical-planning-dev",
+      "parentId": "office-div-lands-assets",
+      "description": "Assistant GM queue for Physical Planning & Development",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-csp-planning",
+      "name": "Planning & Monitoring Department Office",
+      "code": "OFF_DEPT_CSP_PLANNING",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-csp",
+      "departmentId": "dept-csp-planning",
+      "parentId": "office-div-csp",
+      "description": "Assistant GM queue for Planning & Monitoring",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-audit-policy",
+      "name": "Policy Compliance Department Office",
+      "code": "OFF_DEPT_AUDIT_POLICY",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-audit",
+      "departmentId": "dept-audit-policy",
+      "parentId": "office-div-audit",
+      "description": "Assistant GM queue for Policy Compliance",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-ports-eng",
+      "name": "Ports Engineering Department Office",
+      "code": "OFF_DEPT_PORTS_ENG",
+      "officeType": "agm",
+      "directorateId": "dir-edets",
+      "divisionId": "div-engineering",
+      "departmentId": "dept-ports-eng",
+      "parentId": "office-div-engineering",
+      "description": "Assistant GM queue for Ports Engineering",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-projects",
+      "name": "Projects Department Office",
+      "code": "OFF_DEPT_PROJECTS",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-procurement",
+      "departmentId": "dept-projects",
+      "parentId": "office-div-procurement",
+      "description": "Assistant GM queue for Projects",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-csc-pem",
+      "name": "Protocol & Events Management Department Office",
+      "code": "OFF_DEPT_CSC_PEM",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-csc",
+      "departmentId": "dept-csc-pem",
+      "parentId": "office-div-csc",
+      "description": "Assistant GM queue for Protocol & Events Management",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-public-private-partnership",
+      "name": "Public-Private Partnership Department Office",
+      "code": "OFF_DEPT_PPP",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-ppp",
+      "departmentId": "dept-public-private-partnership",
+      "parentId": "office-div-ppp",
+      "description": "Assistant GM queue for Public-Private Partnership",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-radiology",
+      "name": "Radiology Department Office",
+      "code": "OFF_DEPT_RADIOLOGY",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-medical",
+      "departmentId": "dept-radiology",
+      "parentId": "office-div-medical",
+      "description": "Assistant GM queue for Radiology",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-regulatory",
+      "name": "Regulatory Services Department Office",
+      "code": "OFF_DEPT_REGULATORY",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-regulatory",
+      "departmentId": "dept-regulatory",
+      "parentId": "office-div-regulatory",
+      "description": "Assistant GM queue for Regulatory Services",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-ict-research",
+      "name": "Research & Special Projects Department Office",
+      "code": "OFF_DEPT_ICT_RESEARCH",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-ict",
+      "departmentId": "dept-ict-research",
+      "parentId": "office-div-ict",
+      "description": "Assistant GM queue for Research & Special Projects",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-csp-research",
+      "name": "Research & Statistics Department Office",
+      "code": "OFF_DEPT_CSP_RESEARCH",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-csp",
+      "departmentId": "dept-csp-research",
+      "parentId": "office-div-csp",
+      "description": "Assistant GM queue for Research & Statistics",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-servicom",
+      "name": "SERVICOM Department Office",
+      "code": "OFF_DEPT_SERVICOM",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-servicom",
+      "departmentId": "dept-servicom",
+      "parentId": "office-div-servicom",
+      "description": "Assistant GM queue for SERVICOM",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-safety",
+      "name": "Safety Department Office",
+      "code": "OFF_DEPT_SAFETY",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-hse",
+      "departmentId": "dept-safety",
+      "parentId": "office-div-hse",
+      "description": "Assistant GM queue for Safety",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-seaview-properties",
+      "name": "Seaview Properties Limited Department Office",
+      "code": "OFF_DEPT_SEAVIEW",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-seaview-properties",
+      "departmentId": "dept-seaview-properties",
+      "parentId": "office-div-seaview-properties",
+      "description": "Assistant GM queue for Seaview Properties Limited",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-security",
+      "name": "Security Department Office",
+      "code": "OFF_DEPT_SECURITY",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-security",
+      "departmentId": "dept-security",
+      "parentId": "office-div-security",
+      "description": "Assistant GM queue for Security",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-ict-software",
+      "name": "Software Applications & Database Management Department Office",
+      "code": "OFF_DEPT_ICT_SOFTWARE",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-ict",
+      "departmentId": "dept-ict-software",
+      "parentId": "office-div-ict",
+      "description": "Assistant GM queue for Software Applications & Database Management",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-superannuation",
+      "name": "Superannuation Department Office",
+      "code": "OFF_DEPT_SUPERANNUATION",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-S&I",
+      "departmentId": "dept-superannuation",
+      "parentId": "office-div-S&I",
+      "description": "Assistant GM queue for Superannuation",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-audit-systems",
+      "name": "System & ICT Department Office",
+      "code": "OFF_DEPT_AUDIT_SYSTEMS",
+      "officeType": "agm",
+      "directorateId": "dir-md",
+      "divisionId": "div-audit",
+      "departmentId": "dept-audit-systems",
+      "parentId": "office-div-audit",
+      "description": "Assistant GM queue for System & ICT",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-tariff",
+      "name": "Tariff & Billing Department Office",
+      "code": "OFF_DEPT_TARIFF",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-tariff",
+      "departmentId": "dept-tariff",
+      "parentId": "office-div-tariff",
+      "description": "Assistant GM queue for Tariff & Billing",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-tax",
+      "name": "Tax Department Office",
+      "code": "OFF_DEPT_TAX",
+      "officeType": "agm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-finance",
+      "departmentId": "dept-tax",
+      "parentId": "office-div-finance",
+      "description": "Assistant GM queue for Tax",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dept-vessel",
+      "name": "Vessel Management Department Office",
+      "code": "OFF_DEPT_VESSEL",
+      "officeType": "agm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-marine",
+      "departmentId": "dept-vessel",
+      "parentId": "office-div-marine",
+      "description": "Assistant GM queue for Vessel Management",
+      "allowExternalIntake": false,
+      "allowLateralRouting": false,
+      "isActive": true
+    },
+    {
+      "id": "office-dir-edets",
+      "name": "Executive Director, Engineering & Technical Services Office",
+      "code": "OFF_DIR_EDETS",
+      "officeType": "ed",
+      "directorateId": "dir-edets",
+      "divisionId": null,
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "Leadership queue for Executive Director, Engineering & Technical Services",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-dir-edfa",
+      "name": "Executive Director, Finance & Administration Office",
+      "code": "OFF_DIR_EDFA",
+      "officeType": "ed",
+      "directorateId": "dir-edfa",
+      "divisionId": null,
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "Leadership queue for Executive Director, Finance & Administration",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-dir-edmo",
+      "name": "Executive Director, Marine & Operations Office",
+      "code": "OFF_DIR_EDMO",
+      "officeType": "ed",
+      "directorateId": "dir-edmo",
+      "divisionId": null,
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "Leadership queue for Executive Director, Marine & Operations",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-abuja",
+      "name": "Abuja Liaison Office Division Office",
+      "code": "OFF_DIV_ABUJA",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-abuja",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Abuja Liaison Office",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-admin",
+      "name": "Administration Division Office",
+      "code": "OFF_DIV_ADMIN",
+      "officeType": "gm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-admin",
+      "departmentId": null,
+      "parentId": "office-dir-edfa",
+      "description": "General Manager queue for Administration",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-audit",
+      "name": "Audit Division Office",
+      "code": "OFF_DIV_AUDIT",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-audit",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Audit",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-csc",
+      "name": "Corporate & Strategic Communications Division Office",
+      "code": "OFF_DIV_CANDSC",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-csc",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Corporate & Strategic Communications",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-csp",
+      "name": "Corporate & Strategic Planning Division Office",
+      "code": "OFF_DIV_CANDSP",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-csp",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Corporate & Strategic Planning",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-engineering",
+      "name": "Engineering & Technical Services Division Office",
+      "code": "OFF_DIV_ENGINEERING",
+      "officeType": "gm",
+      "directorateId": "dir-edets",
+      "divisionId": "div-engineering",
+      "departmentId": null,
+      "parentId": "office-dir-edets",
+      "description": "General Manager queue for Engineering & Technical Services",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-finance",
+      "name": "Finance Division Office",
+      "code": "OFF_DIV_FINANCE",
+      "officeType": "gm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-finance",
+      "departmentId": null,
+      "parentId": "office-dir-edfa",
+      "description": "General Manager queue for Finance",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-gm-md-office",
+      "name": "GM MD's Office Division Office",
+      "code": "OFF_DIV_GM_MD_OFFICE",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-gm-md-office",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for GM MD's Office",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-hse",
+      "name": "Health, Safety & Environment Division Office",
+      "code": "OFF_DIV_HSE",
+      "officeType": "gm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-hse",
+      "departmentId": null,
+      "parentId": "office-dir-edmo",
+      "description": "General Manager queue for Health, Safety & Environment",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-hr",
+      "name": "Human Resources Division Office",
+      "code": "OFF_DIV_HR",
+      "officeType": "gm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-hr",
+      "departmentId": null,
+      "parentId": "office-dir-edfa",
+      "description": "General Manager queue for Human Resources",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-ict",
+      "name": "Information & Communication Technology Division Office",
+      "code": "OFF_DIV_ICT",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-ict",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Information & Communication Technology",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-lands-assets",
+      "name": "Lands & Assets Administration Division Office",
+      "code": "OFF_DIV_LANDS_ASSETS",
+      "officeType": "gm",
+      "directorateId": "dir-edets",
+      "divisionId": "div-lands-assets",
+      "departmentId": null,
+      "parentId": "office-dir-edets",
+      "description": "General Manager queue for Lands & Assets Administration",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-legal",
+      "name": "Legal Services Division Office",
+      "code": "OFF_DIV_LEGAL",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-legal",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Legal Services",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-marine",
+      "name": "Marine Division Office",
+      "code": "OFF_DIV_MARINE",
+      "officeType": "gm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-marine",
+      "departmentId": null,
+      "parentId": "office-dir-edmo",
+      "description": "General Manager queue for Marine",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-medical",
+      "name": "Medical Services Division Office",
+      "code": "OFF_DIV_MEDICAL",
+      "officeType": "gm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-medical",
+      "departmentId": null,
+      "parentId": "office-dir-edfa",
+      "description": "General Manager queue for Medical Services",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-monitoring",
+      "name": "Monitoring Division Office",
+      "code": "OFF_DIV_MONITORING",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-monitoring",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Monitoring",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-operations",
+      "name": "Operations Division Office",
+      "code": "OFF_DIV_OPERATIONS",
+      "officeType": "gm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-operations",
+      "departmentId": null,
+      "parentId": "office-dir-edmo",
+      "description": "General Manager queue for Operations",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-oversea",
+      "name": "Oversea Liaison Office Division Office",
+      "code": "OFF_DIV_OVERSEA",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-oversea",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Oversea Liaison Office",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-procurement",
+      "name": "Procurement Division Office",
+      "code": "OFF_DIV_PROCUREMENT",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-procurement",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Procurement",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-ppp",
+      "name": "Public-Private Partnership Division Office",
+      "code": "OFF_DIV_PPP",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-ppp",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Public-Private Partnership",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-regulatory",
+      "name": "Regulatory Services Division Office",
+      "code": "OFF_DIV_REGULATORY",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-regulatory",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Regulatory Services",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-servicom",
+      "name": "SERVICOM Division Office",
+      "code": "OFF_DIV_SERVICOM",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-servicom",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for SERVICOM",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-seaview-properties",
+      "name": "Seaview Properties Limited Division Office",
+      "code": "OFF_DIV_SEAVIEW_PROPERTIES",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-seaview-properties",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Seaview Properties Limited",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-security",
+      "name": "Security Division Office",
+      "code": "OFF_DIV_SECURITY",
+      "officeType": "gm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-security",
+      "departmentId": null,
+      "parentId": "office-dir-edmo",
+      "description": "General Manager queue for Security",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-special-duties",
+      "name": "Special Duties Division Office",
+      "code": "OFF_DIV_SPECIAL_DUTIES",
+      "officeType": "gm",
+      "directorateId": "dir-md",
+      "divisionId": "div-special-duties",
+      "departmentId": null,
+      "parentId": "office-dir-md",
+      "description": "General Manager queue for Special Duties",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-S&I",
+      "name": "Superannuation & Investment Division Office",
+      "code": "OFF_DIV_SANDI",
+      "officeType": "gm",
+      "directorateId": "dir-edfa",
+      "divisionId": "div-S&I",
+      "departmentId": null,
+      "parentId": "office-dir-edfa",
+      "description": "General Manager queue for Superannuation & Investment",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-div-tariff",
+      "name": "Tariff & Billing Division Office",
+      "code": "OFF_DIV_TARIFF",
+      "officeType": "gm",
+      "directorateId": "dir-edmo",
+      "divisionId": "div-tariff",
+      "departmentId": null,
+      "parentId": "office-dir-edmo",
+      "description": "General Manager queue for Tariff & Billing",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    },
+    {
+      "id": "office-dir-md",
+      "name": "Managing Director Office Office",
+      "code": "OFF_MD",
+      "officeType": "md",
+      "directorateId": "dir-md",
+      "divisionId": null,
+      "departmentId": null,
+      "parentId": null,
+      "description": "Leadership queue for Managing Director Office",
+      "allowExternalIntake": true,
+      "allowLateralRouting": true,
+      "isActive": true
+    }
+  ],
+  "OFFICE_MEMBERSHIPS": [
+    {
+      "officeId": "office-dept-abuja",
+      "userId": "user-agm-abuja",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-accounts",
+      "userId": "user-agm-accounts",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-admin-archives",
+      "userId": "user-agm-admin-archives",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-admin-facility",
+      "userId": "user-agm-admin-facility",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-admin-general",
+      "userId": "user-agm-admin-general",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-atons-vts",
+      "userId": "user-agm-atons-vts",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-audit-finance",
+      "userId": "user-agm-audit-finance",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-audit-policy",
+      "userId": "user-agm-audit-policy",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-audit-systems",
+      "userId": "user-agm-audit-systems",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-bids-mgt-selection",
+      "userId": "user-agm-bms",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-board-registry",
+      "userId": "user-agm-board-registry",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-budget",
+      "userId": "user-agm-budget",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-civil",
+      "userId": "user-agm-civil",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-compliance-records",
+      "userId": "user-agm-cr",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-csc-csr",
+      "userId": "user-agm-csc-csr",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-csc-pem",
+      "userId": "user-agm-csc-pem",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-csp-planning",
+      "userId": "user-agm-csp-planning",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-csp-research",
+      "userId": "user-agm-csp-research",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-electrical",
+      "userId": "user-agm-electrical",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-environment",
+      "userId": "user-agm-environment",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-erm",
+      "userId": "user-agm-erm",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-finance",
+      "userId": "user-agm-finance",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-fire-rescue",
+      "userId": "user-agm-fire-rescue",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-harbours",
+      "userId": "user-agm-harbours",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-hr-labour",
+      "userId": "user-agm-hr-labour",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-hr-learning-development",
+      "userId": "user-agm-hr-ld",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-hr-management",
+      "userId": "user-agm-hr-mgt",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-hydrographic",
+      "userId": "user-agm-hydrographic",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-ict-hardware",
+      "userId": "user-agm-infra",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-ict-networks",
+      "userId": "user-agm-networks",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-ict-research",
+      "userId": "user-agm-research",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-ict-software",
+      "userId": "user-agm-software",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-investment",
+      "userId": "user-agm-investment",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-land-estate",
+      "userId": "user-agm-lands-assets",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-legal",
+      "userId": "user-agm-legal",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-medical",
+      "userId": "user-agm-medical",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-monitoring",
+      "userId": "user-agm-monitoring",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-new-business-venture",
+      "userId": "user-agm-nbv",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-nursing",
+      "userId": "user-agm-nursing",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-occupational",
+      "userId": "user-agm-occupational",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-operations",
+      "userId": "user-agm-operations",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-performance",
+      "userId": "user-agm-performance",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-pharmacy",
+      "userId": "user-agm-pharmacy",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-physical-planning-dev",
+      "userId": "user-agm-ppd",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-ports-eng",
+      "userId": "user-agm-ports-eng",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-projects",
+      "userId": "user-agm-projects",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-public-private-partnership",
+      "userId": "user-agm-ppp",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-radiology",
+      "userId": "user-agm-radiology",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-regulatory",
+      "userId": "user-agm-regulatory",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-safety",
+      "userId": "user-agm-safety",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-seaview-properties",
+      "userId": "user-agm-seaview-properties",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-security",
+      "userId": "user-agm-security",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-servicom",
+      "userId": "user-agm-servicom",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-superannuation",
+      "userId": "user-agm-superannuation",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-tariff",
+      "userId": "user-agm-tariff",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-tax",
+      "userId": "user-agm-tax",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dept-vessel",
+      "userId": "user-agm-vessel",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dir-edets",
+      "userId": "user-ed-ets",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": false,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dir-edfa",
+      "userId": "user-ed-fa",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": false,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dir-edmo",
+      "userId": "user-ed-mo",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": false,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-dir-md",
+      "userId": "user-md",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": false,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-S&I",
+      "userId": "user-gm-superannuation-investment",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-abuja",
+      "userId": "user-gm-liaison",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-admin",
+      "userId": "user-gm-admin",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-audit",
+      "userId": "user-gm-audit",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-csc",
+      "userId": "user-gm-csc",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-csp",
+      "userId": "user-gm-csp",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-engineering",
+      "userId": "user-gm-engineering",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-finance",
+      "userId": "user-gm-finance",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-gm-md-office",
+      "userId": "user-gm-md-office",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-hr",
+      "userId": "user-gm-hr",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-hse",
+      "userId": "user-gm-hse",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-ict",
+      "userId": "user-gm-ict",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-lands-assets",
+      "userId": "user-gm-lands-assets",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-legal",
+      "userId": "user-gm-legal",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-marine",
+      "userId": "user-gm-marine-alt",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-medical",
+      "userId": "user-gm-medical",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-monitoring",
+      "userId": "user-gm-monitoring",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-operations",
+      "userId": "user-gm-operations",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-oversea",
+      "userId": "user-gm-oversea-liaison",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-ppp",
+      "userId": "user-gm-ppp",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-procurement",
+      "userId": "user-gm-procurement",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-regulatory",
+      "userId": "user-gm-regulatory",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-seaview-properties",
+      "userId": "user-gm-seaview-properties",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-security",
+      "userId": "user-gm-security",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-servicom",
+      "userId": "user-gm-servicom",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-special-duties",
+      "userId": "user-gm-special-duties",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
+    },
+    {
+      "officeId": "office-div-tariff",
+      "userId": "user-gm-tariff",
+      "assignmentRole": "principal",
+      "isPrimary": true,
+      "canRegister": true,
+      "canRoute": true,
+      "canApprove": true
     }
   ],
   "GRADE_LEVELS": [

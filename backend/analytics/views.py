@@ -64,6 +64,36 @@ class ExecutiveAnalyticsView(APIView):
         return Response(data)
 
 
+class ExecutivePortfolioView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        range_days = int(request.query_params.get("range", 30))
+        records_limit = int(request.query_params.get("records", 8))
+        records_query = request.query_params.get("records_query")
+        data = AnalyticsService.build_executive_portfolio(
+            user=request.user,
+            range_days=range_days,
+            records_limit=max(1, min(records_limit, 25)),
+            records_query=records_query,
+        )
+        return Response(data)
+
+
+class ExecutiveRecordsSearchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = (request.query_params.get("query") or "").strip()
+        limit = int(request.query_params.get("limit", 20))
+        data = AnalyticsService.search_executive_records(
+            user=request.user,
+            query=query,
+            limit=max(1, min(limit, 50)),
+        )
+        return Response(data)
+
+
 class ReportsAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 

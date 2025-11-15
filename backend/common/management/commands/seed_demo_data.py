@@ -27,7 +27,7 @@ from dms.models import (
     DocumentVersion,
     DocumentWorkspace,
 )
-from organization.models import Department, Directorate, Division, Role
+from organization.models import Department, Directorate, Division, Office, OfficeMembership, Role
 from support.models import FaqEntry, HelpGuide, SupportTicket
 from workflow.models import ApprovalTask, TaskAction, WorkflowStep, WorkflowTemplate
 
@@ -59,6 +59,7 @@ class Command(BaseCommand):
             if options.get("reset"):
                 self._reset_organization_units()
             directorates, divisions, departments = self._ensure_organization_units(data)
+            offices = self._ensure_offices(data, directorates, divisions, departments)
             
             # Only create users if not skipped
             if options.get("skip_users"):
@@ -70,8 +71,10 @@ class Command(BaseCommand):
             # Only assign leadership and create demo data if users were created
             if users:
                 self._assign_org_leadership(data, directorates, divisions, departments, users)
+                self._ensure_office_memberships(data, offices, users)
+                self._ensure_leadership_office_memberships(directorates, divisions, departments)
                 documents = self._ensure_documents(users, divisions, departments)
-                correspondence_items = self._ensure_correspondence(users, divisions, departments, documents)
+                correspondence_items = self._ensure_correspondence(users, divisions, departments, documents, offices)
                 self._ensure_workflows(users, correspondence_items)
                 self._ensure_support_content(users)
                 self._ensure_analytics(users)
@@ -190,6 +193,225 @@ class Command(BaseCommand):
             f"{len(division_map)} divisions, {len(department_map)} departments)."
         ))
         return directorate_map, division_map, department_map
+
+    def _ensure_offices(
+        self,
+        data: dict,
+        directorates: dict[str, Directorate],
+        divisions: dict[str, Division],
+        departments: dict[str, Department],
+    ) -> dict[str, Office]:
+        office_map: dict[str, Office] = {}
+        pending_parent_links: list[tuple[Office, str]] = []
+        directorate_offices: dict[str, Office] = {}
+        division_offices: dict[str, Office] = {}
+        department_offices: dict[str, Office] = {}
+
+        def register_office_mappings(office: Office):
+            if office.department_id:
+                department_offices[office.department_id] = office
+            elif office.division_id:
+                division_offices[office.division_id] = office
+            elif office.directorate_id:
+                directorate_offices[office.directorate_id] = office
+
+        for office_data in data.get("OFFICES", []):
+            code = office_data.get("code")
+            if not code:
+                continue
+
+            directorate = directorates.get(office_data.get("directorateId"))
+            division = divisions.get(office_data.get("divisionId"))
+            department = departments.get(office_data.get("departmentId"))
+
+            office_defaults = {
+                "name": office_data.get("name", code),
+                "office_type": office_data.get("officeType", Office.OfficeTier.CUSTOM),
+                "directorate": directorate,
+                "division": division,
+                "department": department,
+                "description": office_data.get("description", ""),
+                "is_active": office_data.get("isActive", True),
+                "allow_external_intake": office_data.get("allowExternalIntake", True),
+                "allow_lateral_routing": office_data.get("allowLateralRouting", True),
+            }
+
+            office, _ = Office.objects.update_or_create(
+                code=code,
+                defaults=office_defaults,
+            )
+            office_map[office_data["id"]] = office
+            register_office_mappings(office)
+
+            parent_id = office_data.get("parentId")
+            if parent_id:
+                pending_parent_links.append((office, parent_id))
+
+        for office, parent_id in pending_parent_links:
+            parent = office_map.get(parent_id)
+            if parent:
+                office.parent = parent
+                office.save(update_fields=["parent"])
+
+        # Auto-generate offices for every directorate/division/department to ensure routing coverage
+        md_office = Office.objects.filter(office_type=Office.OfficeTier.MANAGING_DIRECTOR).first()
+
+        for directorate_id, directorate in directorates.items():
+            existing = directorate_offices.get(directorate.pk)
+            if existing:
+                continue
+            code = f"OFF_DIR_{directorate.code.upper()}"
+            defaults = {
+                "name": f"{directorate.name} Directorate Office",
+                "office_type": Office.OfficeTier.DIRECTORATE,
+                "directorate": directorate,
+                "description": f"Inbox for {directorate.name}",
+                "is_active": True,
+                "allow_external_intake": True,
+                "allow_lateral_routing": True,
+                "parent": md_office if md_office and directorate != md_office.directorate else None,
+            }
+            office, _ = Office.objects.get_or_create(code=code, defaults=defaults)
+            if defaults["parent"] and office.parent_id != defaults["parent"].id:
+                office.parent = defaults["parent"]
+                office.save(update_fields=["parent"])
+            register_office_mappings(office)
+
+        for division_id, division in divisions.items():
+            existing = division_offices.get(division.pk)
+            if existing:
+                continue
+            parent_office = directorate_offices.get(division.directorate_id) or Office.objects.filter(
+                directorate=division.directorate, division__isnull=True, department__isnull=True
+            ).first()
+            code = f"OFF_DIV_{division.code.upper()}"
+            defaults = {
+                "name": f"{division.name} Division Office",
+                "office_type": Office.OfficeTier.GENERAL_MANAGER,
+                "directorate": division.directorate,
+                "division": division,
+                "description": f"GM queue for {division.name}",
+                "is_active": True,
+                "allow_external_intake": True,
+                "allow_lateral_routing": True,
+                "parent": parent_office,
+            }
+            office, _ = Office.objects.get_or_create(code=code, defaults=defaults)
+            if defaults["parent"] and office.parent_id != defaults["parent"].id:
+                office.parent = defaults["parent"]
+                office.save(update_fields=["parent"])
+            register_office_mappings(office)
+
+        for department_id, department in departments.items():
+            existing = department_offices.get(department.pk)
+            if existing:
+                continue
+            parent_office = division_offices.get(department.division_id) or Office.objects.filter(
+                division=department.division, department__isnull=True
+            ).first()
+            code = f"OFF_DEPT_{department.code.upper()}"
+            defaults = {
+                "name": f"{department.name} Department Office",
+                "office_type": Office.OfficeTier.ASSISTANT_GENERAL_MANAGER,
+                "directorate": department.division.directorate if department.division else None,
+                "division": department.division,
+                "department": department,
+                "description": f"AGM queue for {department.name}",
+                "is_active": True,
+                "allow_external_intake": False,
+                "allow_lateral_routing": False,
+                "parent": parent_office,
+            }
+            office, _ = Office.objects.get_or_create(code=code, defaults=defaults)
+            if defaults["parent"] and office.parent_id != defaults["parent"].id:
+                office.parent = defaults["parent"]
+                office.save(update_fields=["parent"])
+            register_office_mappings(office)
+
+        if office_map:
+            self.stdout.write(self.style.SUCCESS(f"Ensured {len(office_map)} offices."))
+        else:
+            self.stdout.write(self.style.WARNING("No offices defined in organization_data.json"))
+        return office_map
+
+    def _ensure_office_memberships(
+        self,
+        data: dict,
+        offices: dict[str, Office],
+        users: dict[str, User],
+    ) -> None:
+        created = 0
+        for entry in data.get("OFFICE_MEMBERSHIPS", []):
+            office = offices.get(entry.get("officeId"))
+            if not office:
+                continue
+            user = users.get(entry.get("userId")) or users.get((entry.get("userId") or "").replace("user-", ""))
+            if not user:
+                continue
+
+            defaults = {
+                "assignment_role": entry.get("assignmentRole", OfficeMembership.AssignmentRole.STAFF),
+                "is_primary": entry.get("isPrimary", False),
+                "can_register": entry.get("canRegister", False),
+                "can_route": entry.get("canRoute", True),
+                "can_approve": entry.get("canApprove", False),
+                "is_active": entry.get("isActive", True),
+            }
+
+            OfficeMembership.objects.update_or_create(
+                office=office,
+                user=user,
+                defaults=defaults,
+            )
+            created += 1
+
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Ensured {created} office memberships."))
+
+    def _ensure_leadership_office_memberships(
+        self,
+        directorates: dict[str, Directorate],
+        divisions: dict[str, Division],
+        departments: dict[str, Department],
+    ) -> None:
+        created = 0
+
+        def ensure_membership(office: Office | None, user, role: str):
+            nonlocal created
+            if not office or not user:
+                return
+            defaults = {
+                "assignment_role": role,
+                "is_primary": True,
+                "can_register": True,
+                "can_route": True,
+                "can_approve": True,
+                "is_active": True,
+            }
+            _, was_created = OfficeMembership.objects.update_or_create(
+                office=office,
+                user=user,
+                defaults=defaults,
+            )
+            if was_created:
+                created += 1
+
+        for directorate in directorates.values():
+            office = Office.objects.filter(
+                directorate=directorate, division__isnull=True, department__isnull=True
+            ).order_by("-created_at").first()
+            ensure_membership(office, directorate.executive_director, OfficeMembership.AssignmentRole.PRINCIPAL)
+
+        for division in divisions.values():
+            office = Office.objects.filter(division=division, department__isnull=True).order_by("-created_at").first()
+            ensure_membership(office, division.general_manager, OfficeMembership.AssignmentRole.PRINCIPAL)
+
+        for department in departments.values():
+            office = Office.objects.filter(department=department).order_by("-created_at").first()
+            ensure_membership(office, department.head_of_department, OfficeMembership.AssignmentRole.PRINCIPAL)
+
+        if created:
+            self.stdout.write(self.style.SUCCESS(f"Ensured {created} leadership office memberships."))
 
     def _ensure_users(
         self,
@@ -473,9 +695,11 @@ class Command(BaseCommand):
         divisions: dict[str, Division],
         departments: dict[str, Department],
         documents,
+        offices: dict[str, Office],
     ):
         division = divisions.get("div-ict")
         department = departments.get("dept-ict-software")
+        owning_office = offices.get("office-md")
 
         correspondence, _ = Correspondence.objects.update_or_create(
             reference_number="NPA/CORR/2025/015",
@@ -492,6 +716,8 @@ class Command(BaseCommand):
                 "tags": ["ecm", "update"],
                 "created_by": users.get("gmict") or users.get("user-gm-ict"),
                 "current_approver": users.get("md") or users.get("user-md"),
+                "owning_office": owning_office,
+                "current_office": owning_office,
                 "received_date": date.today(),
             },
         )
@@ -533,6 +759,7 @@ class Command(BaseCommand):
                 "grade_level": "EDCS",
                 "acted_by_secretary": False,
                 "acted_by_assistant": True,
+                "from_office": owning_office,
             },
         )
 

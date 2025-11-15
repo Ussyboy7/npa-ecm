@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { logError } from '@/lib/client-logger';
 import {
   Dialog,
   DialogContent,
@@ -16,9 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import {
   DocumentRecord,
-  getAccessibleDocumentsForUser,
-  fetchDocuments,
-  getCachedDocuments,
+  queryDocuments,
 } from '@/lib/dms-storage';
 import { type User } from '@/lib/npa-structure';
 import { formatDate } from '@/lib/correspondence-helpers';
@@ -28,7 +27,6 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 interface LinkDocumentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentUser: User | null;
   linkedDocumentIds?: string[];
   onSave: (documentIds: string[]) => void;
   divisionId?: string;
@@ -39,7 +37,6 @@ interface LinkDocumentDialogProps {
 export const LinkDocumentDialog = ({
   open,
   onOpenChange,
-  currentUser,
   linkedDocumentIds,
   onSave,
   divisionId,
@@ -49,36 +46,44 @@ export const LinkDocumentDialog = ({
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>(linkedDocumentIds ?? []);
+  const [loading, setLoading] = useState(false);
   const { divisions, departments } = useOrganization();
+
+  const loadDocuments = useCallback(
+    async (queryValue: string) => {
+      setLoading(true);
+      try {
+        const response = await queryDocuments({
+          page: 1,
+          pageSize: 50,
+          search: queryValue.trim() || undefined,
+          ordering: '-updated_at',
+        });
+        setDocuments(response.results);
+      } catch (error) {
+        logError('Failed to load documents for linking', error);
+        setDocuments([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!open) return;
-
     setSelectedIds(linkedDocumentIds ?? []);
+  }, [open, linkedDocumentIds]);
 
-    const load = async () => {
-      await fetchDocuments();
-      const cache = getCachedDocuments();
-      if (currentUser) {
-        setDocuments(getAccessibleDocumentsForUser(currentUser));
-      } else {
-        setDocuments(cache);
-      }
-    };
+  useEffect(() => {
+    if (!open) return;
+    const handle = setTimeout(() => {
+      void loadDocuments(searchQuery);
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [open, searchQuery, loadDocuments]);
 
-    void load();
-  }, [open, currentUser, linkedDocumentIds]);
-
-  const filteredDocuments = useMemo(() => {
-    if (!searchQuery.trim()) return documents;
-    const query = searchQuery.toLowerCase();
-    return documents.filter((doc) =>
-      doc.title.toLowerCase().includes(query) ||
-      (doc.referenceNumber ?? '').toLowerCase().includes(query) ||
-      (doc.description ?? '').toLowerCase().includes(query) ||
-      doc.tags?.some((tag) => tag.toLowerCase().includes(query)),
-    );
-  }, [documents, searchQuery]);
+  const filteredDocuments = documents;
 
   const recommendedIds = useMemo(() => {
     return documents
@@ -149,7 +154,9 @@ export const LinkDocumentDialog = ({
 
           <ScrollArea className="max-h-[360px] rounded-md border border-border">
             <div className="divide-y">
-              {filteredDocuments.length === 0 ? (
+              {loading ? (
+                <div className="p-6 text-center text-sm text-muted-foreground">Loading documents…</div>
+              ) : filteredDocuments.length === 0 ? (
                 <div className="p-6 text-center text-sm text-muted-foreground">No documents found.</div>
               ) : (
                 filteredDocuments.map((doc) => {

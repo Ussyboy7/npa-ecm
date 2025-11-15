@@ -36,6 +36,15 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         DIVISION = "division", "Division"
         DIRECTORATE = "directorate", "Directorate"
 
+    class DocumentType(models.TextChoices):
+        LETTER = "letter", "Letter"
+        REQUEST = "request", "Request"
+        COMPLAINT = "complaint", "Complaint"
+        INQUIRY = "inquiry", "Inquiry"
+        REPORT = "report", "Report"
+        DIRECTIVE = "directive", "Directive"
+        OTHER = "other", "Other"
+
     reference_number = models.CharField(max_length=100, unique=True, blank=True)
     subject = models.CharField(max_length=500)
     summary = models.TextField(blank=True)
@@ -63,6 +72,30 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         blank=True,
     )
     tags = models.JSONField(default=list, blank=True)
+    sender_reference = models.CharField(max_length=255, blank=True)
+    letter_date = models.DateField(null=True, blank=True)
+    dispatch_date = models.DateField(null=True, blank=True)
+    recipient_name = models.CharField(max_length=255, blank=True)
+    remarks = models.TextField(blank=True)
+    document_type = models.CharField(
+        max_length=32,
+        choices=DocumentType.choices,
+        default=DocumentType.LETTER,
+    )
+    owning_office = models.ForeignKey(
+        "organization.Office",
+        related_name="owned_correspondence",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    current_office = models.ForeignKey(
+        "organization.Office",
+        related_name="inbox_correspondence",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         related_name="correspondence_created",
@@ -193,6 +226,20 @@ class Minute(UUIDModel, TimeStampedModel):
     read_at = models.DateTimeField(null=True, blank=True)
     mentions = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="mentioned_in_minutes")
     signature_payload = models.JSONField(blank=True, null=True)
+    from_office = models.ForeignKey(
+        "organization.Office",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="minutes_from_office",
+    )
+    to_office = models.ForeignKey(
+        "organization.Office",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="minutes_to_office",
+    )
 
     class Meta:
         ordering = ["timestamp"]

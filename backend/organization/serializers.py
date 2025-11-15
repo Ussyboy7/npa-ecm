@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from .models import Department, Directorate, Division, Role
+from .models import Department, Directorate, Division, Office, OfficeMembership, Role
 
 
 class DirectorateSerializer(serializers.ModelSerializer):
@@ -89,4 +89,63 @@ class RoleSerializer(serializers.ModelSerializer):
     def get_user_count(self, obj):
         """Return the number of users assigned to this role."""
         return obj.users.count()
+
+
+class OfficeSerializer(serializers.ModelSerializer):
+    directorate_name = serializers.CharField(source="directorate.name", read_only=True)
+    division_name = serializers.CharField(source="division.name", read_only=True)
+    department_name = serializers.CharField(source="department.name", read_only=True)
+    parent_name = serializers.CharField(source="parent.name", read_only=True)
+
+    class Meta:
+        model = Office
+        fields = [
+            "id",
+            "name",
+            "code",
+            "office_type",
+            "directorate",
+            "directorate_name",
+            "division",
+            "division_name",
+            "department",
+            "department_name",
+            "parent",
+            "parent_name",
+            "description",
+            "is_active",
+            "allow_external_intake",
+            "allow_lateral_routing",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+
+class OfficeMembershipSerializer(serializers.ModelSerializer):
+    office_name = serializers.CharField(source="office.name", read_only=True)
+    user_name = serializers.CharField(source="user.get_full_name", read_only=True)
+    user_username = serializers.CharField(source="user.username", read_only=True)
+
+    class Meta:
+        model = OfficeMembership
+        fields = [
+            "id",
+            "office",
+            "office_name",
+            "user",
+            "user_name",
+            "user_username",
+            "assignment_role",
+            "is_primary",
+            "can_register",
+            "can_route",
+            "can_approve",
+            "starts_at",
+            "ends_at",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
 

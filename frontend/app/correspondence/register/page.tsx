@@ -1,6 +1,6 @@
 "use client";
-import { logInfo, logWarn } from '@/lib/client-logger';
-import { useMemo, useRef, useState, useEffect } from 'react';
+import { logInfo, logWarn, logError } from '@/lib/client-logger';
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
@@ -23,7 +24,6 @@ import { apiFetch } from '@/lib/api-client';
 import {
   Upload,
   FileText,
-  Calendar,
   Building2,
   User as UserIcon,
   Mail,
@@ -49,7 +49,14 @@ const generateReferenceNumber = () => {
 
 const CorrespondenceRegister = () => {
   const router = useRouter();
-  const { directorates, divisions, users: organizationUsers } = useOrganization();
+  const {
+    directorates,
+    divisions,
+    departments,
+    users: organizationUsers,
+    offices,
+    officeMemberships,
+  } = useOrganization();
   const { syncFromApi } = useCorrespondence();
   const { currentUser, hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser);
@@ -61,17 +68,28 @@ const CorrespondenceRegister = () => {
     senderName: '',
     senderOrganization: '',
     receivedDate: new Date().toISOString().split('T')[0],
+    letterDate: '',
+    dispatchDate: '',
     priority: 'medium',
     referenceNumber: generateReferenceNumber(),
     assignTo: '',
     divisionId: '',
     documentType: 'letter',
     tags: '',
+    owningOfficeId: '',
+    senderReference: '',
+    recipientName: '',
+    remarks: '',
   });
   const [documentFiles, setDocumentFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const ASSIGN_PLACEHOLDER = '__select_assign__';
   const [assignSearch, setAssignSearch] = useState('');
+  const owningOfficeId = formData.owningOfficeId;
+  const [flowType, setFlowType] = useState<'inward' | 'outward'>('inward');
+  const [directorateDistribution, setDirectorateDistribution] = useState<string[]>([]);
+  const [divisionDistribution, setDivisionDistribution] = useState<string[]>([]);
+  const [departmentDistribution, setDepartmentDistribution] = useState<string[]>([]);
 
   const executives = useMemo(() => {
     if (!Array.isArray(organizationUsers)) {
@@ -99,6 +117,69 @@ const CorrespondenceRegister = () => {
     return filtered;
   }, [executives, assignSearch]);
 
+  const [officeSearch, setOfficeSearch] = useState('');
+
+  const directorateMap = useMemo(
+    () => new Map(directorates.map((item) => [item.id, item.name])),
+    [directorates],
+  );
+
+  const divisionMap = useMemo(
+    () => new Map(divisions.map((item) => [item.id, item.name])),
+    [divisions],
+  );
+
+  const departmentMap = useMemo(
+    () => new Map(departments.map((item) => [item.id, item.name])),
+    [departments],
+  );
+
+  const activeOffices = useMemo(
+    () =>
+      offices
+        .filter((office) => office.isActive)
+        .map((office) => ({
+          ...office,
+          directorateName: office.directorateId ? directorateMap.get(office.directorateId) : undefined,
+          divisionName: office.divisionId ? divisionMap.get(office.divisionId) : undefined,
+          departmentName: office.departmentId ? departmentMap.get(office.departmentId) : undefined,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [offices, directorateMap, divisionMap, departmentMap],
+  );
+
+  const userOfficeMemberships = useMemo(
+    () =>
+      officeMemberships.filter(
+        (membership) => membership.userId === currentUser?.id && membership.isActive,
+      ),
+    [officeMemberships, currentUser?.id],
+  );
+
+  const membershipOffices = useMemo(() => {
+    const membershipOfficeIds = new Set(userOfficeMemberships.map((membership) => membership.officeId));
+    return activeOffices.filter((office) => membershipOfficeIds.has(office.id));
+  }, [activeOffices, userOfficeMemberships]);
+
+  const filteredOffices = useMemo(() => {
+    if (!officeSearch.trim()) {
+      return membershipOffices;
+    }
+    const query = officeSearch.toLowerCase();
+    return membershipOffices.filter((office) => {
+      const candidates = [
+        office.name,
+        office.code,
+        office.directorateName,
+        office.divisionName,
+        office.departmentName,
+      ]
+        .filter(Boolean)
+        .map((value) => value!.toLowerCase());
+      return candidates.some((candidate) => candidate.includes(query));
+    });
+  }, [activeOffices, officeSearch]);
+
   // Track if component has mounted (client-side only)
   // This prevents SSR from showing the restricted message
   const [mounted, setMounted] = useState(false);
@@ -106,6 +187,81 @@ const CorrespondenceRegister = () => {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (owningOfficeId) return;
+    const membership = officeMemberships.find(
+      (item) => item.userId === currentUser.id && item.isPrimary && item.isActive,
+    );
+    if (membership?.officeId) {
+      setFormData((prev) => ({ ...prev, owningOfficeId: membership.officeId ?? '' }));
+    }
+  }, [currentUser?.id, officeMemberships, owningOfficeId]);
+
+  useEffect(() => {
+    if (flowType !== 'outward') {
+      setDirectorateDistribution([]);
+      setDivisionDistribution([]);
+      setDepartmentDistribution([]);
+      setFormData((prev) => ({
+        ...prev,
+        dispatchDate: '',
+        recipientName: '',
+      }));
+      return;
+    }
+    if (!owningOfficeId) return;
+    const office = activeOffices.find((entry) => entry.id === owningOfficeId);
+    if (!office) return;
+    setFormData((prev) => {
+      if (prev.senderName && prev.senderName !== '' && prev.senderName !== office.name) {
+        return prev;
+      }
+      return { ...prev, senderName: office.name ?? prev.senderName };
+    });
+  }, [flowType, owningOfficeId, activeOffices]);
+
+  const createDistributionEntries = useCallback(
+    async (correspondenceId: string) => {
+      const payloads = [
+        ...directorateDistribution.map((id) => ({
+          recipient_type: 'directorate' as const,
+          directorate: id,
+        })),
+        ...divisionDistribution.map((id) => ({
+          recipient_type: 'division' as const,
+          division: id,
+        })),
+        ...departmentDistribution.map((id) => ({
+          recipient_type: 'department' as const,
+          department: id,
+        })),
+      ];
+      if (!payloads.length) return;
+      await Promise.all(
+        payloads.map((payload) =>
+          apiFetch('/correspondence/distribution/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              correspondence: correspondenceId,
+              recipient_type: payload.recipient_type,
+              directorate: payload.recipient_type === 'directorate' ? payload.directorate : undefined,
+              division: payload.recipient_type === 'division' ? payload.division : undefined,
+              department: payload.recipient_type === 'department' ? payload.department : undefined,
+            }),
+          }).catch((error) => {
+            logError('Failed to create distribution entry', error);
+            return null;
+          }),
+        ),
+      );
+    },
+    [departmentDistribution, directorateDistribution, divisionDistribution],
+  );
 
   // Always show loading on server-side or before client hydration
   // This prevents the "Registration Restricted" message from being pre-rendered
@@ -227,8 +383,28 @@ const CorrespondenceRegister = () => {
       return;
     }
 
-    if (!formData.subject || !formData.senderName || !formData.assignTo) {
+    if (flowType === 'outward') {
+      if (!formData.recipientName) {
+        toast.error('Please specify who this dispatch is going to.');
+        return;
+      }
+      if (!formData.dispatchDate) {
+        toast.error('Please set the dispatch date.');
+        return;
+      }
+      if (directorateDistribution.length + divisionDistribution.length + departmentDistribution.length === 0) {
+        toast.error('Select at least one directorate, division, or department in the distribution list.');
+        return;
+      }
+    }
+
+    if (!formData.subject || !formData.senderName || !formData.assignTo || !formData.owningOfficeId) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (flowType === 'inward' && !formData.receivedDate) {
+      toast.error('Please capture the date received for inward correspondence.');
       return;
     }
 
@@ -237,10 +413,33 @@ const CorrespondenceRegister = () => {
     form.append('reference_number', formData.referenceNumber);
     form.append('sender_name', formData.senderName);
     form.append('sender_organization', formData.senderOrganization);
-    form.append('received_date', formData.receivedDate);
+    const registrationDate =
+      flowType === 'outward' ? formData.dispatchDate || formData.receivedDate : formData.receivedDate;
+    if (registrationDate) {
+      form.append('received_date', registrationDate);
+    }
     form.append('priority', formData.priority);
+    if (formData.senderReference) {
+      form.append('sender_reference', formData.senderReference);
+    }
+    if (formData.letterDate) {
+      form.append('letter_date', formData.letterDate);
+    }
+    if (flowType === 'outward' && formData.dispatchDate) {
+      form.append('dispatch_date', formData.dispatchDate);
+    }
+    if (flowType === 'outward') {
+      form.append('recipient_name', formData.recipientName);
+    } else if (formData.recipientName) {
+      form.append('recipient_name', formData.recipientName);
+    }
+    if (formData.remarks) {
+      form.append('remarks', formData.remarks);
+    }
+    const source = flowType === 'inward' ? 'external' : 'internal';
+    const direction = flowType === 'inward' ? 'upward' : 'downward';
     form.append('current_approver_id', formData.assignTo);
-    form.append('documentType', formData.documentType);
+    form.append('document_type', formData.documentType);
     if (formData.tags) {
       const tags = formData.tags.split(',').map((tag) => tag.trim()).filter(Boolean);
       form.append('tags', JSON.stringify(tags));
@@ -248,23 +447,37 @@ const CorrespondenceRegister = () => {
     if (formData.divisionId) {
       form.append('division', formData.divisionId);
     }
-    form.append('source', 'internal');
+    form.append('source', source);
+    form.append('direction', direction);
+    form.append('owning_office', formData.owningOfficeId);
+    form.append('current_office', formData.owningOfficeId);
     documentFiles.forEach((file) => {
       form.append('attachments', file);
     });
 
     try {
-      const response = await apiFetch<{ reference_number?: string }>('/correspondence/items/', {
+      const response = await apiFetch<{ id?: string; reference_number?: string }>(
+        '/correspondence/items/',
+        {
         method: 'POST',
         body: form,
         headers: {},
-      });
+        },
+      );
+
+      if (response?.id && flowType === 'outward') {
+        await createDistributionEntries(response.id);
+      }
 
       await syncFromApi();
 
       toast.success('Correspondence registered successfully', {
         description: `Reference: ${response.reference_number ?? formData.referenceNumber}`,
       });
+
+      setDirectorateDistribution([]);
+      setDivisionDistribution([]);
+      setDepartmentDistribution([]);
 
       setTimeout(() => {
         router.push('/correspondence/inbox');
@@ -283,47 +496,171 @@ const CorrespondenceRegister = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-              <Mail className="h-8 w-8 text-primary" />
-              Register New Correspondence
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Capture and initiate new inbound or outbound correspondence
-            </p>
+      <div className="p-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+                <Mail className="h-8 w-8 text-primary" />
+                Register New Correspondence
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Capture and initiate inward or outward correspondence from your office
+              </p>
+            </div>
+            <ContextualHelp
+              title="Registering correspondence"
+              description="Pick your office, choose inward/outward workflow, complete the form, then attach the source document."
+              steps={[
+                'Select the correspondence office you are acting for.',
+                'Choose inward registration or outward dispatch.',
+                'Attach supporting files and register to push into workflow.',
+              ]}
+            />
           </div>
-          <ContextualHelp
-            title="Registering correspondence"
-            description="Fill every required field, attach the source document, and select the first approver. The system generates the reference number automatically."
-            steps={[
-              'Capture sender details and document type.',
-              'Choose the initial executive to receive the memo.',
-              'Attach supporting files and register to push into workflow.'
+
+          <HelpGuideCard
+            title="Office-based Registration"
+            description="Each executive office retains its own registry workspace. Choose your office, register what arrived inwards, or capture drafts before dispatching outward."
+            links={[
+              { label: "Correspondence Inbox", href: "/correspondence/inbox" },
+              { label: "Help & Guides", href: "/help" },
             ]}
           />
-        </div>
 
-        <HelpGuideCard
-          title="Register New Correspondence"
-          description="Capture the subject, sender, priority, and routing details before handing the memo off to the appropriate directorate or division. Upload supporting files and assign next action owners."
-          links={[
-            { label: "Correspondence Inbox", href: "/correspondence/inbox" },
-            { label: "Help & Guides", href: "/help" },
-          ]}
-        />
+          <Card className="shadow-medium">
+            <CardContent className="space-y-4 p-6">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Correspondence Office</p>
+                  <p className="text-lg font-semibold">
+                    {activeOffices.find((office) => office.id === formData.owningOfficeId)?.name ||
+                      'Select an office'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {membershipOffices.length === 0 ? (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      No office membership detected
+                    </Badge>
+                  ) : (
+                    membershipOffices.map((office) => (
+                      <Button
+                        key={office.id}
+                        type="button"
+                        variant={formData.owningOfficeId === office.id ? 'default' : 'outline'}
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            owningOfficeId: office.id,
+                          }))
+                        }
+                      >
+                        {office.name}
+                      </Button>
+                    ))
+                  )}
+                </div>
+              </div>
 
-        <form onSubmit={handleSubmit}>
+              <div className="flex flex-wrap gap-3">
+                {(['inward', 'outward'] as const).map((type) => (
+                  <Button
+                    key={type}
+                    type="button"
+                    variant={flowType === type ? 'default' : 'outline'}
+                    className="gap-2"
+                    onClick={() => setFlowType(type)}
+                  >
+                    {type === 'inward' ? 'Inward Registration' : 'Outward Dispatch'}
+                    {flowType === type && (
+                      <Badge variant="secondary" className="ml-1">
+                        Active
+                      </Badge>
+                    )}
+                  </Button>
+                ))}
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {flowType === 'inward'
+                  ? 'Use this mode to capture external or inter-agency correspondence received by your office.'
+                  : 'Use this mode to register drafts prepared by your office before issuing outward (sender defaults to your office).'}
+              </p>
+            </CardContent>
+          </Card>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
           <Card className="shadow-medium">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-primary" />
-                Correspondence Details
+                {flowType === 'inward' ? 'Inward Details' : 'Outward Details'}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Owning Office *</Label>
+              <Select
+                value={formData.owningOfficeId}
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, owningOfficeId: value }))}
+              >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select the executive office receiving this correspondence" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[320px] overflow-y-auto">
+                  <div className="sticky top-0 z-10 bg-popover p-2 border-b border-border">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={officeSearch}
+                        onChange={(event) => setOfficeSearch(event.target.value)}
+                        placeholder="Search by office, directorate, division, department"
+                        className="pl-8 h-9"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      />
+                    </div>
+                  </div>
+                  {filteredOffices.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No offices match that search.
+                    </div>
+                  ) : (
+                    filteredOffices.map((office) => (
+                      <SelectItem key={office.id} value={office.id}>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{office.name}</span>
+                          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                            {office.officeType}
+                            {office.directorateName ? ` • ${office.directorateName}` : ''}
+                            {office.divisionName ? ` › ${office.divisionName}` : ''}
+                            {office.departmentName ? ` › ${office.departmentName}` : ''}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Building2 className="h-3.5 w-3.5" />
+                    Registry will file this item under the selected office before routing downstream.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="subject">Subject *</Label>
+                  <Input
+                    id="subject"
+                    placeholder="e.g. Request for ICT infrastructure upgrade"
+                    value={formData.subject}
+                    onChange={(event) => setFormData((prev) => ({ ...prev, subject: event.target.value }))}
+                  />
+                </div>
+              </div>
+
               {/* Document Upload */}
               <div className="space-y-2">
                 <Label htmlFor="document" className="flex items-center gap-2">
@@ -436,68 +773,224 @@ const CorrespondenceRegister = () => {
                   </div>
                 </div>
 
-                {/* Subject */}
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="subject">Subject *</Label>
-                  <Input
-                    id="subject"
-                    name="subject"
-                    autoComplete="off"
-                    placeholder="Enter correspondence subject"
-                    value={formData.subject}
-                    onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    required
-                  />
-                </div>
+                {flowType === 'inward' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="senderReference">Sender’s Reference</Label>
+                      <Input
+                        id="senderReference"
+                        placeholder="Reference number shown on the letter"
+                        value={formData.senderReference}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, senderReference: event.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="letterDate">Date of Letter</Label>
+                      <Input
+                        id="letterDate"
+                        type="date"
+                        value={formData.letterDate}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, letterDate: event.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="receivedDate">Date Received *</Label>
+                      <Input
+                        id="receivedDate"
+                        name="receivedDate"
+                        type="date"
+                        autoComplete="off"
+                        value={formData.receivedDate}
+                        onChange={(e) => setFormData({ ...formData, receivedDate: e.target.value })}
+                        required
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="letterDate">Date of Letter *</Label>
+                      <Input
+                        id="letterDate"
+                        type="date"
+                        value={formData.letterDate}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, letterDate: event.target.value }))
+                        }
+                        required={flowType === 'outward'}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="dispatchDate">Date of Dispatch *</Label>
+                      <Input
+                        id="dispatchDate"
+                        type="date"
+                        value={formData.dispatchDate}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, dispatchDate: event.target.value }))
+                        }
+                        required={flowType === 'outward'}
+                      />
+                    </div>
+                  </>
+                )}
 
-                {/* Sender Name */}
-                <div className="space-y-2">
-                  <Label htmlFor="senderName" className="flex items-center gap-2">
-                    <UserIcon className="h-4 w-4" />
-                    Sender Name *
-                  </Label>
-                  <Input
-                    id="senderName"
-                    name="senderName"
-                    autoComplete="name"
-                    placeholder="Enter sender's name"
-                    value={formData.senderName}
-                    onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
-                    required
-                  />
-                </div>
+                {/* Sender / Originator */}
+                {flowType === 'inward' ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="senderName" className="flex items-center gap-2">
+                      <UserIcon className="h-4 w-4" />
+                      From Whom *
+                    </Label>
+                    <Input
+                      id="senderName"
+                      name="senderName"
+                      autoComplete="name"
+                      placeholder="Enter sender's name"
+                      value={formData.senderName}
+                      onChange={(e) => setFormData({ ...formData, senderName: e.target.value })}
+                      required
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <UserIcon className="h-4 w-4" />
+                      Originating Office
+                    </Label>
+                    <div className="rounded-md border border-border/70 bg-muted/40 px-3 py-2 text-sm">
+                      {formData.senderName || 'Select an office to populate the originating unit.'}
+                    </div>
+                  </div>
+                )}
 
                 {/* Sender Organization */}
                 <div className="space-y-2">
                   <Label htmlFor="senderOrganization" className="flex items-center gap-2">
                     <Building2 className="h-4 w-4" />
-                    Sender Organization
+                    {flowType === 'inward' ? 'Sender Organization' : 'External Recipient (optional)'}
                   </Label>
                   <Input
                     id="senderOrganization"
                     name="senderOrganization"
                     autoComplete="organization"
-                    placeholder="Enter organization name"
+                    placeholder={
+                      flowType === 'inward'
+                        ? 'Enter organization name'
+                        : 'Optional: indicate destination organization'
+                    }
                     value={formData.senderOrganization}
                     onChange={(e) => setFormData({ ...formData, senderOrganization: e.target.value })}
                   />
                 </div>
 
-                {/* Date Received */}
-                <div className="space-y-2">
-                  <Label htmlFor="receivedDate" className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Date Received
-                  </Label>
-                  <Input
-                    id="receivedDate"
-                    name="receivedDate"
-                    type="date"
-                    autoComplete="off"
-                    value={formData.receivedDate}
-                    onChange={(e) => setFormData({ ...formData, receivedDate: e.target.value })}
-                  />
-                </div>
+                {flowType === 'outward' && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="recipientName" className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      To Whom *
+                    </Label>
+                    <Input
+                      id="recipientName"
+                      placeholder="Recipient name or office"
+                      value={formData.recipientName}
+                      onChange={(event) =>
+                        setFormData((prev) => ({ ...prev, recipientName: event.target.value }))
+                      }
+                      required={flowType === 'outward'}
+                    />
+                  </div>
+                )}
+
+                {flowType === 'outward' && (
+                  <div className="space-y-3 md:col-span-2">
+                    <Label className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      Distribution List
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Select every directorate, division, or department that should receive this dispatch.
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div>
+                        <p className="text-sm font-semibold mb-2">Directorates</p>
+                        <div className="max-h-40 overflow-y-auto rounded-md border border-border/70 p-3 space-y-2">
+                          {directorates.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No directorates available.</p>
+                          ) : (
+                            directorates.map((dir) => (
+                              <label key={dir.id} className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={directorateDistribution.includes(dir.id)}
+                                  onCheckedChange={(checked) =>
+                                    setDirectorateDistribution((prev) =>
+                                      checked
+                                        ? Array.from(new Set([...prev, dir.id]))
+                                        : prev.filter((item) => item !== dir.id),
+                                    )
+                                  }
+                                />
+                                <span className="truncate">{dir.name}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold mb-2">Divisions</p>
+                        <div className="max-h-40 overflow-y-auto rounded-md border border-border/70 p-3 space-y-2">
+                          {divisions.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No divisions available.</p>
+                          ) : (
+                            divisions.map((division) => (
+                              <label key={division.id} className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={divisionDistribution.includes(division.id)}
+                                  onCheckedChange={(checked) =>
+                                    setDivisionDistribution((prev) =>
+                                      checked
+                                        ? Array.from(new Set([...prev, division.id]))
+                                        : prev.filter((item) => item !== division.id),
+                                    )
+                                  }
+                                />
+                                <span className="truncate">{division.name}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold mb-2">Departments</p>
+                        <div className="max-h-40 overflow-y-auto rounded-md border border-border/70 p-3 space-y-2">
+                          {departments.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No departments available.</p>
+                          ) : (
+                            departments.map((department) => (
+                              <label key={department.id} className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={departmentDistribution.includes(department.id)}
+                                  onCheckedChange={(checked) =>
+                                    setDepartmentDistribution((prev) =>
+                                      checked
+                                        ? Array.from(new Set([...prev, department.id]))
+                                        : prev.filter((item) => item !== department.id),
+                                    )
+                                  }
+                                />
+                                <span className="truncate">{department.name}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Priority */}
                 <div className="space-y-2">
@@ -702,6 +1195,18 @@ const CorrespondenceRegister = () => {
                     onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
                   />
                 </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="remarks">Remarks</Label>
+                  <Textarea
+                    id="remarks"
+                    placeholder="Add registry notes or routing instructions"
+                    value={formData.remarks}
+                    onChange={(event) =>
+                      setFormData((prev) => ({ ...prev, remarks: event.target.value }))
+                    }
+                  />
+                </div>
               </div>
 
               {/* Preview Section */}
@@ -779,6 +1284,7 @@ const CorrespondenceRegister = () => {
             </div>
           </div>
         </form>
+        </div>
       </div>
     </DashboardLayout>
   );

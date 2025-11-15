@@ -28,10 +28,10 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { 
-  MessageSquare, 
-  Send, 
-  Save, 
+import {
+  MessageSquare,
+  Send,
+  Save,
   User as UserIcon,
   ArrowDown,
   ArrowUp,
@@ -39,7 +39,8 @@ import {
   FileText,
   Image as ImageIcon,
   AlertCircle,
-  Search
+  Search,
+  Building2,
 } from 'lucide-react';
 import { 
   GRADE_LEVELS,
@@ -81,6 +82,7 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
   const [hasDraft, setHasDraft] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<DistributionRecipient[]>([]);
+  const [targetOfficeId, setTargetOfficeId] = useState<string>('');
   const [selectedDirection, setSelectedDirection] = useState<'upward' | 'downward'>(initialDirection);
   const [searchQuery, setSearchQuery] = useState('');
   const [userSignature, setUserSignature] = useState<StoredSignature | null>(null);
@@ -97,7 +99,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
   };
   const [userSignaturePreferences, setUserSignaturePreferences] = useState<UserSignaturePreferences>(defaultUserSignaturePreferences);
   const { currentUser: activeUser } = useCurrentUser();
-  const { assistantAssignments, users: organizationUsers } = useOrganization();
+  const { assistantAssignments, users: organizationUsers, offices, officeMemberships } = useOrganization();
 
   const allDirectoryUsers = organizationUsers;
   const activeDirectoryUsers = useMemo(
@@ -139,6 +141,37 @@ const [newTemplateName, setNewTemplateName] = useState('');
     (id: string) => activeDirectoryUsers.find((user) => user.id === id),
     [activeDirectoryUsers],
   );
+
+  const activeOffices = useMemo(() => offices.filter((office) => office.isActive), [offices]);
+  const officeOptions = useMemo(
+    () => activeOffices.slice().sort((a, b) => a.name.localeCompare(b.name)),
+    [activeOffices],
+  );
+  const primaryOfficeMembership = useMemo(
+    () =>
+      currentUser
+        ? officeMemberships.find(
+            (membership) => membership.userId === currentUser.id && membership.isPrimary && membership.isActive,
+          )
+        : undefined,
+    [officeMemberships, currentUser?.id],
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const fallbackOfficeId =
+      correspondence.currentOfficeId ??
+      correspondence.owningOfficeId ??
+      primaryOfficeMembership?.officeId ??
+      '';
+    setTargetOfficeId(fallbackOfficeId ?? '');
+  }, [
+    isOpen,
+    correspondence.id,
+    correspondence.currentOfficeId,
+    correspondence.owningOfficeId,
+    primaryOfficeMembership?.officeId,
+  ]);
  
   useEffect(() => {
     initializeTemplates();
@@ -633,6 +666,9 @@ const [newTemplateName, setNewTemplateName] = useState('');
       actedByAssistant: false,
       signature: signaturePayload,
     };
+    if (targetOfficeId) {
+      newMinute.toOfficeId = targetOfficeId;
+    }
 
     try {
       const existingKeys = new Set(
@@ -658,11 +694,15 @@ const [newTemplateName, setNewTemplateName] = useState('');
 
       await addMinute(newMinute);
 
-      await updateCorrespondence(correspondence.id, {
+      const correspondenceUpdates: Partial<Correspondence> = {
         currentApproverId: forwardTo,
         status: 'in-progress',
         direction: finalDirection,
-      });
+      };
+      if (targetOfficeId) {
+        correspondenceUpdates.currentOfficeId = targetOfficeId;
+      }
+      await updateCorrespondence(correspondence.id, correspondenceUpdates);
 
       if (canDistribute && newDistributionEntries.length > 0) {
         await Promise.all(
@@ -715,7 +755,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
       }, 200);
 
       toast.success('Minute added successfully', {
-        description: `Forwarded to ${forwardUser?.name ?? 'selected user'}`,
+        description: `Forwarded to ${forwardUser?.name ?? 'selected user'}${targetOfficeId ? ` • Routed to ${officeOptions.find((office) => office.id === targetOfficeId)?.name ?? 'office'}` : ''}`,
       });
     } catch (error) {
       logError('Failed to record minute', error);
@@ -1000,6 +1040,45 @@ const [newTemplateName, setNewTemplateName] = useState('');
               </div>
             </div>
           )}
+
+          {/* Office Routing */}
+          <div className="space-y-2">
+            <Label>Route to Office</Label>
+            <Select
+              value={targetOfficeId || '__keep_office__'}
+              onValueChange={(value) => setTargetOfficeId(value === '__keep_office__' ? '' : value)}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={correspondence.currentOfficeName ?? 'Select destination office'}
+                />
+              </SelectTrigger>
+              <SelectContent className="max-h-[320px] overflow-y-auto">
+                <SelectItem value="__keep_office__">
+                  Keep current office ({correspondence.currentOfficeName ?? 'Unassigned'})
+                </SelectItem>
+                {officeOptions.map((office) => (
+                  <SelectItem key={office.id} value={office.id}>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{office.name}</span>
+                      <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                        {office.officeType}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Building2 className="h-3.5 w-3.5" />
+              Current office:{' '}
+              {targetOfficeId
+                ? officeOptions.find((office) => office.id === targetOfficeId)?.name ??
+                  correspondence.currentOfficeName ??
+                  'Unassigned'
+                : correspondence.currentOfficeName ?? 'Unassigned'}
+            </p>
+          </div>
 
           {/* Action Type */}
           <div className="space-y-2">

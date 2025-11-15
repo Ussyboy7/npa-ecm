@@ -36,6 +36,7 @@ export const AdvancedSearchFilters = ({
   departments = []
 }: AdvancedSearchFiltersProps) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const ANY_VALUE = '__any__';
 
   const updateFilter = (key: keyof SearchFilters, value: any) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -90,12 +91,15 @@ export const AdvancedSearchFilters = ({
               {/* Status Filter */}
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select value={filters.status || ''} onValueChange={(value) => updateFilter('status', value || undefined)}>
+                <Select
+                  value={filters.status ?? ANY_VALUE}
+                  onValueChange={(value) => updateFilter('status', value === ANY_VALUE ? undefined : value)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Any status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any status</SelectItem>
+                    <SelectItem value={ANY_VALUE}>Any status</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="in-progress">In Progress</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
@@ -107,12 +111,15 @@ export const AdvancedSearchFilters = ({
               {/* Priority Filter */}
               <div className="space-y-2">
                 <Label>Priority</Label>
-                <Select value={filters.priority || ''} onValueChange={(value) => updateFilter('priority', value || undefined)}>
+                <Select
+                  value={filters.priority ?? ANY_VALUE}
+                  onValueChange={(value) => updateFilter('priority', value === ANY_VALUE ? undefined : value)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Any priority" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any priority</SelectItem>
+                    <SelectItem value={ANY_VALUE}>Any priority</SelectItem>
                     <SelectItem value="urgent">Urgent</SelectItem>
                     <SelectItem value="high">High</SelectItem>
                     <SelectItem value="normal">Normal</SelectItem>
@@ -124,12 +131,15 @@ export const AdvancedSearchFilters = ({
               {/* Type Filter */}
               <div className="space-y-2">
                 <Label>Type</Label>
-                <Select value={filters.type || ''} onValueChange={(value) => updateFilter('type', value || undefined)}>
+                <Select
+                  value={filters.type ?? ANY_VALUE}
+                  onValueChange={(value) => updateFilter('type', value === ANY_VALUE ? undefined : value)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Any type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any type</SelectItem>
+                    <SelectItem value={ANY_VALUE}>Any type</SelectItem>
                     <SelectItem value="internal">Internal Memo</SelectItem>
                     <SelectItem value="external-in">External (Incoming)</SelectItem>
                     <SelectItem value="external-out">External (Outgoing)</SelectItem>
@@ -141,12 +151,15 @@ export const AdvancedSearchFilters = ({
               {divisions.length > 0 && (
                 <div className="space-y-2">
                   <Label>Division</Label>
-                  <Select value={filters.division || ''} onValueChange={(value) => updateFilter('division', value || undefined)}>
+                  <Select
+                    value={filters.division ?? ANY_VALUE}
+                    onValueChange={(value) => updateFilter('division', value === ANY_VALUE ? undefined : value)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Any division" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Any division</SelectItem>
+                      <SelectItem value={ANY_VALUE}>Any division</SelectItem>
                       {divisions.map(div => (
                         <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
                       ))}
@@ -159,12 +172,15 @@ export const AdvancedSearchFilters = ({
               {departments.length > 0 && (
                 <div className="space-y-2">
                   <Label>Department</Label>
-                  <Select value={filters.department || ''} onValueChange={(value) => updateFilter('department', value || undefined)}>
+                  <Select
+                    value={filters.department ?? ANY_VALUE}
+                    onValueChange={(value) => updateFilter('department', value === ANY_VALUE ? undefined : value)}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Any department" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Any department</SelectItem>
+                      <SelectItem value={ANY_VALUE}>Any department</SelectItem>
                       {departments.map(dept => (
                         <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
                       ))}

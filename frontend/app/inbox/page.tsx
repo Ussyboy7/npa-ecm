@@ -9,14 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
+import {
   Inbox,
   Search,
   Mail,
   Clock,
-  CheckCircle2,
   AlertCircle,
-  User as UserIcon
+  User as UserIcon,
 } from 'lucide-react';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -55,6 +54,22 @@ const ExecutiveInbox = () => {
     });
   }, [searchQuery, inboxItems]);
 
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return 'destructive';
+      case 'high': return 'default';
+      default: return 'secondary';
+    }
+  };
+
+  const metricTotals = useMemo(() => {
+    const total = inboxItems.length;
+    const pending = inboxItems.filter((item) => item.status === 'pending').length;
+    const inProgress = inboxItems.filter((item) => item.status === 'in-progress').length;
+    const urgent = inboxItems.filter((item) => item.priority === 'urgent').length;
+    return { total, pending, inProgress, urgent };
+  }, [inboxItems]);
+
   if (!hydrated) {
     return (
       <DashboardLayout>
@@ -83,54 +98,66 @@ const ExecutiveInbox = () => {
     );
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'destructive';
-      case 'high': return 'default';
-      default: return 'secondary';
-    }
-  };
+  const ItemCard = ({ corr }: { corr: Correspondence }) => {
+    const statusBadge =
+      corr.status === 'pending'
+        ? { label: 'Awaiting action', variant: 'warning' as const }
+        : corr.status === 'in-progress'
+        ? { label: 'In progress', variant: 'info' as const }
+        : { label: corr.status, variant: 'outline' as const };
 
-  const ItemCard = ({ corr }: { corr: Correspondence }) => (
-    <div 
-      onClick={() => router.push(`/correspondence/${corr.id}`)}
-      className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer"
-    >
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <div className="flex-1">
-          <h4 className="font-semibold text-foreground mb-2">{corr.subject}</h4>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant={getPriorityColor(corr.priority)}>
-              {corr.priority.toUpperCase()}
-            </Badge>
-            <Badge variant="outline" className="gap-1">
-              {corr.direction === 'downward' ? '↓ Downward' : '↑ Upward'}
-            </Badge>
-            {corr.status === 'pending' && (
-              <Badge variant="outline" className="gap-1 text-warning bg-warning/10">
-                <Clock className="h-3 w-3" />
-                Awaiting Action
+    return (
+      <div
+        onClick={() => router.push(`/correspondence/${corr.id}`)}
+        className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer"
+      >
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <Badge variant={getPriorityColor(corr.priority)}>
+                {corr.priority.toUpperCase()}
               </Badge>
-            )}
+              <Badge variant="outline" className="gap-1">
+                {corr.direction === 'downward' ? '↓ Downward' : '↑ Upward'}
+              </Badge>
+              <Badge
+                variant={statusBadge.variant === 'warning' ? 'destructive' : statusBadge.variant}
+                className={
+                  statusBadge.variant === 'warning'
+                    ? 'bg-warning/10 text-warning gap-1'
+                    : statusBadge.variant === 'info'
+                    ? 'bg-info/10 text-info gap-1'
+                    : 'gap-1'
+                }
+              >
+                <Clock className="h-3 w-3" />
+                {statusBadge.label}
+              </Badge>
+              <Badge variant="outline" className="gap-1">
+                <Mail className="h-3 w-3" />
+                {corr.archiveLevel ? `${corr.archiveLevel} archive` : 'Active queue'}
+              </Badge>
+            </div>
+            <h4 className="font-semibold text-foreground mb-2">{corr.subject}</h4>
+          </div>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {formatDateShort(corr.receivedDate)}
+          </span>
+        </div>
+
+        <div className="text-sm text-muted-foreground space-y-1">
+          <div className="flex items-center gap-2">
+            <Mail className="h-3.5 w-3.5" />
+            <span>Ref: {corr.referenceNumber}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <UserIcon className="h-3.5 w-3.5" />
+            <span>From: {corr.senderName}</span>
           </div>
         </div>
-        <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {formatDateShort(corr.receivedDate)}
-        </span>
       </div>
-
-      <div className="text-sm text-muted-foreground space-y-1">
-        <div className="flex items-center gap-2">
-          <Mail className="h-3.5 w-3.5" />
-          <span>Ref: {corr.referenceNumber}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <UserIcon className="h-3.5 w-3.5" />
-          <span>From: {corr.senderName}</span>
-        </div>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const filterByStatus = (status: string) => {
     if (status === 'all') return filteredItems;
@@ -161,70 +188,51 @@ const ExecutiveInbox = () => {
         />
 
         {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-warning/10">
-                  <AlertCircle className="h-6 w-6 text-warning" />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: 'Items awaiting you',
+              value: metricTotals.total,
+              Icon: Inbox,
+              badgeClass: 'bg-primary/10',
+              iconClass: 'text-primary',
+            },
+            {
+              label: 'Pending',
+              value: metricTotals.pending,
+              Icon: AlertCircle,
+              badgeClass: 'bg-warning/10',
+              iconClass: 'text-warning',
+            },
+            {
+              label: 'In progress',
+              value: metricTotals.inProgress,
+              Icon: Mail,
+              badgeClass: 'bg-info/10',
+              iconClass: 'text-info',
+            },
+            {
+              label: 'Urgent',
+              value: metricTotals.urgent,
+              Icon: Clock,
+              badgeClass: 'bg-destructive/10',
+              iconClass: 'text-destructive',
+            },
+          ].map(({ label, value, Icon, badgeClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-lg ${badgeClass}`}>
+                    <Icon className={`h-6 w-6 ${iconClass}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <p className="text-2xl font-bold">{value}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Pending</p>
-                  <p className="text-2xl font-bold">
-                    {filterByStatus('pending').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-info/10">
-                  <Mail className="h-6 w-6 text-info" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">In Progress</p>
-                  <p className="text-2xl font-bold">
-                    {filterByStatus('in-progress').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-success/10">
-                  <CheckCircle2 className="h-6 w-6 text-success" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold">
-                    {filterByStatus('completed').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-destructive/10">
-                  <Clock className="h-6 w-6 text-destructive" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Urgent</p>
-                  <p className="text-2xl font-bold">
-                    {filteredItems.filter(c => c.priority === 'urgent').length}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         {/* Search */}
@@ -249,9 +257,6 @@ const ExecutiveInbox = () => {
             </TabsTrigger>
             <TabsTrigger value="in-progress">
               In Progress ({filterByStatus('in-progress').length})
-            </TabsTrigger>
-            <TabsTrigger value="completed">
-              Completed ({filterByStatus('completed').length})
             </TabsTrigger>
           </TabsList>
 
@@ -282,11 +287,6 @@ const ExecutiveInbox = () => {
             ))}
           </TabsContent>
 
-          <TabsContent value="completed" className="space-y-3">
-            {filterByStatus('completed').map(corr => (
-              <ItemCard key={corr.id} corr={corr} />
-            ))}
-          </TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>

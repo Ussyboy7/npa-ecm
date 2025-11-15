@@ -53,6 +53,7 @@ import { ManualRouteModal } from '@/components/correspondence/ManualRouteModal';
 import { DelegateModal } from '@/components/correspondence/DelegateModal';
 import { PrintPreviewModal } from '@/components/correspondence/PrintPreviewModal';
 import { DocumentPreviewModal } from '@/components/correspondence/DocumentPreviewModal';
+import { OfficeReassignModal } from '@/components/correspondence/OfficeReassignModal';
 import { downloadAsPDF, downloadAsWord } from '@/lib/document-generator';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import { LinkDocumentDialog } from '@/components/correspondence/LinkDocumentDialog';
@@ -74,6 +75,7 @@ const CorrespondenceDetail = () => {
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [showManualRouteModal, setShowManualRouteModal] = useState(false);
   const [showDelegateModal, setShowDelegateModal] = useState(false);
+  const [showReassignModal, setShowReassignModal] = useState(false);
   const [showRoutingDetails, setShowRoutingDetails] = useState(true);
   const [selectedMinute, setSelectedMinute] = useState<Minute | null>(null);
   const [showMinuteDetail, setShowMinuteDetail] = useState(false);
@@ -311,6 +313,16 @@ const CorrespondenceDetail = () => {
               <div>
                 <h1 className="text-xl font-bold text-foreground">{correspondence.referenceNumber}</h1>
                 <p className="text-sm text-muted-foreground">{correspondence.subject}</p>
+                <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Building2 className="h-3.5 w-3.5" />
+                    Owning: {correspondence.owningOfficeName ?? 'Not set'}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Building2 className="h-3.5 w-3.5" />
+                    Current: {correspondence.currentOfficeName ?? correspondence.owningOfficeName ?? 'Not set'}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -887,6 +899,14 @@ const CorrespondenceDetail = () => {
                 <Button
                   variant="outline"
                   className="w-full justify-start"
+                  onClick={() => setShowReassignModal(true)}
+                >
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Reassign Office / Approver
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
                   onClick={() => setShowManualRouteModal(true)}
                 >
                   <Send className="h-4 w-4 mr-2" />
@@ -1053,6 +1073,12 @@ const CorrespondenceDetail = () => {
         minutes={minutes}
       />
 
+      <OfficeReassignModal
+        correspondence={correspondence}
+        isOpen={showReassignModal}
+        onClose={() => setShowReassignModal(false)}
+      />
+
       <ManualRouteModal
         correspondence={correspondence}
         isOpen={showManualRouteModal}
@@ -1101,7 +1127,6 @@ const CorrespondenceDetail = () => {
       <LinkDocumentDialog
         open={showLinkDocumentDialog}
         onOpenChange={setShowLinkDocumentDialog}
-        currentUser={activeUser}
         linkedDocumentIds={correspondence.linkedDocumentIds}
         onSave={handleLinkDocumentsSave}
         divisionId={correspondence.divisionId}

@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   FileText,
   Inbox,
-  CheckSquare,
   Users,
   Building2,
   Settings,
@@ -44,35 +43,109 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { Badge } from "@/components/ui/badge";
+import { useCorrespondence } from "@/contexts/CorrespondenceContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
+
+const EXECUTIVE_GRADES = new Set([
+  "MD",
+  "ED",
+  "GM",
+  "AGM",
+  "MDCS",
+  "EDCS",
+  "GMCS",
+  "AGMCS",
+]);
 
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const { currentUser, hydrated } = useCurrentUser();
-  const { users, isSyncing } = useOrganization();
+  const { correspondence } = useCorrespondence();
+  const { officeMemberships } = useOrganization();
 
-  const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
-  const effectiveUser = useMemo(() => {
-    // Always prefer currentUser if available and hydrated
-    if (hydrated && currentUser) return currentUser;
-    // Only fall back to activeUsers if currentUser is definitely not available
-    if (hydrated && !currentUser) return activeUsers[0] ?? null;
-    // While hydrating, return currentUser if it exists (even if not fully hydrated)
-    if (currentUser) return currentUser;
-    return null;
-  }, [currentUser, activeUsers, hydrated]);
-  
-  // Calculate permissions - use effectiveUser even while syncing to prevent flashing
-  // The permission calculation will handle missing data gracefully
-  const permissions = useUserPermissions(effectiveUser ?? undefined);
+  const permissions = useUserPermissions(currentUser ?? undefined);
+
+  const isExecutiveUser = useMemo(() => {
+    const grade = (currentUser?.gradeLevel ?? '').toUpperCase();
+    const roleName = (currentUser?.systemRole ?? '').toLowerCase();
+    return (
+      permissions.canAccessExecutiveDashboard ||
+      EXECUTIVE_GRADES.has(grade) ||
+      roleName.includes('executive')
+    );
+  }, [currentUser?.gradeLevel, currentUser?.systemRole, permissions.canAccessExecutiveDashboard]);
+
+  const userOfficeIds = useMemo(() => {
+    if (!currentUser) return [];
+    return officeMemberships
+      .filter((membership) => membership.userId === currentUser.id && membership.isActive)
+      .map((membership) => membership.officeId);
+  }, [currentUser?.id, officeMemberships]);
+
+  const officeInboxCount = useMemo(() => {
+    if (!correspondence.length) return 0;
+    const inboxItems = userOfficeIds.length
+      ? correspondence.filter(
+          (item) =>
+            item.currentOfficeId && userOfficeIds.includes(item.currentOfficeId) && item.status !== 'completed',
+        )
+      : currentUser?.isSuperuser
+        ? correspondence.filter((item) => item.status !== 'completed')
+        : [];
+    return inboxItems.length;
+  }, [correspondence, currentUser?.isSuperuser, userOfficeIds]);
+
+  const myInboxCount = useMemo(() => {
+    if (!currentUser) return 0;
+    return correspondence.filter((item) => item.currentApproverId === currentUser.id).length;
+  }, [correspondence, currentUser?.id]);
+
+  const departmentFilesCount = useMemo(() => {
+    if (!currentUser) return 0;
+    const userDivisionId = currentUser.division;
+    const userDepartmentId = currentUser.department;
+    return correspondence.filter((item) => {
+      const isRecord = item.status === 'completed' || item.status === 'archived';
+      if (!isRecord) return false;
+      if (item.departmentId && userDepartmentId && item.departmentId === userDepartmentId) return true;
+      if (item.divisionId && userDivisionId && item.divisionId === userDivisionId) return true;
+      if (item.owningOfficeId && userOfficeIds.includes(item.owningOfficeId)) return true;
+      return false;
+    }).length;
+  }, [correspondence, currentUser?.department, currentUser?.division, userOfficeIds]);
+
+  const outboxCount = useMemo(() => {
+    if (!currentUser) return 0;
+    const pendingStatuses = new Set(['pending', 'in-progress']);
+    return correspondence.filter(
+      (item) => item.createdById === currentUser.id && pendingStatuses.has(item.status),
+    ).length;
+  }, [correspondence, currentUser?.id]);
+
+  const hasCorrespondenceAccess =
+    permissions.canViewCorrespondenceRegistry ||
+    permissions.canRouteCorrespondence ||
+    permissions.canApproveCorrespondence ||
+    userOfficeIds.length > 0;
+
+  const shouldShowDepartmentFiles =
+    hasCorrespondenceAccess &&
+    (departmentFilesCount > 0 ||
+      userOfficeIds.length > 0 ||
+      Boolean(currentUser?.division || currentUser?.department));
+
+  const shouldShowOutbox = permissions.canRegisterCorrespondence || outboxCount > 0;
+  const departmentLinkLabel = isExecutiveUser ? 'Records & Intelligence' : 'Department Files';
+  const showDepartmentLinkInExecGroup = isExecutiveUser && shouldShowDepartmentFiles;
 
   const isActive = (path: string) => pathname === path;
   const isCollapsed = state === "collapsed";
 
-  const showSkeleton = !hydrated && !effectiveUser;
+  const showSkeleton = !hydrated && !currentUser;
 
-  if (showSkeleton) {
+  if (showSkeleton || (!hydrated && !currentUser)) {
     return (
       <Sidebar collapsible="icon" className="border-r border-sidebar-border">
         <SidebarHeader>
@@ -121,9 +194,9 @@ export function AppSidebar() {
          </div>
        </SidebarHeader>
       <SidebarContent>
-        {/* Main Navigation */}
+        {/* Standard workspace */}
         <SidebarGroup>
-          <SidebarGroupLabel>Main</SidebarGroupLabel>
+          <SidebarGroupLabel>My Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -138,112 +211,192 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Correspondence */}
-        <SidebarGroup>
-          <Collapsible defaultOpen>
-            <SidebarGroupLabel asChild>
-              <CollapsibleTrigger className="group/collapsible">
-                Correspondence
-                {!isCollapsed && (
-                  <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
-                )}
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={isActive('/correspondence/inbox')}>
-                      <Link href="/correspondence/inbox">
-                        <Mail className="h-4 w-4" />
-                        {!isCollapsed && <span>Correspondence Inbox</span>}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={isActive('/inbox')}>
-                      <Link href="/inbox">
-                        <Inbox className="h-4 w-4" />
-                        {!isCollapsed && <span>My Inbox</span>}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={isActive('/documents')}>
-                      <Link href="/documents">
-                        <FileText className="h-4 w-4" />
-                        {!isCollapsed && <span>My Documents</span>}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-
-                  {permissions.canAccessDocumentManagement && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={isActive('/dms')}>
-                        <Link href="/dms">
-                          <FolderKanban className="h-4 w-4" />
-                          {!isCollapsed && <span>Document Management</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
-                  
-                  {permissions.canRegisterCorrespondence && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
-                        <Link href="/correspondence/register">
-                          <Send className="h-4 w-4" />
-                          {!isCollapsed && <span>Register New</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
-
-                  {permissions.canViewCorrespondenceRegistry && (
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={isActive('/correspondence/registered')}>
-                        <Link href="/correspondence/registered">
-                          <FileText className="h-4 w-4" />
-                          {!isCollapsed && <span>Registered Correspondence</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )}
-
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={isActive('/correspondence/archived')}>
-                      <Link href="/correspondence/archived">
-                        <Archive className="h-4 w-4" />
-                        {!isCollapsed && <span>Archived</span>}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </SidebarGroup>
-
-        {/* Workflows & Approvals */}
-        {permissions.canAccessApprovals && (
+        {/* Executive oversight */}
+        {showDepartmentLinkInExecGroup || permissions.canAccessExecutiveDashboard ? (
           <SidebarGroup>
-            <SidebarGroupLabel>Workflows</SidebarGroupLabel>
+            <SidebarGroupLabel>Executive Oversight</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/approvals')}>
-                    <Link href="/approvals">
-                      <CheckSquare className="h-4 w-4" />
-                      {!isCollapsed && <span>Approvals</span>}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                {permissions.canAccessExecutiveDashboard && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={isActive('/analytics/executive')}>
+                      <Link href="/analytics/executive">
+                        <Activity className="h-4 w-4" />
+                        {!isCollapsed && <span>Executive Dashboard</span>}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
+                {showDepartmentLinkInExecGroup && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive('/correspondence/department-files')}
+                    >
+                      <Link href="/correspondence/department-files" className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          {!isCollapsed && <span>{departmentLinkLabel}</span>}
+                        </div>
+                        {!isCollapsed && (
+                          <Badge
+                            variant={departmentFilesCount > 0 ? 'secondary' : 'secondary'}
+                            className={departmentFilesCount > 0 ? 'ml-auto' : 'ml-auto opacity-70'}
+                          >
+                            {departmentFilesCount}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-        )}
+        ) : null}
+
+        {/* Correspondence */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Offices & Registry</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {hasCorrespondenceAccess && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/correspondence/inbox')}>
+                    <Link href="/correspondence/inbox" className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        {!isCollapsed && <span>Office Inbox</span>}
+                      </div>
+                      {!isCollapsed && (
+                        <Badge
+                          variant={officeInboxCount > 0 ? 'destructive' : 'secondary'}
+                          className="ml-auto"
+                        >
+                          {officeInboxCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/inbox')}>
+                  <Link href="/inbox" className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Inbox className="h-4 w-4" />
+                      {!isCollapsed && <span>My Inbox</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <Badge
+                        variant={myInboxCount > 0 ? 'secondary' : 'secondary'}
+                        className={myInboxCount > 0 ? 'ml-auto' : 'ml-auto opacity-70'}
+                      >
+                        {myInboxCount}
+                      </Badge>
+                    )}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              {permissions.canRegisterCorrespondence && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
+                    <Link href="/correspondence/register">
+                      <Send className="h-4 w-4" />
+                      {!isCollapsed && <span>Register New</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {!isExecutiveUser && shouldShowDepartmentFiles && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive('/correspondence/department-files')}
+                  >
+                    <Link
+                      href="/correspondence/department-files"
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        {!isCollapsed && <span>{departmentLinkLabel}</span>}
+                      </div>
+                      {!isCollapsed && (
+                        <Badge
+                          variant={departmentFilesCount > 0 ? 'secondary' : 'secondary'}
+                          className={departmentFilesCount > 0 ? 'ml-auto' : 'ml-auto opacity-70'}
+                        >
+                          {departmentFilesCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {hasCorrespondenceAccess && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/correspondence/archived')}>
+                    <Link href="/correspondence/archived" className="flex items-center gap-2">
+                      <Archive className="h-4 w-4" />
+                      {!isCollapsed && <span>Archive</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+
+              {shouldShowOutbox && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/correspondence/outbox')}>
+                    <Link href="/correspondence/outbox" className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Send className="h-4 w-4" />
+                        {!isCollapsed && <span>Outbox</span>}
+                      </div>
+                      {!isCollapsed && outboxCount > 0 && (
+                        <Badge variant="secondary" className="ml-auto">
+                          {outboxCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Documents & Records */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Documents & Records</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive('/documents')}>
+                  <Link href="/documents">
+                    <FileText className="h-4 w-4" />
+                    {!isCollapsed && <span>My Documents</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              {permissions.canAccessDocumentManagement && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/dms')}>
+                    <Link href="/dms">
+                      <FolderKanban className="h-4 w-4" />
+                      {!isCollapsed && <span>Document Management</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         {/* Analytics & Reports */}
         {permissions.canAccessAnalytics && (
@@ -271,7 +424,7 @@ export function AppSidebar() {
                       </SidebarMenuItem>
                     )}
 
-                    {permissions.canAccessExecutiveDashboard && (
+                    {!isExecutiveUser && permissions.canAccessExecutiveDashboard && (
                       <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={isActive("/analytics/executive")}>
                           <Link href="/analytics/executive">
