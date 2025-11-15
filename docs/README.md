@@ -22,13 +22,13 @@ the project to date.
 
 | Topic | Description | Primary doc |
 | --- | --- | --- |
-| Quick start | Local prerequisites, env vars, seeding | [`QUICK_START.md`](../QUICK_START.md) |
+| Quick start | Local prerequisites, env vars, seeding | [`QUICK_START.md`](./guides/QUICK_START.md) |
 | Backend setup | Detailed Django bootstrap instructions | [`docs/backend-setup.md`](./backend-setup.md) |
-| CI/CD + environments | Pipelines, deployment targets, env files | [`CI-CD-README.md`](../CI-CD-README.md) & [`NPA_ECM_SETUP_GUIDE.md`](../NPA_ECM_SETUP_GUIDE.md) |
-| Manual deploy | Step-by-step playbook for prod/stage | [`MANUAL_DEPLOYMENT.md`](../MANUAL_DEPLOYMENT.md) |
-| Notifications & audit | Realtime stack, audit logging, verification steps | [`NOTIFICATIONS_AND_AUDIT_IMPLEMENTATION.md`](../NOTIFICATIONS_AND_AUDIT_IMPLEMENTATION.md) |
-| DMS module | Document model, versioning, collaboration | [`DMS_MODULE.md`](../DMS_MODULE.md) |
-| Digital signatures | Signing workflow design + future work | [`DIGITAL_SIGNATURE_MODULE.md`](../DIGITAL_SIGNATURE_MODULE.md) |
+| CI/CD + environments | Pipelines, deployment targets, env files | [`CI-CD-README.md`](./guides/CI-CD-README.md) & [`NPA_ECM_SETUP_GUIDE.md`](./guides/NPA_ECM_SETUP_GUIDE.md) |
+| Manual deploy | Step-by-step playbook for prod/stage | [`MANUAL_DEPLOYMENT.md`](./guides/MANUAL_DEPLOYMENT.md) |
+| Notifications & audit | Realtime stack, audit logging, verification steps | [`NOTIFICATIONS_AND_AUDIT_IMPLEMENTATION.md`](./modules/NOTIFICATIONS_AND_AUDIT_IMPLEMENTATION.md) |
+| DMS module | Document model, versioning, collaboration | [`DMS_MODULE.md`](./modules/DMS_MODULE.md) |
+| Digital signatures | Signing workflow design + future work | [`DIGITAL_SIGNATURE_MODULE.md`](./modules/DIGITAL_SIGNATURE_MODULE.md) |
 
 ## Scripts & operations
 
