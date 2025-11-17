@@ -173,7 +173,12 @@ export default function SettingsPage() {
       if (!hasTokens() || !currentUser) return;
       
       try {
-        const userData = await apiFetch('/accounts/auth/me/');
+        const userData = await apiFetch<{
+          first_name?: string;
+          last_name?: string;
+          email?: string;
+          phone?: string;
+        }>('/accounts/auth/me/');
         setProfile({
           firstName: userData.first_name || '',
           lastName: userData.last_name || '',

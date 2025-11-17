@@ -522,7 +522,7 @@ export const ShareDocumentDialog = ({
       // Ctrl+Enter or Cmd+Enter to submit
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        const form = document.querySelector('form');
+        const form = window.document.querySelector('form');
         if (form && !isSubmitting) {
           form.requestSubmit();
         }
@@ -557,8 +557,8 @@ export const ShareDocumentDialog = ({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-3xl h-[100vh] flex flex-col overflow-hidden ">
+        <DialogHeader className="flex-shrink-0 px-2">
           <DialogTitle>Share Document</DialogTitle>
           <DialogDescription>
             Grant access to users, divisions, or departments. Shared documents will appear in their My Documents view.
@@ -566,8 +566,8 @@ export const ShareDocumentDialog = ({
         </DialogHeader>
 
         {document && (
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden space-y-4">
-            <div className="rounded-md border bg-muted/20 p-3 space-y-2 flex-shrink-0">
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden space-y-2 px-2">
+            <div className="rounded-md border bg-muted/20 p-2 space-y-2 flex-shrink-0">
               <p className="text-sm font-semibold text-foreground">{document.title}</p>
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <Badge variant="outline" className="capitalize">
@@ -637,7 +637,7 @@ export const ShareDocumentDialog = ({
                 <span className="ml-2 text-sm text-muted-foreground">Loading permissions...</span>
               </div>
             ) : existingPermissions.length > 0 && (
-              <div className="space-y-2 flex-shrink-0 border rounded-lg p-3 bg-muted/30">
+              <div className="space-y-2 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-medium">Current Access ({existingPermissions.length})</Label>
                 </div>
@@ -661,11 +661,87 @@ export const ShareDocumentDialog = ({
                   </div>
                 </ScrollArea>
               </div>
+            )} <div className="space-y-2 flex-shrink-0 ">
+            <div className="space-y-2">
+              <Label htmlFor="share-note">
+                Message <span className="text-muted-foreground text-xs">(optional)</span>
+              </Label>
+              <Textarea
+                id="share-note"
+                placeholder="Add context or instructions. Notifications will include this message."
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                rows={1}
+                maxLength={MAX_NOTE_LENGTH}
+                aria-label="Share message"
+                aria-describedby="note-help"
+              />
+              <p id="note-help" className="text-xs text-muted-foreground">
+                {note.length}/{MAX_NOTE_LENGTH} characters
+              </p>
+            </div>
+
+            {shareProgress > 0 && shareProgress < 100 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Sharing...</span>
+                  <span className="text-muted-foreground">{Math.round(shareProgress)}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${shareProgress}%` }}
+                    role="progressbar"
+                    aria-valuenow={shareProgress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+              </div>
             )}
 
-            <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                <TabsList className="grid w-full grid-cols-5 flex-shrink-0">
+            {totalSelected > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {shareToAll
+                  ? `Document will be shared with all ${activeUserCount} users with ${accessLevel} access.`
+                  : `Document will be shared with ${totalSelected} selection${totalSelected !== 1 ? "s" : ""} with ${accessLevel} access.`}
+              </p>
+            )}
+
+            <DialogFooter className="py-0">
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm"
+                className="h-7 text-xs px-3"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+                aria-label="Cancel sharing"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="h-7 text-xs px-3"
+                disabled={isSubmitting || (!shareToAll && totalSelected === 0)}
+                aria-label="Share document"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                    Sharing…
+                  </>
+                ) : (
+                  "Share Document"
+                )}
+              </Button>
+            </DialogFooter>
+          </div>
+
+            <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+                <TabsList className="grid w-full grid-cols-5 flex-shrink-0 mb-4">
                   <TabsTrigger value="all" className="flex items-center gap-2">
                     <Globe className="h-4 w-4" />
                     All
@@ -688,8 +764,8 @@ export const ShareDocumentDialog = ({
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="all" className="mt-4">
-                  <div className="space-y-4">
+                <TabsContent value="all" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex">
+                  <div className="space-y-4 flex-1">
                     <div className="flex items-center space-x-2 p-4 border rounded-lg">
                       <Checkbox
                         id="share-to-all"
@@ -718,8 +794,8 @@ export const ShareDocumentDialog = ({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="directorate" className="mt-4 flex-1 flex flex-col min-h-0">
-                  <div className="flex flex-col flex-1 min-h-0 space-y-3">
+                <TabsContent value="directorate" className="h-[80vh] flex flex-col">
+                  <div className="flex flex-col h-full space-y-3">
                     <div className="flex items-center justify-between px-1 flex-shrink-0">
                       <Label className="text-sm font-medium">
                         Select Directorates ({selectedDirectorateIds.size} selected)
@@ -760,9 +836,7 @@ export const ShareDocumentDialog = ({
                               <div
                                 key={dir.id}
                                 className={`flex items-center space-x-3 p-3 border rounded-lg transition-colors ${
-                                  isSelected 
-                                    ? 'bg-primary/10 border-primary shadow-sm' 
-                                    : existing.hasAccess 
+                                  existing.hasAccess 
                                     ? 'bg-muted/30 border-muted' 
                                     : 'hover:bg-accent/50 border-border'
                                 }`}
@@ -787,15 +861,10 @@ export const ShareDocumentDialog = ({
                                 <Label htmlFor={`dir-${dir.id}`} className="flex-1 cursor-pointer min-w-0">
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className={`font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                      <span className="font-medium text-foreground">
                                         {dir.name}
                                       </span>
-                                      {isSelected && (
-                                        <Badge variant="default" className="text-xs">
-                                          Selected
-                                        </Badge>
-                                      )}
-                                      {existing.hasAccess && !isSelected && (
+                                      {existing.hasAccess && (
                                         <Badge variant="outline" className="text-xs">
                                           Has {existing.accessLevel} access
                                         </Badge>
@@ -820,8 +889,8 @@ export const ShareDocumentDialog = ({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="division" className="mt-4 flex-1 flex flex-col min-h-0">
-                  <div className="flex flex-col flex-1 min-h-0 space-y-3">
+                <TabsContent value="division" className="h-[80vh] flex flex-col">
+                  <div className="flex flex-col h-full space-y-3">
                     <div className="flex items-center justify-between px-1 flex-shrink-0">
                       <Label className="text-sm font-medium">
                         Select Divisions ({selectedDivisionIds.size} selected)
@@ -884,9 +953,7 @@ export const ShareDocumentDialog = ({
                               <div
                                 key={div.id}
                                 className={`flex items-center space-x-3 p-3 border rounded-lg transition-colors ${
-                                  isSelected 
-                                    ? 'bg-primary/10 border-primary shadow-sm' 
-                                    : existing.hasAccess 
+                                  existing.hasAccess 
                                     ? 'bg-muted/30 border-muted' 
                                     : 'hover:bg-accent/50 border-border'
                                 }`}
@@ -912,15 +979,10 @@ export const ShareDocumentDialog = ({
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                        <span className="font-medium text-foreground">
                                           {div.name}
                                         </span>
-                                        {isSelected && (
-                                          <Badge variant="default" className="text-xs">
-                                            Selected
-                                          </Badge>
-                                        )}
-                                        {existing.hasAccess && !isSelected && (
+                                        {existing.hasAccess && (
                                           <Badge variant="outline" className="text-xs">
                                             Has {existing.accessLevel} access
                                           </Badge>
@@ -962,8 +1024,8 @@ export const ShareDocumentDialog = ({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="department" className="mt-4 flex-1 flex flex-col min-h-0">
-                  <div className="flex flex-col flex-1 min-h-0 space-y-3">
+                <TabsContent value="department" className="h-[40vh] flex flex-col">
+                  <div className="flex flex-col h-full space-y-3">
                     <div className="flex items-center justify-between px-1 flex-shrink-0">
                       <Label className="text-sm font-medium">
                         Select Departments ({selectedDepartmentIds.size} selected)
@@ -1026,9 +1088,7 @@ export const ShareDocumentDialog = ({
                               <div
                                 key={dept.id}
                                 className={`flex items-center space-x-3 p-3 border rounded-lg transition-colors ${
-                                  isSelected 
-                                    ? 'bg-primary/10 border-primary shadow-sm' 
-                                    : existing.hasAccess 
+                                  existing.hasAccess 
                                     ? 'bg-muted/30 border-muted' 
                                     : 'hover:bg-accent/50 border-border'
                                 }`}
@@ -1054,15 +1114,10 @@ export const ShareDocumentDialog = ({
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className={`font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                        <span className="font-medium text-foreground">
                                           {dept.name}
                                         </span>
-                                        {isSelected && (
-                                          <Badge variant="default" className="text-xs">
-                                            Selected
-                                          </Badge>
-                                        )}
-                                        {existing.hasAccess && !isSelected && (
+                                        {existing.hasAccess && (
                                           <Badge variant="outline" className="text-xs">
                                             Has {existing.accessLevel} access
                                           </Badge>
@@ -1104,8 +1159,8 @@ export const ShareDocumentDialog = ({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="users" className="mt-4 flex-1 flex flex-col min-h-0">
-                  <div className="flex flex-col flex-1 min-h-0 space-y-3">
+                <TabsContent value="users" className="h-[40vh] flex flex-col">
+                  <div className="flex flex-col h-full space-y-3">
                     <div className="flex items-center justify-between px-1 flex-shrink-0">
                       <Label className="text-sm font-medium">
                         Select Users ({selectedUserIds.size} selected)
@@ -1175,9 +1230,7 @@ export const ShareDocumentDialog = ({
                                   <div
                                     key={user.id}
                                     className={`flex items-center space-x-3 p-3 border rounded-lg transition-colors ${
-                                      isSelected 
-                                        ? 'bg-primary/10 border-primary shadow-sm' 
-                                        : existing.hasAccess 
+                                      existing.hasAccess 
                                         ? 'bg-muted/30 border-muted' 
                                         : 'hover:bg-accent/50 border-border'
                                     }`}
@@ -1202,15 +1255,10 @@ export const ShareDocumentDialog = ({
                                     <Label htmlFor={`user-recent-${user.id}`} className="flex-1 cursor-pointer min-w-0">
                                       <div className="flex flex-col">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <span className={`font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                          <span className="font-medium text-foreground">
                                             {user.name}
                                           </span>
-                                          {isSelected && (
-                                            <Badge variant="default" className="text-xs">
-                                              Selected
-                                            </Badge>
-                                          )}
-                                          {existing.hasAccess && !isSelected && (
+                                          {existing.hasAccess && (
                                             <Badge variant="outline" className="text-xs">
                                               Has {existing.accessLevel} access
                                             </Badge>
@@ -1235,9 +1283,7 @@ export const ShareDocumentDialog = ({
                               <div
                                 key={user.id}
                                 className={`flex items-center space-x-3 p-3 border rounded-lg transition-colors ${
-                                  isSelected 
-                                    ? 'bg-primary/10 border-primary shadow-sm' 
-                                    : existing.hasAccess 
+                                  existing.hasAccess 
                                     ? 'bg-muted/30 border-muted' 
                                     : 'hover:bg-accent/50 border-border'
                                 }`}
@@ -1262,15 +1308,10 @@ export const ShareDocumentDialog = ({
                                 <Label htmlFor={`user-${user.id}`} className="flex-1 cursor-pointer min-w-0">
                                   <div className="flex flex-col">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className={`font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                                      <span className="font-medium text-foreground">
                                         {user.name}
                                       </span>
-                                      {isSelected && (
-                                        <Badge variant="default" className="text-xs">
-                                          Selected
-                                        </Badge>
-                                      )}
-                                      {existing.hasAccess && !isSelected && (
+                                      {existing.hasAccess && (
                                         <Badge variant="outline" className="text-xs">
                                           Has {existing.accessLevel} access
                                         </Badge>
@@ -1311,80 +1352,7 @@ export const ShareDocumentDialog = ({
                   </div>
                 </TabsContent>
               </Tabs>
-
-              <div className="space-y-4 flex-shrink-0 border-t pt-4 mt-auto">
-                <div className="space-y-2">
-                  <Label htmlFor="share-note">
-                    Message <span className="text-muted-foreground text-xs">(optional)</span>
-                  </Label>
-                  <Textarea
-                    id="share-note"
-                    placeholder="Add context or instructions. Notifications will include this message."
-                    value={note}
-                    onChange={(event) => setNote(event.target.value)}
-                    rows={3}
-                    maxLength={MAX_NOTE_LENGTH}
-                    aria-label="Share message"
-                    aria-describedby="note-help"
-                  />
-                  <p id="note-help" className="text-xs text-muted-foreground">
-                    {note.length}/{MAX_NOTE_LENGTH} characters
-                  </p>
-                </div>
-
-                {shareProgress > 0 && shareProgress < 100 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">Sharing...</span>
-                      <span className="text-muted-foreground">{Math.round(shareProgress)}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all duration-300"
-                        style={{ width: `${shareProgress}%` }}
-                        role="progressbar"
-                        aria-valuenow={shareProgress}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {totalSelected > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {shareToAll
-                      ? `Document will be shared with all ${activeUserCount} users with ${accessLevel} access.`
-                      : `Document will be shared with ${totalSelected} selection${totalSelected !== 1 ? "s" : ""} with ${accessLevel} access.`}
-                  </p>
-                )}
-
-                <DialogFooter>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => onOpenChange(false)}
-                    disabled={isSubmitting}
-                    aria-label="Cancel sharing"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || (!shareToAll && totalSelected === 0)}
-                    aria-label="Share document"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Sharing…
-                      </>
-                    ) : (
-                      "Share Document"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </div>
+             
             </form>
           </div>
         )}
