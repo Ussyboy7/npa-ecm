@@ -32,8 +32,12 @@ export const NotificationList = ({ onClose }: NotificationListProps) => {
 
   const loadNotifications = useCallback(async () => {
     try {
-      const data = await getNotifications({ status: 'unread,read' });
-      setNotifications(data);
+      // Fetch all notifications and filter out archived ones on the frontend
+      // The backend doesn't support multiple status values, so we fetch all and filter
+      const data = await getNotifications();
+      // Filter out archived notifications - we only want unread and read
+      const filtered = data.filter((n) => n.status !== 'archived');
+      setNotifications(filtered);
     } catch (error) {
       logError('Failed to load notifications', error);
     } finally {

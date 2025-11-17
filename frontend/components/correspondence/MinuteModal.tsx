@@ -41,6 +41,7 @@ import {
   AlertCircle,
   Search,
   Building2,
+  Loader2,
 } from 'lucide-react';
 import { 
   GRADE_LEVELS,
@@ -75,8 +76,10 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
   const { addMinute, updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [minuteText, setMinuteText] = useState('');
+  const [minuteTextError, setMinuteTextError] = useState('');
   const [actionType, setActionType] = useState<'minute' | 'approve'>('minute');
   const [forwardTo, setForwardTo] = useState('');
+  const [forwardToError, setForwardToError] = useState('');
   const [characterCount, setCharacterCount] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
@@ -85,6 +88,7 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
   const [targetOfficeId, setTargetOfficeId] = useState<string>('');
   const [selectedDirection, setSelectedDirection] = useState<'upward' | 'downward'>(initialDirection);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [userSignature, setUserSignature] = useState<StoredSignature | null>(null);
   const [applySignature, setApplySignature] = useState(false);
   const [applySignatureManuallySet, setApplySignatureManuallySet] = useState(false);
@@ -574,30 +578,46 @@ const [newTemplateName, setNewTemplateName] = useState('');
     toast.success('Template removed.');
   };
 
-  const handleSubmit = () => {
-    if (!minuteText.trim()) {
-      toast.error('Please enter your minute');
-      return;
+  const validateForm = (): boolean => {
+    setMinuteTextError('');
+    setForwardToError('');
+
+    const trimmedMinuteText = minuteText.trim();
+    if (!trimmedMinuteText) {
+      setMinuteTextError('Please enter your minute');
+      return false;
+    }
+
+    if (trimmedMinuteText.length < 10) {
+      setMinuteTextError('Minute text must be at least 10 characters long');
+      return false;
     }
 
     if (!forwardTo) {
-      toast.error('Please select who to forward to');
-      return;
+      setForwardToError('Please select who to forward to');
+      return false;
     }
 
     if (actionType === 'approve' && !userSignature) {
       toast.error('A digital signature is required to approve. Upload your signature in Settings → Signature.');
-      return;
+      return false;
     }
 
     if (applySignature) {
       const availableTemplates = relevantTemplates;
       if (availableTemplates.length > 0 && !selectedTemplateId) {
         toast.error('Please select a signature template.');
-        return;
+        return false;
       }
     }
 
+    return true;
+  };
+
+  const handleSubmit = () => {
+    if (!validateForm()) {
+      return;
+    }
     setShowConfirmation(true);
   };
 
@@ -674,6 +694,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
       newMinute.toOfficeId = targetOfficeId;
     }
 
+    setIsSubmitting(true);
     try {
       const existingKeys = new Set(
         existingDistribution.map((entry) => {
@@ -696,17 +717,35 @@ const [newTemplateName, setNewTemplateName] = useState('');
         return !existingKeys.has(`${entry.type}:${targetId}`);
       });
 
-      await addMinute(newMinute);
+      // Create minute via API
+      await apiFetch('/correspondence/minutes/', {
+        method: 'POST',
+        body: JSON.stringify({
+          correspondence: correspondence.id,
+          user_id: currentUser.id,
+          grade_level: currentUser.gradeLevel,
+          action_type: actionType,
+          minute_text: minuteText.trim(),
+          direction: finalDirection,
+          step_number: nextStep,
+          to_office_id: targetOfficeId || undefined,
+          signature_payload: signaturePayload || undefined,
+        }),
+      });
 
-      const correspondenceUpdates: Partial<Correspondence> = {
-        currentApproverId: forwardTo,
+      // Update correspondence via API
+      const correspondenceUpdatePayload: any = {
+        current_approver: forwardTo,
         status: 'in-progress',
         direction: finalDirection,
       };
       if (targetOfficeId) {
-        correspondenceUpdates.currentOfficeId = targetOfficeId;
+        correspondenceUpdatePayload.current_office = targetOfficeId;
       }
-      await updateCorrespondence(correspondence.id, correspondenceUpdates);
+      await apiFetch(`/correspondence/items/${correspondence.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(correspondenceUpdatePayload),
+      });
 
       if (canDistribute && newDistributionEntries.length > 0) {
         await Promise.all(
@@ -749,7 +788,9 @@ const [newTemplateName, setNewTemplateName] = useState('');
 
         setTimeout(() => {
           setMinuteText('');
+          setMinuteTextError('');
           setForwardTo('');
+          setForwardToError('');
           setActionType('minute');
           setDistribution([]);
           setHasDraft(false);
@@ -761,12 +802,17 @@ const [newTemplateName, setNewTemplateName] = useState('');
       toast.success('Minute added successfully', {
         description: `Forwarded to ${forwardUser?.name ?? 'selected user'}${targetOfficeId ? ` • Routed to ${officeOptions.find((office) => office.id === targetOfficeId)?.name ?? 'office'}` : ''}`,
       });
-    } catch (error) {
+    } catch (error: any) {
       logError('Failed to record minute', error);
-      toast.error('Unable to save minute', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
+      const errorMessage = error?.response?.data?.detail || 
+                          error?.response?.data?.minute_text?.[0] ||
+                          error?.response?.data?.current_approver?.[0] ||
+                          error?.message || 
+                          'Unable to save minute. Please try again.';
+      toast.error(errorMessage);
       setShowConfirmation(false);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

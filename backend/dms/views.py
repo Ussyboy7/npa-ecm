@@ -92,8 +92,33 @@ class DocumentViewSet(viewsets.ModelViewSet):
     ordering_fields = ["updated_at", "created_at", "title"]
     ordering = ["-updated_at"]
 
+    def filter_queryset(self, queryset):
+        """Override to add full-text search in document versions."""
+        # Get search query before calling super() which applies SearchFilter
+        search_query = self.request.query_params.get("search", "").strip()
+        
+        # Call super to apply standard filters (SearchFilter, DjangoFilterBackend, etc.)
+        queryset = super().filter_queryset(queryset)
+        
+        # If there's a search query, also search in document version content
+        if search_query:
+            from django.db.models import Q
+            
+            # Add full-text search in document versions (content_text, ocr_text)
+            # This extends the base search_fields (title, reference, description, tags)
+            version_filter = Q(
+                versions__content_text__icontains=search_query
+            ) | Q(
+                versions__ocr_text__icontains=search_query
+            )
+            
+            # Combine with existing search results using OR
+            queryset = queryset.filter(version_filter).distinct()
+        
+        return queryset
+
     def get_queryset(self):
-        qs = self.base_queryset
+        qs = self.base_queryset.prefetch_related("versions")  # Prefetch versions for full-text search
         request = getattr(self, "request", None)
         if request:
             only_deleted = request.query_params.get("only_deleted") == "true"

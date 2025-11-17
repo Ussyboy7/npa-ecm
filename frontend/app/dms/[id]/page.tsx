@@ -46,9 +46,11 @@ import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPre
 import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiFetch } from '@/lib/api-client';
 import { Correspondence, Minute } from '@/lib/npa-structure';
-import { Link } from 'lucide-react';
+import { Link, AlertTriangle, Download as DownloadIcon, Filter as FilterIcon, Calendar as CalendarIcon } from 'lucide-react';
 
 const statusLabel = (status: DocumentRecord['status']) => {
   switch (status) {
@@ -106,6 +108,13 @@ const DocumentDetailPage = () => {
   const [newDiscussionMessage, setNewDiscussionMessage] = useState('');
   const [accessLogs, setAccessLogs] = useState<DocumentAccessLog[]>([]);
   const [relatedCorrespondence, setRelatedCorrespondence] = useState<Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>>([]);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
+  const [showStatusChangeConfirmation, setShowStatusChangeConfirmation] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<DocumentRecord['status'] | null>(null);
+  const [metadataErrors, setMetadataErrors] = useState<Record<string, string>>({});
+  const [accessLogFilter, setAccessLogFilter] = useState<'all' | 'view' | 'download' | 'attempted-download'>('all');
+  const [accessLogDateFilter, setAccessLogDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
 
   const { currentUser } = useCurrentUser();
   const { users: organizationUsers, divisions, departments } = useOrganization();
@@ -166,6 +175,8 @@ const DocumentDetailPage = () => {
             sensitivity: doc.sensitivity,
             status: doc.status,
           });
+          setHasUnsavedChanges(false);
+          setMetadataErrors({});
         }
 
         // Load collaboration data
@@ -384,7 +395,86 @@ const DocumentDetailPage = () => {
     return () => clearInterval(interval);
   }, [params?.id]);
 
+  const validateMetadata = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    if (!metadataDraft.title.trim()) {
+      errors.title = 'Title is required';
+    }
+    if (metadataDraft.title.length > 500) {
+      errors.title = 'Title must be less than 500 characters';
+    }
+    if (metadataDraft.referenceNumber && metadataDraft.referenceNumber.length > 100) {
+      errors.referenceNumber = 'Reference number must be less than 100 characters';
+    }
+    
+    setMetadataErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const checkStatusChange = (newStatus: DocumentRecord['status']): boolean => {
+    if (!document) return false;
+    const oldStatus = document.status;
+    
+    // Check if status is changing from draft to published (requires confirmation)
+    if (oldStatus === 'draft' && newStatus === 'published') {
+      return true;
+    }
+    // Check if status is changing from published to archived (requires confirmation)
+    if (oldStatus === 'published' && newStatus === 'archived') {
+      return true;
+    }
+    return false;
+  };
+
+  const handleStatusChange = (newStatus: DocumentRecord['status']) => {
+    if (checkStatusChange(newStatus)) {
+      setPendingStatusChange(newStatus);
+      setShowStatusChangeConfirmation(true);
+    } else {
+      setMetadataDraft({ ...metadataDraft, status: newStatus });
+      setHasUnsavedChanges(true);
+    }
+  };
+
+  const confirmStatusChange = () => {
+    if (pendingStatusChange) {
+      setMetadataDraft({ ...metadataDraft, status: pendingStatusChange });
+      setHasUnsavedChanges(true);
+      setPendingStatusChange(null);
+      setShowStatusChangeConfirmation(false);
+      toast.info('Status change will be saved when you click "Save Changes"');
+    }
+  };
+
   const handleMetadataSave = async () => {
+    if (!document) return;
+
+    if (!validateMetadata()) {
+      toast.error('Please fix validation errors before saving');
+      return;
+    }
+
+    // Check for unsaved changes
+    const hasChanges = 
+      metadataDraft.title !== document.title ||
+      metadataDraft.description !== (document.description ?? '') ||
+      metadataDraft.referenceNumber !== (document.referenceNumber ?? '') ||
+      metadataDraft.divisionId !== document.divisionId ||
+      metadataDraft.departmentId !== document.departmentId ||
+      metadataDraft.tags !== document.tags.join(', ') ||
+      metadataDraft.sensitivity !== document.sensitivity ||
+      metadataDraft.status !== document.status;
+
+    if (!hasChanges) {
+      toast.info('No changes to save');
+      return;
+    }
+
+    setShowSaveConfirmation(true);
+  };
+
+  const confirmMetadataSave = async () => {
     if (!document) return;
 
     try {
@@ -393,6 +483,7 @@ const DocumentDetailPage = () => {
         .map((tag) => tag.trim())
         .filter(Boolean);
 
+      const oldStatus = document.status;
       const updated = await updateDocumentMetadata(document.id, {
         title: metadataDraft.title,
         description: metadataDraft.description,
@@ -405,12 +496,42 @@ const DocumentDetailPage = () => {
       });
 
       setDocument(updated);
-      toast.success('Document details updated');
-    } catch (error) {
+      setHasUnsavedChanges(false);
+      setMetadataErrors({});
+      setShowSaveConfirmation(false);
+      
+      // Show notification if status changed
+      if (oldStatus !== updated.status) {
+        toast.success(`Document ${oldStatus} → ${updated.status}`);
+      } else {
+        toast.success('Document details updated');
+      }
+    } catch (error: any) {
       logError('Failed to update metadata', error);
-      toast.error('Unable to update document');
+      const errorMessage = error?.response?.data?.detail || 
+                          error?.response?.data?.title?.[0] ||
+                          'Unable to update document';
+      toast.error(errorMessage);
+      setShowSaveConfirmation(false);
     }
   };
+
+  // Track unsaved changes
+  useEffect(() => {
+    if (!document) return;
+    
+    const hasChanges = 
+      metadataDraft.title !== document.title ||
+      metadataDraft.description !== (document.description ?? '') ||
+      metadataDraft.referenceNumber !== (document.referenceNumber ?? '') ||
+      metadataDraft.divisionId !== document.divisionId ||
+      metadataDraft.departmentId !== document.departmentId ||
+      metadataDraft.tags !== document.tags.join(', ') ||
+      metadataDraft.sensitivity !== document.sensitivity ||
+      metadataDraft.status !== document.status;
+    
+    setHasUnsavedChanges(hasChanges);
+  }, [metadataDraft, document]);
 
   const handleVersionUploadComplete = (updated: DocumentRecord) => {
     setDocument(updated);
@@ -581,20 +702,36 @@ const DocumentDetailPage = () => {
             <CardContent className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="doc-title">Title</Label>
+                  <Label htmlFor="doc-title">
+                    Title <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="doc-title"
                     value={metadataDraft.title}
-                    onChange={(e) => setMetadataDraft((prev) => ({ ...prev, title: e.target.value }))}
+                    onChange={(e) => {
+                      setMetadataDraft((prev) => ({ ...prev, title: e.target.value }));
+                      if (metadataErrors.title) setMetadataErrors({ ...metadataErrors, title: '' });
+                    }}
+                    aria-label="Document title"
+                    aria-required="true"
+                    aria-invalid={!!metadataErrors.title}
+                    aria-describedby={metadataErrors.title ? "title-error" : undefined}
                   />
+                  {metadataErrors.title && (
+                    <p id="title-error" className="text-xs text-destructive" role="alert">
+                      {metadataErrors.title}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
                   <Select
                     value={metadataDraft.status}
-                    onValueChange={(value) =>
-                      setMetadataDraft((prev) => ({ ...prev, status: value as DocumentRecord['status'] }))
-                    }
+                    onValueChange={(value) => {
+                      const newStatus = value as DocumentRecord['status'];
+                      handleStatusChange(newStatus);
+                    }}
+                    aria-label="Document status"
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -605,6 +742,12 @@ const DocumentDetailPage = () => {
                       <SelectItem value="archived">Archived</SelectItem>
                     </SelectContent>
                   </Select>
+                  {document && metadataDraft.status !== document.status && (
+                    <p className="text-xs text-muted-foreground">
+                      Status will change from <span className="font-medium">{document.status}</span> to{' '}
+                      <span className="font-medium">{metadataDraft.status}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -659,18 +802,34 @@ const DocumentDetailPage = () => {
                   <Input
                     id="doc-reference"
                     value={metadataDraft.referenceNumber}
-                    onChange={(e) =>
-                      setMetadataDraft((prev) => ({ ...prev, referenceNumber: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      setMetadataDraft((prev) => ({ ...prev, referenceNumber: e.target.value }));
+                      if (metadataErrors.referenceNumber) setMetadataErrors({ ...metadataErrors, referenceNumber: '' });
+                    }}
+                    aria-label="Reference number"
+                    aria-invalid={!!metadataErrors.referenceNumber}
+                    aria-describedby={metadataErrors.referenceNumber ? "reference-error" : undefined}
                   />
+                  {metadataErrors.referenceNumber && (
+                    <p id="reference-error" className="text-xs text-destructive" role="alert">
+                      {metadataErrors.referenceNumber}
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>Sensitivity</Label>
                   <Select
                     value={metadataDraft.sensitivity}
-                    onValueChange={(value) =>
-                      setMetadataDraft((prev) => ({ ...prev, sensitivity: value as DocumentRecord['sensitivity'] }))
-                    }
+                    onValueChange={(value) => {
+                      const newSensitivity = value as DocumentRecord['sensitivity'];
+                      setMetadataDraft((prev) => ({ ...prev, sensitivity: newSensitivity }));
+                      setHasUnsavedChanges(true);
+                      // Show warning for restricted documents
+                      if (newSensitivity === 'restricted' && document && document.sensitivity !== 'restricted') {
+                        toast.warning('Restricted sensitivity requires high-level access permissions');
+                      }
+                    }}
+                    aria-label="Document sensitivity"
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -682,6 +841,22 @@ const DocumentDetailPage = () => {
                       <SelectItem value="restricted">Restricted</SelectItem>
                     </SelectContent>
                   </Select>
+                  {metadataDraft.sensitivity === 'restricted' && (
+                    <div className="flex items-start gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-xs">
+                      <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                      <p className="text-destructive">
+                        Restricted documents are only accessible to MDCS, EDCS, and MSS1 grade levels.
+                      </p>
+                    </div>
+                  )}
+                  {metadataDraft.sensitivity === 'confidential' && (
+                    <div className="flex items-start gap-2 p-2 bg-warning/10 border border-warning/20 rounded text-xs">
+                      <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                      <p className="text-warning">
+                        Confidential documents require MSS2 or higher grade level access.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -696,10 +871,47 @@ const DocumentDetailPage = () => {
                   }
                 />
               </div>
-              <div className="flex justify-end">
-                <Button onClick={handleMetadataSave}>
-                  Save Changes
-                </Button>
+              <div className="flex items-center justify-between">
+                {hasUnsavedChanges && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <AlertTriangle className="h-4 w-4 text-warning" />
+                    <span>You have unsaved changes</span>
+                  </div>
+                )}
+                <div className="flex gap-2 ml-auto">
+                  {hasUnsavedChanges && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (document) {
+                          setMetadataDraft({
+                            title: document.title,
+                            description: document.description ?? '',
+                            referenceNumber: document.referenceNumber ?? '',
+                            divisionId: document.divisionId,
+                            departmentId: document.departmentId,
+                            tags: document.tags.join(', '),
+                            sensitivity: document.sensitivity,
+                            status: document.status,
+                          });
+                          setHasUnsavedChanges(false);
+                          setMetadataErrors({});
+                          toast.info('Changes discarded');
+                        }
+                      }}
+                      aria-label="Discard changes"
+                    >
+                      Discard
+                    </Button>
+                  )}
+                  <Button 
+                    onClick={handleMetadataSave}
+                    disabled={!hasUnsavedChanges}
+                    aria-label="Save document changes"
+                  >
+                    Save Changes
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1182,45 +1394,168 @@ const DocumentDetailPage = () => {
           {/* Access Activity */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Access Activity
-              </CardTitle>
-              <CardDescription>Recent views and download attempts for this document.</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Access Activity
+                  </CardTitle>
+                  <CardDescription>Recent views and download attempts for this document.</CardDescription>
+                </div>
+                {accessLogs.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Export access logs as CSV
+                      const csv = [
+                        ['User', 'Action', 'Sensitivity', 'Timestamp'].join(','),
+                        ...accessLogs.map((log) => {
+                          const user = userLookup.get(log.userId);
+                          return [
+                            user?.name || 'Unknown',
+                            log.action,
+                            log.sensitivity,
+                            log.timestamp,
+                          ].join(',');
+                        }),
+                      ].join('\n');
+                      const blob = new Blob([csv], { type: 'text/csv' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `document-access-logs-${document.id}-${new Date().toISOString().split('T')[0]}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      toast.success('Access logs exported');
+                    }}
+                    aria-label="Export access logs"
+                  >
+                    <DownloadIcon className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {accessLogs.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No access activity recorded yet.</p>
               ) : (
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                  {accessLogs.slice(0, 20).map((log) => {
-                    const user = userLookup.get(log.userId);
-                    const actionIcon = log.action === 'download' ? Download : Eye;
-                    const actionLabel = log.action === 'download' ? 'Downloaded' : log.action === 'attempted-download' ? 'Attempted Download' : 'Viewed';
-                    
-                    return (
-                      <div key={log.id} className="flex items-center gap-3 p-2 border rounded-md text-sm">
-                        <div className="flex items-center gap-2 flex-1">
-                          {actionIcon === Download ? (
-                            <Download className="h-4 w-4 text-primary" />
-                          ) : (
-                            <Eye className="h-4 w-4 text-muted-foreground" />
-                          )}
-                          <span className="font-medium">{user?.name ?? 'Unknown User'}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {actionLabel}
-                          </Badge>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {formatDateTime(log.timestamp)}
-                        </span>
+                <div className="space-y-4">
+                  {/* Filters */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <FilterIcon className="h-4 w-4 text-muted-foreground" />
+                      <Select value={accessLogFilter} onValueChange={(value) => setAccessLogFilter(value as any)}>
+                        <SelectTrigger className="w-40 h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Actions</SelectItem>
+                          <SelectItem value="view">Views Only</SelectItem>
+                          <SelectItem value="download">Downloads Only</SelectItem>
+                          <SelectItem value="attempted-download">Attempted Downloads</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+                      <Select value={accessLogDateFilter} onValueChange={(value) => setAccessLogDateFilter(value as any)}>
+                        <SelectTrigger className="w-32 h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Time</SelectItem>
+                          <SelectItem value="today">Today</SelectItem>
+                          <SelectItem value="week">This Week</SelectItem>
+                          <SelectItem value="month">This Month</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  {/* Filtered Logs */}
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {(() => {
+                      const now = new Date();
+                      const filtered = accessLogs.filter((log) => {
+                        // Action filter
+                        if (accessLogFilter !== 'all' && log.action !== accessLogFilter) return false;
+                        
+                        // Date filter
+                        if (accessLogDateFilter !== 'all') {
+                          const logDate = new Date(log.timestamp);
+                          const diffMs = now.getTime() - logDate.getTime();
+                          const diffDays = diffMs / (1000 * 60 * 60 * 24);
+                          
+                          if (accessLogDateFilter === 'today' && diffDays >= 1) return false;
+                          if (accessLogDateFilter === 'week' && diffDays >= 7) return false;
+                          if (accessLogDateFilter === 'month' && diffDays >= 30) return false;
+                        }
+                        
+                        return true;
+                      });
+                      
+                      if (filtered.length === 0) {
+                        return (
+                          <p className="text-sm text-muted-foreground text-center py-4">
+                            No access logs match the selected filters.
+                          </p>
+                        );
+                      }
+                      
+                      return filtered.slice(0, 50).map((log) => {
+                        const user = userLookup.get(log.userId);
+                        const actionIcon = log.action === 'download' ? Download : Eye;
+                        const actionLabel = log.action === 'download' ? 'Downloaded' : log.action === 'attempted-download' ? 'Attempted Download' : 'Viewed';
+                        
+                        return (
+                          <div key={log.id} className="flex items-center gap-3 p-2 border rounded-md text-sm">
+                            <div className="flex items-center gap-2 flex-1">
+                              {actionIcon === Download ? (
+                                <Download className="h-4 w-4 text-primary" />
+                              ) : (
+                                <Eye className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              <span className="font-medium">{user?.name ?? 'Unknown User'}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {actionLabel}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs capitalize">
+                                {log.sensitivity}
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {formatDateTime(log.timestamp)}
+                            </span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                  
+                  {/* Statistics */}
+                  {accessLogs.length > 0 && (
+                    <div className="grid grid-cols-3 gap-4 pt-4 border-t">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Total Views</p>
+                        <p className="text-lg font-semibold">
+                          {accessLogs.filter((l) => l.action === 'view').length}
+                        </p>
                       </div>
-                    );
-                  })}
-                  {accessLogs.length > 20 && (
-                    <p className="text-xs text-muted-foreground text-center pt-2">
-                      Showing 20 of {accessLogs.length} access records
-                    </p>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Downloads</p>
+                        <p className="text-lg font-semibold">
+                          {accessLogs.filter((l) => l.action === 'download').length}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Unique Users</p>
+                        <p className="text-lg font-semibold">
+                          {new Set(accessLogs.map((l) => l.userId)).size}
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
@@ -1393,6 +1728,67 @@ const DocumentDetailPage = () => {
           onClose={() => setPreviewVersion(null)}
         />
       )}
+
+      {/* Save Confirmation Dialog */}
+      <AlertDialog open={showSaveConfirmation} onOpenChange={setShowSaveConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Save Document Changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to save these changes? This will update the document metadata.
+              {document && metadataDraft.status !== document.status && (
+                <div className="mt-2 p-2 bg-warning/10 border border-warning/20 rounded text-sm">
+                  <strong>Status Change:</strong> {document.status} → {metadataDraft.status}
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmMetadataSave}>
+              Save Changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Status Change Confirmation Dialog */}
+      <AlertDialog open={showStatusChangeConfirmation} onOpenChange={setShowStatusChangeConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Status Change</AlertDialogTitle>
+            <AlertDialogDescription>
+              {document && pendingStatusChange && (
+                <>
+                  You are about to change the document status from{' '}
+                  <strong>{document.status}</strong> to <strong>{pendingStatusChange}</strong>.
+                  {pendingStatusChange === 'published' && (
+                    <div className="mt-2 p-2 bg-primary/10 border border-primary/20 rounded text-sm">
+                      Publishing this document will make it visible to users with appropriate permissions.
+                    </div>
+                  )}
+                  {pendingStatusChange === 'archived' && (
+                    <div className="mt-2 p-2 bg-secondary/10 border border-secondary/20 rounded text-sm">
+                      Archiving this document will move it to archived status. It can still be accessed but won't appear in active document lists.
+                    </div>
+                  )}
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setPendingStatusChange(null);
+              setShowStatusChangeConfirmation(false);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmStatusChange}>
+              Confirm Change
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 };

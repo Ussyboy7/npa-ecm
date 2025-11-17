@@ -1,69 +1,114 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, FileStack, ShieldCheck, Workflow, BarChart3, Building2 } from "lucide-react";
+import { ArrowRight, FileStack, ShieldCheck, Workflow, BarChart3, Building2, Calendar, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
+import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
 
 const features = [
   {
-    title: "Unified Correspondence",
-    description:
-      "Digitize inbound/outbound memos with linked DMS files, distribution controls, and signature-ready audit trails.",
-    icon: FileStack,
-  },
-  {
-    title: "Predictable Workflows",
-    description:
-      "Configurable approval paths, escalations, and audit trails ensure accountability across directorates.",
-    icon: Workflow,
-  },
-  {
     title: "Office-Based Routing",
     description:
-      "Queues follow MD, ED, GM, and AGM offices—acting officers and successors inherit the same backlog automatically.",
+      "Queues follow MD, ED, GM, and AGM offices—not individuals. Acting officers and successors automatically inherit the same backlog, ensuring seamless handovers.",
     icon: Building2,
   },
   {
-    title: "Enterprise Security",
+    title: "Institutional Memory",
     description:
-      "Granular permissions, DRM policies, and tamper-evident signatures keep sensitive records protected.",
-    icon: ShieldCheck,
+      "Complete audit trails, soft-delete archives, and Records & Intelligence make every decision searchable and accessible to successors within minutes.",
+    icon: FileStack,
   },
   {
-    title: "Executive Insights",
+    title: "Completion Intelligence",
     description:
-      "Real-time dashboards surface bottlenecks, turnaround times, and performance metrics for leadership.",
+      "Completion packages, executive dashboards, and departmental files transform decisions into searchable institutional knowledge instantly.",
     icon: BarChart3,
+  },
+  {
+    title: "Real-Time Collaboration",
+    description:
+      "WebSocket notifications, live updates, and instant routing ensure MD, ED, GM, and AGM offices stay synchronized across all actions.",
+    icon: Workflow,
+  },
+  {
+    title: "Enterprise-Grade Security",
+    description:
+      "File validation, virus scanning, granular permissions, DRM policies, and tamper-evident signatures protect sensitive records at every level.",
+    icon: ShieldCheck,
   },
 ];
 
 const stats = [
-  { value: "40+", label: "Executive & departmental offices on ECM" },
-  { value: "200+", label: "Documents & correspondence linked to workflows" },
-  { value: "24/7", label: "Real-time routing, approvals, and archives" },
+  { value: "8", label: "Directorates unified on a single platform" },
+  { value: "23+", label: "Divisions with office-based routing enabled" },
+  { value: "100%", label: "Institutional memory preserved through audit trails" },
 ];
 
 const modules = [
   {
+    title: "Correspondence Management",
+    description:
+      "Register, route, and track all inbound and outbound memos with office-based inboxes, distribution controls, and complete audit trails for MD, ED, GM, and AGM offices.",
+  },
+  {
     title: "Document Management",
     description:
-      "Draft, upload, version, and classify official documents with instant linkage to correspondence and approvals.",
+      "Draft, upload, version, and classify official documents with instant linkage to correspondence, approvals, and hierarchical workspace organization.",
+  },
+  {
+    title: "Workflow & Approvals",
+    description:
+      "Configurable approval paths, minutes, forwarding, and office reassignment ensure accountability and seamless handovers across directorates.",
   },
   {
     title: "Digital Signatures",
     description:
-      "Apply secure signatures with organization templates, user preferences, and automatic verification trails.",
+      "Apply secure signatures with organization templates, user preferences, and automatic verification trails for all approval actions.",
   },
   {
     title: "Analytics & Reports",
     description:
-      "Heatmaps, turnaround trends, and sensitivity dashboards give MD, EDs, and GMs direct visibility into performance.",
+      "Real-time dashboards, turnaround trends, and performance metrics give MD, EDs, and GMs direct visibility into bottlenecks and efficiency.",
   },
   {
-    title: "Governance & Compliance",
+    title: "Audit & Compliance",
     description:
-      "Hierarchical archives, DRM enforcement, and structured templates keep every directorate aligned with policy.",
+      "Complete activity logs, tamper-evident records, and hierarchical archives ensure every action is traceable and compliant with policy.",
+  },
+];
+
+const deliveryPhases = [
+  {
+    phase: "Phase 1",
+    title: "Digitize & Secure",
+    date: "OCT 2025",
+    description:
+      "Centralized authentication, registry capture, and role-based access so the earliest adopters could register correspondence and search archives without paper files.",
+    status: "completed",
+  },
+  {
+    phase: "Phase 2",
+    title: "Office-Based Routing",
+    date: "OCT 2025",
+    description:
+      "Introduced office ownership, notifications, reassignment, and My/Office inboxes so MD, ED, GM, and AGM offices could hand over work without losing context.",
+    status: "completed",
+  },
+  {
+    phase: "Phase 3",
+    title: "Completion & Intelligence",
+    date: "NOV 2025",
+    description:
+      "Completion packages, Records & Intelligence, executive dashboards, and departmental files make every decision auditable and searchable within minutes.",
+    status: "completed",
+  },
+  {
+    phase: "Phase 4+",
+    title: "Collaboration & AI",
+    date: "DEC 2025",
+    description:
+      "Live co-authoring, OCR, AI summarization, and backend-integrated correspondence services extend the ECM into daily collaboration tools.",
+    status: "in-flight",
   },
 ];
 
@@ -97,8 +142,11 @@ export default function LandingPage() {
             </div>
           </Link>
           <div className="flex items-center gap-3">
-            <Link href="#modules" className="text-sm font-medium text-muted-foreground hover:text-foreground">
-              View Modules
+            <Link href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Features
+            </Link>
+            <Link href="#phases" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Phases
             </Link>
             <Button asChild variant="default" className="gap-2">
               <Link href="/login">
@@ -116,11 +164,10 @@ export default function LandingPage() {
           Digital Transformation
         </span>
         <h1 className="max-w-4xl text-balance text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-          Keep correspondence, documents, and office handovers in lockstep.
+          Streamline NPA correspondence, decisions, and records on a single modern platform.
         </h1>
         <p className="max-w-3xl text-balance text-base text-muted-foreground sm:text-lg">
-          NPA ECM routes every memo through the MD/ED/GM/AGM office structure, links DMS files to actions, and captures
-          the full audit trail so successors inherit the same queue on day one.
+          NPA ECM unifies routing, approvals, document management, and analytics to give every directorate, division and department clarity, accountability, and immediate access to institutional memory.
         </p>
         <div className="flex flex-col gap-4 sm:flex-row">
           <Button asChild size="lg" className="gap-2">
@@ -135,19 +182,13 @@ export default function LandingPage() {
         </div>
         <div className="relative w-full rounded-3xl border border-border/60 bg-background/80 p-1 shadow-lg backdrop-blur">
           <div className="rounded-[22px] bg-gradient-to-br from-white via-white to-slate-50 p-6 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950">
-            <div className="grid gap-6 md:grid-cols-3">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {stats.map((stat) => (
                 <div key={stat.label} className="rounded-2xl border border-border/60 bg-background/60 p-6 text-left shadow-sm">
                   <p className="text-3xl font-semibold text-primary">{stat.value}</p>
                   <p className="mt-2 text-sm text-muted-foreground">{stat.label}</p>
                 </div>
               ))}
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6 text-left shadow-sm">
-                <p className="text-3xl font-semibold text-emerald-600 dark:text-emerald-400">Phase 3+</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Collaboration, OCR, AI summarization, and backend services ready for implementation.
-                </p>
-              </div>
             </div>
           </div>
         </div>
@@ -158,12 +199,12 @@ export default function LandingPage() {
         <div className="mb-12 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Built for enterprise governance</h2>
           <p className="mt-4 text-base text-muted-foreground sm:text-lg">
-            Every capability is mapped to NPA&apos;s organizational structure, grade levels, and compliance needs.
+            Unique capabilities designed for NPA&apos;s office-based structure, ensuring seamless handovers, institutional memory, and real-time collaboration across all directorates.
           </p>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {features.map((feature) => (
-            <Card key={feature.title} className="border-border/60 bg-background/60 shadow-sm backdrop-blur">
+            <Card key={feature.title} className="border-border/60 bg-background/60 shadow-sm backdrop-blur transition hover:border-primary/40 hover:shadow-md">
               <CardContent className="flex flex-col gap-4 p-6">
                 <feature.icon className="h-9 w-9 text-primary" />
                 <div>
@@ -176,24 +217,62 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Modules */}
-      <section id="modules" className="mx-auto mt-24 w-full max-w-6xl px-6">
-        <div className="mb-12 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">ECM Modules</h2>
-            <p className="mt-4 max-w-2xl text-base text-muted-foreground sm:text-lg">
-              Modular architecture spans correspondence, digital signatures, archives, analytics, and collaboration,
-              ensuring every directorate can work in lockstep.
-            </p>
-          </div>
-          <Button asChild variant="ghost" className="gap-2">
-            <Link href="/dashboard">
-              View Dashboard Demo
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+      {/* Delivery Phases */}
+      <section id="phases" className="mx-auto mt-24 w-full max-w-6xl px-6">
+        <div className="mb-12 text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Delivery Phases</h2>
+          <p className="mt-4 max-w-3xl mx-auto text-base text-muted-foreground sm:text-lg">
+            From digitizing registry operations to completion intelligence, each phase builds on the last and prepares the platform for collaboration, OCR, AI, and backend service integrations.
+          </p>
         </div>
         <div className="grid gap-6 md:grid-cols-2">
+          {deliveryPhases.map((phase) => (
+            <Card
+              key={phase.phase}
+              className={`group border-border/60 bg-background/70 shadow-sm transition hover:border-primary/40 hover:shadow-lg ${
+                phase.status === "in-flight" ? "border-primary/30 bg-primary/5" : ""
+              }`}
+            >
+              <CardContent className="flex flex-col gap-4 p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-semibold text-primary">{phase.phase}</span>
+                      {phase.status === "completed" && (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      )}
+                      {phase.status === "in-flight" && (
+                        <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                          In Flight
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-xl font-semibold text-foreground group-hover:text-primary mb-2">
+                      {phase.title}
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Calendar className="h-4 w-4" />
+                    <span className="font-medium">{phase.date}</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">{phase.description}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Modules */}
+      <section id="modules" className="mx-auto mt-24 w-full max-w-6xl px-6">
+        <div className="mb-12 text-center">
+          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">ECM Modules</h2>
+          <p className="mt-4 max-w-3xl mx-auto text-base text-muted-foreground sm:text-lg">
+            Six integrated modules span correspondence management, document workflows, approvals, digital signatures, analytics, and compliance,
+            ensuring every directorate can work in lockstep.
+          </p>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {modules.map((module) => (
             <Card key={module.title} className="group border-border/60 bg-background/70 shadow-sm transition hover:border-primary/40 hover:shadow-lg">
               <CardContent className="flex flex-col gap-3 p-6">
@@ -225,7 +304,7 @@ export default function LandingPage() {
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="mailto:ecm-programme@nigerianports.gov.ng">Contact Programme Office</Link>
+              <Link href={`mailto:${NPA_ECM_CONTACT_EMAIL}`}>Contact Programme Office</Link>
             </Button>
           </div>
         </div>
@@ -235,14 +314,17 @@ export default function LandingPage() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-6 py-8 text-center text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:text-left">
           <p>© {new Date().getFullYear()} Nigerian Ports Authority. All rights reserved.</p>
           <div className="flex items-center justify-center gap-4 sm:justify-end">
-            <Link href="/admin/templates" className="hover:text-foreground">
-              Admin Templates
+            <Link href="#features" className="hover:text-foreground">
+              Features
             </Link>
-            <Link href="/analytics/executive" className="hover:text-foreground">
-              Executive Analytics
+            <Link href="#modules" className="hover:text-foreground">
+              Modules
             </Link>
-            <Link href="/correspondence/inbox" className="hover:text-foreground">
-              Correspondence Inbox
+            <Link href="#phases" className="hover:text-foreground">
+              Delivery Phases
+            </Link>
+            <Link href={`mailto:${NPA_ECM_CONTACT_EMAIL}`} className="hover:text-foreground">
+              Contact
             </Link>
           </div>
         </div>

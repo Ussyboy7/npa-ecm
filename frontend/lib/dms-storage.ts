@@ -2,6 +2,9 @@ import { logError, logInfo } from '@/lib/client-logger';
 import { apiFetch, hasTokens } from './api-client';
 import type { User } from './npa-structure';
 
+// Re-export apiFetch and hasTokens for use in components
+export { apiFetch, hasTokens };
+
 export type DocumentType = 'letter' | 'memo' | 'circular' | 'policy' | 'report' | 'other';
 export type DocumentStatus = 'draft' | 'published' | 'archived';
 export type DocumentSensitivity = 'public' | 'internal' | 'confidential' | 'restricted';

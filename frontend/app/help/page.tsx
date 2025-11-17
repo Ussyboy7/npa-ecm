@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users } from "lucide-react";
+import DOMPurify from "dompurify";
+import { Building2, CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users, RefreshCw, AlertCircle } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -11,6 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, hasTokens } from "@/lib/api-client";
+import { NPA_ECM_CONTACT_EMAIL, NPA_ECM_SUPPORT_EMAIL, NPA_ECM_FEEDBACK_EMAIL } from "@/lib/branding";
+import { logError } from "@/lib/client-logger";
+import { toast } from "sonner";
 
 const quickStartSteps = [
   {
@@ -122,38 +126,45 @@ type FaqEntry = {
   order?: number;
 };
 
-const faqItems = [
+const faqItems: FaqEntry[] = [
   {
+    id: "faq-nav-items",
     question: "How do I know which navigation items I should see?",
     answer:
       "Navigation adapts automatically to your grade level. MD/ED/GM see Executive Analytics and Administration. MSS2-MSS4 see Approvals. Officers and below see Correspondence, DMS, My Inbox, and My Documents relevant to their division/department.",
   },
   {
-    question: "What’s the difference between Correspondence Inbox, My Inbox, and My Documents?",
+    id: "faq-inbox-difference",
+    question: "What's the difference between Correspondence Inbox, My Inbox, and My Documents?",
     answer:
       "Correspondence Inbox shows items routed to your current persona with full minute threads and CC distribution. My Inbox filters direct tasks/actions awaiting you. My Documents surfaces DMS items you authored, are collaborating on, or have permissions to view.",
   },
   {
+    id: "faq-archives-hierarchy",
     question: "How do archives respect hierarchy?",
     answer:
       "When completing a correspondence you choose Departmental, Divisional, or Directorate archive. Access is automatically limited: department members, division heads, or directorate heads respectively.",
   },
   {
+    id: "faq-office-head-change",
     question: "What happens when an office head changes?",
     answer:
       "Correspondence is owned by the office, not the individual. When a GM/ED/MD seat changes hands (or someone acts in the role), the successor inherits the same office queue, minutes, and history automatically.",
   },
   {
+    id: "faq-signature-templates",
     question: "Where can I update signature templates or organization branding?",
     answer:
       "Go to Settings → Signature for personal signature uploads, template defaults, and auto-apply rules. Organization-wide templates and document branding live under Administration → Templates.",
   },
   {
+    id: "faq-link-dms",
     question: "Can I link DMS documents to correspondence?",
     answer:
       "Yes. Inside a correspondence detail view, use the Linked Documents panel to attach DMS records, auto-suggested by subject keywords or division/department alignment.",
   },
   {
+    id: "faq-support-contact",
     question: "Who can I contact for support or onboarding?",
     answer:
       "Reach out to the ECM Programme Office on the contact options below. They coordinate onboarding, permissions, and roadmap discussions.",
@@ -166,9 +177,9 @@ const supportResources = [
     description: "For access requests, onboarding, and workflow configuration support.",
     action: (
       <Button variant="outline" size="sm" asChild>
-        <Link href="mailto:ecm-programme@nigerianports.gov.ng">
+        <Link href={`mailto:${NPA_ECM_CONTACT_EMAIL}`}>
           <Mail className="mr-2 h-4 w-4" />
-          ecm-programme@nigerianports.gov.ng
+          {NPA_ECM_CONTACT_EMAIL}
         </Link>
       </Button>
     ),
@@ -178,9 +189,9 @@ const supportResources = [
     description: "Capture the persona, page, and error message. Screenshots help us reproduce quickly.",
     action: (
       <Button variant="outline" size="sm" asChild>
-        <Link href="mailto:ecm-support@nigerianports.gov.ng">
+        <Link href={`mailto:${NPA_ECM_SUPPORT_EMAIL}`}>
           <Mail className="mr-2 h-4 w-4" />
-          ecm-support@nigerianports.gov.ng
+          {NPA_ECM_SUPPORT_EMAIL}
         </Link>
       </Button>
     ),
@@ -190,22 +201,44 @@ const supportResources = [
     description: "We welcome feedback on workflows, analytics, DMS collaboration, and automation ideas.",
     action: (
       <Button variant="outline" size="sm" asChild>
-        <Link href="mailto:ecm-feedback@nigerianports.gov.ng">
+        <Link href={`mailto:${NPA_ECM_FEEDBACK_EMAIL}`}>
           <Mail className="mr-2 h-4 w-4" />
-          ecm-feedback@nigerianports.gov.ng
+          {NPA_ECM_FEEDBACK_EMAIL}
         </Link>
       </Button>
     ),
   },
 ];
 
+// Category display name mapping
+const getCategoryDisplayName = (category: string): string => {
+  const categoryMap: Record<string, string> = {
+    dms: "Document Management",
+    correspondence: "Correspondence",
+    workflow: "Workflow",
+    admin: "Administration",
+  };
+  return categoryMap[category] || category;
+};
+
+// Sanitize HTML content to prevent XSS
+const sanitizeContent = (content: string): string => {
+  if (typeof window === "undefined") return content;
+  return DOMPurify.sanitize(content, {
+    ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "h5", "h6"],
+    ALLOWED_ATTR: ["href", "target", "rel"],
+  });
+};
+
 export default function HelpAndGuidePage() {
   const router = useRouter();
   const [isNavigating, setIsNavigating] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loadingGuides, setLoadingGuides] = useState(true);
+  const [loadingFaqs, setLoadingFaqs] = useState(true);
   const [guides, setGuides] = useState<HelpGuide[]>([]);
   const [faqs, setFaqs] = useState<FaqEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [guidesError, setGuidesError] = useState<string | null>(null);
+  const [faqsError, setFaqsError] = useState<string | null>(null);
 
   useEffect(() => {
     router.prefetch("/dashboard");
@@ -217,58 +250,67 @@ export default function HelpAndGuidePage() {
     router.push("/dashboard");
   };
 
-  useEffect(() => {
-    let ignore = false;
+  const toArray = <T,>(payload: unknown): T[] => {
+    if (Array.isArray(payload)) return payload as T[];
+    if (payload && typeof payload === "object" && "results" in payload) {
+      const results = (payload as { results?: unknown }).results;
+      if (Array.isArray(results)) return results as T[];
+    }
+    return [];
+  };
 
-    const toArray = <T,>(payload: unknown): T[] => {
-      if (Array.isArray(payload)) return payload as T[];
-      if (payload && typeof payload === "object" && "results" in payload) {
-        const results = (payload as { results?: unknown }).results;
-        if (Array.isArray(results)) return results as T[];
-      }
-      return [];
-    };
+  const loadGuides = useCallback(async () => {
+    if (!hasTokens()) {
+      setGuides([]);
+      setLoadingGuides(false);
+      return;
+    }
 
-    const loadSupportContent = async () => {
-      if (!hasTokens()) {
-        setGuides([]);
-        setFaqs([]);
-        setLoading(false);
-        return;
-      }
+    setLoadingGuides(true);
+    setGuidesError(null);
 
-      setLoading(true);
-      setError(null);
-
-      try {
-        const [guidePayload, faqPayload] = await Promise.all([
-          apiFetch("/support/guides/?is_published=true&ordering=title"),
-          apiFetch("/support/faqs/?is_active=true&ordering=order"),
-        ]);
-
-        if (ignore) return;
-
-        setGuides(toArray<HelpGuide>(guidePayload));
-        setFaqs(toArray<FaqEntry>(faqPayload));
-      } catch (err) {
-        if (ignore) return;
-        const message = err instanceof Error ? err.message : "Unable to load help content.";
-        setError(message);
-        setGuides([]);
-        setFaqs([]);
-      } finally {
-        if (!ignore) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void loadSupportContent();
-
-    return () => {
-      ignore = true;
-    };
+    try {
+      const guidePayload = await apiFetch("/support/guides/?is_published=true&ordering=title");
+      setGuides(toArray<HelpGuide>(guidePayload));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load help guides.";
+      setGuidesError(message);
+      logError("Failed to load help guides", err);
+      toast.error("Failed to load help guides. Please try again.");
+      setGuides([]);
+    } finally {
+      setLoadingGuides(false);
+    }
   }, []);
+
+  const loadFaqs = useCallback(async () => {
+    if (!hasTokens()) {
+      setFaqs([]);
+      setLoadingFaqs(false);
+      return;
+    }
+
+    setLoadingFaqs(true);
+    setFaqsError(null);
+
+    try {
+      const faqPayload = await apiFetch("/support/faqs/?is_active=true&ordering=order");
+      setFaqs(toArray<FaqEntry>(faqPayload));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to load FAQs.";
+      setFaqsError(message);
+      logError("Failed to load FAQs", err);
+      toast.error("Failed to load FAQs. Please try again.");
+      setFaqs([]);
+    } finally {
+      setLoadingFaqs(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadGuides();
+    void loadFaqs();
+  }, [loadGuides, loadFaqs]);
 
   const faqsToRender = useMemo(() => (faqs.length > 0 ? faqs : faqItems), [faqs]);
 
@@ -358,7 +400,7 @@ export default function HelpAndGuidePage() {
               Step-by-step walkthroughs and reference material maintained by the ECM support team.
             </p>
           </div>
-          {loading ? (
+          {loadingGuides ? (
             <div className="grid gap-4 md:grid-cols-2">
               {Array.from({ length: 4 }).map((_, index) => (
                 <Card key={index} className="border-border/60 bg-background/60 shadow-sm">
@@ -376,16 +418,37 @@ export default function HelpAndGuidePage() {
             </div>
           ) : guides.length === 0 ? (
             <Card className="border-border/60 bg-background/60 shadow-sm">
-              <CardContent className="py-10 text-center text-sm text-muted-foreground">
-                {error ?? "No help guides have been published yet."}
+              <CardContent className="py-10 text-center space-y-4">
+                {guidesError ? (
+                  <>
+                    <AlertCircle className="h-8 w-8 mx-auto text-destructive" aria-hidden="true" />
+                    <p className="text-sm text-muted-foreground">{guidesError}</p>
+                    <Button variant="outline" size="sm" onClick={loadGuides} aria-label="Retry loading help guides">
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Retry
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <HelpCircle className="h-8 w-8 mx-auto text-muted-foreground opacity-50" aria-hidden="true" />
+                    <p className="text-sm text-muted-foreground">No help guides have been published yet.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Check back later or{" "}
+                      <Link href={`mailto:${NPA_ECM_CONTACT_EMAIL}?subject=Help Guide Request`} className="text-primary hover:underline">
+                        contact the programme office
+                      </Link>{" "}
+                      to request specific guides.
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-6">
               {categorizedGuides.map(({ category, entries }) => (
                 <div key={category} className="space-y-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    {category.replace(/-/g, " ")}
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground" aria-label={`Category: ${getCategoryDisplayName(category)}`}>
+                    {getCategoryDisplayName(category)}
                   </h3>
                   <div className="grid gap-4 md:grid-cols-2">
                     {entries.map((guide) => (
@@ -397,11 +460,11 @@ export default function HelpAndGuidePage() {
                           )}
                         </CardHeader>
                         <CardContent className="space-y-3 text-sm text-muted-foreground">
-                          <div dangerouslySetInnerHTML={{ __html: guide.content }} />
+                          <div dangerouslySetInnerHTML={{ __html: sanitizeContent(guide.content) }} />
                           {guide.tags && guide.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-2 pt-2">
+                            <div className="flex flex-wrap gap-2 pt-2" role="list" aria-label="Tags">
                               {guide.tags.map((tag) => (
-                                <Badge key={tag} variant="secondary" className="text-xs">
+                                <Badge key={tag} variant="secondary" className="text-xs" role="listitem">
                                   {tag}
                                 </Badge>
                               ))}
@@ -424,16 +487,45 @@ export default function HelpAndGuidePage() {
               Quick answers to common workflows, permissions, and navigation questions.
             </p>
           </div>
-          <Accordion type="single" collapsible className="w-full">
-            {faqsToRender.map((item) => (
-              <AccordionItem value={item.question} key={item.question}>
-                <AccordionTrigger className="text-left">{item.question}</AccordionTrigger>
-                <AccordionContent className="text-sm text-muted-foreground">
-                  {item.answer}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
+          {loadingFaqs ? (
+            <Card className="border-border/60 bg-background/60 shadow-sm">
+              <CardContent className="py-10 space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="space-y-2">
+                    <Skeleton className="h-5 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : faqsError ? (
+            <Card className="border-border/60 bg-background/60 shadow-sm">
+              <CardContent className="py-10 text-center space-y-4">
+                <AlertCircle className="h-8 w-8 mx-auto text-destructive" aria-hidden="true" />
+                <p className="text-sm text-muted-foreground">{faqsError}</p>
+                <Button variant="outline" size="sm" onClick={loadFaqs} aria-label="Retry loading FAQs">
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Accordion type="single" collapsible className="w-full" aria-label="Frequently Asked Questions">
+              {faqsToRender.map((item) => {
+                const itemKey = item.id;
+                return (
+                  <AccordionItem value={itemKey} key={itemKey}>
+                    <AccordionTrigger className="text-left" aria-label={`Question: ${item.question}`}>
+                      {item.question}
+                    </AccordionTrigger>
+                    <AccordionContent className="text-sm text-muted-foreground">
+                      {item.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          )}
         </section>
 
         <section className="space-y-4">

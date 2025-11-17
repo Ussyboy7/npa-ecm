@@ -118,6 +118,8 @@ export type Correspondence = {
   completedAt?: string;
   senderName: string;
   senderOrganization: string;
+  senderEmail?: string;
+  senderPhone?: string;
   status: 'pending' | 'in-progress' | 'completed' | 'archived';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   divisionId?: string;

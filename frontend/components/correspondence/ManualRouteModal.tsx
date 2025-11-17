@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { generateId, getNextStepNumber } from '@/lib/correspondence-helpers';
+import { apiFetch } from '@/lib/api-client';
+import { Loader2 } from 'lucide-react';
 import type { Minute, Correspondence } from '@/lib/npa-structure';
 import {
   Select,
@@ -51,11 +53,14 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
   const actingUser = useMemo(() => currentUser ?? activeUsers[0] ?? null, [currentUser, activeUsers]);
 
   const [routingNotes, setRoutingNotes] = useState('');
+  const [routingNotesError, setRoutingNotesError] = useState('');
   const [selectedUser, setSelectedUser] = useState('');
+  const [selectedUserError, setSelectedUserError] = useState('');
   const [selectedDivision, setSelectedDivision] = useState<string>('all');
   const [characterCount, setCharacterCount] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const divisionOptions = useMemo(() => {
     const ids = new Set(activeUsers.map((user) => user.division).filter(Boolean));
@@ -87,27 +92,48 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
     });
   }, [activeUsers, actingUser?.id, searchQuery, selectedDivision]);
 
+  const MAX_ROUTING_NOTES_LENGTH = 500;
+
   const handleTextChange = (text: string) => {
-    setRoutingNotes(text);
-    setCharacterCount(text.length);
+    if (text.length <= MAX_ROUTING_NOTES_LENGTH) {
+      setRoutingNotes(text);
+      setCharacterCount(text.length);
+      if (routingNotesError) setRoutingNotesError('');
+    }
   };
 
-  const handleSubmit = () => {
+  const validateForm = (): boolean => {
+    setRoutingNotesError('');
+    setSelectedUserError('');
+
     if (!actingUser) {
       toast.error('Active user not found. Please refresh and try again.');
-      return;
+      return false;
     }
 
-    if (!routingNotes.trim()) {
-      toast.error('Please enter routing notes/instructions');
-      return;
+    const trimmedNotes = routingNotes.trim();
+    if (!trimmedNotes) {
+      setRoutingNotesError('Please enter routing notes/instructions');
+      return false;
+    }
+
+    if (trimmedNotes.length < 10) {
+      setRoutingNotesError('Routing notes must be at least 10 characters long');
+      return false;
     }
 
     if (!selectedUser) {
-      toast.error('Please select a recipient');
-      return;
+      setSelectedUserError('Please select a recipient');
+      return false;
     }
 
+    return true;
+  };
+
+  const handleSubmit = () => {
+    if (!validateForm()) {
+      return;
+    }
     setShowConfirmation(true);
   };
 
@@ -118,30 +144,34 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
       return;
     }
 
+    setIsSubmitting(true);
     const recipient = getUserById(selectedUser);
-    const existingMinutes = getMinutesByCorrespondenceId(correspondence.id);
-    const nextStep = getNextStepNumber(existingMinutes);
-
-    const newMinute: Minute = {
-      id: generateId('min'),
-      correspondenceId: correspondence.id,
-      userId: actingUser.id,
-      gradeLevel: actingUser.gradeLevel,
-      actionType: 'forward',
-      minuteText: `[MANUAL ROUTE] ${routingNotes}`,
-      direction: 'downward',
-      stepNumber: nextStep,
-      timestamp: new Date().toISOString(),
-      actedBySecretary: false,
-      actedByAssistant: false,
-    };
-
+    
     try {
-      await addMinute(newMinute);
+      // Create minute via API
+      const existingMinutes = getMinutesByCorrespondenceId(correspondence.id);
+      const nextStep = getNextStepNumber(existingMinutes);
 
-      await updateCorrespondence(correspondence.id, {
-        currentApproverId: selectedUser,
-        status: 'in-progress',
+      await apiFetch('/correspondence/minutes/', {
+        method: 'POST',
+        body: JSON.stringify({
+          correspondence: correspondence.id,
+          user_id: actingUser.id,
+          grade_level: actingUser.gradeLevel,
+          action_type: 'forward',
+          minute_text: `[MANUAL ROUTE] ${routingNotes.trim()}`,
+          direction: 'downward',
+          step_number: nextStep,
+        }),
+      });
+
+      // Update correspondence via API
+      await apiFetch(`/correspondence/items/${correspondence.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          current_approver: selectedUser,
+          status: 'in-progress',
+        }),
       });
 
       await syncFromApi();
@@ -156,18 +186,24 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
           setSelectedUser('');
           setSelectedDivision('all');
           setSearchQuery('');
+          setRoutingNotesError('');
+          setSelectedUserError('');
         }, 100);
       }, 200);
 
       toast.success('Correspondence routed successfully', {
         description: `Manually routed to ${recipient?.name ?? 'selected user'}`,
       });
-    } catch (error) {
+    } catch (error: any) {
       logError('Failed to route correspondence', error);
-      toast.error('Unable to route correspondence', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
+      const errorMessage = error?.response?.data?.detail || 
+                          error?.response?.data?.minute_text?.[0] ||
+                          error?.message || 
+                          'Unable to route correspondence. Please try again.';
+      toast.error(errorMessage);
       setShowConfirmation(false);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -238,17 +274,34 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
           </Card>
 
           <div className="space-y-2">
-            <Label htmlFor="notes">Routing Instructions *</Label>
+            <Label htmlFor="notes">
+              Routing Instructions * <span className="text-muted-foreground text-xs font-normal">(10-500 characters)</span>
+            </Label>
             <Textarea
               id="notes"
               placeholder="Enter reason for manual routing and specific instructions..."
               value={routingNotes}
               onChange={(e) => handleTextChange(e.target.value)}
-              className="min-h-[120px] resize-none"
+              className={`min-h-[120px] resize-none ${routingNotesError ? 'border-destructive' : ''}`}
+              aria-label="Routing instructions"
+              aria-required="true"
+              aria-invalid={!!routingNotesError}
+              aria-describedby={routingNotesError ? "notes-error" : "notes-help"}
             />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Be specific about why you&apos;re bypassing normal workflow</span>
-              <span>{characterCount} characters</span>
+            <div className="flex justify-between items-center">
+              <div>
+                {routingNotesError && (
+                  <p id="notes-error" className="text-xs text-destructive" role="alert">
+                    {routingNotesError}
+                  </p>
+                )}
+                <p id="notes-help" className="text-xs text-muted-foreground">
+                  Be specific about why you&apos;re bypassing normal workflow
+                </p>
+              </div>
+              <div className={`text-xs ${characterCount > MAX_ROUTING_NOTES_LENGTH ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {characterCount}/{MAX_ROUTING_NOTES_LENGTH} characters
+              </div>
             </div>
           </div>
 
@@ -283,7 +336,13 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
               <UserIcon className="h-4 w-4" />
               Route To *
             </Label>
-            <Select value={selectedUser} onValueChange={setSelectedUser}>
+            <Select 
+              value={selectedUser} 
+              onValueChange={(value) => {
+                setSelectedUser(value);
+                if (selectedUserError) setSelectedUserError('');
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select any user in the organization" />
               </SelectTrigger>
@@ -330,6 +389,11 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
                 )}
               </SelectContent>
             </Select>
+            {selectedUserError && (
+              <p className="text-xs text-destructive" role="alert">
+                {selectedUserError}
+              </p>
+            )}
           </div>
 
           {selectedRecipient && (
@@ -383,16 +447,27 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
           </Button>
           <Button
             onClick={handleSubmit}
+            disabled={isSubmitting}
             className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
+            aria-label="Route correspondence manually"
           >
-            <Send className="h-4 w-4" />
-            Route Now
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Routing...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                Route Now
+              </>
+            )}
           </Button>
         </div>
 
         <ConfirmationDialog
           isOpen={showConfirmation}
-          onClose={() => setShowConfirmation(false)}
+          onClose={() => !isSubmitting && setShowConfirmation(false)}
           onConfirm={handleConfirm}
           type="minute"
           data={{
@@ -402,6 +477,7 @@ export const ManualRouteModal = ({ correspondence, isOpen, onClose }: ManualRout
             content: routingNotes,
             direction: 'downward',
           }}
+          disabled={isSubmitting}
         />
       </DialogContent>
     </Dialog>

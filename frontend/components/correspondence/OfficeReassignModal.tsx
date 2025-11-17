@@ -8,7 +8,17 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
-import { Building2, Users, User as UserIcon, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Building2, Users, User as UserIcon, AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api-client';
 import { logError } from '@/lib/client-logger';
@@ -32,8 +42,10 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
   );
   const [selectedUserId, setSelectedUserId] = useState<string>(correspondence.currentApproverId ?? '');
   const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState('');
   const [userSearch, setUserSearch] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -112,17 +124,41 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
     </SelectItem>
   );
 
-  const handleSubmit = async () => {
+  const validateForm = (): boolean => {
+    setReasonError('');
+    
     if (!hasChanges) {
       toast.error('Please adjust at least one field before saving.');
-      return;
+      return false;
     }
 
-    if (!reason.trim()) {
-      toast.error('Please provide a reason for this reassignment.');
-      return;
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) {
+      setReasonError('Please provide a reason for this reassignment.');
+      return false;
     }
 
+    if (trimmedReason.length < 10) {
+      setReasonError('Reason must be at least 10 characters long.');
+      return false;
+    }
+
+    if (trimmedReason.length > 500) {
+      setReasonError('Reason must be less than 500 characters.');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleSubmit = () => {
+    if (!validateForm()) {
+      return;
+    }
+    setShowConfirmation(true);
+  };
+
+  const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
       await apiFetch(`/correspondence/items/${correspondence.id}/reassign/`, {
@@ -138,12 +174,16 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
       toast.success('Correspondence reassigned successfully.');
       await refreshData();
       await syncFromApi();
+      setShowConfirmation(false);
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       logError('Failed to reassign correspondence', error);
-      toast.error('Unable to reassign correspondence', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
+      const errorMessage = error?.response?.data?.reason?.[0] || 
+                          error?.response?.data?.detail || 
+                          error?.message || 
+                          'Unable to reassign correspondence. Please try again.';
+      toast.error(errorMessage);
+      setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -258,15 +298,38 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="reason">Reason *</Label>
+            <Label htmlFor="reason">
+              Reason * <span className="text-muted-foreground text-xs font-normal">(10-500 characters)</span>
+            </Label>
             <Textarea
               id="reason"
               value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                setReason(event.target.value);
+                if (reasonError) setReasonError('');
+              }}
               placeholder="Explain why this correspondence needs to be reassigned…"
-              className="min-h-[120px]"
+              className={`min-h-[120px] ${reasonError ? 'border-destructive' : ''}`}
+              aria-label="Reason for reassignment"
+              aria-required="true"
+              aria-invalid={!!reasonError}
+              aria-describedby={reasonError ? "reason-error" : "reason-help"}
             />
-            <div className="text-xs text-muted-foreground text-right">{reason.length} characters</div>
+            <div className="flex justify-between items-center">
+              <div>
+                {reasonError && (
+                  <p id="reason-error" className="text-xs text-destructive" role="alert">
+                    {reasonError}
+                  </p>
+                )}
+                <p id="reason-help" className="text-xs text-muted-foreground">
+                  Provide a clear explanation for this administrative action
+                </p>
+              </div>
+              <div className={`text-xs ${reason.length > 500 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {reason.length}/500 characters
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -351,18 +414,67 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
         </div>
 
         <div className="flex justify-end gap-3 mt-6">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting} aria-label="Cancel reassignment">
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={!hasChanges || isSubmitting}
             className="bg-gradient-primary hover:opacity-90 transition-opacity"
+            aria-label="Confirm reassignment"
           >
-            {isSubmitting ? 'Saving...' : 'Save Changes'}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
           </Button>
         </div>
       </DialogContent>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Reassignment</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reassign this correspondence? This is an administrative action that will:
+              <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+                {owningChanged && (
+                  <li>Change owning office to <strong>{selectedOwningOffice?.name ?? 'selected office'}</strong></li>
+                )}
+                {currentChanged && (
+                  <li>Move to office queue: <strong>{selectedOffice?.name ?? 'selected office'}</strong></li>
+                )}
+                {approverChanged && (
+                  <li>Assign point of contact: <strong>{selectedUser?.name ?? 'selected user'}</strong></li>
+                )}
+              </ul>
+              This action will be logged in the audit trail.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirm}
+              disabled={isSubmitting}
+              className="bg-gradient-primary hover:opacity-90"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Reassigning...
+                </>
+              ) : (
+                'Confirm Reassignment'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };

@@ -49,13 +49,26 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class CurrentUserView(APIView):
-    """Return the authenticated user's profile."""
+    """Return and update the authenticated user's profile."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
+    def patch(self, request):
+        """Update the authenticated user's profile."""
+        serializer = UserSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            # Only allow users to update certain fields themselves
+            allowed_fields = ['first_name', 'last_name', 'email']
+            update_data = {k: v for k, v in serializer.validated_data.items() if k in allowed_fields}
+            for field, value in update_data.items():
+                setattr(request.user, field, value)
+            request.user.save(update_fields=allowed_fields)
+            return Response(UserSerializer(request.user).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -159,3 +172,45 @@ class AuthImpersonateView(APIView):
             "expires_in": expires_in,
         }
         return Response(data, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    """Allow authenticated users to change their password."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """Change the user's password."""
+        current_password = request.data.get('current_password')
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not all([current_password, new_password, confirm_password]):
+            raise ValidationError({
+                "detail": "current_password, new_password, and confirm_password are required"
+            })
+
+        if new_password != confirm_password:
+            raise ValidationError({"confirm_password": "New passwords do not match"})
+
+        if len(new_password) < 8:
+            raise ValidationError({"new_password": "Password must be at least 8 characters long"})
+
+        user = request.user
+        if not user.check_password(current_password):
+            raise ValidationError({"current_password": "Current password is incorrect"})
+
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+
+        # Create audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            target_user=user,
+            request=request,
+            description="User changed their password",
+        )
+
+        return Response({"detail": "Password changed successfully"}, status=status.HTTP_200_OK)

@@ -8,7 +8,7 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 
-from .views import AuthImpersonateView, AuthTokenObtainPairView, CurrentUserView, UserViewSet
+from .views import AuthImpersonateView, AuthTokenObtainPairView, ChangePasswordView, CurrentUserView, UserViewSet
 
 
 router = DefaultRouter()
@@ -22,6 +22,7 @@ urlpatterns = [
     path("auth/token/blacklist/", TokenBlacklistView.as_view(), name="token_blacklist"),
     path("auth/impersonate/", AuthImpersonateView.as_view(), name="token_impersonate"),
     path("auth/me/", CurrentUserView.as_view(), name="current_user"),
+    path("auth/change-password/", ChangePasswordView.as_view(), name="change_password"),
 ]
 
 urlpatterns += router.urls

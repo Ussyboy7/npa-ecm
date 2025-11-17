@@ -77,11 +77,41 @@ export function generateDocumentHTML(content: DocumentContent): string {
           <title>${attachmentFileName || 'Document'}</title>
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
-            html, body { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #f5f5f5; font-family: system-ui, -apple-system, sans-serif; }
+            html, body { 
+              width: 100%; 
+              height: 100%; 
+              display: flex; 
+              align-items: center; 
+              justify-content: center; 
+              background: hsl(0 0% 96%); 
+              color: hsl(218 25% 15%);
+              font-family: system-ui, -apple-system, sans-serif; 
+            }
+            @media (prefers-color-scheme: dark) {
+              html, body { 
+                background: hsl(218 30% 8%); 
+                color: hsl(218 15% 90%);
+              }
+            }
             .container { text-align: center; padding: 40px; }
-            h2 { margin-bottom: 20px; color: #1f2937; }
-            a { display: inline-block; padding: 12px 24px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; }
-            a:hover { background: #2563eb; }
+            h2 { margin-bottom: 20px; color: inherit; }
+            a { 
+              display: inline-block; 
+              padding: 12px 24px; 
+              background: hsl(218 65% 25%); 
+              color: hsl(0 0% 100%); 
+              text-decoration: none; 
+              border-radius: 6px; 
+            }
+            a:hover { background: hsl(218 65% 35%); }
+            @media (prefers-color-scheme: dark) {
+              a { 
+                background: hsl(218 65% 55%); 
+              }
+              a:hover { 
+                background: hsl(218 65% 65%); 
+              }
+            }
           </style>
         </head>
         <body>
@@ -121,25 +151,27 @@ export function generateDocumentHTML(content: DocumentContent): string {
   const minutesHTML = minutes.map((minute, idx) => {
     const user = getUserById(minute.userId);
     const isDownward = minute.direction === 'downward';
+    const borderColor = isDownward ? 'hsl(210 85% 55%)' : 'hsl(145 65% 45%)';
+    const badgeBg = isDownward ? 'hsl(210 85% 55% / 0.2)' : 'hsl(145 65% 45% / 0.2)';
     
     return `
-      <div style="margin-bottom: 20px; padding: 15px; border-left: 4px solid ${isDownward ? '#3b82f6' : '#10b981'}; background: #f9fafb;">
+      <div class="minute-item" style="border-left: 4px solid ${borderColor};">
         <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
           <div>
             <strong>${user?.name || 'Unknown'}</strong>
-            <div style="font-size: 12px; color: #6b7280;">
+            <div class="minute-meta">
               ${user?.systemRole || ''} • ${minute.gradeLevel}
             </div>
           </div>
-          <div style="font-size: 12px; color: #6b7280;">
+          <div class="minute-meta">
             ${new Date(minute.timestamp).toLocaleString()}
           </div>
         </div>
         <div style="margin-bottom: 8px;">
-          <span style="background: ${isDownward ? '#dbeafe' : '#d1fae5'}; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-right: 8px;">
+          <span class="minute-badge" style="background: ${badgeBg};">
             ${isDownward ? '↓ Downward' : '↑ Upward'}
           </span>
-          <span style="background: #e5e7eb; padding: 2px 8px; border-radius: 4px; font-size: 11px;">
+          <span class="minute-badge minute-badge-neutral">
             ${minute.actionType}
           </span>
         </div>
@@ -149,9 +181,9 @@ export function generateDocumentHTML(content: DocumentContent): string {
   }).join('');
 
   const documentBody = `
-    <div class="content" style="margin: 0; padding: 60px 40px; text-align: center;">
-      <p style="font-size: 18px; color: #6b7280; margin-bottom: 10px;">No document preview available</p>
-      <p style="font-size: 14px; color: #9ca3af;">
+    <div class="content" style="margin: 0; padding: 60px 40px; text-align: center; color: hsl(218 15% 45%);">
+      <p style="font-size: 18px; margin-bottom: 10px; color: inherit;">No document preview available</p>
+      <p style="font-size: 14px; color: hsl(218 15% 55%);">
         No document has been uploaded or linked to this correspondence.
       </p>
     </div>
@@ -174,17 +206,30 @@ export function generateDocumentHTML(content: DocumentContent): string {
           margin: 0 auto;
           padding: 40px;
           line-height: 1.6;
-          color: #1f2937;
+          background: hsl(0 0% 100%);
+          color: hsl(218 25% 15%);
+        }
+        @media (prefers-color-scheme: dark) {
+          body {
+            background: hsl(218 30% 8%);
+            color: hsl(218 15% 90%);
+          }
         }
         .header {
-          border-bottom: 2px solid #1f2937;
+          border-bottom: 2px solid hsl(218 25% 15%);
           padding-bottom: 20px;
           margin-bottom: 30px;
+        }
+        @media (prefers-color-scheme: dark) {
+          .header {
+            border-bottom-color: hsl(218 15% 90%);
+          }
         }
         .header h1 {
           margin: 0 0 10px 0;
           font-size: 24px;
           font-weight: bold;
+          color: inherit;
         }
         .meta {
           display: grid;
@@ -199,38 +244,90 @@ export function generateDocumentHTML(content: DocumentContent): string {
         }
         .meta-label {
           font-weight: bold;
-          color: #6b7280;
+          color: hsl(218 15% 45%);
           font-size: 12px;
           margin-bottom: 4px;
+        }
+        @media (prefers-color-scheme: dark) {
+          .meta-label {
+            color: hsl(218 15% 65%);
+          }
         }
         .content {
           margin: 30px 0;
           line-height: 1.8;
+          color: inherit;
         }
         .minutes-section {
           margin-top: 40px;
-          border-top: 2px solid #e5e7eb;
+          border-top: 2px solid hsl(218 20% 88%);
           padding-top: 30px;
+        }
+        @media (prefers-color-scheme: dark) {
+          .minutes-section {
+            border-top-color: hsl(218 30% 20%);
+          }
         }
         .minutes-section h2 {
           font-size: 18px;
           margin-bottom: 20px;
-          color: #1f2937;
+          color: inherit;
         }
         .footer {
           margin-top: 50px;
           padding-top: 20px;
-          border-top: 1px solid #e5e7eb;
+          border-top: 1px solid hsl(218 20% 88%);
           font-size: 12px;
-          color: #6b7280;
+          color: hsl(218 15% 45%);
           text-align: center;
+        }
+        @media (prefers-color-scheme: dark) {
+          .footer {
+            border-top-color: hsl(218 30% 20%);
+            color: hsl(218 15% 65%);
+          }
+        }
+        .minute-item {
+          margin-bottom: 20px;
+          padding: 15px;
+          background: hsl(218 15% 95%);
+          color: hsl(218 25% 15%);
+        }
+        @media (prefers-color-scheme: dark) {
+          .minute-item {
+            background: hsl(218 30% 18%);
+            color: hsl(218 15% 90%);
+          }
+        }
+        .minute-meta {
+          font-size: 12px;
+          color: hsl(218 15% 45%);
+        }
+        @media (prefers-color-scheme: dark) {
+          .minute-meta {
+            color: hsl(218 15% 65%);
+          }
+        }
+        .minute-badge {
+          padding: 2px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          margin-right: 8px;
+        }
+        .minute-badge-neutral {
+          background: hsl(218 20% 88%);
+        }
+        @media (prefers-color-scheme: dark) {
+          .minute-badge-neutral {
+            background: hsl(218 30% 20%);
+          }
         }
       </style>
     </head>
     <body>
       <div class="header">
         <h1>NIGERIAN PORTS AUTHORITY</h1>
-        <div style="font-size: 14px; color: #6b7280;">
+        <div style="font-size: 14px; color: hsl(218 15% 45%);">
           ${division?.name || 'Corporate Services'}
         </div>
       </div>

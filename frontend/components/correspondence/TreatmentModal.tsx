@@ -29,7 +29,9 @@ import {
   Building2,
   AlertCircle,
   Search,
+  Loader2,
 } from 'lucide-react';
+import { apiFetch } from '@/lib/api-client';
 import { GRADE_LEVELS } from '@/lib/npa-structure';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -46,14 +48,18 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
   const { users, divisions, departments } = useOrganization();
   const [currentUser, setCurrentUser] = useState(activeUser ?? null);
   const [memoSubject, setMemoSubject] = useState(`Re: ${correspondence.subject}`);
+  const [memoSubjectError, setMemoSubjectError] = useState('');
   const [memoContent, setMemoContent] = useState('');
+  const [memoContentError, setMemoContentError] = useState('');
   const [forwardTo, setForwardTo] = useState('');
+  const [forwardToError, setForwardToError] = useState('');
   const [onBehalfOf, setOnBehalfOf] = useState('');
   const [characterCount, setCharacterCount] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (activeUser) {
@@ -183,22 +189,46 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       return;
     }
 
-    if (!memoSubject.trim()) {
-      toast.error('Please enter memo subject');
-      return;
-    }
-
-    if (!memoContent.trim()) {
-      toast.error('Please enter memo content');
-      return;
-    }
-
-    if (!forwardTo) {
-      toast.error('Please select recipient');
+    if (!validateForm()) {
       return;
     }
 
     setShowConfirmation(true);
+  };
+
+  const validateForm = (): boolean => {
+    setMemoSubjectError('');
+    setMemoContentError('');
+    setForwardToError('');
+
+    const trimmedSubject = memoSubject.trim();
+    if (!trimmedSubject) {
+      setMemoSubjectError('Memo subject is required');
+      return false;
+    }
+
+    if (trimmedSubject.length < 5) {
+      setMemoSubjectError('Subject must be at least 5 characters long');
+      return false;
+    }
+
+    const trimmedContent = memoContent.trim();
+    if (!trimmedContent) {
+      setMemoContentError('Memo content is required');
+      return false;
+    }
+
+    if (trimmedContent.length < 10) {
+      setMemoContentError('Content must be at least 10 characters long');
+      return false;
+    }
+
+    if (!forwardTo) {
+      setForwardToError('Please select a recipient');
+      return false;
+    }
+
+    return true;
   };
 
   const handleConfirm = async () => {
@@ -208,53 +238,57 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       return;
     }
 
+    setIsSubmitting(true);
     const recipient = findUserById(forwardTo);
     const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) : null;
     const division = currentUser.division ? divisions.find((div) => div.id === currentUser.division) : undefined;
 
-    const existingMinutes = getMinutesByCorrespondenceId(correspondence.id);
-    const nextStep = getNextStepNumber(existingMinutes);
-
-    const treatmentMinute: Minute = {
-      id: generateId('min'),
-      correspondenceId: correspondence.id,
-      userId: currentUser.id,
-      gradeLevel: currentUser.gradeLevel,
-      actionType: 'treat',
-      minuteText: `[TREATMENT & RESPONSE]\n\nSubject: ${memoSubject}\n\n${memoContent}`,
-      direction: 'upward',
-      stepNumber: nextStep,
-      timestamp: new Date().toISOString(),
-      actedBySecretary: false,
-      actedByAssistant: false,
-    };
-
-    const newCorrespondence: Correspondence = {
-      id: generateId('corr'),
-      referenceNumber: generateReferenceNumber(division?.code || 'NPA'),
-      subject: memoSubject,
-      source: 'internal',
-      receivedDate: new Date().toISOString(),
-      senderName: actingFor ? `${currentUser.name} (on behalf of ${actingFor.name})` : currentUser.name,
-      senderOrganization: division?.name ?? '',
-      status: 'pending',
-      priority: correspondence.priority,
-      divisionId: recipient?.division ?? correspondence.divisionId,
-      departmentId: recipient?.department ?? correspondence.departmentId,
-      currentApproverId: forwardTo,
-      direction: 'upward',
-    };
-
     try {
-      await addMinute(treatmentMinute);
+      // Create treatment minute via API
+      const existingMinutes = getMinutesByCorrespondenceId(correspondence.id);
+      const nextStep = getNextStepNumber(existingMinutes);
 
-      await updateCorrespondence(correspondence.id, {
-        direction: 'upward',
-        currentApproverId: forwardTo,
-        status: 'in-progress',
+      await apiFetch('/correspondence/minutes/', {
+        method: 'POST',
+        body: JSON.stringify({
+          correspondence: correspondence.id,
+          user_id: currentUser.id,
+          grade_level: currentUser.gradeLevel,
+          action_type: 'treat',
+          minute_text: `[TREATMENT & RESPONSE]\n\nSubject: ${memoSubject.trim()}\n\n${memoContent.trim()}`,
+          direction: 'upward',
+          step_number: nextStep,
+        }),
       });
 
-      await addCorrespondence(newCorrespondence);
+      // Update correspondence direction and status via API
+      await apiFetch(`/correspondence/items/${correspondence.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          direction: 'upward',
+          current_approver: forwardTo,
+          status: 'in-progress',
+        }),
+      });
+
+      // Create new correspondence (response memo) via API
+      await apiFetch('/correspondence/items/', {
+        method: 'POST',
+        body: JSON.stringify({
+          reference_number: generateReferenceNumber(division?.code || 'NPA'),
+          subject: memoSubject.trim(),
+          source: 'internal',
+          received_date: new Date().toISOString(),
+          sender_name: actingFor ? `${currentUser.name} (on behalf of ${actingFor.name})` : currentUser.name,
+          sender_organization: division?.name ?? '',
+          status: 'pending',
+          priority: correspondence.priority,
+          division: recipient?.division ?? correspondence.divisionId,
+          department: recipient?.department ?? correspondence.departmentId,
+          current_approver: forwardTo,
+          direction: 'upward',
+        }),
+      });
 
       await syncFromApi();
 
@@ -275,6 +309,9 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           setHasDraft(false);
           setDraftId(null);
           setSearchQuery('');
+          setMemoSubjectError('');
+          setMemoContentError('');
+          setForwardToError('');
         }, 100);
       }, 200);
 
@@ -283,12 +320,17 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
           : `Sent to ${recipient?.name ?? 'selected user'}`,
       });
-    } catch (error) {
+    } catch (error: any) {
       logError('Failed to process treatment', error);
-      toast.error('Unable to send response', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
+      const errorMessage = error?.response?.data?.detail || 
+                          error?.response?.data?.minute_text?.[0] ||
+                          error?.response?.data?.subject?.[0] ||
+                          error?.message || 
+                          'Unable to send response. Please try again.';
+      toast.error(errorMessage);
       setShowConfirmation(false);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -411,34 +453,75 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="subject">Memo Subject *</Label>
+            <Label htmlFor="subject">
+              Memo Subject * <span className="text-muted-foreground text-xs font-normal">(5+ characters)</span>
+            </Label>
             <Input
               id="subject"
               value={memoSubject}
-              onChange={(e) => setMemoSubject(e.target.value)}
+              onChange={(e) => {
+                setMemoSubject(e.target.value);
+                if (memoSubjectError) setMemoSubjectError('');
+              }}
               placeholder="Re: Subject of response"
-              className="font-medium"
+              className={`font-medium ${memoSubjectError ? 'border-destructive' : ''}`}
+              aria-label="Memo subject"
+              aria-required="true"
+              aria-invalid={!!memoSubjectError}
+              aria-describedby={memoSubjectError ? "subject-error" : "subject-help"}
             />
+            {memoSubjectError && (
+              <p id="subject-error" className="text-xs text-destructive" role="alert">
+                {memoSubjectError}
+              </p>
+            )}
+            <p id="subject-help" className="text-xs text-muted-foreground">
+              Enter a clear subject line for the response memo
+            </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="content">Memo Content *</Label>
+            <Label htmlFor="content">
+              Memo Content * <span className="text-muted-foreground text-xs font-normal">(10+ characters)</span>
+            </Label>
             <Textarea
               id="content"
               placeholder="Compose your response memo here..."
               value={memoContent}
-              onChange={(e) => handleContentChange(e.target.value)}
-              className="min-h-[180px] resize-none"
+              onChange={(e) => {
+                handleContentChange(e.target.value);
+                if (memoContentError) setMemoContentError('');
+              }}
+              className={`min-h-[180px] resize-none ${memoContentError ? 'border-destructive' : ''}`}
+              aria-label="Memo content"
+              aria-required="true"
+              aria-invalid={!!memoContentError}
+              aria-describedby={memoContentError ? "content-error" : "content-help"}
             />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Markdown supported</span>
-              <span>{characterCount} characters</span>
+            <div className="flex justify-between items-center">
+              <div>
+                {memoContentError && (
+                  <p id="content-error" className="text-xs text-destructive" role="alert">
+                    {memoContentError}
+                  </p>
+                )}
+                <p id="content-help" className="text-xs text-muted-foreground">
+                  Markdown supported
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">{characterCount} characters</span>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="forwardTo">Forward To *</Label>
-            <Select value={forwardTo} onValueChange={setForwardTo}>
+            <Select 
+              value={forwardTo} 
+              onValueChange={(value) => {
+                setForwardTo(value);
+                if (forwardToError) setForwardToError('');
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select recipient" />
               </SelectTrigger>
@@ -477,7 +560,12 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                 )}
               </SelectContent>
             </Select>
-            {selectedRecipient && (
+            {forwardToError && (
+              <p className="text-xs text-destructive mt-1" role="alert">
+                {forwardToError}
+              </p>
+            )}
+            {selectedRecipient && !forwardToError && (
               <div className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
                 <UserIcon className="h-4 w-4" />
                 Will be sent to: {selectedRecipient.name}
@@ -487,20 +575,39 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
         </div>
 
         <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={handleSaveDraft}>
+          <Button 
+            variant="outline" 
+            onClick={handleSaveDraft}
+            disabled={isSubmitting}
+            aria-label="Save draft"
+          >
             <Save className="h-4 w-4 mr-2" />
             Save Draft
           </Button>
-          <Button onClick={handleSubmit} className="bg-gradient-primary">
-            <Send className="h-4 w-4 mr-2" />
-            Send Response
+          <Button 
+            onClick={handleSubmit} 
+            disabled={isSubmitting}
+            className="bg-gradient-primary"
+            aria-label="Send response"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Sending...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-2" />
+                Send Response
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
 
       <ConfirmationDialog
         isOpen={showConfirmation}
-        onClose={() => setShowConfirmation(false)}
+        onClose={() => !isSubmitting && setShowConfirmation(false)}
         onConfirm={handleConfirm}
         type="treatment"
         data={{
@@ -511,6 +618,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           onBehalfOf: actingFor?.name,
           direction: 'upward',
         }}
+        disabled={isSubmitting}
       />
     </Dialog>
   );

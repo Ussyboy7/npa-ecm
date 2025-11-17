@@ -1,6 +1,16 @@
 import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -16,9 +26,11 @@ import {
   Download,
   Building2,
   Layers,
-  Network
+  Network,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiFetch } from '@/lib/api-client';
 import { type Correspondence, type Minute, getDivisionById, getDepartmentById } from '@/lib/npa-structure';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -47,6 +59,10 @@ export const CompletionSummaryModal = ({
   const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>(
     minutes.map(m => m.userId)
   );
+  const [stakeholdersError, setStakeholdersError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const allowedArchiveLevels = useMemo(
     () => permissions.allowedArchiveLevels,
     [permissions.allowedArchiveLevels]
@@ -77,36 +93,85 @@ export const CompletionSummaryModal = ({
     );
   };
 
-  const handleSendSummary = async () => {
+  const validateForm = (): boolean => {
+    setStakeholdersError('');
+
     if (selectedStakeholders.length === 0) {
-      toast.error('Please select at least one stakeholder');
-      return;
+      setStakeholdersError('Please select at least one stakeholder to receive the summary');
+      return false;
     }
 
+    return true;
+  };
+
+  const handleSendSummary = () => {
+    if (!validateForm()) {
+      return;
+    }
+    setShowConfirmation(true);
+  };
+
+  const handleConfirm = async () => {
+    setIsSubmitting(true);
     try {
-      await updateCorrespondence(correspondence.id, {
-        status: 'archived',
-        archiveLevel: archiveLevel,
+      // Update correspondence status to archived via API
+      await apiFetch(`/correspondence/items/${correspondence.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+        }),
       });
 
       await syncFromApi();
 
       const levelName = archiveLevel === 'department' ? 'Department' : archiveLevel === 'division' ? 'Division' : 'Directorate';
       toast.success('Correspondence archived successfully', {
-        description: `Archived at ${levelName} level. Summary sent to ${selectedStakeholders.length} stakeholder(s)`
+        description: `Archived at ${levelName} level. Summary will be sent to ${selectedStakeholders.length} stakeholder(s)`
       });
 
+      setShowConfirmation(false);
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       logError('Failed to archive correspondence', error);
-      toast.error('Unable to archive correspondence', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
+      const errorMessage = error?.response?.data?.detail || 
+                          error?.response?.data?.status?.[0] ||
+                          error?.message || 
+                          'Unable to archive correspondence. Please try again.';
+      toast.error(errorMessage);
+      setShowConfirmation(false);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleExportPDF = () => {
-    toast.info('Exporting summary as PDF...');
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      // TODO: Implement actual PDF export via backend
+      // For now, create a simple text-based export
+      const pdfContent = generateAutoSummary(correspondence, minutes);
+      const blob = new Blob([pdfContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `completion-summary-${correspondence.referenceNumber}-${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Summary exported successfully', {
+        description: 'Download started'
+      });
+    } catch (error) {
+      logError('Failed to export PDF', error);
+      toast.error('Unable to export summary', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -210,15 +275,22 @@ export const CompletionSummaryModal = ({
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-muted-foreground" />
-              <Label>Stakeholders ({selectedStakeholders.length} selected)</Label>
+              <Label>
+                Stakeholders ({selectedStakeholders.length} selected) * 
+                <span className="text-muted-foreground text-xs font-normal ml-1">(Required)</span>
+              </Label>
             </div>
-            <div className="border border-border rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto">
+            <div className={`border rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto ${stakeholdersError ? 'border-destructive' : 'border-border'}`}>
               {stakeholders.map(stakeholder => (
                 <div key={stakeholder.id} className="flex items-center gap-3">
                   <Checkbox
                     id={stakeholder.id}
                     checked={selectedStakeholders.includes(stakeholder.id)}
-                    onCheckedChange={() => handleToggleStakeholder(stakeholder.id)}
+                    onCheckedChange={() => {
+                      handleToggleStakeholder(stakeholder.id);
+                      if (stakeholdersError) setStakeholdersError('');
+                    }}
+                    aria-label={`Select ${stakeholder.name} as stakeholder`}
                   />
                   <Label 
                     htmlFor={stakeholder.id} 
@@ -232,6 +304,11 @@ export const CompletionSummaryModal = ({
                 </div>
               ))}
             </div>
+            {stakeholdersError && (
+              <p className="text-xs text-destructive" role="alert">
+                {stakeholdersError}
+              </p>
+            )}
           </div>
 
           {/* Archive Level Selection */}
@@ -315,21 +392,88 @@ export const CompletionSummaryModal = ({
 
         {/* Actions */}
         <div className="flex justify-between gap-3 pt-4 border-t">
-          <Button variant="outline" onClick={handleExportPDF}>
-            <Download className="h-4 w-4 mr-2" />
-            Export PDF
+          <Button 
+            variant="outline" 
+            onClick={handleExportPDF}
+            disabled={isExporting || isSubmitting}
+            aria-label="Export summary as PDF"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Export Summary
+              </>
+            )}
           </Button>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button 
+              variant="outline" 
+              onClick={() => onOpenChange(false)}
+              disabled={isSubmitting || isExporting}
+              aria-label="Cancel archiving"
+            >
               Cancel
             </Button>
-            <Button onClick={handleSendSummary} className="bg-gradient-secondary">
-              <Send className="h-4 w-4 mr-2" />
-              Archive & Send Summary
+            <Button 
+              onClick={handleSendSummary} 
+              disabled={isSubmitting || isExporting}
+              className="bg-gradient-secondary"
+              aria-label="Archive correspondence and send summary"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Archiving...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Archive & Send Summary
+                </>
+              )}
             </Button>
           </div>
         </div>
       </DialogContent>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Archive & Send Summary</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to archive this correspondence and send the completion summary?
+              <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+                <li>Archive level: <strong>{archiveLevel === 'department' ? 'Department' : archiveLevel === 'division' ? 'Division' : 'Directorate'}</strong></li>
+                <li>Recipients: <strong>{selectedStakeholders.length} stakeholder(s)</strong></li>
+                <li>This action cannot be undone</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirm}
+              disabled={isSubmitting}
+              className="bg-gradient-secondary hover:opacity-90"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Archiving...
+                </>
+              ) : (
+                'Confirm Archive'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };

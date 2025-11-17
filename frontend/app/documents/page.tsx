@@ -263,11 +263,23 @@ const MyDocuments = () => {
                 {document.workspaceIds.map((workspaceId) => {
                   const workspace = workspaceLookup.get(workspaceId);
                   if (!workspace) return null;
+                  // Calculate text color based on background luminance for contrast
+                  const getContrastColor = (bgColor: string): string => {
+                    const hex = bgColor.replace('#', '');
+                    if (hex.length !== 6) return '#ffffff'; // Fallback to white
+                    const r = parseInt(hex.substr(0, 2), 16);
+                    const g = parseInt(hex.substr(2, 2), 16);
+                    const b = parseInt(hex.substr(4, 2), 16);
+                    // Calculate relative luminance (0-1)
+                    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+                    // Use dark text on light backgrounds, light text on dark backgrounds
+                    return luminance > 0.5 ? '#1f2937' : '#ffffff';
+                  };
                   return (
                     <Badge
                       key={workspaceId}
                       className="text-[10px] font-medium"
-                      style={{ backgroundColor: workspace.color, color: '#ffffff' }}
+                      style={{ backgroundColor: workspace.color, color: getContrastColor(workspace.color) }}
                     >
                       {workspace.name}
                     </Badge>
