@@ -1422,7 +1422,7 @@ const DocumentDetailPage = () => {
                       ].join('\n');
                       const blob = new Blob([csv], { type: 'text/csv' });
                       const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
+                      const a = window.document.createElement('a');
                       a.href = url;
                       a.download = `document-access-logs-${document.id}-${new Date().toISOString().split('T')[0]}.csv`;
                       a.click();
