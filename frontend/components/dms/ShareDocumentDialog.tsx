@@ -738,7 +738,6 @@ export const ShareDocumentDialog = ({
               </Button>
             </DialogFooter>
           </div>
-
             <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
                 <TabsList className="grid w-full grid-cols-5 flex-shrink-0 mb-4">
@@ -794,9 +793,9 @@ export const ShareDocumentDialog = ({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="directorate" className="h-[80vh] flex flex-col">
-                  <div className="flex flex-col h-full space-y-3">
-                    <div className="flex items-center justify-between px-1 flex-shrink-0">
+                <TabsContent value="directorate" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex">
+                  <div className="space-y-4 flex-1">
+                    <div className="flex items-center space-x-2 p-4 border rounded-lg">
                       <Label className="text-sm font-medium">
                         Select Directorates ({selectedDirectorateIds.size} selected)
                       </Label>

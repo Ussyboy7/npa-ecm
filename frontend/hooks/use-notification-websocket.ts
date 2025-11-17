@@ -49,10 +49,14 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
     }
     
     // Extract host and port from baseUrl
-    let host = baseUrl
-      .replace(/^https?:\/\//, '') // Remove protocol
-      .replace(/\/api(\/v\d+)?\/?$/, '') // Remove /api or /api/v1 suffix
-      .split('/')[0]; // Get just the host:port part
+    // Remove protocol if present
+    let host = baseUrl.replace(/^https?:\/\//, '');
+    
+    // Remove /api or /api/v1 suffix if present
+    host = host.replace(/\/api(\/v\d+)?\/?$/, '');
+    
+    // Get just the host:port part (before any path)
+    host = host.split('/')[0];
     
     // Ensure we have a valid host
     if (!host || host === '') {
@@ -61,14 +65,28 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
 
     // WebSocket URL format: ws://host:port/ws/notifications/
     // For staging server (172.16.0.46:4646), ensure port is included
-    if (host.includes('172.16.0.46') && !host.includes(':')) {
-      host = '172.16.0.46:4646';
-    } else if (host === '172.16.0.46') {
-      host = '172.16.0.46:4646';
+    if (host.includes('172.16.0.46')) {
+      if (!host.includes(':')) {
+        host = '172.16.0.46:4646';
+      } else if (host === '172.16.0.46') {
+        host = '172.16.0.46:4646';
+      }
     }
 
-    // Construct WebSocket URL
+    // Construct WebSocket URL - ensure protocol:// is always present
     const wsUrl = `${protocol}://${host}/ws/notifications/`;
+    
+    // Validate the URL format
+    if (!wsUrl.match(/^wss?:\/\/.+/)) {
+      logError('Invalid WebSocket URL constructed:', wsUrl);
+      // Fallback to window location if available
+      if (typeof window !== 'undefined') {
+        const fallbackProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        return `${fallbackProtocol}://${window.location.host}/ws/notifications/`;
+      }
+      return 'ws://localhost:8000/ws/notifications/';
+    }
+    
     return wsUrl;
   }, []);
 

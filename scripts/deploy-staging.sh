@@ -89,11 +89,13 @@ stop_services() {
 
     if [[ -f "${STAGING_DIR}/${DOCKER_COMPOSE_FILE}" ]]; then
         cd "$STAGING_DIR"
+        # IMPORTANT: Do NOT use -v flag - this would remove volumes and wipe the database!
+        # Only stop containers, preserve volumes to keep database data
         docker-compose -f "$DOCKER_COMPOSE_FILE" down --timeout 30 || warning "Some containers failed to stop gracefully"
         cd - > /dev/null
     fi
 
-    success "Services stopped"
+    success "Services stopped (volumes preserved)"
 }
 
 # Clean up unused Docker resources
@@ -106,10 +108,10 @@ cleanup_docker() {
     # Remove unused images
     docker image prune -f
 
-    # Remove unused volumes (be careful with this)
-    # docker volume prune -f
+    # NEVER remove volumes - this would wipe the database!
+    # docker volume prune -f  # COMMENTED OUT TO PREVENT DATA LOSS
 
-    success "Docker cleanup completed"
+    success "Docker cleanup completed (volumes preserved)"
 }
 
 # Deploy new services
@@ -182,8 +184,12 @@ post_deployment_tasks() {
     log "📋 Running post-deployment tasks..."
 
     # Run database migrations if needed
+    # IMPORTANT: Only run migrations, never reset or drop database
     log "Running database migrations..."
     docker exec ecm-backend-stag python manage.py migrate --noinput || warning "Migration failed"
+    
+    # WARNING: Never run seed_demo_data with --reset flag in production/staging!
+    # This would wipe all organization data (directorates, divisions, departments, users)
 
     # Collect static files
     log "Collecting static files..."
