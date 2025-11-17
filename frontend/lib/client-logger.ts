@@ -36,21 +36,18 @@ const flushLogs = async () => {
   const body = JSON.stringify({ entries: payload });
 
   try {
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(
-        '/api/v1/support/client-logs/',
-        new Blob([body], { type: 'application/json' }),
-      );
-      return;
-    }
-
+    // Always use fetch with credentials instead of sendBeacon
+    // because sendBeacon doesn't send authentication cookies/headers
     await fetch('/api/v1/support/client-logs/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body,
+      // Don't wait for response to avoid blocking
+      keepalive: true,
     });
   } catch (error) {
+    // Silently fail - client logging should not break the app
     if (process.env.NODE_ENV !== 'production') {
       console.error('Failed to flush client logs', error);
     }
@@ -107,12 +104,16 @@ if (isBrowser) {
   window.addEventListener('beforeunload', () => {
     if (batch.length) {
       const body = JSON.stringify({ entries: batch.splice(0, batch.length) });
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(
-          '/api/v1/support/client-logs/',
-          new Blob([body], { type: 'application/json' }),
-        );
-      }
+      // Use fetch with keepalive for beforeunload (similar to sendBeacon but with auth)
+      fetch('/api/v1/support/client-logs/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body,
+        keepalive: true,
+      }).catch(() => {
+        // Silently fail on beforeunload
+      });
     }
   });
 }

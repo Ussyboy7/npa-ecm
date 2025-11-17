@@ -44,6 +44,33 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
     # Override file_url to allow data URLs (which are longer than 200 chars)
     # The view will convert data URLs to proper file URLs before saving
     file_url = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=None)
+    
+    def to_representation(self, instance):
+        """Convert relative file URLs to absolute URLs when serializing."""
+        data = super().to_representation(instance)
+        if data.get('file_url') and not data['file_url'].startswith(('http://', 'https://', 'data:')):
+            # If it's a relative path, convert to absolute URL
+            from django.conf import settings
+            request = self.context.get('request')
+            if request:
+                try:
+                    # Use the request's host (which should be the external Nginx URL)
+                    data['file_url'] = request.build_absolute_uri(settings.MEDIA_URL + data['file_url'].lstrip('/'))
+                except Exception:
+                    # Fallback: use the request host directly
+                    scheme = getattr(request, 'scheme', 'http')
+                    host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8000'
+                    media_path = data['file_url'].lstrip('/')
+                    if not media_path.startswith('media/'):
+                        media_path = f"media/{media_path}"
+                    data['file_url'] = f"{scheme}://{host}/{media_path}"
+            elif hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
+                # Use MEDIA_BASE_URL from settings if available
+                media_path = data['file_url'].lstrip('/')
+                if not media_path.startswith('media/'):
+                    media_path = f"media/{media_path}"
+                data['file_url'] = f"{settings.MEDIA_BASE_URL.rstrip('/')}/{media_path}"
+        return data
 
     class Meta:
         model = DocumentVersion

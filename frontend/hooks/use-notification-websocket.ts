@@ -34,19 +34,42 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
   const reconnectDelay = NOTIFICATION_WS_RECONNECT_DELAY_MS;
 
   const getWebSocketUrl = useCallback(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-    // Remove protocol and trailing /api or /api/vX suffix
-    let wsUrl = apiUrl
-      .replace(/^https?:\/\//, '')
-      .replace(/\/api(\/v\d+)?\/?$/, '');
-    const protocol = apiUrl.startsWith('https') ? 'wss' : 'ws';
-
-    // WebSocket URL format: ws://host:port/ws/notifications/
-    if (!wsUrl.includes(':') && !apiUrl.includes('localhost')) {
-      wsUrl = `${wsUrl}:8000`;
+    // Get base URL from environment or window location
+    let baseUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (!baseUrl && typeof window !== 'undefined') {
+      // Fallback to current window location
+      baseUrl = `${window.location.protocol}//${window.location.host}`;
+    }
+    baseUrl = baseUrl || 'http://localhost:8000';
+    
+    // Determine protocol - use wss for https, ws for http
+    let protocol = 'ws';
+    if (baseUrl.startsWith('https://') || (typeof window !== 'undefined' && window.location.protocol === 'https:')) {
+      protocol = 'wss';
+    }
+    
+    // Extract host and port from baseUrl
+    let host = baseUrl
+      .replace(/^https?:\/\//, '') // Remove protocol
+      .replace(/\/api(\/v\d+)?\/?$/, '') // Remove /api or /api/v1 suffix
+      .split('/')[0]; // Get just the host:port part
+    
+    // Ensure we have a valid host
+    if (!host || host === '') {
+      host = typeof window !== 'undefined' ? window.location.host : 'localhost:8000';
     }
 
-    return `${protocol}://${wsUrl}/ws/notifications/`;
+    // WebSocket URL format: ws://host:port/ws/notifications/
+    // For staging server (172.16.0.46:4646), ensure port is included
+    if (host.includes('172.16.0.46') && !host.includes(':')) {
+      host = '172.16.0.46:4646';
+    } else if (host === '172.16.0.46') {
+      host = '172.16.0.46:4646';
+    }
+
+    // Construct WebSocket URL
+    const wsUrl = `${protocol}://${host}/ws/notifications/`;
+    return wsUrl;
   }, []);
 
   const connect = useCallback(() => {
