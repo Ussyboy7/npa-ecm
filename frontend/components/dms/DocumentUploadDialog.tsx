@@ -146,7 +146,13 @@ export const DocumentUploadDialog = ({
     if (!latest) return;
     if (latest.contentHtml) {
       setEditorHtml(latest.contentHtml);
-      setEditorJson(latest.contentJson ?? null);
+      // Ensure contentJson is either a valid Record or null
+      const jsonValue = latest.contentJson;
+      setEditorJson(
+        jsonValue && typeof jsonValue === 'object' && !Array.isArray(jsonValue)
+          ? (jsonValue as Record<string, unknown>)
+          : null
+      );
       setTemplateApplied(true);
     }
   }, [composeMode, document]);
@@ -420,7 +426,7 @@ export const DocumentUploadDialog = ({
 
         if (composeMode) {
           contentHtml = editorHtml;
-          contentJson = editorJson;
+          contentJson = editorJson ?? undefined;
           fileType = 'text/html';
           fileName = `${title.trim().replace(/\s+/g, '-') || 'document'}.html`;
           const htmlFile = new File([contentHtml], fileName, { type: fileType });
@@ -489,7 +495,7 @@ export const DocumentUploadDialog = ({
 
         if (composeMode) {
           contentHtml = editorHtml;
-          contentJson = editorJson;
+          contentJson = editorJson ?? undefined;
           fileType = 'text/html';
           fileName = `${document.title.trim().replace(/\s+/g, '-') || 'document'}-v${document.versions.length + 1}.html`;
           const htmlFile = new File([contentHtml], fileName, { type: fileType });

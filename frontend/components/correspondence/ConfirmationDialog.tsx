@@ -27,6 +27,7 @@ interface ConfirmationDialogProps {
     onBehalfOf?: string;
     direction?: 'upward' | 'downward';
   };
+  disabled?: boolean;
 }
 
 export const ConfirmationDialog = ({ 
@@ -34,7 +35,8 @@ export const ConfirmationDialog = ({
   onClose, 
   onConfirm, 
   type,
-  data 
+  data,
+  disabled = false
 }: ConfirmationDialogProps) => {
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
@@ -119,9 +121,10 @@ export const ConfirmationDialog = ({
         </div>
 
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={disabled}>Cancel</AlertDialogCancel>
           <AlertDialogAction 
             onClick={onConfirm}
+            disabled={disabled}
             className="bg-gradient-primary hover:opacity-90"
           >
             <Send className="h-4 w-4 mr-2" />
