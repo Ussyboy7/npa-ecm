@@ -56,8 +56,9 @@ import {
 } from '@/lib/template-storage';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
 import { AlertTriangle, Loader2, Save } from 'lucide-react';
+import { sanitizeRichText } from '@/lib/sanitize-html';
 
-const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'other'];
+const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
 const SENSITIVITY_OPTIONS: DocumentSensitivity[] = ['public', 'internal', 'confidential', 'restricted'];
 const DRAFT_STORAGE_KEY = 'dms_upload_draft';
 const MAX_TITLE_LENGTH = 500;
@@ -1131,10 +1132,10 @@ export const DocumentUploadDialog = ({
           <div
             className="prose prose-sm max-w-none dark:prose-invert"
             dangerouslySetInnerHTML={{
-              __html: (() => {
+              __html: sanitizeRichText((() => {
                 const template = templates.find((t) => t.id === templatePreviewId);
                 return template ? replaceTemplateTokens(template.contentHtml) : '';
-              })(),
+              })()),
             }}
           />
         </ScrollArea>

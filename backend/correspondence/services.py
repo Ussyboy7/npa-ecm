@@ -16,6 +16,11 @@ from django.utils import timezone
 from django.utils.html import strip_tags
 from django.utils.text import slugify
 from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.units import inch
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 
 from accounts.models import User
@@ -77,8 +82,7 @@ class CompletionPackageService:
 
         context = cls._build_summary_context(correspondence, triggered_by, document_created=created)
         html = render_to_string(cls.SUMMARY_TEMPLATE, context)
-        text = strip_tags(html)
-        pdf_bytes = cls._build_summary_pdf(text)
+        pdf_bytes = cls._build_summary_pdf(context)
 
         storage_path = cls._store_pdf(correspondence, pdf_bytes)
         file_url = cls._build_media_url(storage_path)
@@ -124,33 +128,227 @@ class CompletionPackageService:
         }
 
     @staticmethod
-    def _build_summary_pdf(text: str) -> bytes:
+    def _build_summary_pdf(context: dict) -> bytes:
+        """Build a properly formatted PDF from context data."""
+        from django.utils.dateformat import format as date_format
+        
         buffer = BytesIO()
-        pdf = canvas.Canvas(buffer, pagesize=LETTER)
-        width, height = LETTER
-        x_margin = 40
-        y = height - 50
-
-        pdf.setFont("Helvetica-Bold", 12)
-        wrapped_subject = textwrap.wrap(text.splitlines()[0], 80)
-        for line in wrapped_subject:
-            pdf.drawString(x_margin, y, line)
-            y -= 16
-        pdf.setFont("Helvetica", 10)
-        y -= 12
-
-        for line in text.splitlines()[1:]:
-            if not line.strip():
-                y -= 10
-                continue
-            for chunk in textwrap.wrap(line, 95):
-                if y < 60:
-                    pdf.showPage()
-                    pdf.setFont("Helvetica", 10)
-                    y = height - 50
-                pdf.drawString(x_margin, y, chunk)
-                y -= 12
-        pdf.save()
+        doc = SimpleDocTemplate(buffer, pagesize=LETTER, 
+                               rightMargin=0.75*inch, leftMargin=0.75*inch,
+                               topMargin=0.75*inch, bottomMargin=0.75*inch)
+        
+        # Create styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#111827'),
+            spaceAfter=12,
+            alignment=TA_LEFT,
+        )
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#111827'),
+            spaceAfter=8,
+            spaceBefore=16,
+            alignment=TA_LEFT,
+        )
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#0f172a'),
+            leading=14,
+            alignment=TA_LEFT,
+        )
+        meta_style = ParagraphStyle(
+            'MetaStyle',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#0f172a'),
+            leading=14,
+            spaceAfter=6,
+        )
+        minute_header_style = ParagraphStyle(
+            'MinuteHeader',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.HexColor('#111827'),
+            fontName='Helvetica-Bold',
+            spaceAfter=4,
+        )
+        minute_meta_style = ParagraphStyle(
+            'MinuteMeta',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.HexColor('#475569'),
+            spaceAfter=6,
+        )
+        minute_text_style = ParagraphStyle(
+            'MinuteText',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#0f172a'),
+            leading=14,
+            spaceAfter=12,
+            leftIndent=12,
+        )
+        
+        story = []
+        correspondence = context['correspondence']
+        minutes = context['minutes']
+        distribution = context['distribution']
+        attachments = context['attachments']
+        generated_at = context['generated_at']
+        generated_by = context.get('generated_by')
+        
+        # Title
+        story.append(Paragraph("Correspondence Completion Summary", title_style))
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Correspondence Details Section
+        story.append(Paragraph("Correspondence Details", heading_style))
+        
+        meta_items = [
+            ("Reference", correspondence.reference_number or "—"),
+            ("Subject", correspondence.subject or "—"),
+            ("Owning Office", correspondence.owning_office.name if hasattr(correspondence, 'owning_office') and correspondence.owning_office else "Unassigned"),
+            ("Current Office", correspondence.current_office.name if correspondence.current_office else "Unassigned"),
+            ("Priority", correspondence.get_priority_display() if hasattr(correspondence, 'get_priority_display') else str(correspondence.priority)),
+            ("Archive Level", correspondence.get_archive_level_display() if hasattr(correspondence, 'get_archive_level_display') else "Department"),
+            ("Generated", f"{date_format(generated_at, 'F j, Y H:i')}" + (f" · {generated_by.get_full_name() or generated_by.username}" if generated_by else "")),
+        ]
+        
+        for label, value in meta_items:
+            story.append(Paragraph(f"<b>{label}:</b> {value}", meta_style))
+        
+        story.append(Spacer(1, 0.15*inch))
+        
+        # Minutes & Decisions Section
+        story.append(Paragraph("Minutes & Decisions", heading_style))
+        
+        if minutes:
+            for minute in minutes:
+                # Minute header
+                user_name = minute.user.get_full_name() if minute.user else minute.user.username if minute.user else "Unknown"
+                action_type = minute.get_action_type_display() if hasattr(minute, 'get_action_type_display') else str(minute.action_type)
+                story.append(Paragraph(f"{action_type} by {user_name}", minute_header_style))
+                
+                # Minute metadata
+                timestamp = date_format(minute.timestamp, 'F j, Y H:i') if hasattr(minute, 'timestamp') else ""
+                direction = minute.get_direction_display() if hasattr(minute, 'get_direction_display') else str(minute.direction) if hasattr(minute, 'direction') else ""
+                meta_text = f"{timestamp} · Direction: {direction}" if timestamp and direction else timestamp or direction or ""
+                if meta_text:
+                    story.append(Paragraph(meta_text, minute_meta_style))
+                
+                # Minute text
+                if minute.minute_text:
+                    # Wrap long text
+                    minute_text = minute.minute_text.replace('\n', '<br/>')
+                    story.append(Paragraph(minute_text, minute_text_style))
+                
+                # Routing info
+                if hasattr(minute, 'to_office') and minute.to_office:
+                    story.append(Paragraph(f"Routed to: {minute.to_office.name}", minute_meta_style))
+                
+                story.append(Spacer(1, 0.1*inch))
+        else:
+            story.append(Paragraph("No minutes were recorded for this correspondence.", normal_style))
+        
+        story.append(Spacer(1, 0.15*inch))
+        
+        # Distribution Section
+        story.append(Paragraph("Distribution", heading_style))
+        
+        if distribution:
+            dist_data = [['Recipient', 'Type', 'Purpose']]
+            for entry in distribution:
+                recipient_name = "—"
+                if hasattr(entry, 'directorate') and entry.directorate:
+                    recipient_name = entry.directorate.name
+                elif hasattr(entry, 'division') and entry.division:
+                    recipient_name = entry.division.name
+                elif hasattr(entry, 'department') and entry.department:
+                    recipient_name = entry.department.name
+                
+                recipient_type = entry.get_recipient_type_display() if hasattr(entry, 'get_recipient_type_display') else str(entry.recipient_type) if hasattr(entry, 'recipient_type') else "—"
+                purpose = entry.get_purpose_display() if hasattr(entry, 'get_purpose_display') else str(entry.purpose) if hasattr(entry, 'purpose') else "—"
+                
+                dist_data.append([recipient_name, recipient_type, purpose])
+            
+            dist_table = Table(dist_data, colWidths=[3*inch, 1.5*inch, 1.5*inch])
+            dist_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f1f5f9')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#111827')),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#0f172a')),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e2e8f0')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ]))
+            story.append(dist_table)
+        else:
+            story.append(Paragraph("No distribution list captured.", normal_style))
+        
+        story.append(Spacer(1, 0.15*inch))
+        
+        # Attachments Section
+        story.append(Paragraph("Attachments", heading_style))
+        
+        if attachments:
+            attach_data = [['File Name', 'Type', 'Size']]
+            for attachment in attachments:
+                file_size = ""
+                if hasattr(attachment, 'file_size') and attachment.file_size:
+                    size_kb = attachment.file_size / 1024
+                    if size_kb < 1024:
+                        file_size = f"{size_kb:.1f} KB"
+                    else:
+                        file_size = f"{size_kb / 1024:.1f} MB"
+                
+                attach_data.append([
+                    attachment.file_name or "—",
+                    getattr(attachment, 'file_type', None) or "—",
+                    file_size or "—"
+                ])
+            
+            attach_table = Table(attach_data, colWidths=[3.5*inch, 1.5*inch, 1*inch])
+            attach_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f1f5f9')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#111827')),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#0f172a')),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e2e8f0')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ]))
+            story.append(attach_table)
+        else:
+            story.append(Paragraph("No attachments were linked to this correspondence.", normal_style))
+        
+        # Build PDF
+        doc.build(story)
         buffer.seek(0)
         return buffer.read()
 
@@ -164,11 +362,22 @@ class CompletionPackageService:
         return storage_path
 
     @staticmethod
-    def _build_media_url(path: str) -> str:
+    def _build_media_url(path: str, request=None) -> str:
+        """Build media URL. Returns relative path for storage, full URL if request provided."""
         media_url = settings.MEDIA_URL or "/media/"
         if not media_url.endswith("/"):
             media_url = f"{media_url}/"
-        return f"{media_url}{path}".replace("//", "/")
+        relative_path = f"{media_url}{path}".replace("//", "/")
+        
+        # If request is provided, build absolute URL
+        # Build URL manually to avoid /api/ prefix from request path
+        if request:
+            request_scheme = getattr(request, 'scheme', 'http')
+            request_host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8000'
+            return f"{request_scheme}://{request_host}{relative_path}"
+        
+        # Return relative path (will be converted to full URL by serializer if needed)
+        return relative_path
 
     @classmethod
     def _resolve_stakeholders(cls, correspondence: Correspondence) -> List[User]:

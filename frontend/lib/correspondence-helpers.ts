@@ -77,6 +77,17 @@ export const formatDateShort = (dateString: string): string => {
   });
 };
 
+// Format date as YYYY-MM-DD for API requests
+export const formatDateForAPI = (date: Date | string): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) {
+    // If invalid, return today's date
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  }
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 // Check if correspondence is overdue
 export const isOverdue = (correspondence: Correspondence): boolean => {
   const daysSinceReceived = Math.floor(

@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { ConfirmationDialog } from './ConfirmationDialog';
-import { generateId, generateReferenceNumber, getNextStepNumber } from '@/lib/correspondence-helpers';
+import { generateId, generateReferenceNumber, getNextStepNumber, formatDateForAPI } from '@/lib/correspondence-helpers';
 import { saveDraft, getDraftByCorrespondence, deleteDraft } from '@/lib/storage';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
+import { GRADE_LEVELS } from '@/lib/npa-structure';
 import {
   Select,
   SelectContent,
@@ -32,9 +33,12 @@ import {
   Loader2,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
-import { GRADE_LEVELS } from '@/lib/npa-structure';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { UserSelector } from '@/components/shared/UserSelector';
+import { MODAL_CONSTANTS } from '@/lib/modal-constants';
+import { ModalErrorHandler } from '@/lib/modal-errors';
+import { getForwardingOptions, filterUsersBySearch } from '@/lib/routing-utils';
 
 interface TreatmentModalProps {
   correspondence: Correspondence;
@@ -97,52 +101,14 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     [users],
   );
 
-  const getForwardingOptions = () => {
+  const forwardingOptions = useMemo(() => {
     if (!currentUser) return [];
-    const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map((g) => g.code);
-    const currentGradeIndex = gradeOrder.indexOf(currentUser.gradeLevel);
-    if (currentGradeIndex === -1) return [];
-    const higherGrades = gradeOrder.slice(0, currentGradeIndex);
-
-    const currentDivision = currentUser.division
-      ? divisions.find((div) => div.id === currentUser.division)
-      : undefined;
-    const currentDirectorateId = currentUser.directorate ?? currentDivision?.directorateId;
-
-    const candidates = activeUsers.filter((user) => {
-      if (user.id === currentUser.id) return false;
-
-      if (user.systemRole === 'Managing Director' || user.gradeLevel === 'MDCS') {
-        return true;
-      }
-
-      const targetGradeIndex = gradeOrder.indexOf(user.gradeLevel);
-      const isHigherGrade = targetGradeIndex !== -1 && targetGradeIndex < currentGradeIndex;
-
-      if (user.division && currentUser.division && user.division === currentUser.division) {
-        return true;
-      }
-
-      const userDivision = user.division ? divisions.find((div) => div.id === user.division) : undefined;
-      const userDirectorateId = user.directorate ?? userDivision?.directorateId;
-
-      if (currentDirectorateId && userDirectorateId === currentDirectorateId && isHigherGrade) {
-        return true;
-      }
-
-      if (!user.division && isHigherGrade) {
-        return true;
-      }
-
-      return false;
+    return getForwardingOptions({
+      currentUser,
+      activeUsers,
+      divisions: divisions.filter((d) => d.isActive !== false),
     });
-
-    if (candidates.length === 0) {
-      return activeUsers;
-    }
-
-    return candidates;
-  };
+  }, [currentUser, activeUsers, divisions]);
 
   const getBehalfOfOptions = () => {
     if (!currentUser) return [];
@@ -158,23 +124,13 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     );
   };
 
-  const forwardingOptions = useMemo(() => getForwardingOptions(), [activeUsers, currentUser, divisions]);
   const behalfOfOptions = useMemo(() => getBehalfOfOptions(), [activeUsers, currentUser, divisions]);
 
   const filteredForwardingOptions = useMemo(() => {
-    if (!searchQuery.trim()) return forwardingOptions;
-    const query = searchQuery.toLowerCase();
-    return forwardingOptions.filter((user) => {
-      const division = user.division ? divisions.find((div) => div.id === user.division) : undefined;
-      const departmentName = user.department ? (departments.find((dept) => dept.id === user.department)?.name ?? '') : '';
-      return (
-        user.name.toLowerCase().includes(query) ||
-        user.systemRole.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
-        user.gradeLevel.toLowerCase().includes(query) ||
-        (division?.name.toLowerCase().includes(query) ?? false) ||
-        (departmentName?.toLowerCase().includes(query) ?? false)
-      );
+    return filterUsersBySearch(forwardingOptions, searchQuery, {
+      includeDivision: true,
+      includeDepartment: true,
+      includeEmail: true,
     });
   }, [forwardingOptions, searchQuery]);
 
@@ -207,8 +163,13 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       return false;
     }
 
-    if (trimmedSubject.length < 5) {
-      setMemoSubjectError('Subject must be at least 5 characters long');
+    if (trimmedSubject.length < MODAL_CONSTANTS.MEMO_SUBJECT.MIN) {
+      setMemoSubjectError(`Subject must be at least ${MODAL_CONSTANTS.MEMO_SUBJECT.MIN} characters long`);
+      return false;
+    }
+
+    if (trimmedSubject.length > MODAL_CONSTANTS.MEMO_SUBJECT.MAX) {
+      setMemoSubjectError(`Subject must not exceed ${MODAL_CONSTANTS.MEMO_SUBJECT.MAX} characters`);
       return false;
     }
 
@@ -218,8 +179,13 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       return false;
     }
 
-    if (trimmedContent.length < 10) {
-      setMemoContentError('Content must be at least 10 characters long');
+    if (trimmedContent.length < MODAL_CONSTANTS.MEMO_CONTENT.MIN) {
+      setMemoContentError(`Content must be at least ${MODAL_CONSTANTS.MEMO_CONTENT.MIN} characters long`);
+      return false;
+    }
+
+    if (trimmedContent.length > MODAL_CONSTANTS.MEMO_CONTENT.MAX) {
+      setMemoContentError(`Content must not exceed ${MODAL_CONSTANTS.MEMO_CONTENT.MAX} characters`);
       return false;
     }
 
@@ -266,7 +232,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
         method: 'PATCH',
         body: JSON.stringify({
           direction: 'upward',
-          current_approver: forwardTo,
+          current_approver_id: forwardTo,
           status: 'in-progress',
         }),
       });
@@ -278,14 +244,14 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           reference_number: generateReferenceNumber(division?.code || 'NPA'),
           subject: memoSubject.trim(),
           source: 'internal',
-          received_date: new Date().toISOString(),
+          received_date: formatDateForAPI(new Date()),
           sender_name: actingFor ? `${currentUser.name} (on behalf of ${actingFor.name})` : currentUser.name,
           sender_organization: division?.name ?? '',
           status: 'pending',
           priority: correspondence.priority,
           division: recipient?.division ?? correspondence.divisionId,
           department: recipient?.department ?? correspondence.departmentId,
-          current_approver: forwardTo,
+          current_approver_id: forwardTo,
           direction: 'upward',
         }),
       });
@@ -322,12 +288,8 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       });
     } catch (error: any) {
       logError('Failed to process treatment', error);
-      const errorMessage = error?.response?.data?.detail || 
-                          error?.response?.data?.minute_text?.[0] ||
-                          error?.response?.data?.subject?.[0] ||
-                          error?.message || 
-                          'Unable to send response. Please try again.';
-      toast.error(errorMessage);
+      const modalError = ModalErrorHandler.createErrorFromApi(error);
+      toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
@@ -454,7 +416,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
 
           <div className="space-y-2">
             <Label htmlFor="subject">
-              Memo Subject * <span className="text-muted-foreground text-xs font-normal">(5+ characters)</span>
+              Memo Subject * <span className="text-muted-foreground text-xs font-normal">({MODAL_CONSTANTS.MEMO_SUBJECT.MIN}-{MODAL_CONSTANTS.MEMO_SUBJECT.MAX} characters)</span>
             </Label>
             <Input
               id="subject"
@@ -465,6 +427,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
               }}
               placeholder="Re: Subject of response"
               className={`font-medium ${memoSubjectError ? 'border-destructive' : ''}`}
+              maxLength={MODAL_CONSTANTS.MEMO_SUBJECT.MAX}
               aria-label="Memo subject"
               aria-required="true"
               aria-invalid={!!memoSubjectError}
@@ -482,7 +445,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
 
           <div className="space-y-2">
             <Label htmlFor="content">
-              Memo Content * <span className="text-muted-foreground text-xs font-normal">(10+ characters)</span>
+              Memo Content * <span className="text-muted-foreground text-xs font-normal">({MODAL_CONSTANTS.MEMO_CONTENT.MIN}-{MODAL_CONSTANTS.MEMO_CONTENT.MAX} characters)</span>
             </Label>
             <Textarea
               id="content"
@@ -493,6 +456,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                 if (memoContentError) setMemoContentError('');
               }}
               className={`min-h-[180px] resize-none ${memoContentError ? 'border-destructive' : ''}`}
+              maxLength={MODAL_CONSTANTS.MEMO_CONTENT.MAX}
               aria-label="Memo content"
               aria-required="true"
               aria-invalid={!!memoContentError}
@@ -509,69 +473,33 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                   Markdown supported
                 </p>
               </div>
-              <span className="text-xs text-muted-foreground">{characterCount} characters</span>
+              <span className={`text-xs ${characterCount > MODAL_CONSTANTS.MEMO_CONTENT.MAX ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {characterCount} / {MODAL_CONSTANTS.MEMO_CONTENT.MAX} characters
+              </span>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="forwardTo">Forward To *</Label>
-            <Select 
-              value={forwardTo} 
-              onValueChange={(value) => {
-                setForwardTo(value);
-                if (forwardToError) setForwardToError('');
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select recipient" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
-                <div className="sticky top-0 z-10 bg-popover p-2 border-b border-border">
-                  <div className="relative">
-                    <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Search name, role, division..."
-                      className="pl-8 h-9"
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
-                    />
-                  </div>
-                </div>
-                {filteredForwardingOptions.length > 0 ? (
-                  filteredForwardingOptions.map((user) => {
-                    const userDivision = user.division ? divisions.find((div) => div.id === user.division) : undefined;
-                    return (
-                      <SelectItem key={user.id} value={user.id}>
-                        <div className="flex flex-col items-start">
-                          <span className="font-medium">{user.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {user.systemRole} {userDivision ? `- ${userDivision.name}` : ''}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })
-                ) : (
-                  <SelectItem value="no-users" disabled>
-                    No suitable recipients found
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            {forwardToError && (
-              <p className="text-xs text-destructive mt-1" role="alert">
-                {forwardToError}
-              </p>
-            )}
-            {selectedRecipient && !forwardToError && (
-              <div className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
-                <UserIcon className="h-4 w-4" />
-                Will be sent to: {selectedRecipient.name}
-              </div>
-            )}
-          </div>
+          <UserSelector
+            users={filteredForwardingOptions}
+            value={forwardTo}
+            onValueChange={(value) => {
+              setForwardTo(value);
+              if (forwardToError) setForwardToError('');
+            }}
+            label="Forward To"
+            placeholder="Select recipient"
+            required
+            error={forwardToError}
+            currentUser={currentUser ?? undefined}
+            offices={[]}
+            officeMemberships={[]}
+            maxHeight="400px"
+            emptyMessage="No suitable recipients found"
+            aria-label="Select recipient for response"
+            aria-required
+            aria-invalid={!!forwardToError}
+            aria-describedby={forwardToError ? "forwardTo-error" : undefined}
+          />
         </div>
 
         <DialogFooter className="mt-4">

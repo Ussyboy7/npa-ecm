@@ -18,6 +18,8 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { logError } from '@/lib/client-logger';
+import { MODAL_CONSTANTS } from '@/lib/modal-constants';
+import { ModalErrorHandler } from '@/lib/modal-errors';
 
 interface DelegateModalProps {
   open: boolean;
@@ -100,9 +102,8 @@ export const DelegateModal = ({
       onOpenChange(false);
     } catch (error) {
       logError('Failed to delegate correspondence', error);
-      toast.error('Unable to delegate correspondence', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
+      const modalError = ModalErrorHandler.createErrorFromApi(error);
+      toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
@@ -174,9 +175,13 @@ export const DelegateModal = ({
                   value={delegationNotes}
                   onChange={(e) => setDelegationNotes(e.target.value)}
                   rows={4}
+                  maxLength={MODAL_CONSTANTS.DELEGATION_NOTES.MAX}
                   aria-label="Delegation instructions"
                   aria-describedby="notes-help"
                 />
+                <p className="text-xs text-muted-foreground">
+                  {delegationNotes.length} / {MODAL_CONSTANTS.DELEGATION_NOTES.MAX} characters
+                </p>
                 <p id="notes-help" className="text-xs text-muted-foreground">
                   Provide specific guidance on how the assistant should handle this correspondence
                 </p>

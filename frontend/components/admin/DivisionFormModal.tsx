@@ -11,9 +11,10 @@ interface DivisionFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   division?: Division;
+  defaultDirectorateId?: string;
 }
 
-export const DivisionFormModal = ({ open, onOpenChange, division }: DivisionFormModalProps) => {
+export const DivisionFormModal = ({ open, onOpenChange, division, defaultDirectorateId }: DivisionFormModalProps) => {
   const { addDivision, updateDivision, users, directorates } = useOrganization();
   const [formData, setFormData] = useState({
     name: '',
@@ -32,9 +33,14 @@ export const DivisionFormModal = ({ open, onOpenChange, division }: DivisionForm
         generalManagerId: division.generalManagerId ?? '',
       });
     } else {
-      setFormData({ name: '', code: '', directorateId: '', generalManagerId: '' });
+      setFormData({ 
+        name: '', 
+        code: '', 
+        directorateId: defaultDirectorateId || '', 
+        generalManagerId: '' 
+      });
     }
-  }, [division, open]);
+  }, [division, open, defaultDirectorateId]);
 
   const generalManagers = users.filter(u => u.gradeLevel === 'MSS1');
   const activeDirectorates = directorates.filter(dir => dir.isActive);

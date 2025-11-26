@@ -33,6 +33,7 @@ export default function NotificationsPage() {
 
   const loadNotifications = useCallback(async () => {
     try {
+      setLoading(true);
       let params: { status?: string } = {};
       if (activeTab === 'unread') {
         params.status = 'unread';
@@ -41,12 +42,19 @@ export default function NotificationsPage() {
       } else if (activeTab === 'archived') {
         params.status = 'archived';
       }
+      // For 'all' tab, fetch all notifications (no status filter)
+      // The backend will return all non-archived by default
 
       const data = await getNotifications(params);
-      setNotifications(data);
+      // Ensure we're not showing archived notifications in 'all' tab
+      const filtered = activeTab === 'all' 
+        ? data.filter((n) => n.status !== 'archived')
+        : data;
+      setNotifications(filtered);
     } catch (error) {
       logError('Failed to load notifications', error);
       toast.error('Failed to load notifications');
+      setNotifications([]);
     } finally {
       setLoading(false);
     }

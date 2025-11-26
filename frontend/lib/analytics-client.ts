@@ -165,9 +165,56 @@ export interface ReportsAnalytics {
     completionRate: number;
   };
   statusDistribution: { name: string; value: number }[];
-  priorityDistribution: { name: string; value: number }[];
+  priorityDistribution: { name: string; value: number; priority: string }[];
   divisionSummary: { name: string; total: number; completed: number; pending: number; rate: number }[];
   trend: { date: string; received: number; completed: number }[];
+}
+
+export interface EnhancedReportsAnalytics extends ReportsAnalytics {
+  sla: {
+    total: number;
+    compliant: number;
+    breached: number;
+    atRisk: number;
+    complianceRate: number;
+  };
+  comparison?: {
+    totalChange: number;
+    completedChange: number;
+    completionRateChange: number;
+    avgProcessingTimeChange: number;
+    slaComplianceChange: number;
+  };
+  typeDistribution: { name: string; value: number; type: string }[];
+  turnaroundDistribution: { name: string; count: number; min: number; max: number | null }[];
+  staffWorkload: { userId: string; name: string; handled: number; completed: number; avgDays: number }[];
+  divisionPerformance: {
+    name: string;
+    fullName: string;
+    total: number;
+    completed: number;
+    pending: number;
+    rate: number;
+    slaCompliance: number;
+    avgTurnaround: number;
+  }[];
+}
+
+export interface ReportTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  filters: {
+    divisionId?: string;
+    range?: string;
+    types?: string[];
+    priorities?: string[];
+    statuses?: string[];
+  };
+  metrics: string[];
+  charts: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const fetchPerformanceAnalytics = async (range: string | number = '30') => {
@@ -208,9 +255,46 @@ export const searchExecutiveRecords = async ({
   return apiFetch<ExecutiveRecordSearchResponse>(`/analytics/executive/records/?${search}`);
 };
 
+export interface EnhancedReportsParams {
+  range?: string | number;
+  divisionId?: string;
+  types?: string[];
+  priorities?: string[];
+  statuses?: string[];
+  includeComparison?: boolean;
+}
+
 export const fetchReportsAnalytics = async ({ range = '30', divisionId }: { range?: string | number; divisionId?: string }) => {
   const query = buildQuery({ range, divisionId: divisionId && divisionId !== 'all' ? divisionId : undefined });
   return apiFetch<ReportsAnalytics>(`/analytics/insights/?${query}`);
+};
+
+export const fetchEnhancedReportsAnalytics = async (params: EnhancedReportsParams = {}) => {
+  const { range = '30', divisionId, types, priorities, statuses, includeComparison = true } = params;
+  const query = buildQuery({
+    range,
+    divisionId: divisionId && divisionId !== 'all' ? divisionId : undefined,
+    types: types?.join(','),
+    priorities: priorities?.join(','),
+    statuses: statuses?.join(','),
+    include_comparison: includeComparison ? '1' : undefined,
+  });
+  return apiFetch<EnhancedReportsAnalytics>(`/analytics/insights/?${query}`);
+};
+
+export const fetchReportTemplates = async () => {
+  return apiFetch<ReportTemplate[]>('/analytics/reports/');
+};
+
+export const saveReportTemplate = async (template: Omit<ReportTemplate, 'id' | 'createdAt' | 'updatedAt'>) => {
+  return apiFetch<ReportTemplate>('/analytics/reports/', {
+    method: 'POST',
+    body: JSON.stringify(template),
+  });
+};
+
+export const deleteReportTemplate = async (id: string) => {
+  return apiFetch<void>(`/analytics/reports/${id}/`, { method: 'DELETE' });
 };
 
 export interface AnalyticsExportOptions {

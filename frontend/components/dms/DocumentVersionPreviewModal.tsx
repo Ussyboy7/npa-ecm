@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Printer, Download } from "lucide-react";
 import type { DocumentVersion } from "@/lib/dms-storage";
 import mammoth from "mammoth";
+import { sanitizeRichText } from "@/lib/sanitize-html";
 
 interface DocumentVersionPreviewModalProps {
   version: DocumentVersion;
@@ -239,9 +240,12 @@ export const DocumentVersionPreviewModal = ({
 
         <div className="flex-1 border-t border-b overflow-y-auto" style={{ height: 'calc(90vh - 200px)', maxHeight: 'calc(90vh - 200px)' }}>
           {version.contentHtml && version.contentHtml.trim() !== '' ? (
-            // Priority 1: Show HTML content from editor
+            // Priority 1: Show HTML content from editor (sanitized)
             <div className="prose prose-base dark:prose-invert max-w-none p-6">
-              <div dangerouslySetInnerHTML={{ __html: version.contentHtml }} />
+              <div 
+                dangerouslySetInnerHTML={{ __html: sanitizeRichText(version.contentHtml) }}
+                aria-label="Document content"
+              />
             </div>
           ) : version.fileUrl && version.fileUrl.trim() !== '' ? (
             // Priority 2: Show uploaded file
@@ -271,27 +275,26 @@ export const DocumentVersionPreviewModal = ({
                       src={pdfBlobUrl}
                       className="w-full h-full min-h-[600px] border-0"
                       title="Document Preview"
+                      sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                      aria-label={`Preview of ${version.fileName || 'document'}`}
                     />
                   ) : (
-                    <object
-                      data={version.fileUrl}
-                      type="application/pdf"
-                      className="w-full h-full min-h-[600px] border-0"
-                      title="Document Preview"
-                    >
-                      <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
-                        <p className="text-lg font-medium mb-4">Unable to display PDF</p>
-                        <a
-                          href={version.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                        >
-                          <Download className="h-4 w-4" />
-                          Open PDF in new tab
-                        </a>
-                      </div>
-                    </object>
+                    <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+                      <p className="text-lg font-medium mb-4">Loading PDF preview...</p>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        If the preview doesn't load, you can download the file instead.
+                      </p>
+                      <a
+                        href={version.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                        aria-label={`Download ${version.fileName || 'PDF document'}`}
+                      >
+                        <Download className="h-4 w-4" />
+                        Download PDF
+                      </a>
+                    </div>
                   )}
                 </div>
               ) : isImage ? (
@@ -324,7 +327,7 @@ export const DocumentVersionPreviewModal = ({
                     </div>
                   ) : wordHtml ? (
                     <div className="prose prose-base dark:prose-invert max-w-none p-6">
-                      <div dangerouslySetInnerHTML={{ __html: wordHtml }} />
+                      <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(wordHtml) }} />
                     </div>
                   ) : null}
                 </>

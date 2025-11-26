@@ -5,14 +5,16 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
-from organization.models import Department, Division
+from organization.models import Department, Directorate, Division, Office
 
 from .models import ApprovalTask, TaskAction, WorkflowStep, WorkflowTemplate
 
 
 class WorkflowStepSerializer(serializers.ModelSerializer):
+    directorate = serializers.PrimaryKeyRelatedField(queryset=Directorate.objects.all(), allow_null=True, required=False)
     division = serializers.PrimaryKeyRelatedField(queryset=Division.objects.all(), allow_null=True, required=False)
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
+    office = serializers.PrimaryKeyRelatedField(queryset=Office.objects.all(), allow_null=True, required=False)
 
     class Meta:
         model = WorkflowStep
@@ -23,8 +25,10 @@ class WorkflowStepSerializer(serializers.ModelSerializer):
             "title",
             "required_role",
             "required_grade_level",
+            "directorate",
             "division",
             "department",
+            "office",
             "requires_all_assistants",
             "created_at",
             "updated_at",

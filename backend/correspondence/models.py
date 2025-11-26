@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 from dms.models import Document
@@ -126,6 +129,19 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     )
     completion_summary_generated_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # Parallel routing fields
+    workflow_state = models.CharField(
+        max_length=20,
+        choices=[
+            ("sequential", "Sequential Processing"),
+            ("parallel", "Parallel Processing"),
+            ("merged", "Branches Merged"),
+            ("waiting_merge", "Waiting for Parallel Branches"),
+        ],
+        default="sequential",
+    )
+    active_parallel_branches = models.IntegerField(default=0)
+    completed_parallel_branches = models.IntegerField(default=0)
 
     class Meta:
         ordering = ["-created_at"]
@@ -249,9 +265,283 @@ class Minute(UUIDModel, TimeStampedModel):
         blank=True,
         related_name="minutes_to_office",
     )
+    to_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="minutes_received",
+        help_text="Specific user recipient (for parallel routing or direct user routing)",
+    )
+    # Recall/Edit fields
+    is_edited = models.BooleanField(default=False)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    edit_window_expires_at = models.DateTimeField(null=True, blank=True)  # 30 min from creation
+    is_opened = models.BooleanField(default=False)  # Track if recipient opened
+    opened_at = models.DateTimeField(null=True, blank=True)
+    original_minute_text = models.TextField(null=True, blank=True)  # Store original
+    edit_history = models.JSONField(default=list)  # Track all edits
+    is_recalled = models.BooleanField(default=False)  # Track if minute was recalled/withdrawn
+    recalled_at = models.DateTimeField(null=True, blank=True)
+    recall_reason = models.TextField(null=True, blank=True)  # Optional reason for recall
+    # Purpose-based routing
+    purpose = models.CharField(
+        max_length=20,
+        choices=[
+            ("action", "For Action"),
+            ("information", "For Information"),
+            ("comment", "For Comment"),
+            ("approval", "For Approval"),
+        ],
+        default="action",
+    )
+    requires_response = models.BooleanField(default=True)  # For action/approval
+    response_deadline = models.DateTimeField(null=True, blank=True)
+    # Parallel routing fields
+    routing_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("sequential", "Sequential"),
+            ("parallel", "Parallel"),
+            ("broadcast", "Broadcast"),
+        ],
+        default="sequential",
+    )
+    parallel_group_id = models.UUIDField(null=True, blank=True)  # Group parallel minutes
+    is_parallel_branch = models.BooleanField(default=False)
+    parent_minute = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="parallel_branches",
+    )
+    merge_strategy = models.CharField(
+        max_length=20,
+        choices=[
+            ("all", "Wait for all"),
+            ("independent", "Independent"),
+            ("any", "Any one completes"),
+            ("majority", "Majority completes"),
+        ],
+        default="all",
+    )
+    # Branch originator tracking (for parallel routing)
+    branch_originator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="parallel_branches_originated",
+        help_text="The user who originally received this parallel branch (for routing back up hierarchy)",
+    )
+    # Consultation routing (for lateral input requests)
+    is_consultation = models.BooleanField(
+        default=False,
+        help_text="True if this is a consultation request from another branch",
+    )
+    consultation_from_branch = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="consultation_requests",
+        help_text="The minute/branch that requested this consultation",
+    )
+    consultation_to_branch = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="consultation_responses",
+        help_text="The minute/branch that this consultation responds to",
+    )
+    # Additional minutes/instructions
+    minute_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("routing", "Routing Minute"),
+            ("instruction", "Additional Instruction"),
+            ("clarification", "Clarification"),
+            ("addendum", "Addendum"),
+        ],
+        default="routing",
+    )
+    is_additional = models.BooleanField(default=False)
+    relates_to_minute = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="related_minutes",
+    )
 
     class Meta:
         ordering = ["timestamp"]
+
+    def can_be_edited(self):
+        """Check if minute can still be edited."""
+        if self.is_recalled:
+            return False  # Recalled minutes cannot be edited
+        if self.is_opened:
+            return False  # Once opened, cannot edit
+        if self.edit_window_expires_at and timezone.now() > self.edit_window_expires_at:
+            return False  # Window expired
+        return True
+
+    def can_be_recalled(self):
+        """Check if minute can still be recalled."""
+        if self.is_recalled:
+            return False  # Already recalled
+        if self.is_opened:
+            return False  # Once opened, cannot recall
+        if self.edit_window_expires_at and timezone.now() > self.edit_window_expires_at:
+            return False  # Window expired
+        return True
+
+    def save(self, *args, **kwargs):
+        """Auto-set edit window expiration on creation."""
+        if not self.pk and not self.edit_window_expires_at:
+            # Set 30-minute window from creation
+            self.edit_window_expires_at = timezone.now() + timedelta(minutes=30)
+        super().save(*args, **kwargs)
+
+
+class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
+    """Groups minutes that are part of a parallel routing."""
+
+    correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="parallel_routing_groups")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="parallel_routes_created")
+    merge_strategy = models.CharField(
+        max_length=20,
+        choices=[
+            ("all", "Wait for all"),
+            ("independent", "Independent"),
+            ("any", "Any one completes"),
+            ("majority", "Majority completes"),
+        ],
+        default="all",
+    )
+    is_complete = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    total_branches = models.IntegerField(default=0)
+    completed_branches = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Parallel Route {self.id} - {self.correspondence.reference_number}"
+
+    def check_and_update_completion(self):
+        """Check if parallel routing group should be marked as complete based on merge strategy."""
+        from django.utils import timezone
+        from organization.models import OfficeMembership
+
+        # Get all minutes in this parallel group
+        parallel_minutes = Minute.objects.filter(
+            parallel_group_id=self.id,
+            is_parallel_branch=True
+        ).select_related('to_office', 'correspondence')
+
+        # Count completed branches (branches where recipient has acted)
+        # A branch is complete if:
+        # 1. Correspondence is completed (all branches implicitly complete), OR
+        # 2. The recipient has created a subsequent minute/response
+        completed_branch_ids = set()
+        for minute in parallel_minutes:
+            # Check if correspondence is completed (all branches implicitly complete)
+            if self.correspondence.status == Correspondence.Status.COMPLETED:
+                completed_branch_ids.add(minute.id)
+                continue
+
+            # Determine the recipient user
+            # Priority: to_user (if set) > office principal > acting > highest grade
+            recipient_user_id = None
+            
+            # First, check if to_user is explicitly set (for parallel routing or direct user routing)
+            if minute.to_user_id:
+                recipient_user_id = minute.to_user_id
+            elif minute.to_office:
+                # Find office head with hierarchy fallback
+                # 1. Try principal
+                office_head = OfficeMembership.objects.filter(
+                    office=minute.to_office,
+                    is_active=True,
+                    assignment_role='principal'
+                ).select_related('user').first()
+                
+                if office_head:
+                    recipient_user_id = office_head.user_id
+                else:
+                    # 2. Try acting head
+                    acting = OfficeMembership.objects.filter(
+                        office=minute.to_office,
+                        is_active=True,
+                        assignment_role='acting'
+                    ).select_related('user').order_by('-starts_at').first()
+                    
+                    if acting:
+                        recipient_user_id = acting.user_id
+                    else:
+                        # 3. Find highest grade staff member
+                        memberships = OfficeMembership.objects.filter(
+                            office=minute.to_office,
+                            is_active=True
+                        ).select_related('user').all()
+                        
+                        if memberships.exists():
+                            # Sort by grade level (simplified - you may want to use a proper grade level model)
+                            grade_order = ['MDCS', 'EDCS', 'GMCS', 'AGMCS', 'MSS1', 'MSS2', 'MSS3', 'MSS4', 'MSS5', 
+                                          'SSS1', 'SSS2', 'SSS3', 'SSS4', 'JSS1', 'JSS2', 'JSS3']
+                            
+                            def get_grade_level(user):
+                                grade = getattr(user, 'grade_level', '')
+                                try:
+                                    return grade_order.index(grade) if grade in grade_order else 999
+                                except (ValueError, AttributeError):
+                                    return 999
+                            
+                            sorted_memberships = sorted(memberships, key=lambda m: get_grade_level(m.user), reverse=True)
+                            recipient_user_id = sorted_memberships[0].user_id
+
+            # If we have a recipient, check if they've created a subsequent minute (completed their action)
+            if recipient_user_id:
+                recipient_acted = Minute.objects.filter(
+                    correspondence=self.correspondence,
+                    user_id=recipient_user_id,
+                    timestamp__gt=minute.timestamp
+                ).exists()
+                if recipient_acted:
+                    completed_branch_ids.add(minute.id)
+
+        completed_count = len(completed_branch_ids)
+        self.completed_branches = completed_count
+
+        # Check if group should be marked complete based on merge strategy
+        should_complete = False
+        if self.merge_strategy == "all":
+            should_complete = completed_count >= self.total_branches
+        elif self.merge_strategy == "any":
+            should_complete = completed_count >= 1
+        elif self.merge_strategy == "majority":
+            majority_threshold = (self.total_branches // 2) + 1
+            should_complete = completed_count >= majority_threshold
+        elif self.merge_strategy == "independent":
+            # Independent branches don't block each other, so we don't mark as complete
+            # The workflow can continue regardless
+            should_complete = False
+
+        if should_complete and not self.is_complete:
+            self.is_complete = True
+            self.completed_at = timezone.now()
+            # Update correspondence workflow state
+            if self.correspondence.workflow_state == "parallel":
+                self.correspondence.workflow_state = "merged"
+                self.correspondence.completed_parallel_branches = completed_count
+                self.correspondence.save(update_fields=["workflow_state", "completed_parallel_branches"])
+
+        self.save(update_fields=["completed_branches", "is_complete", "completed_at"])
 
 
 class Delegation(UUIDModel, TimeStampedModel):

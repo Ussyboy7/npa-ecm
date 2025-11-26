@@ -82,16 +82,86 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName }: Mi
             {/* Main Content */}
             <div className="space-y-4">
               <div>
-                <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" />
-                  Minute Content
-                </h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-primary" />
+                    Minute Content
+                  </h4>
+                  {minute.isEdited && (
+                    <Badge variant="outline" className="text-xs text-warning">
+                      Edited {minute.editedAt ? format(new Date(minute.editedAt), 'PPp') : ''}
+                    </Badge>
+                  )}
+                </div>
                 <div className="p-4 rounded-lg bg-muted/50 border border-border">
                   <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                     {minute.minuteText}
                   </p>
                 </div>
+                {minute.originalMinuteText && minute.originalMinuteText !== minute.minuteText && (
+                  <div className="mt-2 p-3 rounded-lg bg-muted/30 border border-border border-dashed">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Original Text:</p>
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap line-through">
+                      {minute.originalMinuteText}
+                    </p>
+                  </div>
+                )}
               </div>
+
+              {/* Edit History */}
+              {minute.editHistory && minute.editHistory.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground mb-2">Edit History</h4>
+                  <div className="space-y-2">
+                    {minute.editHistory.map((edit, idx) => (
+                      <div key={idx} className="p-3 rounded-lg bg-muted/30 border border-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-foreground">
+                            Edit #{idx + 1}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(edit.edited_at), 'PPp')}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-1">Previous:</p>
+                            <p className="text-xs text-muted-foreground whitespace-pre-wrap line-through">
+                              {edit.old_text}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-1">Updated:</p>
+                            <p className="text-xs text-foreground whitespace-pre-wrap">
+                              {edit.new_text}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Related Minutes */}
+              {minute.isAdditional && minute.relatesToMinuteId && (
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4 text-primary" />
+                    Related To
+                  </h4>
+                  <div className="p-3 rounded-lg bg-info/10 border border-info/20">
+                    <p className="text-xs text-muted-foreground mb-1">This is an additional minute related to:</p>
+                    <p className="text-sm text-foreground font-medium">Minute #{minute.stepNumber}</p>
+                    {minute.minuteType && (
+                      <Badge variant="outline" className="text-xs mt-2 bg-info/20 text-info border-info/30">
+                        {minute.minuteType === 'instruction' ? 'Additional Instruction' :
+                         minute.minuteType === 'clarification' ? 'Clarification' : 'Addendum'}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Additional Fields */}
               <Separator />

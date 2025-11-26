@@ -1,6 +1,7 @@
 import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { ModalErrorHandler } from '@/lib/modal-errors';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -134,11 +135,8 @@ export const CompletionSummaryModal = ({
       onOpenChange(false);
     } catch (error: any) {
       logError('Failed to archive correspondence', error);
-      const errorMessage = error?.response?.data?.detail || 
-                          error?.response?.data?.status?.[0] ||
-                          error?.message || 
-                          'Unable to archive correspondence. Please try again.';
-      toast.error(errorMessage);
+      const modalError = ModalErrorHandler.createErrorFromApi(error);
+      toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
@@ -390,8 +388,7 @@ export const CompletionSummaryModal = ({
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-between gap-3 pt-4 border-t">
+        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <Button 
             variant="outline" 
             onClick={handleExportPDF}
@@ -438,7 +435,7 @@ export const CompletionSummaryModal = ({
               )}
             </Button>
           </div>
-        </div>
+        </DialogFooter>
       </DialogContent>
 
       {/* Confirmation Dialog */}
@@ -448,12 +445,14 @@ export const CompletionSummaryModal = ({
             <AlertDialogTitle>Confirm Archive & Send Summary</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to archive this correspondence and send the completion summary?
-              <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+            </AlertDialogDescription>
+            <div className="mt-3">
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
                 <li>Archive level: <strong>{archiveLevel === 'department' ? 'Department' : archiveLevel === 'division' ? 'Division' : 'Directorate'}</strong></li>
                 <li>Recipients: <strong>{selectedStakeholders.length} stakeholder(s)</strong></li>
                 <li>This action cannot be undone</li>
               </ul>
-            </AlertDialogDescription>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>

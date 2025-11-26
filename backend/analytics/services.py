@@ -14,7 +14,7 @@ from django.utils import timezone
 from accounts.models import User
 from correspondence.models import Correspondence, Minute
 from dms.models import Document
-from organization.models import Office, OfficeMembership
+from organization.models import Division, Office, OfficeMembership
 
 
 @dataclass(frozen=True)
@@ -31,15 +31,97 @@ class DivisionMetric:
     backlog: int = 0
 
 
+@dataclass(frozen=True)
+class EnhancedDivisionMetric(DivisionMetric):
+    """Extended division metric with SLA information."""
+    sla_compliant: int = 0
+    sla_breached: int = 0
+    sla_at_risk: int = 0
+    sla_compliance_rate: float = 0.0
+    p50_turnaround: float = 0.0
+    p90_turnaround: float = 0.0
+    throughput: float = 0.0
+    trend: str = "stable"
+    trend_percent: float = 0.0
+
+
 class AnalyticsService:
     """Central place for computing analytics payloads consumed by the dashboards."""
 
-    SLA_TARGETS = {
+    # Default SLA targets (will be overridden by database values if available)
+    DEFAULT_SLA_TARGETS = {
         Correspondence.Priority.URGENT: 2,
         Correspondence.Priority.HIGH: 3,
         Correspondence.Priority.MEDIUM: 5,
         Correspondence.Priority.LOW: 7,
     }
+    
+    # Cache for SLA targets (refreshed periodically)
+    _sla_cache: dict[str, int] | None = None
+    _sla_cache_time: datetime | None = None
+    _SLA_CACHE_TTL = timedelta(minutes=5)
+    
+    @classmethod
+    def get_sla_targets(cls) -> dict[str, int]:
+        """Get SLA targets from database, with fallback to defaults."""
+        now = timezone.now()
+        
+        # Check if cache is valid
+        if cls._sla_cache and cls._sla_cache_time and (now - cls._sla_cache_time) < cls._SLA_CACHE_TTL:
+            return cls._sla_cache
+        
+        try:
+            from .models import SLAConfiguration
+            targets = SLAConfiguration.get_default_sla_targets()
+            cls._sla_cache = targets
+            cls._sla_cache_time = now
+            return targets
+        except Exception:
+            # Fallback to defaults if database not available
+            return cls.DEFAULT_SLA_TARGETS
+    
+    @classmethod
+    def get_sla_target(cls, priority: str, division_id: str | None = None) -> int:
+        """Get SLA target for a specific priority and optional division."""
+        try:
+            from .models import SLAConfiguration
+            sla = SLAConfiguration.get_sla_for_correspondence(priority, division_id=division_id)
+            if sla:
+                return sla.target_days
+        except Exception:
+            pass
+        
+        targets = cls.get_sla_targets()
+        return targets.get(priority, 5)
+    
+    @classmethod
+    def get_sla_thresholds(cls, priority: str, division_id: str | None = None) -> dict[str, int]:
+        """Get SLA target and warning/critical thresholds for a priority."""
+        try:
+            from .models import SLAConfiguration
+            sla = SLAConfiguration.get_sla_for_correspondence(priority, division_id=division_id)
+            if sla:
+                target = sla.target_days
+                warning_days = int(target * sla.warning_threshold_percent / 100)
+                critical_days = int(target * sla.critical_threshold_percent / 100)
+                return {
+                    "target": target,
+                    "warning": warning_days,
+                    "critical": critical_days,
+                }
+        except Exception:
+            pass
+        
+        target = cls.get_sla_targets().get(priority, 5)
+        return {
+            "target": target,
+            "warning": int(target * 0.75),
+            "critical": int(target * 0.90),
+        }
+
+    # Keep for backward compatibility, but use get_sla_targets() in new code
+    SLA_TARGETS = DEFAULT_SLA_TARGETS
+    
     RESPONSE_BUCKETS = [
         {"name": "0-2 days", "min": 0, "max": 2},
         {"name": "3-5 days", "min": 3, "max": 5},
@@ -250,25 +332,98 @@ class AnalyticsService:
         totals = cls._compute_basic_metrics(correspondences, now)
         status_data = cls._build_status_distribution(totals)
         priority_data = cls._build_priority_distribution(correspondences)
+        division_metrics = cls._compute_division_metrics(correspondences, now)
         division_data = [
             {
                 "name": metric.name,
+                "fullName": metric.full_name,
                 "total": metric.workload,
                 "completed": metric.completed,
                 "pending": metric.workload - metric.completed,
                 "rate": round(metric.completion_rate),
             }
-            for metric in cls._compute_division_metrics(correspondences, now)
+            for metric in division_metrics
             if metric.workload > 0
         ]
-        trend = cls._compute_daily_trend(correspondences, days=7)
+        trend = cls._compute_daily_trend(correspondences, days=min(range_days, 30))
+        
+        # Calculate SLA metrics
+        sla_targets = cls.get_sla_targets()
+        sla_compliant = 0
+        sla_breached = 0
+        sla_at_risk = 0
+        
+        for item in correspondences:
+            if item.status == Correspondence.Status.ARCHIVED:
+                continue
+            priority = item.priority or "medium"
+            target = sla_targets.get(priority, 5)
+            thresholds = cls.get_sla_thresholds(priority)
+            days_open = cls._turnaround_days(item, now)
+            
+            if item.status == Correspondence.Status.COMPLETED:
+                if days_open <= target:
+                    sla_compliant += 1
+                else:
+                    sla_breached += 1
+            else:
+                if days_open > target:
+                    sla_breached += 1
+                elif days_open >= thresholds["warning"]:
+                    sla_at_risk += 1
+                else:
+                    sla_compliant += 1
+        
+        total_sla = sla_compliant + sla_breached + sla_at_risk
+        sla_compliance_rate = round((sla_compliant / total_sla) * 100, 2) if total_sla else 0.0
+        
+        # Type distribution
+        type_counts = Counter()
+        for item in correspondences:
+            corr_type = getattr(item, 'correspondence_type', None) or 'incoming'
+            type_counts[corr_type] += 1
+        
+        type_distribution = [
+            {"name": t.title(), "value": count, "type": t}
+            for t, count in type_counts.items()
+        ]
+        
+        # Turnaround distribution
+        completed_items = [item for item in correspondences if item.status == Correspondence.Status.COMPLETED]
+        turnaround_buckets = [{**bucket, "count": 0} for bucket in cls.RESPONSE_BUCKETS]
+        for item in completed_items:
+            days = cls._turnaround_days(item, now)
+            for bucket in turnaround_buckets:
+                minimum = bucket["min"]
+                maximum = bucket["max"]
+                if minimum is not None and days < minimum:
+                    continue
+                if maximum is not None and days > maximum:
+                    continue
+                bucket["count"] += 1
+                break
+        
+        turnaround_distribution = [
+            {"name": bucket["name"], "count": bucket["count"], "min": bucket["min"], "max": bucket["max"]}
+            for bucket in turnaround_buckets
+        ]
 
         return {
             "metadata": cls._metadata(range_days, division_id=division_id),
             "metrics": totals,
+            "sla": {
+                "total": total_sla,
+                "compliant": sla_compliant,
+                "breached": sla_breached,
+                "atRisk": sla_at_risk,
+                "complianceRate": sla_compliance_rate,
+            },
             "statusDistribution": status_data,
             "priorityDistribution": priority_data,
+            "typeDistribution": type_distribution,
+            "turnaroundDistribution": turnaround_distribution,
             "divisionSummary": division_data,
+            "divisionPerformance": division_data,
             "trend": trend,
         }
 
@@ -814,3 +969,400 @@ class AnalyticsService:
             )
             buckets.append({"date": label, "received": received, "completed": completed})
         return buckets
+
+    # ------------------------------------------------------------------ #
+    # Enhanced Analytics Methods
+    # ------------------------------------------------------------------ #
+
+    @classmethod
+    def build_enhanced_sla_payload(cls, *, range_days: int = 30, division_id: str | None = None) -> dict[str, Any]:
+        """Build enhanced SLA analytics with detailed breakdown."""
+        correspondences = list(cls._fetch_correspondence(range_days=range_days, division_id=division_id))
+        now = timezone.now()
+        sla_targets = cls.get_sla_targets()
+        
+        # Overall SLA metrics
+        total = 0
+        compliant = 0
+        breached = 0
+        at_risk = 0
+        days_to_breach_sum = 0.0
+        
+        # By priority breakdown
+        by_priority: dict[str, dict[str, int]] = {
+            p: {"total": 0, "compliant": 0, "breached": 0, "atRisk": 0}
+            for p in ["urgent", "high", "medium", "low"]
+        }
+        
+        # By division breakdown
+        by_division: dict[str, dict[str, Any]] = {}
+        
+        for item in correspondences:
+            if item.status == Correspondence.Status.ARCHIVED:
+                continue
+                
+            total += 1
+            priority = item.priority or "medium"
+            target = sla_targets.get(priority, 5)
+            thresholds = cls.get_sla_thresholds(priority, division_id=str(item.division_id) if item.division_id else None)
+            
+            days_open = cls._turnaround_days(item, now)
+            
+            # Determine SLA status
+            if item.status == Correspondence.Status.COMPLETED:
+                if days_open <= target:
+                    compliant += 1
+                    by_priority[priority]["compliant"] += 1
+                else:
+                    breached += 1
+                    by_priority[priority]["breached"] += 1
+            else:
+                days_remaining = target - days_open
+                days_to_breach_sum += max(0, days_remaining)
+                
+                if days_open > target:
+                    breached += 1
+                    by_priority[priority]["breached"] += 1
+                elif days_open >= thresholds["critical"]:
+                    at_risk += 1
+                    by_priority[priority]["atRisk"] += 1
+                elif days_open >= thresholds["warning"]:
+                    at_risk += 1
+                    by_priority[priority]["atRisk"] += 1
+                else:
+                    compliant += 1
+                    by_priority[priority]["compliant"] += 1
+            
+            by_priority[priority]["total"] += 1
+            
+            # Track by division
+            div_id = str(item.division_id) if item.division_id else "unassigned"
+            div_name = getattr(item.division, "name", None) or "Unassigned"
+            if div_id not in by_division:
+                by_division[div_id] = {
+                    "id": div_id if div_id != "unassigned" else None,
+                    "name": div_name,
+                    "total": 0,
+                    "compliant": 0,
+                    "breached": 0,
+                    "atRisk": 0,
+                }
+            
+            div_bucket = by_division[div_id]
+            div_bucket["total"] += 1
+            if item.status == Correspondence.Status.COMPLETED:
+                if days_open <= target:
+                    div_bucket["compliant"] += 1
+                else:
+                    div_bucket["breached"] += 1
+            else:
+                if days_open > target:
+                    div_bucket["breached"] += 1
+                elif days_open >= thresholds["warning"]:
+                    div_bucket["atRisk"] += 1
+                else:
+                    div_bucket["compliant"] += 1
+        
+        compliance_rate = round((compliant / total) * 100, 2) if total else 0.0
+        avg_days_to_breach = round(days_to_breach_sum / (total - breached), 2) if (total - breached) > 0 else 0.0
+        
+        # Add compliance rate to each division
+        for div in by_division.values():
+            div["complianceRate"] = round((div["compliant"] / div["total"]) * 100, 2) if div["total"] else 0.0
+        
+        # Add compliance rate to each priority
+        for p, data in by_priority.items():
+            data["complianceRate"] = round((data["compliant"] / data["total"]) * 100, 2) if data["total"] else 0.0
+        
+        return {
+            "metadata": cls._metadata(range_days, division_id=division_id),
+            "summary": {
+                "total": total,
+                "compliant": compliant,
+                "breached": breached,
+                "atRisk": at_risk,
+                "complianceRate": compliance_rate,
+                "avgDaysToBreach": avg_days_to_breach,
+            },
+            "byPriority": [
+                {"priority": p, "label": p.title(), **data}
+                for p, data in by_priority.items()
+            ],
+            "byDivision": sorted(by_division.values(), key=lambda x: x["total"], reverse=True),
+            "slaTargets": {k: v for k, v in sla_targets.items()},
+        }
+
+    @classmethod
+    def build_enhanced_division_performance(cls, *, range_days: int = 30) -> dict[str, Any]:
+        """Build enhanced division performance analytics with SLA and trending."""
+        correspondences = list(cls._fetch_correspondence(range_days=range_days))
+        now = timezone.now()
+        sla_targets = cls.get_sla_targets()
+        
+        # Group by division
+        division_data: dict[str, dict[str, Any]] = {}
+        
+        for item in correspondences:
+            div_id = str(item.division_id) if item.division_id else "unassigned"
+            div_name = getattr(item.division, "code", None) or getattr(item.division, "name", None) or "Unassigned"
+            full_name = getattr(item.division, "name", None) or "Unassigned"
+            
+            if div_id not in division_data:
+                division_data[div_id] = {
+                    "id": div_id if div_id != "unassigned" else None,
+                    "name": div_name,
+                    "fullName": full_name,
+                    "workload": 0,
+                    "completed": 0,
+                    "pending": 0,
+                    "turnaround_values": [],
+                    "slaCompliant": 0,
+                    "slaBreached": 0,
+                    "slaAtRisk": 0,
+                    "urgent": 0,
+                    "high": 0,
+                    "medium": 0,
+                    "low": 0,
+                    "backlog": 0,
+                }
+            
+            div = division_data[div_id]
+            div["workload"] += 1
+            
+            # Priority count
+            priority = item.priority or "medium"
+            if priority in div:
+                div[priority] += 1
+            
+            days_open = cls._turnaround_days(item, now)
+            target = sla_targets.get(priority, 5)
+            
+            if item.status == Correspondence.Status.COMPLETED:
+                div["completed"] += 1
+                div["turnaround_values"].append(days_open)
+                if days_open <= target:
+                    div["slaCompliant"] += 1
+                else:
+                    div["slaBreached"] += 1
+            else:
+                div["pending"] += 1
+                if days_open > target:
+                    div["slaBreached"] += 1
+                elif days_open >= target * 0.75:
+                    div["slaAtRisk"] += 1
+                else:
+                    div["slaCompliant"] += 1
+                
+                if days_open > 5:
+                    div["backlog"] += 1
+        
+        # Calculate derived metrics
+        results = []
+        for div_id, div in division_data.items():
+            turnaround_values = div.pop("turnaround_values")
+            
+            # Calculate percentiles
+            if turnaround_values:
+                sorted_values = sorted(turnaround_values)
+                n = len(sorted_values)
+                avg_turnaround = round(sum(sorted_values) / n, 2)
+                p50_idx = int(n * 0.5)
+                p90_idx = min(int(n * 0.9), n - 1)
+                p50_turnaround = round(sorted_values[p50_idx], 2)
+                p90_turnaround = round(sorted_values[p90_idx], 2)
+            else:
+                avg_turnaround = 0.0
+                p50_turnaround = 0.0
+                p90_turnaround = 0.0
+            
+            completion_rate = round((div["completed"] / div["workload"]) * 100, 2) if div["workload"] else 0.0
+            sla_compliance = round(
+                (div["slaCompliant"] / div["workload"]) * 100, 2
+            ) if div["workload"] else 0.0
+            efficiency = round((completion_rate / (avg_turnaround or 1)) * 10, 2) if completion_rate else 0.0
+            throughput = round(div["completed"] / max(range_days, 1), 2)
+            
+            results.append({
+                "id": div["id"],
+                "name": div["name"],
+                "fullName": div["fullName"],
+                "workload": div["workload"],
+                "completed": div["completed"],
+                "pending": div["pending"],
+                "completionRate": completion_rate,
+                "avgTurnaround": avg_turnaround,
+                "p50Turnaround": p50_turnaround,
+                "p90Turnaround": p90_turnaround,
+                "slaCompliant": div["slaCompliant"],
+                "slaBreached": div["slaBreached"],
+                "slaAtRisk": div["slaAtRisk"],
+                "slaComplianceRate": sla_compliance,
+                "efficiency": efficiency,
+                "throughput": throughput,
+                "backlog": div["backlog"],
+                "priorityBreakdown": {
+                    "urgent": div["urgent"],
+                    "high": div["high"],
+                    "medium": div["medium"],
+                    "low": div["low"],
+                },
+            })
+        
+        # Sort by workload
+        results.sort(key=lambda x: x["workload"], reverse=True)
+        
+        # Calculate system-wide averages
+        total_workload = sum(r["workload"] for r in results)
+        total_completed = sum(r["completed"] for r in results)
+        avg_completion_rate = round(
+            sum(r["completionRate"] * r["workload"] for r in results) / total_workload, 2
+        ) if total_workload else 0.0
+        avg_sla_compliance = round(
+            sum(r["slaComplianceRate"] * r["workload"] for r in results) / total_workload, 2
+        ) if total_workload else 0.0
+        
+        return {
+            "metadata": cls._metadata(range_days),
+            "summary": {
+                "totalDivisions": len(results),
+                "totalWorkload": total_workload,
+                "totalCompleted": total_completed,
+                "avgCompletionRate": avg_completion_rate,
+                "avgSlaCompliance": avg_sla_compliance,
+            },
+            "divisions": results,
+            "topPerformers": sorted(results, key=lambda x: x["slaComplianceRate"], reverse=True)[:5],
+            "needsAttention": sorted(
+                [r for r in results if r["slaComplianceRate"] < 80],
+                key=lambda x: x["slaComplianceRate"]
+            )[:5],
+        }
+
+    @classmethod
+    def build_efficiency_analysis(cls, *, range_days: int = 30, division_id: str | None = None) -> dict[str, Any]:
+        """Build detailed efficiency analysis including staff metrics and bottlenecks."""
+        correspondences = list(cls._fetch_correspondence(range_days=range_days, division_id=division_id))
+        now = timezone.now()
+        
+        # Calculate handoff metrics
+        total_handoffs = 0
+        first_touch_resolved = 0
+        completed_count = 0
+        
+        # Staff activity tracking
+        staff_activity: dict[str, dict[str, Any]] = {}
+        
+        # Time analysis
+        hour_activity: Counter[int] = Counter()
+        weekend_activity = 0
+        total_activity = 0
+        
+        # Process bottleneck detection
+        division_pending_days: dict[str, list[float]] = defaultdict(list)
+        
+        for item in correspondences:
+            # Count handoffs from minutes
+            minutes_count = item.minutes.count() if hasattr(item, "minutes") else 0
+            total_handoffs += minutes_count
+            
+            if item.status == Correspondence.Status.COMPLETED:
+                completed_count += 1
+                if minutes_count <= 1:
+                    first_touch_resolved += 1
+            
+            # Track staff activity
+            if item.current_approver:
+                user_id = str(item.current_approver.id)
+                if user_id not in staff_activity:
+                    staff_activity[user_id] = {
+                        "userId": user_id,
+                        "name": item.current_approver.get_full_name() or item.current_approver.username,
+                        "itemsHandled": 0,
+                        "itemsCompleted": 0,
+                        "totalDays": 0.0,
+                    }
+                staff_activity[user_id]["itemsHandled"] += 1
+                if item.status == Correspondence.Status.COMPLETED:
+                    staff_activity[user_id]["itemsCompleted"] += 1
+                staff_activity[user_id]["totalDays"] += cls._turnaround_days(item, now)
+            
+            # Time analysis from created_at
+            if item.created_at:
+                hour = item.created_at.hour
+                hour_activity[hour] += 1
+                total_activity += 1
+                if item.created_at.weekday() >= 5:  # Saturday or Sunday
+                    weekend_activity += 1
+            
+            # Bottleneck detection
+            if item.status != Correspondence.Status.COMPLETED:
+                div_id = str(item.division_id) if item.division_id else "unassigned"
+                division_pending_days[div_id].append(cls._turnaround_days(item, now))
+        
+        # Calculate averages
+        avg_handoffs = round(total_handoffs / len(correspondences), 2) if correspondences else 0.0
+        first_touch_rate = round((first_touch_resolved / completed_count) * 100, 2) if completed_count else 0.0
+        
+        # Top performers
+        staff_list = list(staff_activity.values())
+        for staff in staff_list:
+            staff["avgResponseDays"] = round(
+                staff["totalDays"] / staff["itemsHandled"], 2
+            ) if staff["itemsHandled"] else 0.0
+            del staff["totalDays"]
+        
+        top_performers = sorted(staff_list, key=lambda x: x["itemsCompleted"], reverse=True)[:10]
+        
+        # Peak hours
+        peak_hours = [hour for hour, _ in hour_activity.most_common(3)]
+        
+        # Weekend activity
+        weekend_percent = round((weekend_activity / total_activity) * 100, 2) if total_activity else 0.0
+        
+        # Bottlenecks - divisions with highest average pending days
+        bottlenecks = []
+        for div_id, days_list in division_pending_days.items():
+            if days_list:
+                avg_pending = sum(days_list) / len(days_list)
+                # Get division name
+                try:
+                    div = Division.objects.get(id=div_id) if div_id != "unassigned" else None
+                    div_name = div.name if div else "Unassigned"
+                except Exception:
+                    div_name = "Unknown"
+                
+                bottlenecks.append({
+                    "divisionId": div_id if div_id != "unassigned" else None,
+                    "divisionName": div_name,
+                    "pendingCount": len(days_list),
+                    "avgPendingDays": round(avg_pending, 2),
+                })
+        
+        bottlenecks.sort(key=lambda x: x["avgPendingDays"], reverse=True)
+        
+        # Staff utilization (rough estimate based on items per staff)
+        active_staff = len(staff_activity)
+        avg_items_per_staff = round(len(correspondences) / active_staff, 2) if active_staff else 0.0
+        utilization_rate = min(100.0, round((avg_items_per_staff / 20) * 100, 2))  # Assume 20 items/staff is 100%
+        
+        return {
+            "metadata": cls._metadata(range_days, division_id=division_id),
+            "processEfficiency": {
+                "avgHandoffs": avg_handoffs,
+                "firstTouchResolutionRate": first_touch_rate,
+                "totalCorrespondence": len(correspondences),
+                "totalCompleted": completed_count,
+            },
+            "timeAnalysis": {
+                "avgProcessingHours": round(avg_handoffs * 24, 1),  # Rough estimate
+                "peakActivityHours": peak_hours,
+                "weekendActivityPercent": weekend_percent,
+            },
+            "staffMetrics": {
+                "activeStaff": active_staff,
+                "avgItemsPerStaff": avg_items_per_staff,
+                "utilizationRate": utilization_rate,
+                "topPerformers": top_performers,
+            },
+            "bottlenecks": bottlenecks[:5],
+        }

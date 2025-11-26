@@ -14,7 +14,13 @@ const toOptionalString = (value: unknown): string | undefined => {
 const mapApiUserToUser = (data: any): User => {
   const name = `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim();
   // system_role is now a ForeignKey (UUID), but backend returns system_role_name for display
-  const roleName = data.system_role_name ?? (data.system_role?.name ?? "");
+  let roleName = data.system_role_name ?? (data.system_role?.name ?? "");
+  // UUID pattern to detect if we accidentally got a UUID instead of a name
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // Never use UUID as role name
+  if (uuidPattern.test(roleName)) {
+    roleName = "";
+  }
   return {
     id: String(data.id ?? data.username),
     username: data.username ?? undefined,

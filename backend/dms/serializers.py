@@ -16,6 +16,7 @@ from .models import (
     DocumentPermission,
     DocumentVersion,
     DocumentWorkspace,
+    FormDocument,
 )
 
 
@@ -52,24 +53,37 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
             # If it's a relative path, convert to absolute URL
             from django.conf import settings
             request = self.context.get('request')
+            file_url = data['file_url']
+            
+            # Ensure the path starts with /media/ (it should already, but handle edge cases)
+            if not file_url.startswith('/media/'):
+                # If it doesn't start with /media/, prepend MEDIA_URL
+                media_path = file_url.lstrip('/')
+                if not media_path.startswith('media/'):
+                    media_path = f"media/{media_path}"
+                file_url = f"{settings.MEDIA_URL.rstrip('/')}/{media_path}"
+            
             if request:
                 try:
-                    # Use the request's host (which should be the external Nginx URL)
-                    data['file_url'] = request.build_absolute_uri(settings.MEDIA_URL + data['file_url'].lstrip('/'))
+                    # Build absolute URL manually to avoid request path prefix issues
+                    # request.build_absolute_uri might include /api/ prefix if request came through API
+                    scheme = getattr(request, 'scheme', 'http')
+                    host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8000'
+                    # Ensure file_url starts with /media/ (not /api/media/)
+                    if file_url.startswith('/api/media/'):
+                        file_url = file_url.replace('/api/media/', '/media/')
+                    # Build URL directly without using build_absolute_uri to avoid path prefix issues
+                    data['file_url'] = f"{scheme}://{host}{file_url}"
                 except Exception:
                     # Fallback: use the request host directly
                     scheme = getattr(request, 'scheme', 'http')
                     host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8000'
-                    media_path = data['file_url'].lstrip('/')
-                    if not media_path.startswith('media/'):
-                        media_path = f"media/{media_path}"
-                    data['file_url'] = f"{scheme}://{host}/{media_path}"
+                    if file_url.startswith('/api/media/'):
+                        file_url = file_url.replace('/api/media/', '/media/')
+                    data['file_url'] = f"{scheme}://{host}{file_url}"
             elif hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
                 # Use MEDIA_BASE_URL from settings if available
-                media_path = data['file_url'].lstrip('/')
-                if not media_path.startswith('media/'):
-                    media_path = f"media/{media_path}"
-                data['file_url'] = f"{settings.MEDIA_BASE_URL.rstrip('/')}/{media_path}"
+                data['file_url'] = f"{settings.MEDIA_BASE_URL.rstrip('/')}{file_url}"
         return data
 
     class Meta:
@@ -132,6 +146,7 @@ class DocumentPermissionSerializer(serializers.ModelSerializer):
             "id",
             "document",
             "access",
+            "note",
             "division_ids",
             "department_ids",
             "grade_levels",
@@ -161,6 +176,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         required=False,
         allow_empty=True,
     )
+    form_document = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
@@ -180,10 +196,38 @@ class DocumentSerializer(serializers.ModelSerializer):
             "workspace_ids",
             "versions",
             "permissions",
+            "form_document",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "author", "versions", "permissions", "created_at", "updated_at"]
+        read_only_fields = ["id", "author", "versions", "permissions", "form_document", "created_at", "updated_at"]
+
+    def get_form_document(self, obj):
+        """Get FormDocument data if this is a form document."""
+        if hasattr(obj, "form_document") and obj.form_document:
+            # Use a minimal serializer to avoid circular reference
+            form_doc = obj.form_document
+            return {
+                "id": str(form_doc.id),
+                "template": {
+                    "id": str(form_doc.template.id) if form_doc.template else None,
+                    "name": form_doc.template.name if form_doc.template else None,
+                    "slug": form_doc.template.slug if form_doc.template else None,
+                } if form_doc.template else None,
+                "form_data": form_doc.form_data,
+                "status": form_doc.status,
+                "signature_workflow": {
+                    "id": str(form_doc.signature_workflow.id),
+                    "status": form_doc.signature_workflow.status,
+                } if form_doc.signature_workflow else None,
+                "correspondence": {
+                    "id": str(form_doc.correspondence.id),
+                    "reference_number": form_doc.correspondence.reference_number,
+                } if form_doc.correspondence else None,
+                "created_at": form_doc.created_at.isoformat() if form_doc.created_at else None,
+                "updated_at": form_doc.updated_at.isoformat() if form_doc.updated_at else None,
+            }
+        return None
 
 
 class DocumentCommentSerializer(serializers.ModelSerializer):
@@ -279,3 +323,164 @@ class DocumentEditorSessionSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "user", "since", "created_at", "updated_at"]
+
+
+class FormDocumentSerializer(serializers.ModelSerializer):
+    """Serializer for FormDocument - extends DMS Document with form-specific data."""
+    
+    # Use a minimal document representation to avoid circular reference
+    document = serializers.SerializerMethodField()
+    document_id = serializers.PrimaryKeyRelatedField(
+        source="document",
+        queryset=Document.objects.all(),
+        write_only=True,
+        required=False,
+    )
+    
+    # Use UUIDField to avoid queryset issues with circular imports
+    template_id = serializers.UUIDField(
+        source="template.id",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    signature_workflow_id = serializers.UUIDField(
+        source="signature_workflow.id",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    correspondence_id = serializers.UUIDField(
+        source="correspondence.id",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    
+    template = serializers.SerializerMethodField()
+    signature_workflow = serializers.SerializerMethodField()
+    correspondence = serializers.SerializerMethodField()
+
+    def get_document(self, obj):
+        """Get minimal document data to avoid circular reference."""
+        if obj.document:
+            return {
+                "id": str(obj.document.id),
+                "title": obj.document.title,
+                "document_type": obj.document.document_type,
+                "status": obj.document.status,
+                "reference_number": obj.document.reference_number,
+            }
+        return None
+
+    def get_template(self, obj):
+        if obj.template:
+            return {"id": str(obj.template.id), "name": obj.template.name, "slug": obj.template.slug}
+        return None
+    
+    def get_signature_workflow(self, obj):
+        if obj.signature_workflow:
+            return {"id": str(obj.signature_workflow.id), "status": obj.signature_workflow.status}
+        return None
+    
+    def get_correspondence(self, obj):
+        if obj.correspondence:
+            return {"id": str(obj.correspondence.id), "reference_number": obj.correspondence.reference_number}
+        return None
+
+    def create(self, validated_data):
+        """Create FormDocument with proper foreign key handling."""
+        # Get document from validated_data (set by view's create method)
+        document = validated_data.get("document")
+        if not document:
+            # Try to get from document_id if document not set
+            document_id = self.initial_data.get("document_id")
+            if document_id:
+                document = Document.objects.get(id=document_id)
+            else:
+                raise serializers.ValidationError({"document_id": "Document is required"})
+        
+        # Handle template_id from initial_data
+        template_id = self.initial_data.get("template_id")
+        
+        # Handle signature_workflow_id
+        workflow_id = self.initial_data.get("signature_workflow_id")
+        
+        # Handle correspondence_id
+        correspondence_id = self.initial_data.get("correspondence_id")
+        
+        # Create FormDocument
+        form_doc = FormDocument.objects.create(
+            document=document,
+            form_data=validated_data.get("form_data", {}),
+            status=validated_data.get("status", FormDocument.FormStatus.DRAFT),
+        )
+        
+        # Set foreign keys
+        if template_id:
+            from forms.models import FormTemplate
+            form_doc.template = FormTemplate.objects.get(id=template_id)
+        if workflow_id:
+            from forms.signature_models import FormSignatureWorkflow
+            form_doc.signature_workflow = FormSignatureWorkflow.objects.get(id=workflow_id)
+        if correspondence_id:
+            from correspondence.models import Correspondence
+            form_doc.correspondence = Correspondence.objects.get(id=correspondence_id)
+        
+        form_doc.save()
+        return form_doc
+    
+    def update(self, instance, validated_data):
+        """Update FormDocument with proper foreign key handling."""
+        # Handle template_id
+        if "template_id" in self.initial_data:
+            template_id = self.initial_data.get("template_id")
+            if template_id:
+                from forms.models import FormTemplate
+                instance.template = FormTemplate.objects.get(id=template_id)
+            else:
+                instance.template = None
+        
+        # Handle signature_workflow_id
+        if "signature_workflow_id" in self.initial_data:
+            workflow_id = self.initial_data.get("signature_workflow_id")
+            if workflow_id:
+                from forms.signature_models import FormSignatureWorkflow
+                instance.signature_workflow = FormSignatureWorkflow.objects.get(id=workflow_id)
+            else:
+                instance.signature_workflow = None
+        
+        # Handle correspondence_id
+        if "correspondence_id" in self.initial_data:
+            correspondence_id = self.initial_data.get("correspondence_id")
+            if correspondence_id:
+                from correspondence.models import Correspondence
+                instance.correspondence = Correspondence.objects.get(id=correspondence_id)
+            else:
+                instance.correspondence = None
+        
+        # Update other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        return instance
+
+    class Meta:
+        model = FormDocument
+        fields = [
+            "id",
+            "document",
+            "document_id",
+            "template",
+            "template_id",
+            "form_data",
+            "status",
+            "signature_workflow",
+            "signature_workflow_id",
+            "correspondence",
+            "correspondence_id",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "document", "template", "signature_workflow", "correspondence", "created_at", "updated_at"]

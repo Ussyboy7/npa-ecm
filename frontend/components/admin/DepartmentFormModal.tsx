@@ -11,11 +11,12 @@ interface DepartmentFormModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   department?: Department;
+  defaultDivisionId?: string;
 }
 
 const EMPTY_VALUE = "__none";
 
-export const DepartmentFormModal = ({ open, onOpenChange, department }: DepartmentFormModalProps) => {
+export const DepartmentFormModal = ({ open, onOpenChange, department, defaultDivisionId }: DepartmentFormModalProps) => {
   const { addDepartment, updateDepartment, divisions, users } = useOrganization();
   const [formData, setFormData] = useState({
     name: '',
@@ -34,9 +35,14 @@ export const DepartmentFormModal = ({ open, onOpenChange, department }: Departme
         assistantGeneralManagerId: department.assistantGeneralManagerId || '',
       });
     } else {
-      setFormData({ name: '', code: '', divisionId: '', assistantGeneralManagerId: '' });
+      setFormData({ 
+        name: '', 
+        code: '', 
+        divisionId: defaultDivisionId || '', 
+        assistantGeneralManagerId: '' 
+      });
     }
-  }, [department, open]);
+  }, [department, open, defaultDivisionId]);
 
   const activeDivisions = divisions.filter(d => d.isActive);
   const assistantGeneralManagers = users.filter(u => u.gradeLevel === 'MSS2');

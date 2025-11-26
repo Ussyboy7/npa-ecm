@@ -76,6 +76,7 @@ export interface Role {
   name: string;
   description?: string;
   isActive: boolean;
+  permissions?: Record<string, boolean>;
   userCount?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -85,6 +86,7 @@ type CreateRoleInput = {
   name: string;
   description?: string;
   isActive?: boolean;
+  permissions?: Record<string, boolean>;
 };
 
 type UpdateRoleInput = Partial<CreateRoleInput>;
@@ -204,13 +206,21 @@ const mapApiUserToUser = (user: any): User => {
   // system_role is now a ForeignKey (UUID), but we need the name for display
   // Backend returns system_role_name for the role name
   // Ensure we never use the UUID as the role name - only use system_role_name
+  // system_role is now a ForeignKey (UUID), but we need the name for display
+  // Backend returns system_role_name for the role name - ALWAYS use this
   let roleName = user.system_role_name ?? '';
-  // If system_role_name is missing but we have system_role as an object with name
-  if (!roleName && user.system_role && typeof user.system_role === 'object' && user.system_role.name) {
+  
+  // UUID pattern to detect if we accidentally got a UUID instead of a name
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  
+  // If system_role_name is missing or is a UUID, try to get it from system_role object
+  if ((!roleName || uuidPattern.test(roleName)) && user.system_role && typeof user.system_role === 'object' && user.system_role.name) {
     roleName = user.system_role.name;
   }
-  // If roleName is still empty or looks like a UUID, set to empty string
-  if (!roleName || (roleName.includes('-') && roleName.length > 30)) {
+  
+  // Final check: if roleName is still a UUID or empty, set to empty string
+  // We should NEVER display a UUID as the role name
+  if (!roleName || uuidPattern.test(roleName)) {
     roleName = '';
   }
   return {
@@ -284,6 +294,7 @@ const mapApiRole = (item: any): Role => ({
   name: item.name ?? 'Role',
   description: item.description ?? '',
   isActive: item.is_active ?? true,
+  permissions: item.permissions ?? {},
   userCount: item.user_count ?? 0,
   createdAt: item.created_at,
   updatedAt: item.updated_at,
@@ -822,6 +833,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         name: role.name,
         description: role.description ?? '',
         is_active: role.isActive ?? true,
+        permissions: role.permissions ?? {},
       }),
     });
     const created = mapApiRole(response);
@@ -837,6 +849,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
           name: updates.name,
           description: updates.description,
           is_active: updates.isActive,
+          permissions: updates.permissions,
         }),
       });
       const updated = mapApiRole(response);

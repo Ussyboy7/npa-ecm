@@ -5,6 +5,7 @@ import Link from "next/link";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,6 +17,10 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import type { Correspondence } from "@/lib/npa-structure";
+
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+const DEFAULT_PAGE_SIZE = 25;
 
 const statusFilters = ["all", "pending", "in-progress", "completed", "archived"] as const;
 const priorityFilters = ["all", "urgent", "high", "medium", "low"] as const;
@@ -62,10 +67,18 @@ const RegisteredCorrespondencePage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [goToPageInput, setGoToPageInput] = useState('');
 
   useEffect(() => {
     void syncFromApi();
   }, [syncFromApi]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, statusFilter, priorityFilter, pageSize]);
 
   const canViewRegistry = permissions.canViewCorrespondenceRegistry;
 
@@ -114,6 +127,21 @@ const RegisteredCorrespondencePage = () => {
     searchQuery,
     statusFilter,
   ]);
+
+  const totalCount = searchableCorrespondence.length;
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const paginatedCorrespondence = useMemo(() => {
+    const startIndex = (page - 1) * pageSize;
+    return searchableCorrespondence.slice(startIndex, startIndex + pageSize);
+  }, [searchableCorrespondence, page, pageSize]);
+
+  const handleGoToPage = () => {
+    const pageNum = parseInt(goToPageInput, 10);
+    if (pageNum >= 1 && pageNum <= pageCount) {
+      setPage(pageNum);
+      setGoToPageInput('');
+    }
+  };
 
   if (!hydrated && !currentUser) {
     return null;
@@ -224,14 +252,14 @@ const RegisteredCorrespondencePage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {searchableCorrespondence.length === 0 ? (
+                  {paginatedCorrespondence.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                         No correspondence matches the current filters.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    searchableCorrespondence.map((item, index) => {
+                    paginatedCorrespondence.map((item, index) => {
                       const division = item.divisionId
                         ? divisions.find((divisionItem) => divisionItem.id === item.divisionId)
                         : undefined;
@@ -246,7 +274,7 @@ const RegisteredCorrespondencePage = () => {
 
                       return (
                         <TableRow key={item.id} className="hover:bg-muted/50">
-                          <TableCell className="font-medium">{index + 1}</TableCell>
+                          <TableCell className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</TableCell>
                           <TableCell>
                             <Link
                               href={`/correspondence/${item.id}`}
@@ -283,6 +311,120 @@ const RegisteredCorrespondencePage = () => {
             </ScrollArea>
           </CardContent>
         </Card>
+
+        {/* Pagination */}
+        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-muted-foreground">
+              Showing{' '}
+              {totalCount === 0
+                ? 0
+                : `${(page - 1) * pageSize + 1}-${Math.min(totalCount, (page - 1) * pageSize + paginatedCorrespondence.length)}`}{' '}
+              of {totalCount} records
+            </p>
+            <div className="flex items-center gap-2">
+              <label htmlFor="registered-page-size" className="text-sm text-muted-foreground">
+                Per page:
+              </label>
+              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                <SelectTrigger id="registered-page-size" className="w-20 h-8" aria-label="Items per page">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page === 1}
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            
+            {/* Page number buttons */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
+                let pageNum: number;
+                if (pageCount <= 5) {
+                  pageNum = i + 1;
+                } else if (page <= 3) {
+                  pageNum = i + 1;
+                } else if (page >= pageCount - 2) {
+                  pageNum = pageCount - 4 + i;
+                } else {
+                  pageNum = page - 2 + i;
+                }
+                
+                if (pageNum > pageCount) return null;
+                
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={page === pageNum ? 'default' : 'outline'}
+                    size="sm"
+                    className="w-8 h-8 p-0"
+                    onClick={() => setPage(pageNum)}
+                    aria-label={`Go to page ${pageNum}`}
+                    aria-current={page === pageNum ? 'page' : undefined}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            
+            {/* Go to page input */}
+            {pageCount > 5 && (
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min={1}
+                  max={pageCount}
+                  value={goToPageInput}
+                  onChange={(e) => setGoToPageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleGoToPage();
+                    }
+                  }}
+                  placeholder="Page"
+                  className="w-16 h-8 text-xs"
+                  aria-label="Go to page number"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={handleGoToPage}
+                  aria-label="Go to page"
+                >
+                  Go
+                </Button>
+              </div>
+            )}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+              disabled={page >= pageCount}
+              aria-label="Next page"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );

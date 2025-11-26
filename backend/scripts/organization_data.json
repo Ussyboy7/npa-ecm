@@ -179,6 +179,14 @@
       "active": true
     },
     {
+      "id": "div-edfa-direct",
+      "name": "Executive Director, Finance & Administration - Direct Reports",
+      "code": "EDFA_DIRECT",
+      "directorateId": "dir-edfa",
+      "generalManagerId": null,
+      "active": true
+    },
+    {
       "id": "div-medical",
       "name": "Medical Services",
       "code": "MEDICAL",
@@ -465,7 +473,7 @@
       "name": "Enterprise Risk Management",
       "code": "ERM",
       "directorateId": "dir-edfa",
-      "divisionId": null,
+      "divisionId": "div-edfa-direct",
       "assistantGeneralManagerId": "user-agm-erm",
       "active": true
     },
@@ -1068,7 +1076,7 @@
       "employeeId": "NPA040",
       "gradeLevel": "MSS1",
       "systemRole": "General Manager",
-      "division": "div-ops",
+      "division": "div-operations",
       "active": true
     },
     {
@@ -1218,7 +1226,7 @@
       "email": "agm.performance@npa.gov.ng",
       "employeeId": "NPA051",
       "gradeLevel": "MSS2",
-      "division": "div-monitoring",
+      "division": "div-hr",
       "department": "dept-performance",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1240,7 +1248,7 @@
       "email": "agm.abuja@npa.gov.ng",
       "employeeId": "NPA053",
       "gradeLevel": "MSS2",
-      "division": "div-liaison",
+      "division": "div-abuja",
       "department": "dept-abuja",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1251,7 +1259,7 @@
       "email": "agm.overseas@npa.gov.ng",
       "employeeId": "NPA054",
       "gradeLevel": "MSS2",
-      "division": "div-liaison",
+      "division": "div-oversea",
       "department": "dept-overseas",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1284,7 +1292,7 @@
       "email": "agm.investment@npa.gov.ng",
       "employeeId": "NPA057",
       "gradeLevel": "MSS2",
-      "division": "div-finance",
+      "division": "div-S&I",
       "department": "dept-investment",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1328,7 +1336,7 @@
       "email": "agm.hydrographic@npa.gov.ng",
       "employeeId": "NPA061",
       "gradeLevel": "MSS2",
-      "division": "div-marine",
+      "division": "div-engineering",
       "department": "dept-hydrographic",
       "systemRole": "Assistant General Manager",
       "active": true
@@ -1625,7 +1633,7 @@
       "email": "agm.erm@npa.gov.ng",
       "employeeId": "NPA088",
       "gradeLevel": "MSS2",
-      "directorate": "dir-edfa",
+      "division": "div-edfa-direct",
       "department": "dept-erm",
       "systemRole": "Assistant General Manager",
       "active": true

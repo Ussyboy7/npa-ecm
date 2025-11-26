@@ -80,6 +80,7 @@ class RoleSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "is_active",
+            "permissions",
             "user_count",
             "created_at",
             "updated_at",

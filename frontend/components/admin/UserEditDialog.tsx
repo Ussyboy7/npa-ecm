@@ -55,11 +55,21 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
   const { directorates, divisions, departments, users, updateUser, addUser, roles } = useOrganization();
   const [formData, setFormData] = useState<FormState & { username?: string; firstName?: string; lastName?: string; password?: string }>(defaultState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (user && open) {
       // Find role ID from role name (user.systemRole is the name, but form needs ID)
-      const roleId = roles.find((r) => r.name === user.systemRole)?.id ?? "";
+      // Also handle case where user.systemRole might be a UUID (shouldn't happen, but be safe)
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      let roleId = "";
+      if (user.systemRole && !uuidPattern.test(user.systemRole)) {
+        // user.systemRole is a name, find the ID
+        roleId = roles.find((r) => r.name === user.systemRole)?.id ?? "";
+      } else if (user.systemRole && uuidPattern.test(user.systemRole)) {
+        // user.systemRole is already a UUID (shouldn't happen, but handle it)
+        roleId = user.systemRole;
+      }
       setFormData({
         systemRole: roleId, // Store role ID for form submission
         gradeLevel: user.gradeLevel ?? "",
@@ -109,13 +119,68 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
 
   const selectedUserName = user?.name ?? "";
 
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    if (!user) {
+      // New user validation
+      if (!formData.username || formData.username.trim().length < 3) {
+        errors.username = 'Username must be at least 3 characters';
+      }
+      if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        errors.email = 'Please enter a valid email address';
+      }
+      if (!formData.firstName || formData.firstName.trim().length < 2) {
+        errors.firstName = 'First name must be at least 2 characters';
+      }
+      if (!formData.lastName || formData.lastName.trim().length < 2) {
+        errors.lastName = 'Last name must be at least 2 characters';
+      }
+      if (!formData.password || formData.password.length < 8) {
+        errors.password = 'Password must be at least 8 characters';
+      }
+      if (!formData.systemRole) {
+        errors.systemRole = 'System role is required';
+      }
+      if (!formData.employeeId || formData.employeeId.trim().length === 0) {
+        errors.employeeId = 'Employee ID is required';
+      }
+    } else {
+      // Update user validation
+      if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        errors.email = 'Please enter a valid email address';
+      }
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (!validateForm()) {
+      return;
+    }
+
     setIsSubmitting(true);
+    setValidationErrors({});
     try {
       if (user) {
-        // Update existing user
+        // Update existing user - check for duplicate email if changed
+        if (formData.email && formData.email !== user.email) {
+          const duplicateEmail = users.find(u => u.id !== user.id && u.email.toLowerCase() === formData.email.toLowerCase());
+          if (duplicateEmail) {
+            toast({
+              title: "Duplicate email",
+              description: `Email ${formData.email} is already in use by ${duplicateEmail.name}.`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            return;
+          }
+        }
+        
         await updateUser(user.id, {
           systemRole: formData.systemRole || null,
           gradeLevel: formData.gradeLevel || null,
@@ -132,11 +197,35 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
           description: `${selectedUserName || "The user"} has been updated successfully.`,
         });
       } else {
-        // Create new user
+        // Create new user - check for duplicates
         if (!formData.username || !formData.email || !formData.firstName || !formData.lastName || !formData.password) {
           toast({
             title: "Error",
             description: "Username, email, first name, last name, and password are required",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        
+        // Check for duplicate email
+        const duplicateEmail = users.find(u => u.email.toLowerCase() === formData.email.toLowerCase());
+        if (duplicateEmail) {
+          toast({
+            title: "Duplicate email",
+            description: `Email ${formData.email} is already in use by ${duplicateEmail.name}.`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        
+        // Check for duplicate username
+        const duplicateUsername = users.find(u => u.username?.toLowerCase() === formData.username?.toLowerCase());
+        if (duplicateUsername) {
+          toast({
+            title: "Duplicate username",
+            description: `Username ${formData.username} is already in use.`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -217,7 +306,21 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   }
                   placeholder="username"
                   required
+                  aria-label="Username"
+                  aria-required="true"
+                  aria-invalid={!!validationErrors.username}
+                  aria-describedby={validationErrors.username ? "username-error" : undefined}
                 />
+                {validationErrors.username && (
+                  <p id="username-error" className="text-xs text-destructive" role="alert">
+                    {validationErrors.username}
+                  </p>
+                )}
+                {!validationErrors.username && formData.username && users.some(u => u.username?.toLowerCase() === formData.username?.toLowerCase()) && (
+                  <p className="text-xs text-destructive" role="alert">
+                    This username is already in use
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -231,7 +334,21 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   }
                   placeholder="user@npa.gov.ng"
                   required
+                  aria-label="User email address"
+                  aria-required="true"
+                  aria-invalid={!!validationErrors.email}
+                  aria-describedby={validationErrors.email ? "email-error" : undefined}
                 />
+                {validationErrors.email && (
+                  <p id="email-error" className="text-xs text-destructive" role="alert">
+                    {validationErrors.email}
+                  </p>
+                )}
+                {!validationErrors.email && formData.email && !user && users.some(u => u.email.toLowerCase() === formData.email.toLowerCase()) && (
+                  <p className="text-xs text-destructive" role="alert">
+                    This email is already in use
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -244,7 +361,14 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   }
                   placeholder="First name"
                   required
+                  aria-invalid={!!validationErrors.firstName}
+                  aria-describedby={validationErrors.firstName ? "firstName-error" : undefined}
                 />
+                {validationErrors.firstName && (
+                  <p id="firstName-error" className="text-xs text-destructive" role="alert">
+                    {validationErrors.firstName}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -257,7 +381,14 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   }
                   placeholder="Last name"
                   required
+                  aria-invalid={!!validationErrors.lastName}
+                  aria-describedby={validationErrors.lastName ? "lastName-error" : undefined}
                 />
+                {validationErrors.lastName && (
+                  <p id="lastName-error" className="text-xs text-destructive" role="alert">
+                    {validationErrors.lastName}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -271,7 +402,19 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   }
                   placeholder="Set initial password"
                   required
+                  aria-invalid={!!validationErrors.password}
+                  aria-describedby={validationErrors.password ? "password-error" : undefined}
                 />
+                {validationErrors.password && (
+                  <p id="password-error" className="text-xs text-destructive" role="alert">
+                    {validationErrors.password}
+                  </p>
+                )}
+                {!validationErrors.password && formData.password && (
+                  <p className="text-xs text-muted-foreground">
+                    Password strength: {formData.password.length >= 12 ? 'Strong' : formData.password.length >= 8 ? 'Medium' : 'Weak'}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -296,16 +439,16 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   ))}
                 </SelectContent>
               </Select>
-              <Input
-                id="customRole"
-                name="customRole"
-                placeholder="Enter custom role"
-                value={formData.systemRole}
-                onChange={(event) =>
-                  setFormData((prev) => ({ ...prev, systemRole: event.target.value }))
-                }
-                required={!user}
-              />
+              {validationErrors.systemRole && (
+                <p id="systemRole-error" className="text-xs text-destructive" role="alert">
+                  {validationErrors.systemRole}
+                </p>
+              )}
+              {!validationErrors.systemRole && formData.systemRole && formData.systemRole !== EMPTY_VALUE && (
+                <p className="text-xs text-muted-foreground">
+                  Selected: {roleOptions.find((r) => r.value === formData.systemRole)?.label || 'Unknown role'}
+                </p>
+              )}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">

@@ -20,6 +20,7 @@ api_v1_patterns = [
     path('support/', include('support.urls')),
     path('notifications/', include('notifications.urls')),
     path('audit/', include('audit.urls')),
+    path('forms/', include('forms.urls')),
 ]
 
 urlpatterns = [

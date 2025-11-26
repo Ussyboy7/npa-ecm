@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.utils.text import slugify
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, viewsets
+from rest_framework import filters, permissions, viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from audit.services import AuditService
@@ -20,10 +20,32 @@ from .serializers import (
 )
 
 
+class IsAdminOrReadOnly(permissions.BasePermission):
+    """Allow read access to all authenticated users, but write access only to admins (MD/ED/GM)."""
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Superusers always have access
+        if request.user.is_superuser:
+            return True
+        
+        # Read operations (GET, HEAD, OPTIONS) are allowed for all authenticated users
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        
+        # Write operations require admin grade level
+        grade = (request.user.grade_level or "").upper()
+        admin_grades = {"MDCS", "EDCS", "MSS1"}  # Managing Director, Executive Director, General Manager
+        
+        return grade in admin_grades
+
+
 class WorkflowTemplateViewSet(viewsets.ModelViewSet):
     queryset = WorkflowTemplate.objects.prefetch_related("steps")
     serializer_class = WorkflowTemplateSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     pagination_class = None
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["applies_to", "is_active"]
@@ -44,12 +66,12 @@ class WorkflowTemplateViewSet(viewsets.ModelViewSet):
 
 
 class WorkflowStepViewSet(viewsets.ModelViewSet):
-    queryset = WorkflowStep.objects.select_related("template", "division", "department")
+    queryset = WorkflowStep.objects.select_related("template", "directorate", "division", "department", "office")
     serializer_class = WorkflowStepSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
     pagination_class = None
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["template", "division", "department"]
+    filterset_fields = ["template", "directorate", "division", "department", "office"]
     ordering_fields = ["order"]
     ordering = ["order"]
 

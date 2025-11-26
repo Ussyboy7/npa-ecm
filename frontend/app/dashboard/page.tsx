@@ -23,6 +23,7 @@ import {
   Loader2,
   Users,
 } from 'lucide-react';
+import { PendingSignaturesCard } from '@/components/forms/PendingSignaturesCard';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -36,7 +37,7 @@ import {
 } from '@/lib/analytics-client';
 
 const Dashboard = () => {
-  const { correspondence, minutes } = useCorrespondence();
+  const { correspondence } = useCorrespondence();
   const { currentUser, hydrated } = useCurrentUser();
   const { divisions, officeMemberships, offices } = useOrganization();
   const [recordsQuery, setRecordsQuery] = useState('');
@@ -290,7 +291,7 @@ const Dashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
+      <div className="container mx-auto p-6 space-y-6">
         {/* Welcome Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -348,6 +349,9 @@ const Dashboard = () => {
             );
           })}
         </div>
+
+        {/* Pending Signatures */}
+        <PendingSignaturesCard />
 
         {isExecutive && (
           <>
@@ -686,11 +690,16 @@ const Dashboard = () => {
 
         {/* Recent Correspondence */}
         <Card className="shadow-soft">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5 text-primary" />
               Recent Correspondence
             </CardTitle>
+            {pendingCorrespondence.length > 0 && (
+              <Link href="/inbox" className="text-sm text-primary hover:underline">
+                View All ({pendingCorrespondence.length})
+              </Link>
+            )}
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -698,13 +707,14 @@ const Dashboard = () => {
                 <div className="text-center py-8 text-muted-foreground">
                   <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p>No pending correspondence</p>
+                  <p className="text-xs mt-1">All caught up!</p>
                 </div>
               ) : (
-                pendingCorrespondence.map(corr => (
+                pendingCorrespondence.slice(0, 5).map(corr => (
                   <Link
                     key={corr.id}
                     href={`/correspondence/${corr.id}`}
-                    className="flex items-start gap-4 p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer block"
+                    className="flex items-start gap-4 p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
                   >
                     <div className={`p-2 rounded-lg ${
                       corr.priority === 'urgent' ? 'bg-destructive/10' :
@@ -747,29 +757,29 @@ const Dashboard = () => {
             <Card className="shadow-soft hover:shadow-medium transition-shadow cursor-pointer border-primary/20 hover:border-primary">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <FileText className="h-5 w-5 text-primary" />
-                  Create Document
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Start a new memo or internal document
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/correspondence/register">
-            <Card className="shadow-soft hover:shadow-medium transition-shadow cursor-pointer border-secondary/20 hover:border-secondary">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Mail className="h-5 w-5 text-secondary" />
+                  <Mail className="h-5 w-5 text-primary" />
                   Register Correspondence
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  Register incoming external correspondence
+                  Register incoming or outgoing correspondence
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/dms">
+            <Card className="shadow-soft hover:shadow-medium transition-shadow cursor-pointer border-secondary/20 hover:border-secondary">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="h-5 w-5 text-secondary" />
+                  Document Management
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Access and manage your documents
                 </p>
               </CardContent>
             </Card>

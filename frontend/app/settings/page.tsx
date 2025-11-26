@@ -14,6 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useTheme } from 'next-themes';
 import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectTrigger,
@@ -31,6 +34,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { 
   Settings, 
   User, 
@@ -51,7 +62,23 @@ import {
   Pencil,
   X,
   Check,
-  Loader2
+  Loader2,
+  Smartphone,
+  Key,
+  Copy,
+  Eye,
+  EyeOff,
+  Clock,
+  Volume2,
+  VolumeX,
+  Building2,
+  Briefcase,
+  Camera,
+  QrCode,
+  ShieldCheck,
+  AlertTriangle,
+  Download,
+  FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -76,6 +103,7 @@ import {
 } from '@/lib/signature-storage';
 
 const MAX_SIGNATURE_SIZE_MB = 2;
+const MAX_PHOTO_SIZE_MB = 5;
 type SignatureTemplateType = SignatureTemplate['templateType'];
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -102,7 +130,7 @@ const validateEmail = (email: string): string | null => {
 };
 
 const validatePhone = (phone: string): string | null => {
-  if (!phone) return null; // Phone is optional
+  if (!phone) return null;
   const phoneRegex = /^[\d\s\-\+\(\)]+$/;
   if (!phoneRegex.test(phone)) return 'Please enter a valid phone number';
   return null;
@@ -117,6 +145,17 @@ const validatePassword = (password: string): string | null => {
   return null;
 };
 
+// Generate mock backup codes
+const generateBackupCodes = (): string[] => {
+  const codes: string[] = [];
+  for (let i = 0; i < 10; i++) {
+    const code = Math.random().toString(36).substring(2, 6).toUpperCase() + '-' +
+                 Math.random().toString(36).substring(2, 6).toUpperCase();
+    codes.push(code);
+  }
+  return codes;
+};
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { currentUser, refresh: refreshUser } = useCurrentUser();
@@ -127,9 +166,23 @@ export default function SettingsPage() {
     lastName: '',
     email: '',
     phone: '',
+    bio: '',
+    jobTitle: '',
   });
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  
+  // 2FA state
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [showSetup2FA, setShowSetup2FA] = useState(false);
+  const [twoFactorSecret, setTwoFactorSecret] = useState('');
+  const [twoFactorQRCode, setTwoFactorQRCode] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [showBackupCodes, setShowBackupCodes] = useState(false);
+  const [isEnabling2FA, setIsEnabling2FA] = useState(false);
   
   // Notification preferences state
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferencesType | null>(null);
@@ -178,13 +231,21 @@ export default function SettingsPage() {
           last_name?: string;
           email?: string;
           phone?: string;
+          bio?: string;
+          job_title?: string;
+          profile_photo?: string;
         }>('/accounts/auth/me/');
         setProfile({
           firstName: userData.first_name || '',
           lastName: userData.last_name || '',
           email: userData.email || '',
-          phone: userData.phone || '', // Note: phone might not be in User model
+          phone: userData.phone || '',
+          bio: userData.bio || '',
+          jobTitle: userData.job_title || currentUser.title || '',
         });
+        if (userData.profile_photo) {
+          setProfilePhoto(userData.profile_photo);
+        }
       } catch (error) {
         logError('Failed to load user profile', error);
       }
@@ -222,9 +283,10 @@ export default function SettingsPage() {
       typeAlert: backend.type_alert ?? backend.typeAlert ?? true,
       typeReminder: backend.type_reminder ?? backend.typeReminder ?? true,
       quietHoursEnabled: backend.quiet_hours_enabled ?? backend.quietHoursEnabled ?? false,
-      quietHoursStart: backend.quiet_hours_start ?? backend.quietHoursStart,
-      quietHoursEnd: backend.quiet_hours_end ?? backend.quietHoursEnd,
+      quietHoursStart: backend.quiet_hours_start ?? backend.quietHoursStart ?? '22:00',
+      quietHoursEnd: backend.quiet_hours_end ?? backend.quietHoursEnd ?? '07:00',
       autoArchiveDays: backend.auto_archive_days ?? backend.autoArchiveDays ?? 30,
+      soundEnabled: backend.sound_enabled ?? backend.soundEnabled ?? true,
       createdAt: backend.created_at ?? backend.createdAt ?? new Date().toISOString(),
       updatedAt: backend.updated_at ?? backend.updatedAt ?? new Date().toISOString(),
     };
@@ -257,6 +319,7 @@ export default function SettingsPage() {
       quiet_hours_start: frontend.quietHoursStart,
       quiet_hours_end: frontend.quietHoursEnd,
       auto_archive_days: frontend.autoArchiveDays,
+      sound_enabled: frontend.soundEnabled,
     };
   };
 
@@ -272,7 +335,6 @@ export default function SettingsPage() {
       try {
         const prefs = await getNotificationPreferences();
         if (prefs) {
-          // Convert in case backend returns snake_case
           const converted = convertBackendToFrontend(prefs as any);
           if (converted) {
             setNotificationPrefs(converted);
@@ -320,8 +382,35 @@ export default function SettingsPage() {
     }
   }, []);
 
+  // Profile photo upload
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      toast.error('Please upload a valid image (PNG, JPG, or WebP)');
+      return;
+    }
+
+    if (file.size > MAX_PHOTO_SIZE_MB * 1024 * 1024) {
+      toast.error(`Photo must be ${MAX_PHOTO_SIZE_MB}MB or less`);
+      return;
+    }
+
+    try {
+      setIsUploadingPhoto(true);
+      const base64 = await fileToBase64(file);
+      setProfilePhoto(base64);
+      toast.success('Profile photo updated');
+    } catch (error) {
+      logError('Failed to upload photo', error);
+      toast.error('Failed to upload photo');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
-    // Validate form
     const errors: Record<string, string> = {};
     const emailError = validateEmail(profile.email);
     if (emailError) errors.email = emailError;
@@ -345,6 +434,7 @@ export default function SettingsPage() {
           first_name: profile.firstName,
           last_name: profile.lastName,
           email: profile.email,
+          bio: profile.bio,
         }),
       });
       
@@ -367,13 +457,11 @@ export default function SettingsPage() {
     setIsSavingNotifications(true);
     
     try {
-      // Convert to backend format
       const backendData = convertFrontendToBackend(notificationPrefs);
       const response = await apiFetch('/notifications/preferences/', {
         method: 'PUT',
         body: JSON.stringify(backendData),
       });
-      // Convert response back to frontend format
       const converted = convertBackendToFrontend(response);
       if (converted) {
         setNotificationPrefs(converted);
@@ -386,9 +474,67 @@ export default function SettingsPage() {
       setIsSavingNotifications(false);
     }
   };
+
+  // 2FA handlers
+  const handleSetup2FA = () => {
+    // Generate mock secret and QR code
+    const secret = 'JBSWY3DPEHPK3PXP'; // Mock secret
+    setTwoFactorSecret(secret);
+    setTwoFactorQRCode(`otpauth://totp/NPA-ECM:${profile.email}?secret=${secret}&issuer=NPA-ECM`);
+    setShowSetup2FA(true);
+  };
+
+  const handleVerify2FA = async () => {
+    if (verificationCode.length !== 6) {
+      toast.error('Please enter a valid 6-digit code');
+      return;
+    }
+
+    setIsEnabling2FA(true);
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Generate backup codes
+      const codes = generateBackupCodes();
+      setBackupCodes(codes);
+      setTwoFactorEnabled(true);
+      setShowSetup2FA(false);
+      setShowBackupCodes(true);
+      setVerificationCode('');
+      toast.success('Two-factor authentication enabled');
+    } catch (error) {
+      logError('Failed to enable 2FA', error);
+      toast.error('Failed to verify code. Please try again.');
+    } finally {
+      setIsEnabling2FA(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setTwoFactorEnabled(false);
+      setBackupCodes([]);
+      toast.success('Two-factor authentication disabled');
+    } catch (error) {
+      logError('Failed to disable 2FA', error);
+      toast.error('Failed to disable 2FA');
+    }
+  };
+
+  const handleRegenerateBackupCodes = () => {
+    const codes = generateBackupCodes();
+    setBackupCodes(codes);
+    toast.success('New backup codes generated');
+  };
+
+  const copyBackupCodes = () => {
+    navigator.clipboard.writeText(backupCodes.join('\n'));
+    toast.success('Backup codes copied to clipboard');
+  };
   
   const handleChangePassword = async () => {
-    // Validate passwords
     const errors: Record<string, string> = {};
     
     if (!passwordData.currentPassword) {
@@ -568,15 +714,16 @@ export default function SettingsPage() {
     toast.success('Organization templates reset to defaults');
   };
 
+  const userInitials = currentUser
+    ? `${currentUser.firstName?.[0] || ''}${currentUser.lastName?.[0] || ''}`.toUpperCase() || 'U'
+    : 'U';
+
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
+      <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-            <Settings className="h-8 w-8 text-primary" />
-            Settings
-          </h1>
+          <h1 className="text-3xl font-bold">Settings</h1>
           <p className="text-muted-foreground mt-1">
             Manage your account settings and preferences
           </p>
@@ -584,7 +731,7 @@ export default function SettingsPage() {
 
         <HelpGuideCard
           title="Personalise Your Workspace"
-          description="Update profile details, notifications, appearance, security options, and digital signature templates. Changes apply to the current persona stored in the Role Switcher."
+          description="Update profile details, notifications, appearance, security options, and digital signature templates."
           links={[
             { label: "Help & Guides", href: "/help" },
           ]}
@@ -624,21 +771,63 @@ export default function SettingsPage() {
 
           {/* Profile Tab */}
           <TabsContent value="profile" className="space-y-4">
+            {/* Profile Photo & Basic Info Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Profile Information</CardTitle>
                 <CardDescription>
-                  Update your personal information. Changes will be saved to your account.
+                  Update your personal information and profile photo.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
+                {/* Profile Photo Section */}
+                <div className="flex items-center gap-6">
+                  <div className="relative">
+                    <Avatar className="h-24 w-24">
+                      <AvatarImage src={profilePhoto || undefined} alt="Profile photo" />
+                      <AvatarFallback className="text-2xl">{userInitials}</AvatarFallback>
+                    </Avatar>
+                    <label
+                      htmlFor="photo-upload"
+                      className="absolute bottom-0 right-0 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center cursor-pointer hover:bg-primary/90 transition-colors"
+                    >
+                      {isUploadingPhoto ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Camera className="h-4 w-4" />
+                      )}
+                    </label>
+                    <input
+                      id="photo-upload"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={handlePhotoUpload}
+                      disabled={isUploadingPhoto}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-medium">{profile.firstName} {profile.lastName}</p>
+                    <p className="text-sm text-muted-foreground">{profile.email}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Briefcase className="h-3 w-3" />
+                      <span>{profile.jobTitle || currentUser?.title || 'No title set'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Building2 className="h-3 w-3" />
+                      <span>{currentUser?.divisionName || currentUser?.departmentName || 'No department'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Form Fields */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName">First Name</Label>
                     <Input
                       id="firstName"
-                      name="firstName"
-                      autoComplete="given-name"
                       placeholder="Enter your first name"
                       value={profile.firstName}
                       onChange={(e) => {
@@ -647,23 +836,15 @@ export default function SettingsPage() {
                           setProfileErrors({ ...profileErrors, firstName: '' });
                         }
                       }}
-                      aria-label="First name"
-                      aria-required="true"
-                      aria-invalid={!!profileErrors.firstName}
-                      aria-describedby={profileErrors.firstName ? "firstName-error" : undefined}
                     />
                     {profileErrors.firstName && (
-                      <p id="firstName-error" className="text-sm text-destructive" role="alert">
-                        {profileErrors.firstName}
-                      </p>
+                      <p className="text-sm text-destructive">{profileErrors.firstName}</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Last Name</Label>
                     <Input
                       id="lastName"
-                      name="lastName"
-                      autoComplete="family-name"
                       placeholder="Enter your last name"
                       value={profile.lastName}
                       onChange={(e) => {
@@ -672,25 +853,18 @@ export default function SettingsPage() {
                           setProfileErrors({ ...profileErrors, lastName: '' });
                         }
                       }}
-                      aria-label="Last name"
-                      aria-required="true"
-                      aria-invalid={!!profileErrors.lastName}
-                      aria-describedby={profileErrors.lastName ? "lastName-error" : undefined}
                     />
                     {profileErrors.lastName && (
-                      <p id="lastName-error" className="text-sm text-destructive" role="alert">
-                        {profileErrors.lastName}
-                      </p>
+                      <p className="text-sm text-destructive">{profileErrors.lastName}</p>
                     )}
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
                   <Input
                     id="email"
-                    name="email"
                     type="email"
-                    autoComplete="email"
                     placeholder="Enter your email"
                     value={profile.email}
                     onChange={(e) => {
@@ -699,24 +873,17 @@ export default function SettingsPage() {
                         setProfileErrors({ ...profileErrors, email: '' });
                       }
                     }}
-                    aria-label="Email address"
-                    aria-required="true"
-                    aria-invalid={!!profileErrors.email}
-                    aria-describedby={profileErrors.email ? "email-error" : undefined}
                   />
                   {profileErrors.email && (
-                    <p id="email-error" className="text-sm text-destructive" role="alert">
-                      {profileErrors.email}
-                    </p>
+                    <p className="text-sm text-destructive">{profileErrors.email}</p>
                   )}
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number <span className="text-muted-foreground text-xs">(Optional)</span></Label>
                   <Input
                     id="phone"
-                    name="phone"
                     type="tel"
-                    autoComplete="tel"
                     placeholder="Enter your phone number"
                     value={profile.phone}
                     onChange={(e) => {
@@ -725,21 +892,51 @@ export default function SettingsPage() {
                         setProfileErrors({ ...profileErrors, phone: '' });
                       }
                     }}
-                    aria-label="Phone number"
-                    aria-invalid={!!profileErrors.phone}
-                    aria-describedby={profileErrors.phone ? "phone-error" : undefined}
                   />
                   {profileErrors.phone && (
-                    <p id="phone-error" className="text-sm text-destructive" role="alert">
-                      {profileErrors.phone}
-                    </p>
+                    <p className="text-sm text-destructive">{profileErrors.phone}</p>
                   )}
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bio">Bio <span className="text-muted-foreground text-xs">(Optional)</span></Label>
+                  <Textarea
+                    id="bio"
+                    placeholder="Tell us a bit about yourself..."
+                    value={profile.bio}
+                    onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">{profile.bio.length}/500 characters</p>
+                </div>
+
+                {/* Read-only Organization Info */}
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <p className="text-sm font-medium">Organization Details</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Job Title</p>
+                      <p className="font-medium">{currentUser?.title || 'Not set'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Grade Level</p>
+                      <p className="font-medium">{currentUser?.gradeLevel || 'Not set'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Division</p>
+                      <p className="font-medium">{currentUser?.divisionName || 'Not assigned'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Department</p>
+                      <p className="font-medium">{currentUser?.departmentName || 'Not assigned'}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Contact your administrator to update organization details.</p>
+                </div>
+
                 <Button 
                   onClick={handleSaveProfile} 
-                  className="w-full sm:w-auto"
                   disabled={isSavingProfile}
-                  aria-label="Save profile changes"
                 >
                   {isSavingProfile ? (
                     <>
@@ -781,7 +978,7 @@ export default function SettingsPage() {
                         setIsLoadingNotifications(true);
                         try {
                           const prefs = await getNotificationPreferences();
-                          if (prefs) setNotificationPrefs(prefs);
+                          if (prefs) setNotificationPrefs(convertBackendToFrontend(prefs as any));
                         } catch (error) {
                           logError('Failed to reload preferences', error);
                         } finally {
@@ -795,179 +992,286 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <>
+                    {/* In-App Notifications */}
                     <div className="space-y-4">
-                      <div>
-                        <h3 className="text-sm font-semibold mb-3">In-App Notifications</h3>
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label htmlFor="in-app-enabled" aria-label="Enable in-app notifications">
-                                In-App Notifications
-                              </Label>
-                              <p className="text-sm text-muted-foreground">
-                                Receive notifications within the application
-                              </p>
-                            </div>
-                            <Switch
-                              id="in-app-enabled"
-                              checked={notificationPrefs.inAppEnabled ?? true}
-                              onCheckedChange={(checked) =>
-                                setNotificationPrefs({ ...notificationPrefs, inAppEnabled: checked })
-                              }
-                              aria-label="Toggle in-app notifications"
-                            />
+                      <h3 className="text-sm font-semibold">In-App Notifications</h3>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label>In-App Notifications</Label>
+                            <p className="text-sm text-muted-foreground">Receive notifications within the application</p>
                           </div>
-                          {notificationPrefs.inAppEnabled && (
+                          <Switch
+                            checked={notificationPrefs.inAppEnabled ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, inAppEnabled: checked })
+                            }
+                          />
+                        </div>
+                        {notificationPrefs.inAppEnabled && (
+                          <>
                             <div className="flex items-center justify-between pl-6">
                               <div className="space-y-0.5">
-                                <Label htmlFor="in-app-urgent-only" className="text-sm">
-                                  Urgent Only
-                                </Label>
-                                <p className="text-xs text-muted-foreground">
-                                  Only show urgent priority notifications
-                                </p>
+                                <Label className="text-sm">Urgent Only</Label>
+                                <p className="text-xs text-muted-foreground">Only show urgent priority notifications</p>
                               </div>
                               <Switch
-                                id="in-app-urgent-only"
                                 checked={notificationPrefs.inAppUrgentOnly ?? false}
                                 onCheckedChange={(checked) =>
                                   setNotificationPrefs({ ...notificationPrefs, inAppUrgentOnly: checked })
                                 }
-                                aria-label="Toggle urgent-only in-app notifications"
                               />
                             </div>
-                          )}
-                        </div>
-                      </div>
-                      <Separator />
-                      <div>
-                        <h3 className="text-sm font-semibold mb-3">Email Notifications</h3>
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <Label htmlFor="email-enabled" aria-label="Enable email notifications">
-                                Email Notifications
-                              </Label>
-                              <p className="text-sm text-muted-foreground">
-                                Receive notifications via email
-                              </p>
+                            <div className="flex items-center justify-between pl-6">
+                              <div className="space-y-0.5">
+                                <Label className="text-sm flex items-center gap-2">
+                                  <Volume2 className="h-4 w-4" /> Sound
+                                </Label>
+                                <p className="text-xs text-muted-foreground">Play sound for new notifications</p>
+                              </div>
+                              <Switch
+                                checked={notificationPrefs.soundEnabled ?? true}
+                                onCheckedChange={(checked) =>
+                                  setNotificationPrefs({ ...notificationPrefs, soundEnabled: checked })
+                                }
+                              />
                             </div>
-                            <Switch
-                              id="email-enabled"
-                              checked={notificationPrefs.emailEnabled ?? true}
-                              onCheckedChange={(checked) =>
-                                setNotificationPrefs({ ...notificationPrefs, emailEnabled: checked })
-                              }
-                              aria-label="Toggle email notifications"
-                            />
-                          </div>
-                          {notificationPrefs.emailEnabled && (
-                            <>
-                              <div className="flex items-center justify-between pl-6">
-                                <div className="space-y-0.5">
-                                  <Label htmlFor="email-urgent-only" className="text-sm">
-                                    Urgent Only
-                                  </Label>
-                                  <p className="text-xs text-muted-foreground">
-                                    Only send emails for urgent priority notifications
-                                  </p>
-                                </div>
-                                <Switch
-                                  id="email-urgent-only"
-                                  checked={notificationPrefs.emailUrgentOnly ?? false}
-                                  onCheckedChange={(checked) =>
-                                    setNotificationPrefs({ ...notificationPrefs, emailUrgentOnly: checked })
-                                  }
-                                  aria-label="Toggle urgent-only email notifications"
-                                />
-                              </div>
-                              <div className="flex items-center justify-between pl-6">
-                                <div className="space-y-0.5">
-                                  <Label htmlFor="email-digest" className="text-sm">
-                                    Daily Digest
-                                  </Label>
-                                  <p className="text-xs text-muted-foreground">
-                                    Receive a daily summary instead of individual emails
-                                  </p>
-                                </div>
-                                <Switch
-                                  id="email-digest"
-                                  checked={notificationPrefs.emailDigest ?? false}
-                                  onCheckedChange={(checked) =>
-                                    setNotificationPrefs({ ...notificationPrefs, emailDigest: checked })
-                                  }
-                                  aria-label="Toggle daily email digest"
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
+                          </>
+                        )}
                       </div>
-                      <Separator />
-                      <div>
-                        <h3 className="text-sm font-semibold mb-3">Module Filters</h3>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="module-correspondence" className="text-sm font-normal">
-                              Correspondence
-                            </Label>
-                            <Switch
-                              id="module-correspondence"
-                              checked={notificationPrefs.moduleCorrespondence ?? true}
-                              onCheckedChange={(checked) =>
-                                setNotificationPrefs({ ...notificationPrefs, moduleCorrespondence: checked })
-                              }
-                              aria-label="Toggle correspondence notifications"
-                            />
+                    </div>
+
+                    <Separator />
+
+                    {/* Email Notifications */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold">Email Notifications</h3>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label>Email Notifications</Label>
+                            <p className="text-sm text-muted-foreground">Receive notifications via email</p>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="module-dms" className="text-sm font-normal">
-                              Document Management
-                            </Label>
-                            <Switch
-                              id="module-dms"
-                              checked={notificationPrefs.moduleDms ?? true}
-                              onCheckedChange={(checked) =>
-                                setNotificationPrefs({ ...notificationPrefs, moduleDms: checked })
-                              }
-                              aria-label="Toggle DMS notifications"
-                            />
+                          <Switch
+                            checked={notificationPrefs.emailEnabled ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, emailEnabled: checked })
+                            }
+                          />
+                        </div>
+                        {notificationPrefs.emailEnabled && (
+                          <>
+                            <div className="flex items-center justify-between pl-6">
+                              <div className="space-y-0.5">
+                                <Label className="text-sm">Urgent Only</Label>
+                                <p className="text-xs text-muted-foreground">Only send emails for urgent priority</p>
+                              </div>
+                              <Switch
+                                checked={notificationPrefs.emailUrgentOnly ?? false}
+                                onCheckedChange={(checked) =>
+                                  setNotificationPrefs({ ...notificationPrefs, emailUrgentOnly: checked })
+                                }
+                              />
+                            </div>
+                            <div className="flex items-center justify-between pl-6">
+                              <div className="space-y-0.5">
+                                <Label className="text-sm">Daily Digest</Label>
+                                <p className="text-xs text-muted-foreground">Receive a daily summary instead of individual emails</p>
+                              </div>
+                              <Switch
+                                checked={notificationPrefs.emailDigest ?? false}
+                                onCheckedChange={(checked) =>
+                                  setNotificationPrefs({ ...notificationPrefs, emailDigest: checked })
+                                }
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Quiet Hours */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <Clock className="h-4 w-4" /> Quiet Hours
+                      </h3>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label>Enable Quiet Hours</Label>
+                            <p className="text-sm text-muted-foreground">Pause non-urgent notifications during set hours</p>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="module-workflow" className="text-sm font-normal">
-                              Workflow
-                            </Label>
-                            <Switch
-                              id="module-workflow"
-                              checked={notificationPrefs.moduleWorkflow ?? true}
-                              onCheckedChange={(checked) =>
-                                setNotificationPrefs({ ...notificationPrefs, moduleWorkflow: checked })
-                              }
-                              aria-label="Toggle workflow notifications"
-                            />
+                          <Switch
+                            checked={notificationPrefs.quietHoursEnabled ?? false}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, quietHoursEnabled: checked })
+                            }
+                          />
+                        </div>
+                        {notificationPrefs.quietHoursEnabled && (
+                          <div className="grid grid-cols-2 gap-4 pl-6">
+                            <div className="space-y-2">
+                              <Label className="text-sm">Start Time</Label>
+                              <Input
+                                type="time"
+                                value={notificationPrefs.quietHoursStart || '22:00'}
+                                onChange={(e) =>
+                                  setNotificationPrefs({ ...notificationPrefs, quietHoursStart: e.target.value })
+                                }
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-sm">End Time</Label>
+                              <Input
+                                type="time"
+                                value={notificationPrefs.quietHoursEnd || '07:00'}
+                                onChange={(e) =>
+                                  setNotificationPrefs({ ...notificationPrefs, quietHoursEnd: e.target.value })
+                                }
+                              />
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="module-system" className="text-sm font-normal">
-                              System
-                            </Label>
-                            <Switch
-                              id="module-system"
-                              checked={notificationPrefs.moduleSystem ?? true}
-                              onCheckedChange={(checked) =>
-                                setNotificationPrefs({ ...notificationPrefs, moduleSystem: checked })
-                              }
-                              aria-label="Toggle system notifications"
-                            />
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Priority Filters */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold">Priority Filters</h3>
+                      <p className="text-xs text-muted-foreground">Choose which priority levels trigger notifications</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="destructive" className="h-2 w-2 p-0 rounded-full" />
+                            <span className="text-sm">Urgent</span>
                           </div>
+                          <Switch
+                            checked={notificationPrefs.priorityUrgent ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, priorityUrgent: checked })
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Badge className="h-2 w-2 p-0 rounded-full bg-orange-500" />
+                            <span className="text-sm">High</span>
+                          </div>
+                          <Switch
+                            checked={notificationPrefs.priorityHigh ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, priorityHigh: checked })
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Badge className="h-2 w-2 p-0 rounded-full bg-yellow-500" />
+                            <span className="text-sm">Normal</span>
+                          </div>
+                          <Switch
+                            checked={notificationPrefs.priorityNormal ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, priorityNormal: checked })
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <Badge className="h-2 w-2 p-0 rounded-full bg-green-500" />
+                            <span className="text-sm">Low</span>
+                          </div>
+                          <Switch
+                            checked={notificationPrefs.priorityLow ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, priorityLow: checked })
+                            }
+                          />
                         </div>
                       </div>
                     </div>
+
                     <Separator />
+
+                    {/* Module Filters */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold">Module Filters</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-normal">Correspondence</Label>
+                          <Switch
+                            checked={notificationPrefs.moduleCorrespondence ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, moduleCorrespondence: checked })
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-normal">Document Management</Label>
+                          <Switch
+                            checked={notificationPrefs.moduleDms ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, moduleDms: checked })
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-normal">Workflow</Label>
+                          <Switch
+                            checked={notificationPrefs.moduleWorkflow ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, moduleWorkflow: checked })
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-normal">System</Label>
+                          <Switch
+                            checked={notificationPrefs.moduleSystem ?? true}
+                            onCheckedChange={(checked) =>
+                              setNotificationPrefs({ ...notificationPrefs, moduleSystem: checked })
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Auto Archive */}
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold">Auto-Archive Notifications</h3>
+                      <div className="flex items-center gap-4">
+                        <Label className="text-sm font-normal">Archive read notifications after</Label>
+                        <Select
+                          value={String(notificationPrefs.autoArchiveDays ?? 30)}
+                          onValueChange={(value) =>
+                            setNotificationPrefs({ ...notificationPrefs, autoArchiveDays: parseInt(value) })
+                          }
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="7">7 days</SelectItem>
+                            <SelectItem value="14">14 days</SelectItem>
+                            <SelectItem value="30">30 days</SelectItem>
+                            <SelectItem value="60">60 days</SelectItem>
+                            <SelectItem value="90">90 days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <Separator />
+
                     <Button 
                       onClick={handleSaveNotifications} 
-                      className="w-full sm:w-auto"
                       disabled={isSavingNotifications}
-                      aria-label="Save notification preferences"
                     >
                       {isSavingNotifications ? (
                         <>
@@ -992,9 +1296,7 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Theme Settings</CardTitle>
-                <CardDescription>
-                  Customize the appearance of the application
-                </CardDescription>
+                <CardDescription>Customize the appearance of the application</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
@@ -1032,11 +1334,75 @@ export default function SettingsPage() {
 
           {/* Security Tab */}
           <TabsContent value="security" className="space-y-4">
+            {/* 2FA Card */}
             <Card>
               <CardHeader>
-                <CardTitle>Security Settings</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Smartphone className="h-5 w-5" />
+                  Two-Factor Authentication
+                </CardTitle>
                 <CardDescription>
-                  Change your password to keep your account secure. Use a strong password with at least 8 characters, including uppercase, lowercase, and numbers.
+                  Add an extra layer of security to your account by requiring a verification code from your phone.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    {twoFactorEnabled ? (
+                      <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <ShieldCheck className="h-5 w-5 text-green-600" />
+                      </div>
+                    ) : (
+                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                        <Shield className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium">
+                        {twoFactorEnabled ? '2FA is enabled' : '2FA is not enabled'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {twoFactorEnabled
+                          ? 'Your account is protected with two-factor authentication'
+                          : 'Protect your account with authenticator app verification'}
+                      </p>
+                    </div>
+                  </div>
+                  {twoFactorEnabled ? (
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setShowBackupCodes(true)}>
+                        <Key className="h-4 w-4 mr-2" />
+                        Backup Codes
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={handleDisable2FA}>
+                        Disable
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button onClick={handleSetup2FA}>
+                      <Smartphone className="h-4 w-4 mr-2" />
+                      Enable 2FA
+                    </Button>
+                  )}
+                </div>
+
+                {twoFactorEnabled && (
+                  <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm">
+                    <p className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                      <Check className="h-4 w-4" />
+                      Two-factor authentication is active. You&apos;ll need your authenticator app to sign in.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Password Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Change Password</CardTitle>
+                <CardDescription>
+                  Use a strong password with at least 8 characters, including uppercase, lowercase, and numbers.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1044,9 +1410,7 @@ export default function SettingsPage() {
                   <Label htmlFor="current-password">Current Password</Label>
                   <Input
                     id="current-password"
-                    name="current-password"
                     type="password"
-                    autoComplete="current-password"
                     placeholder="Enter current password"
                     value={passwordData.currentPassword}
                     onChange={(e) => {
@@ -1055,24 +1419,16 @@ export default function SettingsPage() {
                         setPasswordErrors({ ...passwordErrors, currentPassword: '' });
                       }
                     }}
-                    aria-label="Current password"
-                    aria-required="true"
-                    aria-invalid={!!passwordErrors.currentPassword}
-                    aria-describedby={passwordErrors.currentPassword ? "current-password-error" : undefined}
                   />
                   {passwordErrors.currentPassword && (
-                    <p id="current-password-error" className="text-sm text-destructive" role="alert">
-                      {passwordErrors.currentPassword}
-                    </p>
+                    <p className="text-sm text-destructive">{passwordErrors.currentPassword}</p>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="new-password">New Password</Label>
                   <Input
                     id="new-password"
-                    name="new-password"
                     type="password"
-                    autoComplete="new-password"
                     placeholder="Enter new password"
                     value={passwordData.newPassword}
                     onChange={(e) => {
@@ -1081,27 +1437,16 @@ export default function SettingsPage() {
                         setPasswordErrors({ ...passwordErrors, newPassword: '' });
                       }
                     }}
-                    aria-label="New password"
-                    aria-required="true"
-                    aria-invalid={!!passwordErrors.newPassword}
-                    aria-describedby={passwordErrors.newPassword ? "new-password-error" : undefined}
                   />
                   {passwordErrors.newPassword && (
-                    <p id="new-password-error" className="text-sm text-destructive" role="alert">
-                      {passwordErrors.newPassword}
-                    </p>
+                    <p className="text-sm text-destructive">{passwordErrors.newPassword}</p>
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    Password must be at least 8 characters and include uppercase, lowercase, and numbers.
-                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">Confirm New Password</Label>
                   <Input
                     id="confirm-password"
-                    name="confirm-password"
                     type="password"
-                    autoComplete="new-password"
                     placeholder="Confirm new password"
                     value={passwordData.confirmPassword}
                     onChange={(e) => {
@@ -1110,61 +1455,25 @@ export default function SettingsPage() {
                         setPasswordErrors({ ...passwordErrors, confirmPassword: '' });
                       }
                     }}
-                    aria-label="Confirm new password"
-                    aria-required="true"
-                    aria-invalid={!!passwordErrors.confirmPassword}
-                    aria-describedby={passwordErrors.confirmPassword ? "confirm-password-error" : undefined}
                   />
                   {passwordErrors.confirmPassword && (
-                    <p id="confirm-password-error" className="text-sm text-destructive" role="alert">
-                      {passwordErrors.confirmPassword}
-                    </p>
+                    <p className="text-sm text-destructive">{passwordErrors.confirmPassword}</p>
                   )}
                 </div>
                 <Button 
                   onClick={() => setShowPasswordDialog(true)}
-                  className="w-full sm:w-auto"
                   disabled={isChangingPassword}
-                  aria-label="Change password"
                 >
                   <Lock className="h-4 w-4 mr-2" />
                   Change Password
                 </Button>
               </CardContent>
             </Card>
-            
-            {/* Password Change Confirmation Dialog */}
-            <AlertDialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Change Password</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to change your password? You will need to use your new password to log in next time.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isChangingPassword}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleChangePassword}
-                    disabled={isChangingPassword}
-                    className="bg-primary text-primary-foreground"
-                  >
-                    {isChangingPassword ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Changing...
-                      </>
-                    ) : (
-                      'Change Password'
-                    )}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
           </TabsContent>
 
           {/* Signature Tab */}
           <TabsContent value="signature" className="space-y-4">
+            {/* Signature Upload Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Digital Signature</CardTitle>
@@ -1174,314 +1483,267 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-start gap-4 p-4 border border-dashed rounded-lg bg-muted/30">
-                  <AlertCircle className="h-5 w-5 text-primary mt-1" />
+                  <AlertCircle className="h-5 w-5 text-primary mt-0.5" />
                   <div className="space-y-1 text-sm text-muted-foreground">
-                    <p>
-                      Supported formats: <strong>PNG, JPG, SVG</strong> • Max size: <strong>{MAX_SIGNATURE_SIZE_MB}MB</strong>
-                    </p>
-                    <p>
-                      Your signature will be stored locally for now and will migrate to secure backend storage when available.
-                    </p>
+                    <p>Supported formats: <strong>PNG, JPG, SVG</strong> • Max size: <strong>{MAX_SIGNATURE_SIZE_MB}MB</strong></p>
+                    <p>For best results, use a transparent PNG with your signature on a white background.</p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signature-upload">Upload Signature</Label>
-                    <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-                      <Input
-                        id="signature-upload"
-                        type="file"
-                        accept="image/png,image/jpeg,image/svg+xml"
-                        onChange={handleSignatureUpload}
-                        disabled={isUploading}
-                      />
-                      <Button variant="outline" className="gap-2" disabled={isUploading}>
-                        <Upload className="h-4 w-4" />
-                        {isUploading ? 'Uploading...' : 'Select File'}
-                      </Button>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Upload Section */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Upload New Signature</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="file"
+                          accept="image/png,image/jpeg,image/svg+xml"
+                          onChange={handleSignatureUpload}
+                          disabled={isUploading}
+                          className="flex-1"
+                        />
+                      </div>
                     </div>
+
+                    {!signature && (
+                      <div className="p-8 border-2 border-dashed rounded-lg text-center text-muted-foreground">
+                        <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p className="text-sm">No signature uploaded</p>
+                        <p className="text-xs">Upload your signature to approve correspondence</p>
+                      </div>
+                    )}
                   </div>
 
+                  {/* Preview Section */}
                   {signature && (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-foreground">Current Signature</p>
+                          <p className="text-sm font-medium">Current Signature</p>
                           <p className="text-xs text-muted-foreground">
-                            Uploaded {new Date(signature.uploadedAt).toLocaleString()} {signature.fileName ? `• ${signature.fileName}` : ''}
+                            Uploaded {new Date(signature.uploadedAt).toLocaleDateString()}
                           </p>
                         </div>
                         <Button 
                           variant="destructive" 
-                          size="sm" 
-                          className="gap-2" 
+                          size="sm"
                           onClick={() => setShowDeleteSignatureDialog(true)}
-                          aria-label="Delete signature"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4 mr-2" />
                           Remove
                         </Button>
                       </div>
-                      <div className="p-4 border rounded-lg bg-background flex items-center justify-center">
+                      <div className="p-6 border rounded-lg bg-white flex items-center justify-center min-h-[120px]">
                         <img
                           src={signature.imageData}
                           alt="Digital signature preview"
-                          className="max-h-32 object-contain"
+                          className="max-h-24 object-contain"
                         />
                       </div>
-                    </div>
-                  )}
-
-                  {!signature && (
-                    <div className="p-4 border border-border rounded-lg bg-muted/30 text-sm text-muted-foreground">
-                      No signature uploaded yet. Please add your signature to approve correspondence.
-                    </div>
-                  )}
-
-                  <Tabs className="space-y-4" defaultValue="personal">
-                    <TabsList>
-                      <TabsTrigger value="personal">My Templates</TabsTrigger>
-                      <TabsTrigger value="organization">Organization Templates</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="personal">
-                      <div className="space-y-4">
+                      <div className="p-3 bg-muted/50 rounded-lg">
                         <p className="text-xs text-muted-foreground">
-                          Choose your preferred templates for each action. You can fall back to the organization default at any time.
+                          <strong>File:</strong> {signature.fileName || 'Unknown'}
                         </p>
-                        <div className="space-y-4">
-                          {templateTypes.map((type) => {
-                            const templatesForType = signatureTemplates.filter(template => template.templateType === type);
-                            const organizationDefault = signatureTemplates.find(template => template.templateType === type && template.defaultApply) ?? templatesForType[0] ?? null;
-                            const selectedValue = signaturePreferences.templateOverrides?.[type] ?? '__organization__';
-                            return (
-                              <Card key={type} className="border-muted">
-                                <CardHeader className="pb-2">
-                                  <CardTitle className="text-sm capitalize">{type} Template</CardTitle>
-                                  <CardDescription className="text-xs">
-                                    {type === 'approval' && 'Used whenever you approve and forward correspondence.'}
-                                    {type === 'minute' && 'Used when you leave a comment/minute without approving.'}
-                                    {type === 'forward' && 'Used when you manually forward correspondence.'}
-                                    {type === 'treatment' && 'Used when you treat/respond to correspondence.'}
-                                  </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                  {templatesForType.length > 0 ? (
-                                    <Select
-                                      value={selectedValue}
-                                      onValueChange={(value) => handleTemplateOverrideChange(type, value)}
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select template" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="__organization__">
-                                          <div className="flex flex-col text-xs">
-                                            <span className="font-medium text-foreground">Use organization default</span>
-                                            <span className="text-muted-foreground">
-                                              {organizationDefault ? organizationDefault.name : 'No default configured'}
-                                            </span>
-                                          </div>
-                                        </SelectItem>
-                                        {templatesForType.map(template => (
-                                          <SelectItem key={template.id} value={template.id}>
-                                            <div className="flex flex-col text-xs">
-                                              <span className="font-medium text-foreground">{template.name}</span>
-                                              <span className="text-muted-foreground">{template.description}</span>
-                                            </div>
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  ) : (
-                                    <div className="p-3 border border-dashed rounded bg-muted/30 text-xs text-muted-foreground">
-                                      No templates available for this action yet.
-                                    </div>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            );
-                          })}
-                        </div>
-                        <Separator />
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Switch
-                              checked={signaturePreferences.autoApplyForMinutes ?? false}
-                              onCheckedChange={handleAutoApplyMinutesChange}
-                            />
-                            <span>Automatically apply signature to minutes (when not approving)</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={handleResetPersonalPreferences} disabled={!hasPreferenceChanges || !currentUser?.id}>
-                              Reset
-                            </Button>
-                            <Button size="sm" onClick={handleSavePersonalPreferences} disabled={!hasPreferenceChanges || !currentUser?.id}>
-                              Save Preferences
-                            </Button>
-                          </div>
-                        </div>
                       </div>
-                    </TabsContent>
-                    <TabsContent value="organization">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs text-muted-foreground">
-                          Organization-wide templates are the defaults applied across all users.
-                        </p>
-                        <Button variant="outline" size="sm" className="gap-2" onClick={resetOrganizationTemplates}>
-                          <RefreshCcw className="h-4 w-4" />
-                          Reset to Default
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Signature Templates Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Signature Templates</CardTitle>
+                <CardDescription>
+                  Configure how your signature appears in different workflow actions.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="personal" className="space-y-4">
+                  <TabsList>
+                    <TabsTrigger value="personal">My Preferences</TabsTrigger>
+                    <TabsTrigger value="organization">Organization Templates</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="personal" className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Override organization defaults with your personal preferences for each action type.
+                    </p>
+                    
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {templateTypes.map((type) => {
+                        const templatesForType = signatureTemplates.filter(t => t.templateType === type);
+                        const orgDefault = templatesForType.find(t => t.defaultApply) ?? templatesForType[0];
+                        const selectedValue = signaturePreferences.templateOverrides?.[type] ?? '__organization__';
+                        
+                        return (
+                          <Card key={type} className="border-muted">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-sm capitalize flex items-center gap-2">
+                                <FileText className="h-4 w-4" />
+                                {type}
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <Select
+                                value={selectedValue}
+                                onValueChange={(value) => handleTemplateOverrideChange(type, value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select template" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__organization__">
+                                    Use organization default
+                                    {orgDefault && <span className="text-xs text-muted-foreground ml-2">({orgDefault.name})</span>}
+                                  </SelectItem>
+                                  {templatesForType.map(template => (
+                                    <SelectItem key={template.id} value={template.id}>
+                                      {template.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={signaturePreferences.autoApplyForMinutes ?? false}
+                          onCheckedChange={handleAutoApplyMinutesChange}
+                        />
+                        <span className="text-sm">Auto-apply signature to minutes</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={handleResetPersonalPreferences} disabled={!hasPreferenceChanges}>
+                          Reset
+                        </Button>
+                        <Button size="sm" onClick={handleSavePersonalPreferences} disabled={!hasPreferenceChanges}>
+                          Save Preferences
                         </Button>
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {signatureTemplates.map(template => {
-                          const isEditing = editingTemplateId === template.id;
-                          const draft = isEditing ? templateDraft : template;
-                          return (
-                            <Card key={template.id} className="border-muted">
-                              <CardHeader className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  {isEditing ? (
-                                    <Input
-                                      value={draft?.name ?? ''}
-                                      onChange={(e) => updateTemplateDraft('name', e.target.value)}
-                                      className="text-sm font-semibold"
-                                    />
-                                  ) : (
-                                    <CardTitle className="text-sm">{template.name}</CardTitle>
-                                  )}
-                                  <Badge variant="outline" className="text-[10px] uppercase">
-                                    {draft?.templateType}
-                                  </Badge>
-                                </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="organization" className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Organization-wide templates used as defaults for all users.
+                      </p>
+                      <Button variant="outline" size="sm" onClick={resetOrganizationTemplates}>
+                        <RefreshCcw className="h-4 w-4 mr-2" />
+                        Reset to Default
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {signatureTemplates.map(template => {
+                        const isEditing = editingTemplateId === template.id;
+                        const draft = isEditing ? templateDraft : template;
+                        
+                        return (
+                          <Card key={template.id} className="border-muted">
+                            <CardHeader className="pb-2">
+                              <div className="flex items-center justify-between">
                                 {isEditing ? (
-                                  <Textarea
-                                    value={draft?.description ?? ''}
-                                    onChange={(e) => updateTemplateDraft('description', e.target.value)}
-                                    className="text-xs"
-                                    rows={2}
+                                  <Input
+                                    value={draft?.name ?? ''}
+                                    onChange={(e) => updateTemplateDraft('name', e.target.value)}
+                                    className="h-8 text-sm font-semibold"
                                   />
                                 ) : (
-                                  <CardDescription className="text-xs">
-                                    {template.description}
-                                  </CardDescription>
+                                  <CardTitle className="text-sm">{template.name}</CardTitle>
                                 )}
-                              </CardHeader>
-                              <CardContent className="space-y-4">
-                                <div className="space-y-2">
-                                  <Label className="text-xs text-muted-foreground">Format Preview</Label>
-                                  {isEditing ? (
-                                    <Textarea
-                                      value={draft?.format ?? ''}
-                                      onChange={(e) => updateTemplateDraft('format', e.target.value)}
-                                      className="text-xs font-mono"
-                                      rows={4}
-                                    />
-                                  ) : (
-                                    <div className="p-3 rounded bg-muted/30 border border-dashed">
-                                      <p className="text-xs whitespace-pre-wrap text-muted-foreground font-mono">
-                                        {template.format}
-                                      </p>
-                                    </div>
-                                  )}
-                                  {isEditing && (
-                                    <p className="text-[10px] text-muted-foreground">
-                                      Use placeholders such as {'{name}'}, {'{title}'}, {'{gradeLevel}'}, {'{division}'}, {'{department}'}, {'{initials}'}, {'{date}'}, {'{dateTime}'}, {'{referenceNumber}'}.
-                                    </p>
-                                  )}
+                                <Badge variant="outline" className="text-xs capitalize">{template.templateType}</Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              {isEditing ? (
+                                <Textarea
+                                  value={draft?.format ?? ''}
+                                  onChange={(e) => updateTemplateDraft('format', e.target.value)}
+                                  className="text-xs font-mono"
+                                  rows={4}
+                                />
+                              ) : (
+                                <div className="p-2 bg-muted/50 rounded text-xs font-mono whitespace-pre-wrap">
+                                  {template.format}
                                 </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-muted-foreground">
-                                  <div className="space-y-2">
-                                    <Label className="text-xs text-muted-foreground">Template Type</Label>
-                                    {isEditing ? (
-                                      <Select
-                                        value={draft?.templateType}
-                                        onValueChange={(value) => updateTemplateDraft('templateType', value)}
-                                      >
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Select type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="approval">Approval</SelectItem>
-                                          <SelectItem value="minute">Minute</SelectItem>
-                                          <SelectItem value="forward">Forward</SelectItem>
-                                          <SelectItem value="treatment">Treatment</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    ) : (
-                                      <span className="capitalize">{template.templateType}</span>
-                                    )}
-                                  </div>
-                                  <div className="space-y-2">
-                                    <Label className="text-xs text-muted-foreground">Style</Label>
-                                    {isEditing ? (
-                                      <Select
-                                        value={draft?.style}
-                                        onValueChange={(value) => updateTemplateDraft('style', value)}
-                                      >
-                                        <SelectTrigger>
-                                          <SelectValue placeholder="Select style" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="stamp">Stamp</SelectItem>
-                                          <SelectItem value="formal">Formal</SelectItem>
-                                          <SelectItem value="minimal">Minimal</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    ) : (
-                                      <span className="capitalize">{template.style}</span>
-                                    )}
-                                  </div>
-                                  <div className="space-y-2 col-span-1 sm:col-span-2">
-                                    <Label className="text-xs text-muted-foreground">Auto Apply</Label>
-                                    <div className="flex items-center gap-2">
-                                      <Switch
-                                        checked={draft?.defaultApply ?? false}
-                                        onCheckedChange={(checked) => updateTemplateDraft('defaultApply', checked)}
-                                        disabled={!isEditing}
-                                      />
-                                      <span className="text-xs">
-                                        {draft?.defaultApply ? 'Automatically applied during workflow' : 'User can choose to apply manually'}
-                                      </span>
-                                    </div>
-                                  </div>
+                              )}
+                              
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Switch
+                                    checked={draft?.defaultApply ?? false}
+                                    onCheckedChange={(checked) => updateTemplateDraft('defaultApply', checked)}
+                                    disabled={!isEditing}
+                                  />
+                                  <span className="text-xs text-muted-foreground">Default</span>
                                 </div>
-
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-[10px] text-muted-foreground">ID: {template.id}</span>
-                                  {isEditing ? (
-                                    <div className="flex gap-2">
-                                      <Button size="sm" variant="outline" className="gap-1" onClick={cancelEditTemplate}>
-                                        <X className="h-3 w-3" />
-                                        Cancel
-                                      </Button>
-                                      <Button size="sm" className="gap-1" onClick={saveTemplateChanges}>
-                                        <Check className="h-3 w-3" />
-                                        Save
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                    <Button size="sm" variant="outline" className="gap-1" onClick={() => beginEditTemplate(template)}>
-                                      <Pencil className="h-3 w-3" />
-                                      Edit Template
+                                
+                                {isEditing ? (
+                                  <div className="flex gap-1">
+                                    <Button size="sm" variant="ghost" onClick={cancelEditTemplate}>
+                                      <X className="h-4 w-4" />
                                     </Button>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </div>
+                                    <Button size="sm" onClick={saveTemplateChanges}>
+                                      <Check className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button size="sm" variant="ghost" onClick={() => beginEditTemplate(template)}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Dialogs */}
         
-        {/* Signature Delete Confirmation Dialog */}
+        {/* Password Change Dialog */}
+        <AlertDialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Change Password</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to change your password? You will need to use your new password to log in next time.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isChangingPassword}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleChangePassword} disabled={isChangingPassword}>
+                {isChangingPassword ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Changing...
+                  </>
+                ) : (
+                  'Change Password'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Signature Delete Dialog */}
         <AlertDialog open={showDeleteSignatureDialog} onOpenChange={setShowDeleteSignatureDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -1492,15 +1754,130 @@ export default function SettingsPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleSignatureDelete}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
+              <AlertDialogAction onClick={handleSignatureDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                 Delete Signature
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* 2FA Setup Dialog */}
+        <Dialog open={showSetup2FA} onOpenChange={setShowSetup2FA}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Set Up Two-Factor Authentication</DialogTitle>
+              <DialogDescription>
+                Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex justify-center p-4 bg-white rounded-lg">
+                <div className="w-48 h-48 bg-muted flex items-center justify-center rounded">
+                  <QrCode className="h-32 w-32 text-muted-foreground" />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="text-sm">Can&apos;t scan? Enter this code manually:</Label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 p-2 bg-muted rounded text-sm font-mono">{twoFactorSecret}</code>
+                  <Button variant="outline" size="sm" onClick={() => {
+                    navigator.clipboard.writeText(twoFactorSecret);
+                    toast.success('Code copied');
+                  }}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Enter verification code from your app:</Label>
+                <Input
+                  type="text"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                  className="text-center text-2xl tracking-widest"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowSetup2FA(false)}>Cancel</Button>
+              <Button onClick={handleVerify2FA} disabled={verificationCode.length !== 6 || isEnabling2FA}>
+                {isEnabling2FA ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  'Verify & Enable'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Backup Codes Dialog */}
+        <Dialog open={showBackupCodes} onOpenChange={setShowBackupCodes}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5" />
+                Backup Codes
+              </DialogTitle>
+              <DialogDescription>
+                Save these backup codes in a secure location. Each code can only be used once.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                    Keep these codes safe. If you lose access to your authenticator app, you can use these codes to sign in.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 p-4 bg-muted rounded-lg font-mono text-sm">
+                {backupCodes.map((code, index) => (
+                  <div key={index} className="p-2 bg-background rounded text-center">
+                    {code}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={copyBackupCodes}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy All
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => {
+                  const content = backupCodes.join('\n');
+                  const blob = new Blob([content], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'npa-ecm-backup-codes.txt';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </Button>
+              </div>
+
+              <Button variant="outline" className="w-full" onClick={handleRegenerateBackupCodes}>
+                <RefreshCcw className="h-4 w-4 mr-2" />
+                Generate New Codes
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setShowBackupCodes(false)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

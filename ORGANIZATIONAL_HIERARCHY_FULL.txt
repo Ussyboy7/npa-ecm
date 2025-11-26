@@ -1,0 +1,415 @@
+====================================================================================================
+ORGANIZATIONAL HIERARCHY STRUCTURE
+====================================================================================================
+
+📁 Executive Director, Engineering & Technical Services
+   Executive Director: Engr. Umar
+   Code: EDETS
+   Total Users: 13
+
+   📂 Engineering & Technical Services
+      General Manager: Isa Umar
+      Code: ENGINEERING
+      Users: 6
+      📄 Civil Engineering
+         Head: Engr. Ibrahim
+         Code: CIVIL
+         Users: 1
+      📄 Electrical & Corrosion
+         Head: Engr. Bello
+         Code: ELECTRICAL
+         Users: 1
+      📄 Hydrographic
+         Head: Engr. Bello
+         Code: HYDROGRAPHIC
+         Users: 1
+      📄 Ports Engineering
+         Head: Engr. Adeyemi
+         Code: PORTS_ENG
+         Users: 1
+
+   📂 Lands & Assets Administration
+      General Manager: Mrs. Eze
+      Code: LANDS_ASSETS
+      Users: 5
+      📄 Lands And Estate
+         Head: Engr. Okoro
+         Code: LE
+         Users: 1
+      📄 Physical Planning & Development
+         Head: Engr. Eze
+         Code: PPD
+         Users: 1
+
+
+----------------------------------------------------------------------------------------------------
+
+📁 Executive Director, Finance & Administration
+   Executive Director: Mrs. Richard-Edet
+   Code: EDFA
+   Total Users: 37
+
+   📂 Administration
+      General Manager: Mrs. Obi
+      Code: ADMIN
+      Users: 7
+      📄 Administration
+         Head: Mrs. Lawal
+         Code: ADMIN_GENERAL
+         Users: 1
+      📄 Archives & Records Management
+         Head: Mrs. Obi
+         Code: ADMIN_ARCHIVES
+         Users: 2
+      📄 Facility Management
+         Head: Mr. Adewale
+         Code: ADMIN_FACILITY
+         Users: 2
+
+   📂 Executive Director, Finance & Administration - Direct Reports
+      General Manager: Not Assigned
+      Code: EDFA_DIRECT
+      Users: 2
+      📄 Enterprise Risk Management
+         Head: Mrs. Adekunle
+         Code: ERM
+         Users: 1
+
+   📂 Finance
+      General Manager: Mrs. Eze
+      Code: FINANCE
+      Users: 7
+      📄 Accounts
+         Head: Mr. Okafor
+         Code: ACCOUNTS
+         Users: 2
+      📄 Budget
+         Head: Mr. Uche
+         Code: BUDGET
+         Users: 1
+      📄 Finance
+         Head: Mrs. Eze
+         Code: FINANCE
+         Users: 2
+      📄 Tax
+         Head: Mrs. Adesina
+         Code: TAX
+         Users: 1
+
+   📂 Human Resources
+      General Manager: Mr. Adebayo
+      Code: HR
+      Users: 9
+      📄 Employee & Labour Relations
+         Head: Mr. Udo
+         Code: HR_LABOUR
+         Users: 1
+      📄 HR Management
+         Head: Mr. Okafor
+         Code: HR_MGT
+         Users: 1
+      📄 Learning & Development
+         Head: Mrs. Okonkwo
+         Code: HR_LD
+         Users: 1
+      📄 Performance Management
+         Head: Mrs. Okoro
+         Code: PERFORMANCE
+         Users: 1
+
+   📂 Medical Services
+      General Manager: Dr. Nwosu
+      Code: MEDICAL
+      Users: 6
+      📄 Medical Services
+         Head: Dr. Yusuf
+         Code: MEDICAL
+         Users: 1
+      📄 Nursing
+         Head: Mrs. Nwosu
+         Code: NURSING
+         Users: 1
+      📄 Occupational Health
+         Head: Dr. Okeke
+         Code: OCCUPATIONAL
+         Users: 1
+      📄 Pharmacy
+         Head: Pharm. Nnamdi
+         Code: PHARMACY
+         Users: 1
+      📄 Radiology
+         Head: Dr. Okonkwo
+         Code: RADIOLOGY
+         Users: 1
+
+   📂 Superannuation & Investment
+      General Manager: Mr. Ogunleye
+      Code: S&I
+      Users: 4
+      📄 Investment
+         Head: Mr. Balogun
+         Code: INVESTMENT
+         Users: 1
+      📄 Superannuation
+         Head: Mr. Okeke
+         Code: SUPERANNUATION
+         Users: 1
+
+
+----------------------------------------------------------------------------------------------------
+
+📁 Executive Director, Marine & Operations
+   Executive Director: Engr. Badmus
+   Code: EDMO
+   Total Users: 20
+
+   📂 Health, Safety & Environment
+      General Manager: Mr. Adewale
+      Code: HSE
+      Users: 4
+      📄 Environment
+         Head: Mrs. Alade
+         Code: ENVIRONMENT
+         Users: 1
+      📄 Fire & Rescue
+         Head: Mr. Okafor
+         Code: FIRE_RESCUE
+         Users: 1
+      📄 Safety
+         Head: Mr. Akpan
+         Code: SAFETY
+         Users: 1
+
+   📂 Marine
+      General Manager: Capt. Okafor
+      Code: MARINE
+      Users: 7
+      📄 Aids to Navigation & Vessel Traffic System
+         Head: Engr. Okafor
+         Code: ATONS_VTS
+         Users: 1
+      📄 Harbours
+         Head: Capt. Nwankwo
+         Code: HARBOURS
+         Users: 1
+      📄 Vessel Management
+         Head: Capt. Fashola
+         Code: VESSEL
+         Users: 1
+
+   📂 Operations
+      General Manager: Mr. Adeyemi
+      Code: OPERATIONS
+      Users: 3
+      📄 Operations
+         Head: Mr. Okonkwo
+         Code: OPERATIONS
+         Users: 1
+
+   📂 Security
+      General Manager: Edosomwan Anthony
+      Code: SECURITY
+      Users: 2
+      📄 Security
+         Head: Mr. Obasi
+         Code: SECURITY
+         Users: 1
+
+   📂 Tariff & Billing
+      General Manager: Mrs. Mohammed
+      Code: TARIFF
+      Users: 2
+      📄 Tariff & Billing
+         Head: Mrs. Adesina
+         Code: TARIFF
+         Users: 1
+
+
+----------------------------------------------------------------------------------------------------
+
+📁 Managing Director Office
+   Executive Director: Dr. Dantsoho
+   Code: MD
+   Total Users: 61
+
+   📂 Abuja Liaison Office
+      General Manager: Mrs. Suleiman
+      Code: ABUJA
+      Users: 2
+      📄 Abuja Liaison Office
+         Head: Mr. Musa
+         Code: ABUJA
+         Users: 1
+
+   📂 Audit
+      General Manager: Gofwan Paul
+      Code: AUDIT
+      Users: 4
+      📄 Finance & Investment
+         Head: Mrs. Mohammed
+         Code: AUDIT_FINANCE
+         Users: 1
+      📄 Policy Compliance
+         Head: Mrs. Adekunle
+         Code: AUDIT_POLICY
+         Users: 1
+      📄 System & ICT
+         Head: Mr. Yusuf
+         Code: AUDIT_SYSTEMS
+         Users: 1
+
+   📂 Corporate & Strategic Communications
+      General Manager: Mr. Fashola
+      Code: C&SC
+      Users: 4
+      📄 Corporate Social Responsibility
+         Head: Mr. Fashola
+         Code: CSC_CSR
+         Users: 1
+      📄 Protocol & Events Management
+         Head: Mrs. Adebayo
+         Code: CSC_PEM
+         Users: 1
+
+   📂 Corporate & Strategic Planning
+      General Manager: Iyawe Akinyemi
+      Code: C&SP
+      Users: 4
+      📄 Planning & Monitoring
+         Head: Mrs. Adeyemi
+         Code: CSP_PLANNING
+         Users: 1
+      📄 Research & Statistics
+         Head: Dr. Ogunleye
+         Code: CSP_RESEARCH
+         Users: 1
+
+   📂 GM MD's Office
+      General Manager: Mr. Manager
+      Code: GM_MD_OFFICE
+      Users: 1
+      (No departments)
+
+   📂 Information & Communication Technology
+      General Manager: Gbotolorun Ayodele
+      Code: ICT
+      Users: 13
+      📄 Hardware, Infrastructure & Support
+         Head: Mr. Adewale
+         Code: ICT_HARDWARE
+         Users: 3
+      📄 Networks & Communication
+         Head: Engr. Ogunleye
+         Code: ICT_NETWORKS
+         Users: 1
+      📄 Research & Special Projects
+         Head: Ms. Nnaji
+         Code: ICT_RESEARCH
+         Users: 1
+      📄 Software Applications & Database Management
+         Head: Mrs. Eze
+         Code: ICT_SOFTWARE
+         Users: 4
+
+   📂 Legal Services
+      General Manager: Mrs. Adeola
+      Code: LEGAL
+      Users: 4
+      📄 Board Secretary
+         Head: Barr. Okoro
+         Code: BOARD_SECRETARY
+         Users: 1
+      📄 Legal Services
+         Head: Barr. Okeke
+         Code: LEGAL
+         Users: 1
+
+   📂 Monitoring
+      General Manager: Salau Adesina
+      Code: MONITORING
+      Users: 2
+      📄 Monitoring
+         Head: Mr. Adeyeye
+         Code: MONITORING
+         Users: 1
+
+   📂 Oversea Liaison Office
+      General Manager: Mrs. Eze
+      Code: OVERSEA
+      Users: 2
+      (No departments)
+
+   📂 Procurement
+      General Manager: Mr. Okeke
+      Code: PROCUREMENT
+      Users: 5
+      📄 Bids MGT & Selection
+         Head: Mrs. Nwosu
+         Code: BMS
+         Users: 1
+      📄 Compliance & Records
+         Head: Mrs. Adeyemi
+         Code: C_R
+         Users: 1
+      📄 Projects
+         Head: Engr. Okafor
+         Code: PROJECTS
+         Users: 1
+
+   📂 Public-Private Partnership
+      General Manager: Mr. Adeyemi
+      Code: PPP
+      Users: 3
+      📄 New-Business-Venture
+         Head: Mr. Adeyemi
+         Code: NBV
+         Users: 1
+      📄 Public-Private Partnership
+         Head: Mr. Adeyemi
+         Code: PPP
+         Users: 0
+
+   📂 Regulatory Services
+      General Manager: Capt. Williams
+      Code: REGULATORY
+      Users: 2
+      📄 Regulatory Services
+         Head: Capt. Williams
+         Code: REGULATORY
+         Users: 1
+
+   📂 SERVICOM
+      General Manager: Mr. Yusuf
+      Code: SERVICOM
+      Users: 2
+      📄 SERVICOM
+         Head: Ms. Enem
+         Code: SERVICOM
+         Users: 1
+
+   📂 Seaview Properties Limited
+      General Manager: Mr. Nwankwo
+      Code: SEAVIEW_PROPERTIES
+      Users: 2
+      📄 Seaview Properties Limited
+         Head: Mr. Adeyemi
+         Code: SEAVIEW
+         Users: 1
+
+   📂 Special Duties
+      General Manager: Mr. Igbinedion
+      Code: SPECIAL_DUTIES
+      Users: 1
+      (No departments)
+
+
+----------------------------------------------------------------------------------------------------
+
+====================================================================================================
+SUMMARY
+====================================================================================================
+Total Directorates: 4
+Total Divisions: 28
+Total Departments: 57
+Total Users: 131
+====================================================================================================

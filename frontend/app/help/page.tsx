@@ -337,7 +337,7 @@ export default function HelpAndGuidePage() {
             <Badge variant="outline" className="uppercase tracking-[0.35em] text-xs">
               Help & Guide
             </Badge>
-            <h1 className="text-3xl font-bold tracking-tight">NPA ECM Knowledge Hub</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Help & Guides</h1>
             <p className="text-muted-foreground max-w-3xl">
               Everything you need to explore the Electronic Content Management workspace—from onboarding
               checklists and feature breakdowns to FAQs and support contacts.

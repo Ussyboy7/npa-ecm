@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,6 +25,11 @@ import { logError } from '@/lib/client-logger';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence, User } from '@/lib/npa-structure';
+import { OfficeSelector } from '@/components/shared/OfficeSelector';
+import { UserSelector } from '@/components/shared/UserSelector';
+import { MODAL_CONSTANTS } from '@/lib/modal-constants';
+import { ModalErrorHandler } from '@/lib/modal-errors';
+import { filterUsersBySearch } from '@/lib/routing-utils';
 
 interface OfficeReassignModalProps {
   correspondence: Correspondence;
@@ -138,13 +143,13 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
       return false;
     }
 
-    if (trimmedReason.length < 10) {
-      setReasonError('Reason must be at least 10 characters long.');
+    if (trimmedReason.length < MODAL_CONSTANTS.REASSIGN_REASON.MIN) {
+      setReasonError(`Reason must be at least ${MODAL_CONSTANTS.REASSIGN_REASON.MIN} characters long.`);
       return false;
     }
 
-    if (trimmedReason.length > 500) {
-      setReasonError('Reason must be less than 500 characters.');
+    if (trimmedReason.length > MODAL_CONSTANTS.REASSIGN_REASON.MAX) {
+      setReasonError(`Reason must be less than ${MODAL_CONSTANTS.REASSIGN_REASON.MAX} characters.`);
       return false;
     }
 
@@ -178,11 +183,8 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
       onClose();
     } catch (error: any) {
       logError('Failed to reassign correspondence', error);
-      const errorMessage = error?.response?.data?.reason?.[0] || 
-                          error?.response?.data?.detail || 
-                          error?.message || 
-                          'Unable to reassign correspondence. Please try again.';
-      toast.error(errorMessage);
+      const modalError = ModalErrorHandler.createErrorFromApi(error);
+      toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
@@ -236,65 +238,28 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
           </Card>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Owning Office</Label>
-              <Select
-                value={owningOfficeId || '__keep__'}
-                onValueChange={(value) => setOwningOfficeId(value === '__keep__' ? '' : value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select owning office" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[280px] overflow-y-auto">
-                  <SelectItem value="__keep__">
-                    Keep current ({correspondence.owningOfficeName ?? 'Not set'})
-                  </SelectItem>
-                  <Separator className="my-1" />
-                  {sortedOffices.map((office) => (
-                    <SelectItem key={office.id} value={office.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{office.name}</span>
-                        <span className="text-xs uppercase text-muted-foreground">{office.officeType}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Current Office Queue</Label>
-              <Select
-                value={currentOfficeId || '__keep_current__'}
-                onValueChange={(value) =>
-                  setCurrentOfficeId(value === '__keep_current__' ? '' : value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select target office" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[280px] overflow-y-auto">
-                  <SelectItem value="__keep_current__">
-                    Keep current ({correspondence.currentOfficeName ?? correspondence.owningOfficeName ?? 'Not set'})
-                  </SelectItem>
-                  <Separator className="my-1" />
-                  {sortedOffices.map((office) => (
-                    <SelectItem key={office.id} value={office.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{office.name}</span>
-                        <span className="text-xs uppercase text-muted-foreground">{office.officeType}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedOffice && (
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Building2 className="h-3.5 w-3.5" />
-                  {selectedOffice.name} • {selectedOffice.officeType.toUpperCase()}
-                </p>
-              )}
-            </div>
+            <OfficeSelector
+              offices={sortedOffices}
+              value={owningOfficeId}
+              onValueChange={setOwningOfficeId}
+              label="Owning Office"
+              placeholder="Select owning office"
+              showKeepCurrent
+              currentOfficeName={correspondence.owningOfficeName}
+              keepCurrentLabel={`Keep current (${correspondence.owningOfficeName ?? 'Not set'})`}
+              maxHeight="280px"
+            />
+            <OfficeSelector
+              offices={sortedOffices}
+              value={currentOfficeId}
+              onValueChange={setCurrentOfficeId}
+              label="Current Office Queue"
+              placeholder="Select target office"
+              showKeepCurrent
+              currentOfficeName={correspondence.currentOfficeName ?? correspondence.owningOfficeName}
+              keepCurrentLabel={`Keep current (${correspondence.currentOfficeName ?? correspondence.owningOfficeName ?? 'Not set'})`}
+              maxHeight="280px"
+            />
           </div>
 
           <div className="space-y-2">
@@ -310,6 +275,7 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
               }}
               placeholder="Explain why this correspondence needs to be reassigned…"
               className={`min-h-[120px] ${reasonError ? 'border-destructive' : ''}`}
+              maxLength={MODAL_CONSTANTS.REASSIGN_REASON.MAX}
               aria-label="Reason for reassignment"
               aria-required="true"
               aria-invalid={!!reasonError}
@@ -326,8 +292,8 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
                   Provide a clear explanation for this administrative action
                 </p>
               </div>
-              <div className={`text-xs ${reason.length > 500 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                {reason.length}/500 characters
+              <div className={`text-xs ${reason.length > MODAL_CONSTANTS.REASSIGN_REASON.MAX ? 'text-destructive' : 'text-muted-foreground'}`}>
+                {reason.length}/{MODAL_CONSTANTS.REASSIGN_REASON.MAX} characters
               </div>
             </div>
           </div>
@@ -413,7 +379,7 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
           </Card>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6">
+        <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isSubmitting} aria-label="Cancel reassignment">
             Cancel
           </Button>
@@ -432,7 +398,7 @@ export const OfficeReassignModal = ({ correspondence, isOpen, onClose }: OfficeR
               'Save Changes'
             )}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
 
       {/* Confirmation Dialog */}

@@ -9,7 +9,6 @@ import {
   FileText,
   Inbox,
   Users,
-  Building2,
   Settings,
   ChevronDown,
   ChevronLeft,
@@ -19,12 +18,17 @@ import {
   Archive,
   BarChart3,
   FolderKanban,
-  Network,
   UserCog,
-  FilePenLine,
   Activity,
   HelpCircle,
   Shield,
+  FolderTree,
+  LayoutTemplate,
+  Target,
+  Zap,
+  FilePlus,
+  ScrollText,
+  TrendingUp,
 } from "lucide-react";
 import {
   Sidebar,
@@ -47,17 +51,6 @@ import { Badge } from "@/components/ui/badge";
 import { useCorrespondence } from "@/contexts/CorrespondenceContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 
-const EXECUTIVE_GRADES = new Set([
-  "MD",
-  "ED",
-  "GM",
-  "AGM",
-  "MDCS",
-  "EDCS",
-  "GMCS",
-  "AGMCS",
-]);
-
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
@@ -66,16 +59,6 @@ export function AppSidebar() {
   const { officeMemberships } = useOrganization();
 
   const permissions = useUserPermissions(currentUser ?? undefined);
-
-  const isExecutiveUser = useMemo(() => {
-    const grade = (currentUser?.gradeLevel ?? '').toUpperCase();
-    const roleName = (currentUser?.systemRole ?? '').toLowerCase();
-    return (
-      permissions.canAccessExecutiveDashboard ||
-      EXECUTIVE_GRADES.has(grade) ||
-      roleName.includes('executive')
-    );
-  }, [currentUser?.gradeLevel, currentUser?.systemRole, permissions.canAccessExecutiveDashboard]);
 
   const userOfficeIds = useMemo(() => {
     if (!currentUser) return [];
@@ -102,20 +85,6 @@ export function AppSidebar() {
     return correspondence.filter((item) => item.currentApproverId === currentUser.id).length;
   }, [correspondence, currentUser?.id]);
 
-  const departmentFilesCount = useMemo(() => {
-    if (!currentUser) return 0;
-    const userDivisionId = currentUser.division;
-    const userDepartmentId = currentUser.department;
-    return correspondence.filter((item) => {
-      const isRecord = item.status === 'completed' || item.status === 'archived';
-      if (!isRecord) return false;
-      if (item.departmentId && userDepartmentId && item.departmentId === userDepartmentId) return true;
-      if (item.divisionId && userDivisionId && item.divisionId === userDivisionId) return true;
-      if (item.owningOfficeId && userOfficeIds.includes(item.owningOfficeId)) return true;
-      return false;
-    }).length;
-  }, [correspondence, currentUser?.department, currentUser?.division, userOfficeIds]);
-
   const outboxCount = useMemo(() => {
     if (!currentUser) return 0;
     const pendingStatuses = new Set(['pending', 'in-progress']);
@@ -129,15 +98,12 @@ export function AppSidebar() {
     permissions.canDistribute ||
     userOfficeIds.length > 0;
 
-  const shouldShowDepartmentFiles =
-    hasCorrespondenceAccess &&
-    (departmentFilesCount > 0 ||
-      userOfficeIds.length > 0 ||
-      Boolean(currentUser?.division || currentUser?.department));
+  const shouldShowRecordsArchive =
+    hasCorrespondenceAccess ||
+    userOfficeIds.length > 0 ||
+    Boolean(currentUser?.division || currentUser?.department);
 
   const shouldShowOutbox = permissions.canRegisterCorrespondence || outboxCount > 0;
-  const departmentLinkLabel = isExecutiveUser ? 'Records & Intelligence' : 'Department Files';
-  const showDepartmentLinkInExecGroup = isExecutiveUser && shouldShowDepartmentFiles;
 
   const isActive = (path: string) => pathname === path;
   const isCollapsed = state === "collapsed";
@@ -210,50 +176,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Executive oversight */}
-        {showDepartmentLinkInExecGroup || permissions.canAccessExecutiveDashboard ? (
-          <SidebarGroup>
-            <SidebarGroupLabel>Executive Oversight</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {permissions.canAccessExecutiveDashboard && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild isActive={isActive('/analytics/executive')}>
-                      <Link href="/analytics/executive">
-                        <Activity className="h-4 w-4" />
-                        {!isCollapsed && <span>Executive Dashboard</span>}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-                {showDepartmentLinkInExecGroup && (
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive('/correspondence/department-files')}
-                    >
-                      <Link href="/correspondence/department-files" className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
-                          {!isCollapsed && <span>{departmentLinkLabel}</span>}
-                        </div>
-                        {!isCollapsed && (
-                          <Badge
-                            variant={departmentFilesCount > 0 ? 'secondary' : 'secondary'}
-                            className={departmentFilesCount > 0 ? 'ml-auto' : 'ml-auto opacity-70'}
-                          >
-                            {departmentFilesCount}
-                          </Badge>
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ) : null}
-
         {/* Correspondence */}
         <SidebarGroup>
           <SidebarGroupLabel>Offices & Registry</SidebarGroupLabel>
@@ -303,46 +225,19 @@ export function AppSidebar() {
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
                     <Link href="/correspondence/register">
-                      <Send className="h-4 w-4" />
-                      {!isCollapsed && <span>Register New</span>}
+                      <FilePlus className="h-4 w-4" />
+                      {!isCollapsed && <span>Register Correspondence</span>}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
 
-              {!isExecutiveUser && shouldShowDepartmentFiles && (
+              {shouldShowRecordsArchive && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive('/correspondence/department-files')}
-                  >
-                    <Link
-                      href="/correspondence/department-files"
-                      className="flex items-center justify-between gap-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        {!isCollapsed && <span>{departmentLinkLabel}</span>}
-                      </div>
-                      {!isCollapsed && (
-                        <Badge
-                          variant={departmentFilesCount > 0 ? 'secondary' : 'secondary'}
-                          className={departmentFilesCount > 0 ? 'ml-auto' : 'ml-auto opacity-70'}
-                        >
-                          {departmentFilesCount}
-                        </Badge>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-
-              {hasCorrespondenceAccess && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/correspondence/archived')}>
-                    <Link href="/correspondence/archived" className="flex items-center gap-2">
+                  <SidebarMenuButton asChild isActive={isActive('/correspondence/records')}>
+                    <Link href="/correspondence/records" className="flex items-center gap-2">
                       <Archive className="h-4 w-4" />
-                      {!isCollapsed && <span>Archive</span>}
+                      {!isCollapsed && <span>Records & Archive</span>}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -423,7 +318,7 @@ export function AppSidebar() {
                       </SidebarMenuItem>
                     )}
 
-                    {!isExecutiveUser && permissions.canAccessExecutiveDashboard && (
+                    {permissions.canAccessExecutiveDashboard && (
                       <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={isActive("/analytics/executive")}>
                           <Link href="/analytics/executive">
@@ -438,8 +333,8 @@ export function AppSidebar() {
                       <SidebarMenuItem>
                         <SidebarMenuButton asChild isActive={isActive("/reports")}>
                           <Link href="/reports">
-                            <FileText className="h-4 w-4" />
-                            {!isCollapsed && <span>Reports</span>}
+                            <TrendingUp className="h-4 w-4" />
+                            {!isCollapsed && <span>Reports & Intelligence</span>}
                           </Link>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -467,28 +362,10 @@ export function AppSidebar() {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={isActive('/admin/directorates')}>
-                        <Link href="/admin/directorates">
-                          <Network className="h-4 w-4" />
-                          {!isCollapsed && <span>Directorates</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={isActive('/admin/divisions')}>
-                        <Link href="/admin/divisions">
-                          <Building2 className="h-4 w-4" />
-                          {!isCollapsed && <span>Divisions</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-
-                    <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={isActive('/admin/departments')}>
-                        <Link href="/admin/departments">
-                          <Building2 className="h-4 w-4" />
-                          {!isCollapsed && <span>Departments</span>}
+                      <SidebarMenuButton asChild isActive={isActive('/admin/organization')}>
+                        <Link href="/admin/organization">
+                          <FolderTree className="h-4 w-4" />
+                          {!isCollapsed && <span>Organization Structure</span>}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -506,16 +383,16 @@ export function AppSidebar() {
                       <SidebarMenuButton asChild isActive={isActive('/admin/roles')}>
                         <Link href="/admin/roles">
                           <Shield className="h-4 w-4" />
-                          {!isCollapsed && <span>Roles</span>}
+                          {!isCollapsed && <span>System Roles</span>}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
 
                     <SidebarMenuItem>
-                      <SidebarMenuButton asChild isActive={isActive('/admin/templates')}>
-                        <Link href="/admin/templates">
-                          <FilePenLine className="h-4 w-4" />
-                          {!isCollapsed && <span>Templates</span>}
+                      <SidebarMenuButton asChild isActive={isActive('/admin/templates-hub')}>
+                        <Link href="/admin/templates-hub">
+                          <LayoutTemplate className="h-4 w-4" />
+                          {!isCollapsed && <span>Templates Hub</span>}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -525,6 +402,33 @@ export function AppSidebar() {
                         <Link href="/admin/assistants">
                           <Users className="h-4 w-4" />
                           {!isCollapsed && <span>Assistants</span>}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={isActive('/admin/sla-config')}>
+                        <Link href="/admin/sla-config">
+                          <Target className="h-4 w-4" />
+                          {!isCollapsed && <span>SLA Configuration</span>}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={isActive('/admin/escalation-rules')}>
+                        <Link href="/admin/escalation-rules">
+                          <Zap className="h-4 w-4" />
+                          {!isCollapsed && <span>Escalation Rules</span>}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild isActive={isActive('/audit')}>
+                        <Link href="/audit">
+                          <ScrollText className="h-4 w-4" />
+                          {!isCollapsed && <span>Audit Trail</span>}
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

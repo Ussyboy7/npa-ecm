@@ -147,6 +147,10 @@ export type Correspondence = {
     generatedAt?: string;
   } | null;
   completionSummaryGeneratedAt?: string;
+  // Parallel routing fields
+  workflowState?: 'sequential' | 'parallel' | 'merged' | 'waiting_merge';
+  activeParallelBranches?: number;
+  completedParallelBranches?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -181,8 +185,63 @@ export type Minute = {
   signature?: MinuteSignaturePayload;
   fromOfficeId?: string;
   fromOfficeName?: string;
+  // Recall/Edit fields
+  isEdited?: boolean;
+  editedAt?: string;
+  editWindowExpiresAt?: string;
+  isOpened?: boolean;
+  openedAt?: string;
+  originalMinuteText?: string;
+  editHistory?: Array<{
+    edited_at: string;
+    edited_by: string;
+    old_text: string;
+    new_text: string;
+  }>;
+  canBeEdited?: boolean;
+  isRecalled?: boolean;
+  recalledAt?: string;
+  recallReason?: string;
+  canBeRecalled?: boolean;
+  // Purpose-based routing
+  purpose?: 'action' | 'information' | 'comment' | 'approval';
+  requiresResponse?: boolean;
+  responseDeadline?: string;
+  // Parallel routing fields
+  routingType?: 'sequential' | 'parallel' | 'broadcast';
+  parallelGroupId?: string;
+  isParallelBranch?: boolean;
+  parentMinuteId?: string;
+  mergeStrategy?: 'all' | 'independent' | 'any' | 'majority';
+  // Branch originator tracking
+  branchOriginatorId?: string;
+  branchOriginatorName?: string;
+  // Consultation routing
+  isConsultation?: boolean;
+  consultationFromBranchId?: string;
+  consultationToBranchId?: string;
+  // Additional minutes/instructions
+  minuteType?: 'routing' | 'instruction' | 'clarification' | 'addendum';
+  isAdditional?: boolean;
+  relatesToMinuteId?: string;
   toOfficeId?: string;
   toOfficeName?: string;
+  toUserId?: string;
+  toUserName?: string;
+};
+
+export type ParallelRoutingGroup = {
+  id: string;
+  correspondenceId: string;
+  createdById: string;
+  createdByName?: string;
+  mergeStrategy: 'all' | 'independent' | 'any' | 'majority';
+  isComplete: boolean;
+  completedAt?: string;
+  totalBranches: number;
+  completedBranches: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type User = {
@@ -201,22 +260,27 @@ export type User = {
   isSuperuser?: boolean;
 };
 
-export const GRADE_LEVELS: GradeLevel[] = [
-  { code: 'JSS3', name: 'Staff III', level: 4, systemRole: 'Staff', approvalAuthority: 1 },
-  { code: 'JSS2', name: 'Staff II', level: 5, systemRole: 'Staff', approvalAuthority: 1 },
-  { code: 'JSS1', name: 'Staff I', level: 6, systemRole: 'Staff', approvalAuthority: 2 },
-  { code: 'SSS4', name: 'Officer II', level: 8, systemRole: 'Officer', approvalAuthority: 2 },
-  { code: 'SSS3', name: 'Officer I', level: 9, systemRole: 'Officer', approvalAuthority: 3 },
-  { code: 'SSS2', name: 'Senior Officer', level: 10, systemRole: 'Senior Officer', approvalAuthority: 3 },
-  { code: 'SSS1', name: 'Assistant Manager', level: 12, systemRole: 'Assistant Manager', approvalAuthority: 4 },
-  { code: 'MSS5', name: 'Manager', level: 13, systemRole: 'Manager', approvalAuthority: 5 },
-  { code: 'MSS4', name: 'Senior Manager', level: 14, systemRole: 'Senior Manager', approvalAuthority: 6 },
-  { code: 'MSS3', name: 'Principal Manager', level: 15, systemRole: 'Principal Manager', approvalAuthority: 7 },
-  { code: 'MSS2', name: 'Assistant General Manager', level: 16, systemRole: 'Assistant General Manager', approvalAuthority: 8 },
-  { code: 'MSS1', name: 'General Manager', level: 17, systemRole: 'General Manager', approvalAuthority: 9 },
-  { code: 'EDCS', name: 'Executive Director', level: 18, systemRole: 'Executive Director', approvalAuthority: 10 },
-  { code: 'MDCS', name: 'Managing Director', level: 19, systemRole: 'Managing Director', approvalAuthority: 11 },
-];
+export function getGradeLevels(): GradeLevel[] {
+  return [
+    { code: 'JSS3', name: 'Staff III', level: 4, systemRole: 'Staff', approvalAuthority: 1 },
+    { code: 'JSS2', name: 'Staff II', level: 5, systemRole: 'Staff', approvalAuthority: 1 },
+    { code: 'JSS1', name: 'Staff I', level: 6, systemRole: 'Staff', approvalAuthority: 2 },
+    { code: 'SSS4', name: 'Officer II', level: 8, systemRole: 'Officer', approvalAuthority: 2 },
+    { code: 'SSS3', name: 'Officer I', level: 9, systemRole: 'Officer', approvalAuthority: 3 },
+    { code: 'SSS2', name: 'Senior Officer', level: 10, systemRole: 'Senior Officer', approvalAuthority: 3 },
+    { code: 'SSS1', name: 'Assistant Manager', level: 12, systemRole: 'Assistant Manager', approvalAuthority: 4 },
+    { code: 'MSS5', name: 'Manager', level: 13, systemRole: 'Manager', approvalAuthority: 5 },
+    { code: 'MSS4', name: 'Senior Manager', level: 14, systemRole: 'Senior Manager', approvalAuthority: 6 },
+    { code: 'MSS3', name: 'Principal Manager', level: 15, systemRole: 'Principal Manager', approvalAuthority: 7 },
+    { code: 'MSS2', name: 'Assistant General Manager', level: 16, systemRole: 'Assistant General Manager', approvalAuthority: 8 },
+    { code: 'MSS1', name: 'General Manager', level: 17, systemRole: 'General Manager', approvalAuthority: 9 },
+    { code: 'EDCS', name: 'Executive Director', level: 18, systemRole: 'Executive Director', approvalAuthority: 10 },
+    { code: 'MDCS', name: 'Managing Director', level: 19, systemRole: 'Managing Director', approvalAuthority: 11 },
+  ];
+}
+
+// Export as const for backward compatibility
+export const GRADE_LEVELS = getGradeLevels();
 
 export const getGradeLevelByCode = (code?: string | null): GradeLevel | undefined => {
   if (!code) return undefined;

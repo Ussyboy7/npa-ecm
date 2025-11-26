@@ -199,6 +199,43 @@ const mapApiMinute = (item: any): Minute => {
     toOfficeId: normalizeId(item.to_office ?? item.to_office_id),
     toOfficeName:
       item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? item.to_office.name : undefined),
+    toUserId: normalizeId(item.to_user ?? item.to_user_id),
+    toUserName:
+      item.to_user_name ??
+      (typeof item.to_user === 'object' && item.to_user
+        ? (() => {
+            const fullName = `${item.to_user.first_name ?? ''} ${item.to_user.last_name ?? ''}`.trim();
+            if (fullName.length > 0) return fullName;
+            return item.to_user.username ?? '';
+          })()
+        : undefined),
+    // Recall/Edit fields
+    isEdited: item.is_edited ?? false,
+    editedAt: item.edited_at ?? undefined,
+    editWindowExpiresAt: item.edit_window_expires_at ?? undefined,
+    isOpened: item.is_opened ?? false,
+    openedAt: item.opened_at ?? undefined,
+    originalMinuteText: item.original_minute_text ?? undefined,
+    editHistory: Array.isArray(item.edit_history) ? item.edit_history : [],
+    canBeEdited: item.can_be_edited ?? false,
+    isRecalled: item.is_recalled ?? false,
+    recalledAt: item.recalled_at ?? undefined,
+    recallReason: item.recall_reason ?? undefined,
+    canBeRecalled: item.can_be_recalled ?? false,
+    // Purpose-based routing
+    purpose: item.purpose ?? 'action',
+    requiresResponse: item.requires_response ?? true,
+    responseDeadline: item.response_deadline ?? undefined,
+    // Parallel routing fields
+    routingType: item.routing_type ?? 'sequential',
+    parallelGroupId: normalizeId(item.parallel_group_id),
+    isParallelBranch: item.is_parallel_branch ?? false,
+    parentMinuteId: normalizeId(item.parent_minute ?? item.parent_minute_id),
+    mergeStrategy: item.merge_strategy ?? 'all',
+    // Additional minutes/instructions
+    minuteType: item.minute_type ?? 'routing',
+    isAdditional: item.is_additional ?? false,
+    relatesToMinuteId: normalizeId(item.relates_to_minute ?? item.relates_to_minute_id),
   };
 };
 
@@ -456,3 +493,6 @@ export const useCorrespondence = () => {
   }
   return context;
 };
+
+// Export mapping functions for use in other components
+export { mapApiMinute };

@@ -1,294 +1,682 @@
 "use client";
 
-import { logError } from '@/lib/client-logger';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getActivityLogs, type ActivityLog } from '@/lib/audit-storage';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Activity,
+  Search,
+  User as UserIcon,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  Shield,
+  FileText,
+  Filter,
+  Download,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
-import { Search, Filter, Download, Activity } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { getActivityLogs, type ActivityLog } from '@/lib/audit-storage';
+import { logError } from '@/lib/client-logger';
 
-export default function AuditTrailPage() {
-  const { currentUser } = useCurrentUser();
-  const { users } = useOrganization();
+const ACTION_TYPES = [
+  { value: 'user_login', label: 'User Login' },
+  { value: 'user_logout', label: 'User Logout' },
+  { value: 'document_created', label: 'Document Created' },
+  { value: 'document_updated', label: 'Document Updated' },
+  { value: 'document_deleted', label: 'Document Deleted' },
+  { value: 'document_viewed', label: 'Document Viewed' },
+  { value: 'document_downloaded', label: 'Document Downloaded' },
+  { value: 'document_shared', label: 'Document Shared' },
+  { value: 'correspondence_created', label: 'Correspondence Created' },
+  { value: 'correspondence_routed', label: 'Correspondence Routed' },
+  { value: 'correspondence_approved', label: 'Correspondence Approved' },
+  { value: 'permission_granted', label: 'Permission Granted' },
+  { value: 'permission_revoked', label: 'Permission Revoked' },
+];
+
+const MODULES = [
+  { value: 'accounts', label: 'Accounts' },
+  { value: 'dms', label: 'Document Management' },
+  { value: 'correspondence', label: 'Correspondence' },
+  { value: 'workflow', label: 'Workflow' },
+  { value: 'system', label: 'System' },
+];
+
+const SEVERITIES = [
+  { value: 'info', label: 'Information', color: 'secondary' },
+  { value: 'warning', label: 'Warning', color: 'default' },
+  { value: 'error', label: 'Error', color: 'destructive' },
+  { value: 'critical', label: 'Critical', color: 'destructive' },
+];
+
+type AuditSummary = {
+  total: number;
+  logins: number;
+  errors: number;
+  actions: number;
+};
+
+const DEFAULT_SUMMARY: AuditSummary = {
+  total: 0,
+  logins: 0,
+  errors: 0,
+  actions: 0,
+};
+
+const AuditTrailPage = () => {
+  const { currentUser, hydrated } = useCurrentUser();
+  const { users: organizationUsers } = useOrganization();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [actionFilter, setActionFilter] = useState<string>('all');
+  const [moduleFilter, setModuleFilter] = useState<string>('all');
+  const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [successFilter, setSuccessFilter] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
   const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [goToPageInput, setGoToPageInput] = useState('');
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({
-    action: '',
-    objectType: '',
-    module: '',
-    severity: '',
-    success: '',
-    search: '',
-  });
+  const [error, setError] = useState<string | null>(null);
 
+  // Debounce search
   useEffect(() => {
-    loadLogs();
-  }, [filters]);
+    const handle = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
 
-  const loadLogs = async () => {
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, pageSize]);
+
+  // Fetch logs
+  const fetchLogs = async () => {
+    if (!hydrated || !currentUser) return;
+    
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      const params: any = {};
-      if (filters.action) params.action = filters.action;
-      if (filters.objectType) params.objectType = filters.objectType;
-      if (filters.module) params.module = filters.module;
-      if (filters.severity) params.severity = filters.severity;
-      if (filters.success !== '') params.success = filters.success === 'true';
-      if (filters.search) params.search = filters.search;
+      const params: Record<string, any> = {
+        page,
+        pageSize,
+        ordering: sortOrder === 'desc' ? '-timestamp' : 'timestamp',
+      };
+      if (actionFilter !== 'all') params.action = actionFilter;
+      if (moduleFilter !== 'all') params.module = moduleFilter;
+      if (severityFilter !== 'all') params.severity = severityFilter;
+      if (successFilter !== 'all') params.success = successFilter === 'true';
+      if (debouncedSearch) params.search = debouncedSearch;
 
       const data = await getActivityLogs(params);
-      setLogs(data);
-    } catch (error) {
-      logError('Failed to load audit logs', error);
+      setLogs(data.results);
+      setTotalCount(data.count);
+    } catch (err) {
+      logError('Failed to load audit logs', err);
+      setError('Failed to load audit logs. Please try again.');
+      setLogs([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    void fetchLogs();
+  }, [hydrated, currentUser, page, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  const handleGoToPage = () => {
+    const pageNum = parseInt(goToPageInput, 10);
+    if (pageNum >= 1 && pageNum <= totalPages) {
+      setPage(pageNum);
+      setGoToPageInput('');
+    }
+  };
+
+  // Calculate summary (uses totalCount for total, current page data for breakdowns)
+  const summary = useMemo<AuditSummary>(() => {
+    return {
+      total: totalCount,
+      logins: logs.filter(log => log.action === 'user_login').length,
+      errors: logs.filter(log => log.severity === 'error' || log.severity === 'critical' || !log.success).length,
+      actions: logs.filter(log => !['user_login', 'user_logout'].includes(log.action)).length,
+    };
+  }, [logs, totalCount]);
+
   const getUserName = (userId?: string) => {
     if (!userId) return 'System';
-    const user = users.find((u) => u.id === userId);
+    const user = organizationUsers.find((u) => u.id === userId);
     return user?.name || userId;
   };
 
   const getSeverityColor = (severity: ActivityLog['severity']) => {
     switch (severity) {
       case 'critical':
-        return 'destructive';
       case 'error':
         return 'destructive';
       case 'warning':
         return 'default';
       case 'info':
-        return 'secondary';
       default:
-        return 'outline';
+        return 'secondary';
     }
   };
 
-  const actionTypes = [
-    'document_created',
-    'document_updated',
-    'document_deleted',
-    'document_viewed',
-    'document_downloaded',
-    'document_shared',
-    'correspondence_created',
-    'correspondence_routed',
-    'correspondence_approved',
-    'user_login',
-    'user_logout',
-    'permission_granted',
-    'permission_revoked',
-  ];
+  const getActionIcon = (action: string) => {
+    if (action.includes('login') || action.includes('logout')) return UserIcon;
+    if (action.includes('document')) return FileText;
+    if (action.includes('permission')) return Shield;
+    return Activity;
+  };
 
-  const modules = ['dms', 'correspondence', 'accounts', 'workflow', 'system'];
+  const LogCard = ({ log }: { log: ActivityLog }) => {
+    const ActionIcon = getActionIcon(log.action);
+    const isError = log.severity === 'error' || log.severity === 'critical' || !log.success;
+    
+    return (
+      <div className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all">
+        <div className="flex items-start gap-4">
+          <div
+            className={`p-3 rounded-lg ${
+              isError
+                ? 'bg-destructive/10'
+                : log.severity === 'warning'
+                  ? 'bg-warning/10'
+                  : 'bg-primary/10'
+            }`}
+          >
+            <ActionIcon
+              className={`h-5 w-5 ${
+                isError
+                  ? 'text-destructive'
+                  : log.severity === 'warning'
+                    ? 'text-warning'
+                    : 'text-primary'
+              }`}
+            />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex-1 min-w-0">
+                <h4 className="font-semibold text-foreground mb-1">
+                  {log.actionDisplay || log.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </h4>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant={getSeverityColor(log.severity)}>
+                    {log.severityDisplay || log.severity.toUpperCase()}
+                  </Badge>
+                  {log.module && (
+                    <Badge variant="outline">
+                      {log.module.toUpperCase()}
+                    </Badge>
+                  )}
+                  {log.success ? (
+                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Success
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Failed
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {formatDateTime(log.timestamp)}
+              </span>
+            </div>
+
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <UserIcon className="h-3.5 w-3.5" />
+                <span>User: {log.userName || getUserName(log.user)}</span>
+              </div>
+              {log.description && (
+                <div className="flex items-center gap-2">
+                  <Activity className="h-3.5 w-3.5" />
+                  <span>{log.description}</span>
+                </div>
+              )}
+              {log.objectType && log.objectRepr && (
+                <div className="flex items-center gap-2">
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>{log.objectType}: {log.objectRepr}</span>
+                </div>
+              )}
+              {log.errorMessage && (
+                <div className="flex items-center gap-2 text-destructive">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>{log.errorMessage}</span>
+                </div>
+              )}
+              {log.ipAddress && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>IP: {log.ipAddress}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (!hydrated || !currentUser) {
+    return (
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
+          <Card>
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              Loading audit trail…
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Audit Trail</h1>
-          <p className="text-muted-foreground">Comprehensive activity log for all system actions</p>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+              <Activity className="h-8 w-8 text-primary" />
+              Audit Trail
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Track and monitor all system activities, user actions, and security events.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void fetchLogs()}
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button variant="outline" disabled>
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
-            <CardDescription>Filter audit logs by various criteria</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search..."
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  className="pl-8"
-                />
+        {/* Help Guide */}
+        <HelpGuideCard
+          title="Understanding the Audit Trail"
+          description="The audit trail provides a comprehensive record of all activities in the system. Use filters to find specific events, track user actions, and investigate security incidents."
+          links={[
+            { label: 'User Management', href: '/admin/users' },
+            { label: 'System Settings', href: '/settings' },
+          ]}
+        />
+
+        {/* Summary Cards */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: 'Total Events',
+              value: summary.total,
+              icon: Activity,
+              bgClass: 'bg-primary/10',
+              iconClass: 'text-primary',
+            },
+            {
+              label: 'User Logins',
+              value: summary.logins,
+              icon: UserIcon,
+              bgClass: 'bg-info/10',
+              iconClass: 'text-info',
+            },
+            {
+              label: 'Errors & Failures',
+              value: summary.errors,
+              icon: AlertCircle,
+              bgClass: 'bg-destructive/10',
+              iconClass: 'text-destructive',
+            },
+            {
+              label: 'System Actions',
+              value: summary.actions,
+              icon: Shield,
+              bgClass: 'bg-success/10',
+              iconClass: 'text-success',
+            },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-lg ${bgClass}`}>
+                    <Icon className={`h-6 w-6 ${iconClass}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <p className="text-2xl font-semibold">{value}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Search Bar */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="relative max-w-xl w-full">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search by user, action, description, object..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
+              <Filter className="h-3.5 w-3.5" />
+              Filters
+            </Label>
+            <div className="flex flex-wrap gap-4">
+              <div className="w-full md:w-48 space-y-1">
+                <Label className="text-xs text-muted-foreground">Action Type</Label>
+                <Select value={actionFilter} onValueChange={setActionFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Actions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Actions</SelectItem>
+                    {ACTION_TYPES.map((action) => (
+                      <SelectItem key={action.value} value={action.value}>
+                        {action.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <Select
-                value={filters.action || '__all__'}
-                onValueChange={(value) =>
-                  setFilters({ ...filters, action: value === '__all__' ? '' : value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Action" />
+              <div className="w-full md:w-48 space-y-1">
+                <Label className="text-xs text-muted-foreground">Module</Label>
+                <Select value={moduleFilter} onValueChange={setModuleFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Modules" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Modules</SelectItem>
+                    {MODULES.map((module) => (
+                      <SelectItem key={module.value} value={module.value}>
+                        {module.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-full md:w-40 space-y-1">
+                <Label className="text-xs text-muted-foreground">Severity</Label>
+                <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Severities" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Severities</SelectItem>
+                    {SEVERITIES.map((severity) => (
+                      <SelectItem key={severity.value} value={severity.value}>
+                        {severity.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-full md:w-36 space-y-1">
+                <Label className="text-xs text-muted-foreground">Status</Label>
+                <Select value={successFilter} onValueChange={setSuccessFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="true">Success</SelectItem>
+                    <SelectItem value="false">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-full md:w-48 space-y-1">
+                <Label className="text-xs text-muted-foreground">Sort Order</Label>
+                <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as 'asc' | 'desc')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="desc">Newest First</SelectItem>
+                    <SelectItem value="asc">Oldest First</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || debouncedSearch) && (
+                <div className="flex items-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setActionFilter('all');
+                      setModuleFilter('all');
+                      setSeverityFilter('all');
+                      setSuccessFilter('all');
+                    }}
+                    className="text-xs"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Error State */}
+        {error && (
+          <Card>
+            <CardContent className="py-4 text-sm text-destructive">{error}</CardContent>
+          </Card>
+        )}
+
+        {/* Loading State */}
+        {loading ? (
+          <Card>
+            <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              Loading audit logs…
+            </CardContent>
+          </Card>
+        ) : logs.length === 0 ? (
+          /* Empty State */
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Activity className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground mb-2">
+                {debouncedSearch || actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all'
+                  ? 'No audit logs match your filters'
+                  : 'No audit logs recorded yet.'}
+              </p>
+              {(debouncedSearch || actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all') && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setActionFilter('all');
+                    setModuleFilter('all');
+                    setSeverityFilter('all');
+                    setSuccessFilter('all');
+                  }}
+                  className="mt-4"
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          /* Log List */
+          <div className="space-y-3">
+            {logs.map((log) => (
+              <LogCard key={log.id} log={log} />
+            ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-muted-foreground">
+              Showing{' '}
+              {totalCount === 0
+                ? 0
+                : `${(page - 1) * pageSize + 1}-${Math.min(totalCount, (page - 1) * pageSize + logs.length)}`}{' '}
+              of {totalCount} audit logs
+            </p>
+            <div className="flex items-center gap-2">
+              <label htmlFor="audit-page-size" className="text-sm text-muted-foreground">
+                Per page:
+              </label>
+              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                <SelectTrigger id="audit-page-size" className="w-20 h-8" aria-label="Items per page">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__all__">All Actions</SelectItem>
-                  {actionTypes.map((action) => (
-                    <SelectItem key={action} value={action}>
-                      {action.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.objectType || '__all__'}
-                onValueChange={(value) =>
-                  setFilters({ ...filters, objectType: value === '__all__' ? '' : value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Object Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Types</SelectItem>
-                  <SelectItem value="document">Document</SelectItem>
-                  <SelectItem value="correspondence">Correspondence</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.module || '__all__'}
-                onValueChange={(value) =>
-                  setFilters({ ...filters, module: value === '__all__' ? '' : value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Module" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Modules</SelectItem>
-                  {modules.map((module) => (
-                    <SelectItem key={module} value={module}>
-                      {module.toUpperCase()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.severity || '__all__'}
-                onValueChange={(value) =>
-                  setFilters({ ...filters, severity: value === '__all__' ? '' : value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Severity" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All Severities</SelectItem>
-                  <SelectItem value="info">Info</SelectItem>
-                  <SelectItem value="warning">Warning</SelectItem>
-                  <SelectItem value="error">Error</SelectItem>
-                  <SelectItem value="critical">Critical</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.success || '__all__'}
-                onValueChange={(value) =>
-                  setFilters({ ...filters, success: value === '__all__' ? '' : value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All</SelectItem>
-                  <SelectItem value="true">Success</SelectItem>
-                  <SelectItem value="false">Failed</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Activity Logs
-            </CardTitle>
-            <CardDescription>
-              {logs.length} log{logs.length !== 1 ? 's' : ''} found
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="p-8 text-center text-muted-foreground">Loading audit logs...</div>
-            ) : logs.length === 0 ? (
-              <div className="p-8 text-center">
-                <Activity className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">No audit logs found</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={page === 1 || loading}
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            
+            {/* Page number buttons */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (page <= 3) {
+                  pageNum = i + 1;
+                } else if (page >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = page - 2 + i;
+                }
+                
+                if (pageNum > totalPages) return null;
+                
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={page === pageNum ? 'default' : 'outline'}
+                    size="sm"
+                    className="w-8 h-8 p-0"
+                    onClick={() => setPage(pageNum)}
+                    disabled={loading}
+                    aria-label={`Go to page ${pageNum}`}
+                    aria-current={page === pageNum ? 'page' : undefined}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            
+            {/* Go to page input */}
+            {totalPages > 5 && (
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={goToPageInput}
+                  onChange={(e) => setGoToPageInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleGoToPage();
+                    }
+                  }}
+                  placeholder="Page"
+                  className="w-16 h-8 text-xs"
+                  aria-label="Go to page number"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={handleGoToPage}
+                  disabled={loading}
+                  aria-label="Go to page"
+                >
+                  Go
+                </Button>
               </div>
-            ) : (
-              <ScrollArea className="h-[600px]">
-                <div className="divide-y">
-                  {logs.map((log) => (
-                    <div key={log.id} className="p-4 hover:bg-accent/50 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={getSeverityColor(log.severity)} className="text-xs">
-                              {log.severityDisplay}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs">
-                              {log.actionDisplay}
-                            </Badge>
-                            {log.module && (
-                              <Badge variant="secondary" className="text-xs">
-                                {log.module.toUpperCase()}
-                              </Badge>
-                            )}
-                            {log.success ? (
-                              <Badge variant="outline" className="text-xs text-green-600">
-                                Success
-                              </Badge>
-                            ) : (
-                              <Badge variant="destructive" className="text-xs">
-                                Failed
-                              </Badge>
-                            )}
-                            <span className="text-xs text-muted-foreground">
-                              {formatDateTime(log.timestamp)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm">{getUserName(log.user)}</span>
-                            {log.objectType && log.objectRepr && (
-                              <>
-                                <span className="text-muted-foreground">•</span>
-                                <span className="text-sm text-muted-foreground">
-                                  {log.objectType}: {log.objectRepr}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          {log.description && (
-                            <p className="text-sm text-muted-foreground mb-1">{log.description}</p>
-                          )}
-                          {log.errorMessage && (
-                            <p className="text-sm text-red-600 dark:text-red-400">{log.errorMessage}</p>
-                          )}
-                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                            {log.ipAddress && <span>IP: {log.ipAddress}</span>}
-                            {log.userAgent && (
-                              <span className="truncate max-w-xs" title={log.userAgent}>
-                                {log.userAgent}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
             )}
-          </CardContent>
-        </Card>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={page >= totalPages || loading}
+              aria-label="Next page"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );
-}
+};
+
+export default AuditTrailPage;

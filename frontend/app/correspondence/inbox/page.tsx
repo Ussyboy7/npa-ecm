@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,9 @@ import {
   Building2,
   Inbox,
   Filter,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
@@ -38,6 +41,13 @@ import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 
 const STORAGE_KEY = 'office-inbox-selection';
+
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: '#ef4444',
+  high: '#f97316',
+  medium: '#eab308',
+  low: '#22c55e',
+};
 
 const SLA_THRESHOLDS: Record<string, number> = {
   urgent: 2,
@@ -56,6 +66,12 @@ const isOverdue = (item: Correspondence): boolean => {
   return daysOpen > threshold && item.status !== 'completed';
 };
 
+const calculateDaysPending = (item: Correspondence): number => {
+  if (!item.receivedDate) return 0;
+  const received = new Date(item.receivedDate).getTime();
+  return Math.floor((Date.now() - received) / (1000 * 60 * 60 * 24));
+};
+
 type InboxSummary = {
   total: number;
   urgent: number;
@@ -70,21 +86,6 @@ const DEFAULT_SUMMARY: InboxSummary = {
   assigned_to_user: 0,
 };
 
-type StatusFilterOption = {
-  value: string;
-  label: string;
-  statuses?: string[];
-};
-
-const STATUS_FILTERS: StatusFilterOption[] = [
-  { value: 'active', label: 'Active', statuses: ['pending', 'in-progress'] },
-  { value: 'pending', label: 'Pending', statuses: ['pending'] },
-  { value: 'in-progress', label: 'In Progress', statuses: ['in-progress'] },
-  { value: 'completed', label: 'Completed', statuses: ['completed'] },
-  { value: 'archived', label: 'Archived', statuses: ['archived'] },
-  { value: 'all', label: 'All' },
-];
-
 const CorrespondenceInbox = () => {
   const router = useRouter();
   const { currentUser, hydrated } = useCurrentUser();
@@ -94,9 +95,16 @@ const CorrespondenceInbox = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('all');
   const [page, setPage] = useState(1);
-  const pageSize = 25;
-  const [statusFilter, setStatusFilter] = useState<string>('active');
+  const [pageSize, setPageSize] = useState(25);
+  const [goToPageInput, setGoToPageInput] = useState('');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['pending', 'in-progress']);
+  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [assignedOnly, setAssignedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<string>('priority');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
 
   const [inboxItems, setInboxItems] = useState<Correspondence[]>([]);
   const [summary, setSummary] = useState<InboxSummary>(DEFAULT_SUMMARY);
@@ -120,23 +128,50 @@ const CorrespondenceInbox = () => {
   const hasCorrespondenceAccess = userOfficeIds.length > 0 || isSuperuser;
 
   const selectableOffices = useMemo(() => {
-    if (isSuperuser) {
-      return offices;
-    }
+    if (isSuperuser) return offices;
     const membershipOfficeIds = new Set(userOfficeIds);
     return offices.filter((office) => membershipOfficeIds.has(office.id));
   }, [isSuperuser, offices, userOfficeIds]);
+
+  // Count active filters for badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedStatuses.length > 0 && !(selectedStatuses.length === 2 && selectedStatuses.includes('pending') && selectedStatuses.includes('in-progress'))) count++;
+    if (selectedPriorities.length > 0) count++;
+    if (assignedOnly) count++;
+    if (dateFrom) count++;
+    if (dateTo) count++;
+    if (selectedOfficeId !== 'all') count++;
+    return count;
+  }, [selectedStatuses, selectedPriorities, assignedOnly, dateFrom, dateTo, selectedOfficeId]);
+
+  const toggleStatus = (status: string) => {
+    setSelectedStatuses((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+    );
+  };
+
+  const togglePriority = (priority: string) => {
+    setSelectedPriorities((prev) =>
+      prev.includes(priority) ? prev.filter((p) => p !== priority) : [...prev, priority]
+    );
+  };
+
+  const clearAllFilters = () => {
+    setSelectedStatuses(['pending', 'in-progress']);
+    setSelectedPriorities([]);
+    setAssignedOnly(false);
+    setDateFrom('');
+    setDateTo('');
+    setSearchQuery('');
+    setSelectedOfficeId('all');
+  };
 
   useEffect(() => {
     if (!hasCorrespondenceAccess) return;
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (
-        saved &&
-        (saved === 'all' ||
-          userOfficeIds.includes(saved) ||
-          (isSuperuser && selectableOffices.some((office) => office.id === saved)))
-      ) {
+      if (saved && (saved === 'all' || userOfficeIds.includes(saved) || (isSuperuser && selectableOffices.some((office) => office.id === saved)))) {
         setSelectedOfficeId(saved);
         return;
       }
@@ -161,7 +196,7 @@ const CorrespondenceInbox = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [selectedOfficeId, debouncedSearch, statusFilter, assignedOnly]);
+  }, [selectedOfficeId, debouncedSearch, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo, pageSize]);
 
   useEffect(() => {
     if (hydrated && currentUser && !hasCorrespondenceAccess) {
@@ -190,13 +225,17 @@ const CorrespondenceInbox = () => {
           params.append('include_all_offices', 'true');
         }
         if (debouncedSearch) params.append('search', debouncedSearch);
-        const activeFilter = STATUS_FILTERS.find((option) => option.value === statusFilter);
-        if (activeFilter?.statuses?.length) {
-          activeFilter.statuses.forEach((status) => params.append('status', status));
+        if (selectedStatuses.length > 0) {
+          selectedStatuses.forEach((status) => params.append('status', status));
         }
-        if (assignedOnly) {
-          params.append('assigned_only', 'true');
+        if (selectedPriorities.length > 0) {
+          selectedPriorities.forEach((priority) => params.append('priority', priority));
         }
+        if (assignedOnly) params.append('assigned_only', 'true');
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        params.append('sort_by', sortBy);
+        params.append('sort_order', sortOrder);
         params.append('page', String(page));
         params.append('page_size', String(pageSize));
 
@@ -221,146 +260,77 @@ const CorrespondenceInbox = () => {
     };
 
     void fetchInbox();
-  }, [
-    hydrated,
-    currentUser,
-    hasCorrespondenceAccess,
-    selectedOfficeId,
-    debouncedSearch,
-    page,
-    userOfficeIds,
-    isSuperuser,
-    statusFilter,
-    assignedOnly,
-  ]);
+  }, [hydrated, currentUser, hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, page, pageSize, userOfficeIds, isSuperuser, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   const pageCount = Math.max(1, Math.ceil(count / pageSize));
 
+  const handleGoToPage = () => {
+    const pageNum = parseInt(goToPageInput, 10);
+    if (pageNum >= 1 && pageNum <= pageCount) {
+      setPage(pageNum);
+      setGoToPageInput('');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending':
-        return 'text-warning bg-warning/10';
-      case 'in-progress':
-        return 'text-info bg-info/10';
-      case 'completed':
-        return 'text-success bg-success/10';
-      case 'archived':
-        return 'text-muted-foreground bg-muted';
-      default:
-        return 'text-foreground bg-muted';
+      case 'pending': return 'text-warning bg-warning/10';
+      case 'in-progress': return 'text-info bg-info/10';
+      case 'completed': return 'text-success bg-success/10';
+      case 'archived': return 'text-muted-foreground bg-muted';
+      default: return 'text-foreground bg-muted';
     }
   };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'urgent':
-        return 'destructive';
-      case 'high':
-        return 'default';
-      case 'medium':
-        return 'secondary';
-      case 'low':
-        return 'outline';
-      default:
-        return 'secondary';
+      case 'urgent': return 'destructive';
+      case 'high': return 'default';
+      case 'medium': return 'secondary';
+      case 'low': return 'outline';
+      default: return 'secondary';
     }
   };
 
   const CorrespondenceCard = ({ corr }: { corr: Correspondence }) => {
     const division = corr.divisionId ? divisions.find((div) => div.id === corr.divisionId) : undefined;
-    const currentApprover = corr.currentApproverId
-      ? organizationUsers.find((user) => user.id === corr.currentApproverId)
-      : undefined;
+    const currentApprover = corr.currentApproverId ? organizationUsers.find((user) => user.id === corr.currentApproverId) : undefined;
     const overdue = isOverdue(corr);
+    const daysPending = calculateDaysPending(corr);
+    const daysPendingColor = daysPending > 5 ? 'destructive' : daysPending > 2 ? 'default' : 'secondary';
 
     return (
-      <Link
-        href={`/correspondence/${corr.id}`}
-        className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer block"
-      >
+      <Link href={`/correspondence/${corr.id}`} className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer block">
         <div className="flex items-start gap-4">
-          <div
-            className={`p-3 rounded-lg ${
-              corr.priority === 'urgent'
-                ? 'bg-destructive/10'
-                : corr.priority === 'high'
-                  ? 'bg-warning/10'
-                  : 'bg-primary/10'
-            }`}
-          >
-            <Mail
-              className={`h-5 w-5 ${
-                corr.priority === 'urgent'
-                  ? 'text-destructive'
-                  : corr.priority === 'high'
-                    ? 'text-warning'
-                    : 'text-primary'
-              }`}
-            />
+          <div className={`p-3 rounded-lg ${corr.priority === 'urgent' ? 'bg-destructive/10' : corr.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
+            <Mail className={`h-5 w-5 ${corr.priority === 'urgent' ? 'text-destructive' : corr.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
           </div>
-
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3 mb-2">
               <div className="flex-1 min-w-0">
                 <h4 className="font-semibold text-foreground truncate mb-1">{corr.subject}</h4>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant={getPriorityColor(corr.priority)}>
-                    {corr.priority.toUpperCase()}
-                  </Badge>
+                  <Badge variant={getPriorityColor(corr.priority)}>{corr.priority.toUpperCase()}</Badge>
                   <Badge variant="outline" className="gap-1">
-                    {corr.direction === 'downward' ? (
-                      <>
-                        <ArrowDown className="h-3 w-3 text-info" />
-                        Downward
-                      </>
-                    ) : (
-                      <>
-                        <ArrowUp className="h-3 w-3 text-success" />
-                        Upward
-                      </>
-                    )}
+                    {corr.direction === 'downward' ? (<><ArrowDown className="h-3 w-3 text-info" />Downward</>) : (<><ArrowUp className="h-3 w-3 text-success" />Upward</>)}
                   </Badge>
-                  <Badge variant="secondary" className={getStatusColor(corr.status)}>
-                    {corr.status.replace('-', ' ')}
-                  </Badge>
+                  <Badge variant="secondary" className={getStatusColor(corr.status)}>{corr.status.replace('-', ' ')}</Badge>
                   {overdue && <Badge variant="destructive">SLA Breach</Badge>}
+                  {daysPending > 0 && (
+                    <Badge variant={daysPendingColor} className="gap-1">
+                      <Clock className="h-3 w-3" />{daysPending} day{daysPending !== 1 ? 's' : ''} pending
+                    </Badge>
+                  )}
                 </div>
               </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {formatDateShort(corr.receivedDate)}
-              </span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDateShort(corr.receivedDate)}</span>
             </div>
-
             <div className="space-y-1 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <UserIcon className="h-3.5 w-3.5" />
-                <span>From: {corr.senderName}</span>
-                {corr.senderOrganization && (
-                  <span className="text-xs">({corr.senderOrganization})</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5" />
-                <span>Ref: {corr.referenceNumber}</span>
-              </div>
-              {division && (
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  <span>Division: {division.name}</span>
-                </div>
-              )}
-              {currentApprover && (
-                <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Current: {currentApprover.name}</span>
-                </div>
-              )}
-              {corr.currentOfficeName && (
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5" />
-                  <span>Office: {corr.currentOfficeName}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" /><span>From: {corr.senderName}</span></div>
+              <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /><span>Ref: {corr.referenceNumber}</span></div>
+              {division && <div className="flex items-center gap-2"><AlertCircle className="h-3.5 w-3.5" /><span>Division: {division.name}</span></div>}
+              {currentApprover && <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /><span>Current: {currentApprover.name}</span></div>}
+              {corr.currentOfficeName && <div className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5" /><span>Office: {corr.currentOfficeName}</span></div>}
             </div>
           </div>
         </div>
@@ -371,12 +341,8 @@ const CorrespondenceInbox = () => {
   if (!hydrated || !currentUser) {
     return (
       <DashboardLayout>
-        <div className="p-6 space-y-6">
-          <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              Loading office inbox…
-            </CardContent>
-          </Card>
+        <div className="container mx-auto p-6 space-y-6">
+          <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading office inbox…</CardContent></Card>
         </div>
       </DashboardLayout>
     );
@@ -385,16 +351,8 @@ const CorrespondenceInbox = () => {
   if (!hasCorrespondenceAccess) {
     return (
       <DashboardLayout>
-        <div className="p-6 space-y-6">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-lg font-semibold">No office inbox available</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                This persona does not have registry or routing permissions. Redirecting you to your
-                personal inbox…
-              </p>
-            </CardContent>
-          </Card>
+        <div className="container mx-auto p-6 space-y-6">
+          <Card><CardContent className="py-12 text-center"><p className="text-lg font-semibold">No office inbox available</p><p className="text-sm text-muted-foreground mt-2">This persona does not have registry or routing permissions. Redirecting you to your personal inbox…</p></CardContent></Card>
         </div>
       </DashboardLayout>
     );
@@ -402,206 +360,216 @@ const CorrespondenceInbox = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-              <Mail className="h-8 w-8 text-primary" />
-              Correspondence Inbox
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Monitor work queued in your offices and prioritize urgent escalations.
-            </p>
+            <h1 className="text-3xl font-bold">Office Inbox</h1>
+            <p className="text-muted-foreground mt-1">Monitor work queued in your offices and prioritize urgent escalations</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => router.push('/correspondence/register')}
-              className="bg-gradient-primary hover:opacity-90 transition-opacity"
-            >
-              Register New
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
+              <Filter className="h-4 w-4 mr-2" /> Filters
+              {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
+            </Button>
+            <Button size="sm" onClick={() => router.push('/correspondence/register')}>
+              <Mail className="h-4 w-4 mr-2" /> Register New
             </Button>
             <ContextualHelp
               title="How to triage correspondence"
               description="Pick one of your offices, tackle urgent/SLA breaches first, and then work through the remaining approvals."
-              steps={[
-                'Select the office you are acting for.',
-                'Use search to find specific references or senders.',
-                'Open a record to minute, approve, delegate, or archive.',
-              ]}
+              steps={['Select the office you are acting for.', 'Use search to find specific references or senders.', 'Open a record to minute, approve, delegate, or archive.']}
             />
           </div>
         </div>
 
         <HelpGuideCard
-          title="Office queue basics"
+          title="Office Queue Basics"
           description="Department files, archives, and outgoing dispatch now live in their dedicated sections. This view is focused solely on items currently sitting with your office."
-          links={[
-            { label: 'Department Files', href: '/correspondence/department-files' },
-            { label: 'Outbox', href: '/correspondence/outbox' },
-          ]}
+          links={[{ label: 'Department Files', href: '/correspondence/department-files' }, { label: 'Outbox', href: '/correspondence/outbox' }]}
         />
 
+        {/* Filters Panel */}
+        {showFilters && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Inbox Filters</CardTitle>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Office</Label>
+                  <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{isSuperuser ? 'All Offices' : 'All My Offices'}</SelectItem>
+                      {selectableOffices.map((office) => (
+                        <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Status</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {['pending', 'in-progress', 'completed', 'archived'].map((status) => (
+                      <Badge
+                        key={status}
+                        variant={selectedStatuses.includes(status) ? 'default' : 'outline'}
+                        className="cursor-pointer capitalize text-xs"
+                        onClick={() => toggleStatus(status)}
+                      >
+                        {status.replace('-', ' ')}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Priority</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {['urgent', 'high', 'medium', 'low'].map((priority) => (
+                      <Badge
+                        key={priority}
+                        variant={selectedPriorities.includes(priority) ? 'default' : 'outline'}
+                        className="cursor-pointer capitalize text-xs"
+                        onClick={() => togglePriority(priority)}
+                        style={selectedPriorities.includes(priority) ? { backgroundColor: PRIORITY_COLORS[priority] } : {}}
+                      >
+                        {priority}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Assignment</Label>
+                  <Badge
+                    variant={assignedOnly ? 'default' : 'outline'}
+                    className="cursor-pointer"
+                    onClick={() => setAssignedOnly(!assignedOnly)}
+                  >
+                    <UserIcon className="h-3 w-3 mr-1" /> Assigned to me
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Date From</Label>
+                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Date To</Label>
+                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Sort By</Label>
+                    <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+                      <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+                        <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>
+                        <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
+                        <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
+                        <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Search */}
+        <div className="relative max-w-xl">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Search by subject, reference, sender, office, division..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+        </div>
+
+        {/* Summary Cards */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {[
-            {
-              label: 'Total in queue',
-              value: summary.total,
-              icon: Inbox,
-              bgClass: 'bg-primary/10',
-              iconClass: 'text-primary',
-            },
-            {
-              label: 'Urgent items',
-              value: summary.urgent,
-              icon: AlertCircle,
-              bgClass: 'bg-destructive/10',
-              iconClass: 'text-destructive',
-            },
-            {
-              label: 'SLA breaches',
-              value: summary.overdue,
-              icon: Clock,
-              bgClass: 'bg-warning/10',
-              iconClass: 'text-warning',
-            },
-            {
-              label: 'Assigned to you',
-              value: summary.assigned_to_user,
-              icon: UserIcon,
-              bgClass: 'bg-info/10',
-              iconClass: 'text-info',
-            },
+            { label: 'Total in Queue', value: summary.total, icon: Inbox, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+            { label: 'Urgent Items', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
+            { label: 'SLA Breaches', value: summary.overdue, icon: Clock, bgClass: 'bg-warning/10', iconClass: 'text-warning' },
+            { label: 'Assigned to You', value: summary.assigned_to_user, icon: UserIcon, bgClass: 'bg-info/10', iconClass: 'text-info' },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-lg ${bgClass}`}>
-                    <Icon className={`h-6 w-6 ${iconClass}`} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">{label}</p>
-                    <p className="text-2xl font-semibold">{value}</p>
-                  </div>
+                  <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
+                  <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="relative max-w-xl w-full">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search by subject, reference number, or sender..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          {(userOfficeMemberships.length > 0 || isSuperuser) && (
-            <div className="w-full md:w-80 space-y-1">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Office Filter
-              </Label>
-              <Select value={selectedOfficeId} onValueChange={(value) => setSelectedOfficeId(value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select office" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{isSuperuser ? 'All offices' : 'All my offices'}</SelectItem>
-                  {selectableOffices.map((office) => (
-                    <SelectItem key={office.id} value={office.id}>
-                      {office.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-            <Filter className="h-3.5 w-3.5" />
-            Queue Filters
-          </Label>
-          <div className="flex flex-wrap gap-2">
-            {STATUS_FILTERS.map((option) => (
-              <Button
-                key={option.value}
-                variant={statusFilter === option.value ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setStatusFilter(option.value)}
-                className="text-xs"
-              >
-                {option.label}
-              </Button>
-            ))}
-            <Button
-              variant={assignedOnly ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setAssignedOnly((prev) => !prev)}
-              className="text-xs flex items-center gap-2"
-            >
-              <UserIcon className="h-3.5 w-3.5" />
-              Assigned to me
-            </Button>
-          </div>
-        </div>
-
-        {error && (
-          <Card>
-            <CardContent className="py-4 text-sm text-destructive">{error}</CardContent>
-          </Card>
-        )}
+        {error && <Card><CardContent className="py-4 text-sm text-destructive">{error}</CardContent></Card>}
 
         {loading ? (
-          <Card>
-            <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              Loading office queue…
-            </CardContent>
-          </Card>
+          <Card><CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading office queue…</CardContent></Card>
         ) : inboxItems.length === 0 ? (
           <Card>
-            <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              No correspondence routed to your office yet.
+            <CardContent className="py-12 text-center">
+              <Inbox className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+              <p className="text-sm text-muted-foreground mb-2">{debouncedSearch || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence routed to your office yet.'}</p>
+              {(debouncedSearch || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">Clear Filters</Button>}
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {inboxItems.map((corr) => (
-              <CorrespondenceCard key={corr.id} corr={corr} />
-            ))}
-          </div>
+          <div className="space-y-3">{inboxItems.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)}</div>
         )}
 
-        {pageCount > 1 && (
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-muted-foreground">
-              Showing page {page} of {pageCount} ({count} items)
-            </p>
+        {/* Pagination */}
+        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-muted-foreground">Showing {count === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count, (page - 1) * pageSize + inboxItems.length)}`} of {count} items</p>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                disabled={page === 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
-                disabled={page === pageCount}
-              >
-                Next
-              </Button>
+              <label className="text-sm text-muted-foreground">Per page:</label>
+              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1 || loading}><ChevronLeft className="h-4 w-4" />Previous</Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
+                let pageNum: number;
+                if (pageCount <= 5) pageNum = i + 1;
+                else if (page <= 3) pageNum = i + 1;
+                else if (page >= pageCount - 2) pageNum = pageCount - 4 + i;
+                else pageNum = page - 2 + i;
+                if (pageNum > pageCount) return null;
+                return (
+                  <Button key={pageNum} variant={page === pageNum ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pageNum)} disabled={loading}>{pageNum}</Button>
+                );
+              })}
+            </div>
+            {pageCount > 5 && (
+              <div className="flex items-center gap-1">
+                <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
+                <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
+              </div>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );
 };
 
 export default CorrespondenceInbox;
-

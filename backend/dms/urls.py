@@ -12,11 +12,13 @@ from .views import (
     DocumentViewSet,
     DocumentWorkspaceViewSet,
 )
+from .form_views import FormDocumentViewSet
 
 
 router = DefaultRouter()
 router.register(r"workspaces", DocumentWorkspaceViewSet, basename="document-workspace")
 router.register(r"documents", DocumentViewSet, basename="document")
+router.register(r"form-documents", FormDocumentViewSet, basename="form-document")
 router.register(r"versions", DocumentVersionViewSet, basename="document-version")
 router.register(r"permissions", DocumentPermissionViewSet, basename="document-permission")
 router.register(r"comments", DocumentCommentViewSet, basename="document-comment")

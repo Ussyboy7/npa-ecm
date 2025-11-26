@@ -37,6 +37,7 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
         CIRCULAR = "circular", "Circular"
         POLICY = "policy", "Policy"
         REPORT = "report", "Report"
+        FORM = "form", "Form"
         OTHER = "other", "Other"
 
     class DocumentStatus(models.TextChoices):
@@ -127,6 +128,7 @@ class DocumentPermission(UUIDModel, TimeStampedModel):
 
     document = models.ForeignKey(Document, on_delete=models.CASCADE, related_name="permissions")
     access = models.CharField(max_length=16, choices=AccessLevel.choices)
+    note = models.TextField(blank=True, help_text="Optional message/context included when sharing")
     divisions = models.ManyToManyField(
         "organization.Division",
         blank=True,
@@ -240,3 +242,91 @@ class DocumentEditorSession(UUIDModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.user} editing {self.document}"
+
+
+class FormDocument(UUIDModel, TimeStampedModel):
+    """Form-specific document that extends DMS Document for form management."""
+
+    class FormStatus(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        IN_PROGRESS = "in_progress", "In Progress"
+        AWAITING_SIGNATURES = "awaiting_signatures", "Awaiting Signatures"
+        COMPLETED = "completed", "Completed"
+
+    document = models.OneToOneField(
+        Document,
+        on_delete=models.CASCADE,
+        related_name="form_document",
+        help_text="The DMS document this form is associated with",
+    )
+    template = models.ForeignKey(
+        "forms.FormTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="form_documents",
+        help_text="The form template used for this form",
+    )
+    form_data = models.JSONField(
+        default=dict,
+        help_text="The form field data (JSON structure matching template fields)",
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=FormStatus.choices,
+        default=FormStatus.DRAFT,
+    )
+    signature_workflow = models.ForeignKey(
+        "forms.FormSignatureWorkflow",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="form_documents",
+        help_text="Active signature workflow for this form",
+    )
+    correspondence = models.ForeignKey(
+        "correspondence.Correspondence",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="form_documents",
+        help_text="Correspondence this form is linked to (if any)",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["document", "status"]),
+            models.Index(fields=["template", "status"]),
+            models.Index(fields=["correspondence"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Form: {self.document.title} ({self.get_status_display()})"
+
+    def get_signature_workflow(self):
+        """Get the active signature workflow for this form."""
+        if self.signature_workflow:
+            return self.signature_workflow
+        # Try to get from template if workflow exists
+        return None
+
+    def requires_signatures(self):
+        """Check if this form template requires signatures."""
+        if not self.template:
+            return False
+        structure = self.template.structure or {}
+        fields = structure.get("fields", [])
+        return any(
+            field.get("type") == "file" and "signature" in field.get("name", "").lower()
+            for field in fields
+        )
+
+    def mark_completed(self):
+        """Mark the form as completed."""
+        self.status = self.FormStatus.COMPLETED
+        self.save()
+        # Also update document status if needed
+        if self.document.status != Document.DocumentStatus.PUBLISHED:
+            self.document.status = Document.DocumentStatus.PUBLISHED
+            self.document.save()

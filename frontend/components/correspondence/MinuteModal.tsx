@@ -1,7 +1,7 @@
 import { logError } from '@/lib/client-logger';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -44,13 +44,19 @@ import {
   Loader2,
 } from 'lucide-react';
 import { 
-  GRADE_LEVELS,
   getDivisionById,
   getDepartmentById,
+  getDirectorateById,
+  GRADE_LEVELS,
   type Correspondence,
   type DistributionRecipient,
   type User,
 } from '@/lib/npa-structure';
+import { UserSelector } from '@/components/shared/UserSelector';
+import { OfficeSelector } from '@/components/shared/OfficeSelector';
+import { MODAL_CONSTANTS } from '@/lib/modal-constants';
+import { ModalErrorHandler } from '@/lib/modal-errors';
+import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
 import { DistributionSelector } from './DistributionSelector';
 import { loadUserSignature, ensureDefaultSignatureTemplates, loadUserSignaturePreferences, type StoredSignature, type SignatureTemplate, type UserSignaturePreferences } from '@/lib/signature-storage';
 import {
@@ -78,6 +84,7 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
   const [minuteText, setMinuteText] = useState('');
   const [minuteTextError, setMinuteTextError] = useState('');
   const [actionType, setActionType] = useState<'minute' | 'approve'>('minute');
+  const [purpose, setPurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
   const [forwardTo, setForwardTo] = useState('');
   const [forwardToError, setForwardToError] = useState('');
   const [characterCount, setCharacterCount] = useState(0);
@@ -395,95 +402,45 @@ const [newTemplateName, setNewTemplateName] = useState('');
 
   const previousUser = previousMinute ? findUserById(previousMinute.userId) : null;
 
+  // Get users who have already acted (to exclude from suggestions)
+  const usersWhoAlreadyActed = useMemo(() => {
+    const acted = new Set(
+      existingMinutes
+        .filter(minute => !minute.isRecalled)
+        .map(minute => minute.userId)
+        .filter(Boolean)
+    );
+    
+    if (correspondence.currentApproverId) {
+      const currentApproverMinutes = existingMinutes.filter(m => m.userId === correspondence.currentApproverId);
+      const hasNonRecalledMinute = currentApproverMinutes.some(m => !m.isRecalled);
+      if (hasNonRecalledMinute) {
+        acted.add(correspondence.currentApproverId);
+      }
+    }
+    
+    return acted;
+  }, [existingMinutes, correspondence.currentApproverId]);
+
   // Get suggested next approvers based on hierarchy and organizational structure
-  const getSuggestedApprovers = () => {
-    // MD can only send downward, others use selected direction or initial
+  const suggestedApprovers = useMemo(() => {
+    if (!currentUser) return [];
+    
     const dir = isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection);
     
-    // Get grade levels sorted by level (higher level = more authority)
-    const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map(g => g.code);
-    const currentGradeIndex = currentUser?.gradeLevel ? gradeOrder.indexOf(currentUser.gradeLevel) : -1;
-    
-    // Get current user's division and directorate info
-    const division = currentUser?.division ? getDivisionById(currentUser.division) : null;
-    const currentDirectorate = division?.directorateId;
-    const candidates = new Map<string, User>();
-
-    const addCandidate = (user?: User) => {
-      if (!user) return;
-      if (user.id === currentUser?.id) return;
-      if (user.active === false) return;
-      candidates.set(user.id, user);
-    };
-
-    if (dir === 'downward') {
-      const lowerGrades = gradeOrder.slice(currentGradeIndex + 1);
-
-      if (isMD) {
-        activeDirectoryUsers
-          .filter((user) => lowerGrades.includes(user.gradeLevel))
-          .sort((a, b) => {
-            const aGradeIndex = gradeOrder.indexOf(a.gradeLevel);
-            const bGradeIndex = gradeOrder.indexOf(b.gradeLevel);
-            if (aGradeIndex !== bGradeIndex) return aGradeIndex - bGradeIndex;
-            return a.name.localeCompare(b.name);
-          })
-          .forEach(addCandidate);
-      } else {
-        activeDirectoryUsers
-          .filter(
-            (user) =>
-              lowerGrades.includes(user.gradeLevel) &&
-              user.division === currentUser?.division,
-          )
-          .forEach(addCandidate);
-      }
-    } else {
-      const higherGrades = gradeOrder.slice(0, currentGradeIndex);
-
-      activeDirectoryUsers
-        .filter((user) => {
-          if (!higherGrades.includes(user.gradeLevel)) return false;
-
-          const userDivision = user.division ? getDivisionById(user.division) : null;
-          const userDirectorate = userDivision?.directorateId ?? user.directorate ?? null;
-
-          const currentDivision = currentUser?.division;
-          const userBelongsToDivision = Boolean(user.division && currentDivision && user.division === currentDivision);
-          const userBelongsToDirectorate =
-            Boolean(currentDirectorate && userDirectorate && userDirectorate === currentDirectorate) ||
-            Boolean(currentUser?.directorate && userDirectorate && userDirectorate === currentUser.directorate);
-
-          const isExecutiveGrade = ['MDCS', 'EDCS'].includes(user.gradeLevel);
-
-          return userBelongsToDivision || userBelongsToDirectorate || isExecutiveGrade;
-        })
-        .forEach(addCandidate);
-    }
-
-    return Array.from(candidates.values());
-  };
-
-  const suggestedApprovers = getSuggestedApprovers();
-  const suggestedNext = suggestedApprovers[0]; // Immediate next in hierarchy
-  
-  // Filter users based on search query
-  const filterUsersBySearch = (users: User[]) => {
-    if (!searchQuery.trim()) return users;
-    
-    const query = searchQuery.toLowerCase();
-    return users.filter(user => {
-      const nameMatch = user.name.toLowerCase().includes(query);
-      const emailMatch = user.email.toLowerCase().includes(query);
-      const roleMatch = user.systemRole.toLowerCase().includes(query);
-      const division = user.division ? getDivisionById(user.division) : null;
-      const divisionMatch = division?.name.toLowerCase().includes(query) || false;
-      const department = user.department ? getDepartmentById(user.department) : null;
-      const departmentMatch = department?.name.toLowerCase().includes(query) || false;
-      
-      return nameMatch || emailMatch || roleMatch || divisionMatch || departmentMatch;
+    return getSuggestedApprovers({
+      currentUser,
+      direction: dir,
+      correspondence,
+      existingMinutes,
+      offices,
+      officeMemberships,
+      activeUsers: activeDirectoryUsers,
+      excludeUsers: usersWhoAlreadyActed,
     });
-  };
+  }, [currentUser, isMD, canChooseDirection, selectedDirection, initialDirection, correspondence, existingMinutes, offices, officeMemberships, activeDirectoryUsers, usersWhoAlreadyActed]);
+  
+  const suggestedNext = suggestedApprovers[0]; // Immediate next in hierarchy
   
   const assistantIds = useMemo(() => new Set(assistantCandidates.map((user) => user.id)), [assistantCandidates]);
   const baseApproversWithoutAssistants = useMemo(
@@ -491,8 +448,14 @@ const [newTemplateName, setNewTemplateName] = useState('');
     [suggestedApprovers, assistantIds],
   );
 
-  const filteredAssistants = filterUsersBySearch(assistantCandidates);
-  const filteredApprovers = filterUsersBySearch(baseApproversWithoutAssistants);
+  const filteredAssistants = useMemo(
+    () => filterUsersBySearch(assistantCandidates, searchQuery, { includeDivision: true, includeDepartment: true, includeEmail: true }),
+    [assistantCandidates, searchQuery]
+  );
+  const filteredApprovers = useMemo(
+    () => filterUsersBySearch(baseApproversWithoutAssistants, searchQuery, { includeDivision: true, includeDepartment: true, includeEmail: true }),
+    [baseApproversWithoutAssistants, searchQuery]
+  );
   const filteredNext = filteredApprovers[0] ?? filteredAssistants[0] ?? null;
   const nextIsAssistant = filteredNext ? assistantAssignmentsById.has(filteredNext.id) : false;
   const approverList = !searchQuery.trim() && filteredNext && !nextIsAssistant && filteredApprovers.length > 0 && filteredApprovers[0].id === filteredNext.id
@@ -588,13 +551,24 @@ const [newTemplateName, setNewTemplateName] = useState('');
       return false;
     }
 
-    if (trimmedMinuteText.length < 10) {
-      setMinuteTextError('Minute text must be at least 10 characters long');
+    if (trimmedMinuteText.length < MODAL_CONSTANTS.MINUTE_TEXT.MIN) {
+      setMinuteTextError(`Minute text must be at least ${MODAL_CONSTANTS.MINUTE_TEXT.MIN} characters long`);
+      return false;
+    }
+
+    if (trimmedMinuteText.length > MODAL_CONSTANTS.MINUTE_TEXT.MAX) {
+      setMinuteTextError(`Minute text must not exceed ${MODAL_CONSTANTS.MINUTE_TEXT.MAX} characters`);
       return false;
     }
 
     if (!forwardTo) {
       setForwardToError('Please select who to forward to');
+      return false;
+    }
+
+    // Prevent routing to users who have already acted on this correspondence
+    if (usersWhoAlreadyActed.has(forwardTo)) {
+      setForwardToError('This user has already acted on this correspondence. Please select a different recipient.');
       return false;
     }
 
@@ -645,6 +619,38 @@ const [newTemplateName, setNewTemplateName] = useState('');
 
     // MD can only send downward, others use selected direction or initial
     const finalDirection = isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection);
+    
+    // Automatically determine recipient's office from their office memberships
+    const recipientOfficeMembership = officeMemberships.find(
+      (membership) => membership.userId === forwardTo && membership.isActive && membership.isPrimary
+    );
+    const recipientOfficeId = recipientOfficeMembership?.officeId || targetOfficeId || undefined;
+    
+    // Validate that selected user is in the target office (if office is specified)
+    if (targetOfficeId && forwardTo) {
+      const userInOffice = officeMemberships.some(
+        (membership) => membership.userId === forwardTo && 
+                       membership.officeId === targetOfficeId && 
+                       membership.isActive
+      );
+      
+      if (!userInOffice && recipientOfficeId !== targetOfficeId) {
+        const forwardUser = findUserById(forwardTo);
+        const targetOffice = offices.find(o => o.id === targetOfficeId);
+        toast.error(
+          `User ${forwardUser?.name || 'selected'} is not a member of ${targetOffice?.name || 'the selected office'}. Please select a user from that office.`,
+          { duration: 5000 }
+        );
+        setShowConfirmation(false);
+        return;
+      }
+    }
+    
+    // Get current user's office for from_office
+    const currentUserOfficeMembership = officeMemberships.find(
+      (membership) => membership.userId === currentUser.id && membership.isActive && membership.isPrimary
+    );
+    const currentUserOfficeId = currentUserOfficeMembership?.officeId || correspondence.currentOfficeId || undefined;
 
     const templateForSignature = applySignature
       ? (selectedTemplateId
@@ -728,24 +734,57 @@ const [newTemplateName, setNewTemplateName] = useState('');
           minute_text: minuteText.trim(),
           direction: finalDirection,
           step_number: nextStep,
-          to_office_id: targetOfficeId || undefined,
+          from_office_id: currentUserOfficeId || undefined,
+          to_office_id: recipientOfficeId || targetOfficeId || undefined,  // Use recipient's office or explicitly selected office
+          to_user_id: forwardTo,  // Always set to_user when user is selected
           signature_payload: signaturePayload || undefined,
+          purpose: purpose,
+          requires_response: purpose === 'action' || purpose === 'approval',
         }),
       });
 
       // Update correspondence via API
+      // Prevent setting current_approver to the current user
+      if (forwardTo === currentUser.id) {
+        toast.error('Cannot route correspondence to yourself. Please select a different recipient.');
+        setShowConfirmation(false);
+        setIsSubmitting(false);
+        return;
+      }
+      
       const correspondenceUpdatePayload: any = {
-        current_approver: forwardTo,
+        current_approver_id: forwardTo,
         status: 'in-progress',
         direction: finalDirection,
       };
-      if (targetOfficeId) {
-        correspondenceUpdatePayload.current_office = targetOfficeId;
+      // Always update the office to the recipient's office (or explicitly selected office)
+      // Note: Backend also handles this automatically, but we update here for immediate UI feedback
+      const finalOfficeId = recipientOfficeId || targetOfficeId;
+      if (finalOfficeId) {
+        correspondenceUpdatePayload.current_office = finalOfficeId;
       }
-      await apiFetch(`/correspondence/items/${correspondence.id}/`, {
+      // Update correspondence - this is critical for routing
+      const updateResponse = await apiFetch(`/correspondence/items/${correspondence.id}/`, {
         method: 'PATCH',
         body: JSON.stringify(correspondenceUpdatePayload),
       });
+      
+      // Verify the update was successful
+      const expectedOfficeId = recipientOfficeId || targetOfficeId;
+      if (!updateResponse) {
+        console.warn('Correspondence update failed - no response received');
+      } else {
+        const actualApproverId = updateResponse.current_approver_id || updateResponse.current_approver;
+        const actualOfficeId = updateResponse.current_office_id || updateResponse.current_office;
+        
+        if (actualApproverId !== forwardTo) {
+          console.warn('Correspondence update may not have applied correctly. Current approver:', actualApproverId, 'Expected:', forwardTo);
+        }
+        
+        if (expectedOfficeId && actualOfficeId !== expectedOfficeId) {
+          console.warn('Correspondence office may not have been set correctly. Current office:', actualOfficeId, 'Expected:', expectedOfficeId);
+        }
+      }
 
       if (canDistribute && newDistributionEntries.length > 0) {
         await Promise.all(
@@ -804,12 +843,8 @@ const [newTemplateName, setNewTemplateName] = useState('');
       });
     } catch (error: any) {
       logError('Failed to record minute', error);
-      const errorMessage = error?.response?.data?.detail || 
-                          error?.response?.data?.minute_text?.[0] ||
-                          error?.response?.data?.current_approver?.[0] ||
-                          error?.message || 
-                          'Unable to save minute. Please try again.';
-      toast.error(errorMessage);
+      const modalError = ModalErrorHandler.createErrorFromApi(error);
+      toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
@@ -1047,10 +1082,17 @@ const [newTemplateName, setNewTemplateName] = useState('');
               value={minuteText}
               onChange={(e) => handleTextChange(e.target.value)}
               className="min-h-[120px] resize-none"
+              maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
+              aria-label="Minute text"
+              aria-required="true"
+              aria-invalid={!!minuteTextError}
+              aria-describedby="minute-text-help"
             />
             <div className="flex justify-between text-xs text-muted-foreground">
               <span>Use @ to mention others</span>
-              <span>{characterCount} characters</span>
+              <span className={characterCount > MODAL_CONSTANTS.MINUTE_TEXT.MAX ? 'text-destructive' : ''}>
+                {characterCount} / {MODAL_CONSTANTS.MINUTE_TEXT.MAX} characters
+              </span>
             </div>
           </div>
 
@@ -1092,43 +1134,17 @@ const [newTemplateName, setNewTemplateName] = useState('');
           )}
 
           {/* Office Routing */}
-          <div className="space-y-2">
-            <Label>Route to Office</Label>
-            <Select
-              value={targetOfficeId || '__keep_office__'}
-              onValueChange={(value) => setTargetOfficeId(value === '__keep_office__' ? '' : value)}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={correspondence.currentOfficeName ?? 'Select destination office'}
-                />
-              </SelectTrigger>
-              <SelectContent className="max-h-[320px] overflow-y-auto">
-                <SelectItem value="__keep_office__">
-                  Keep current office ({correspondence.currentOfficeName ?? 'Unassigned'})
-                </SelectItem>
-                {officeOptions.map((office) => (
-                  <SelectItem key={office.id} value={office.id}>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{office.name}</span>
-                      <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                        {office.officeType}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Building2 className="h-3.5 w-3.5" />
-              Current office:{' '}
-              {targetOfficeId
-                ? officeOptions.find((office) => office.id === targetOfficeId)?.name ??
-                  correspondence.currentOfficeName ??
-                  'Unassigned'
-                : correspondence.currentOfficeName ?? 'Unassigned'}
-            </p>
-          </div>
+          <OfficeSelector
+            offices={officeOptions}
+            value={targetOfficeId}
+            onValueChange={setTargetOfficeId}
+            label="Route to Office"
+            placeholder={correspondence.currentOfficeName ?? 'Select destination office'}
+            showKeepCurrent
+            currentOfficeName={correspondence.currentOfficeName}
+            keepCurrentLabel={`Keep current office (${correspondence.currentOfficeName ?? 'Unassigned'})`}
+            maxHeight="320px"
+          />
 
           {/* Action Type */}
           <div className="space-y-2">
@@ -1147,6 +1163,48 @@ const [newTemplateName, setNewTemplateName] = useState('');
                 </Label>
               </div>
             </RadioGroup>
+          </div>
+
+          {/* Purpose Selection */}
+          <div className="space-y-2">
+            <Label>Purpose *</Label>
+            <Select value={purpose} onValueChange={(v: any) => setPurpose(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select purpose" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="action">
+                  <div className="flex flex-col">
+                    <span className="font-medium">For Action</span>
+                    <span className="text-xs text-muted-foreground">Recipient must take action</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="information">
+                  <div className="flex flex-col">
+                    <span className="font-medium">For Information</span>
+                    <span className="text-xs text-muted-foreground">View-only, no actions permitted</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="comment">
+                  <div className="flex flex-col">
+                    <span className="font-medium">For Comment</span>
+                    <span className="text-xs text-muted-foreground">Can provide input but doesn't block workflow</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="approval">
+                  <div className="flex flex-col">
+                    <span className="font-medium">For Approval</span>
+                    <span className="text-xs text-muted-foreground">Must approve or reject</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {purpose === 'information' && '⚠️ Recipients will not be able to take any actions on this correspondence.'}
+              {purpose === 'action' && 'Recipients must take action before workflow can continue.'}
+              {purpose === 'comment' && 'Recipients can provide input but workflow can continue independently.'}
+              {purpose === 'approval' && 'Recipients must approve or reject before workflow can continue.'}
+            </p>
           </div>
 
           {/* Forward To */}
@@ -1221,13 +1279,29 @@ const [newTemplateName, setNewTemplateName] = useState('');
                             </div>
                             {gradeUsers.map(user => {
                               const userDivision = user.division ? getDivisionById(user.division) : null;
+                              const userDirectorateId = userDivision?.directorateId ?? user.directorate ?? null;
+                              const userDirectorate = userDirectorateId ? getDirectorateById(userDirectorateId) : null;
+                              const userOfficeMembership = officeMemberships.find(
+                                (m) => m.userId === user.id && m.isPrimary && m.isActive
+                              );
+                              const userOffice = userOfficeMembership ? offices.find(o => o.id === userOfficeMembership.officeId) : null;
+                              
                               return (
                                 <SelectItem key={user.id} value={user.id}>
                                   <div className="flex flex-col">
                                     <span className="font-medium">{user.name}</span>
                                     <span className="text-xs text-muted-foreground">
-                                      {user.systemRole} {userDivision ? `- ${userDivision.name}` : ''}
+                                      {user.systemRole} • {user.gradeLevel}
                                     </span>
+                                    {(userOffice || userDivision || userDirectorate) && (
+                                      <span className="text-[11px] text-muted-foreground mt-0.5">
+                                        {userOffice?.name || ''}
+                                        {userOffice && (userDivision || userDirectorate) ? ' • ' : ''}
+                                        {userDivision?.name || ''}
+                                        {userDivision && userDirectorate ? ' • ' : ''}
+                                        {userDirectorate?.name || ''}
+                                      </span>
+                                    )}
                                   </div>
                                 </SelectItem>
                               );
@@ -1257,12 +1331,34 @@ const [newTemplateName, setNewTemplateName] = useState('');
                         </div>
                         <SelectItem value={filteredNext.id}>
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-success" />
-                            <div>
+                            <CheckCircle className="h-4 w-4 text-success flex-shrink-0" />
+                            <div className="flex flex-col flex-1 min-w-0">
                               <p className="font-medium">{filteredNext?.name}</p>
                               <p className="text-xs text-muted-foreground">
-                                {filteredNext?.systemRole} - {filteredNext?.gradeLevel}
+                                {filteredNext?.systemRole} • {filteredNext?.gradeLevel}
                               </p>
+                              {(() => {
+                                const nextDivision = filteredNext?.division ? getDivisionById(filteredNext.division) : null;
+                                const nextDirectorateId = nextDivision?.directorateId ?? filteredNext?.directorate ?? null;
+                                const nextDirectorate = nextDirectorateId ? getDirectorateById(nextDirectorateId) : null;
+                                const nextOfficeMembership = officeMemberships.find(
+                                  (m) => m.userId === filteredNext?.id && m.isPrimary && m.isActive
+                                );
+                                const nextOffice = nextOfficeMembership ? offices.find(o => o.id === nextOfficeMembership.officeId) : null;
+                                
+                                if (nextOffice || nextDivision || nextDirectorate) {
+                                  return (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                                      {nextOffice?.name || ''}
+                                      {nextOffice && (nextDivision || nextDirectorate) ? ' • ' : ''}
+                                      {nextDivision?.name || ''}
+                                      {nextDivision && nextDirectorate ? ' • ' : ''}
+                                      {nextDirectorate?.name || ''}
+                                    </p>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                           </div>
                         </SelectItem>
@@ -1272,23 +1368,131 @@ const [newTemplateName, setNewTemplateName] = useState('');
                     
                     {approverList.length > 0 ? (
                       <>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                          {searchQuery.trim() ? 'Search Results' : 'Alternative Recipients'} ({approverList.length})
-                        </div>
-                        {approverList.slice(0, 20).map(user => (
-                          <SelectItem key={user.id} value={user.id}>
-                            <div className="flex flex-col">
-                              <span className="font-medium">{user.name}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {user.systemRole} - {user.gradeLevel}
-                              </span>
+                        {(() => {
+                          // Get current user's directorate for sorting
+                          const division = currentUser?.division ? getDivisionById(currentUser.division) : null;
+                          const currentDirectorateId = division?.directorateId ?? currentUser?.directorate ?? null;
+                          const currentDirectorateObj = currentDirectorateId ? getDirectorateById(currentDirectorateId) : null;
+                          const currentDirectorateName = currentDirectorateObj?.name ?? null;
+                          
+                          // Group users by division/directorate for better organization
+                          const groupedUsers = new Map<string, typeof approverList>();
+                          
+                          approverList.forEach(user => {
+                            const userDivision = user.division ? getDivisionById(user.division) : null;
+                            const userDirectorateId = userDivision?.directorateId ?? user.directorate ?? null;
+                            const userDirectorate = userDirectorateId ? getDirectorateById(userDirectorateId) : null;
+                            
+                            // Get user's primary office
+                            const userOfficeMembership = officeMemberships.find(
+                              (m) => m.userId === user.id && m.isPrimary && m.isActive
+                            );
+                            const userOffice = userOfficeMembership ? offices.find(o => o.id === userOfficeMembership.officeId) : null;
+                            
+                            // Create group key
+                            let groupKey = 'Other';
+                            if (userDirectorate) {
+                              groupKey = userDirectorate.name;
+                            } else if (userDivision) {
+                              groupKey = userDivision.name;
+                            } else if (userOffice) {
+                              groupKey = userOffice.name;
+                            }
+                            
+                            if (!groupedUsers.has(groupKey)) {
+                              groupedUsers.set(groupKey, []);
+                            }
+                            groupedUsers.get(groupKey)!.push(user);
+                          });
+                          
+                          // Sort groups: current directorate first, then alphabetically
+                          const sortedGroups = Array.from(groupedUsers.entries()).sort((a, b) => {
+                            if (currentDirectorateName && a[0] === currentDirectorateName) return -1;
+                            if (currentDirectorateName && b[0] === currentDirectorateName) return 1;
+                            return a[0].localeCompare(b[0]);
+                          });
+                          
+                          if (searchQuery.trim() || sortedGroups.length === 1) {
+                            // If searching or only one group, show flat list
+                            return (
+                              <>
+                                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                                  {searchQuery.trim() ? 'Search Results' : 'Alternative Recipients'} ({approverList.length})
+                                </div>
+                                {approverList.slice(0, 50).map(user => {
+                                  const userDivision = user.division ? getDivisionById(user.division) : null;
+                                  const userDirectorateId = userDivision?.directorateId ?? user.directorate ?? null;
+                                  const userDirectorate = userDirectorateId ? getDirectorateById(userDirectorateId) : null;
+                                  const userOfficeMembership = officeMemberships.find(
+                                    (m) => m.userId === user.id && m.isPrimary && m.isActive
+                                  );
+                                  const userOffice = userOfficeMembership ? offices.find(o => o.id === userOfficeMembership.officeId) : null;
+                                  
+                                  return (
+                                    <SelectItem key={user.id} value={user.id}>
+                                      <div className="flex flex-col">
+                                        <span className="font-medium">{user.name}</span>
+                                        <span className="text-xs text-muted-foreground">
+                                          {user.systemRole} • {user.gradeLevel}
+                                        </span>
+                                        {(userOffice || userDivision || userDirectorate) && (
+                                          <span className="text-[11px] text-muted-foreground mt-0.5">
+                                            {userOffice?.name || ''}
+                                            {userOffice && (userDivision || userDirectorate) ? ' • ' : ''}
+                                            {userDivision?.name || ''}
+                                            {userDivision && userDirectorate ? ' • ' : ''}
+                                            {userDirectorate?.name || ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </SelectItem>
+                                  );
+                                })}
+                              </>
+                            );
+                          }
+                          
+                          // Show grouped list
+                          return sortedGroups.map(([groupName, users]) => (
+                            <div key={groupName}>
+                              <div className="px-2 py-1.5 text-xs font-semibold text-primary sticky top-[41px] bg-popover">
+                                {groupName} ({users.length})
+                              </div>
+                              {users.slice(0, 30).map(user => {
+                                const userDivision = user.division ? getDivisionById(user.division) : null;
+                                const userDirectorateId = userDivision?.directorateId ?? user.directorate ?? null;
+                                const userDirectorate = userDirectorateId ? getDirectorateById(userDirectorateId) : null;
+                                const userOfficeMembership = officeMemberships.find(
+                                  (m) => m.userId === user.id && m.isPrimary && m.isActive
+                                );
+                                const userOffice = userOfficeMembership ? offices.find(o => o.id === userOfficeMembership.officeId) : null;
+                                
+                                return (
+                                  <SelectItem key={user.id} value={user.id}>
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{user.name}</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {user.systemRole} • {user.gradeLevel}
+                                      </span>
+                                      {userOffice && (
+                                        <span className="text-[11px] text-muted-foreground mt-0.5">
+                                          {userOffice.name}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                              <Separator className="my-1" />
                             </div>
-                          </SelectItem>
-                        ))}
+                          ));
+                        })()}
                       </>
                     ) : (
                       <div className="p-4 text-center text-sm text-muted-foreground">
-                        No users found matching "{searchQuery}"
+                        {searchQuery.trim() 
+                          ? `No users found matching "${searchQuery}"`
+                          : 'No available recipients. All users in your hierarchy have already acted on this correspondence.'}
                       </div>
                     )}
                   </>
@@ -1482,29 +1686,41 @@ const [newTemplateName, setNewTemplateName] = useState('');
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-between gap-3 mt-6">
+        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <Button 
             variant="outline" 
             onClick={handleSaveDraft}
+            disabled={isSubmitting}
             className="gap-2"
+            aria-label="Save draft"
           >
             <Save className="h-4 w-4" />
             Save Draft
           </Button>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose}>
+            <Button variant="outline" onClick={onClose} disabled={isSubmitting} aria-label="Cancel minute">
               Cancel
             </Button>
             <Button 
               onClick={handleSubmit}
+              disabled={isSubmitting}
               className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
+              aria-label="Send minute"
             >
-              <Send className="h-4 w-4" />
-              Send Minute
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Send Minute
+                </>
+              )}
             </Button>
           </div>
-        </div>
+        </DialogFooter>
 
         {/* Confirmation Dialog */}
         <ConfirmationDialog

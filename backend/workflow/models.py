@@ -42,6 +42,13 @@ class WorkflowStep(UUIDModel, TimeStampedModel):
     title = models.CharField(max_length=255)
     required_role = models.CharField(max_length=100, blank=True)
     required_grade_level = models.CharField(max_length=50, blank=True)
+    directorate = models.ForeignKey(
+        "organization.Directorate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="workflow_steps",
+    )
     division = models.ForeignKey(
         "organization.Division",
         on_delete=models.SET_NULL,
@@ -51,6 +58,13 @@ class WorkflowStep(UUIDModel, TimeStampedModel):
     )
     department = models.ForeignKey(
         "organization.Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="workflow_steps",
+    )
+    office = models.ForeignKey(
+        "organization.Office",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

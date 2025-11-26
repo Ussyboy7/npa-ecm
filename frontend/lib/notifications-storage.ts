@@ -94,10 +94,26 @@ export const getNotifications = async (params?: {
   if (params?.module) queryParams.append('module', params.module);
 
   const query = queryParams.toString();
-  const response = await apiFetch<Notification[]>(
-    `/notifications/notifications/${query ? `?${query}` : ''}`
-  );
-  return Array.isArray(response) ? response : [];
+  // The router registers 'notifications' under api/notifications/, and the viewset is also 'notifications'
+  // So the full path is /api/notifications/notifications/
+  // apiFetch adds /api/v1/ prefix, so we need /notifications/notifications/
+  const url = `/notifications/notifications/${query ? `?${query}` : ''}`;
+  console.log('[notifications-storage] Fetching notifications from:', url);
+  try {
+    const response = await apiFetch<any>(url);
+    console.log('[notifications-storage] Received response:', response, 'Type:', typeof response, 'IsArray:', Array.isArray(response));
+    
+    // Handle paginated response (DRF returns {count, next, previous, results: [...]})
+    if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
+      return response.results as Notification[];
+    }
+    
+    // Handle direct array response (fallback)
+    return Array.isArray(response) ? response : [];
+  } catch (error) {
+    console.error('[notifications-storage] Error fetching notifications:', error);
+    throw error;
+  }
 };
 
 /**
@@ -107,9 +123,16 @@ export const getUnreadNotificationCount = async (): Promise<number> => {
   if (!hasTokens()) return 0;
 
   try {
-    const response = await apiFetch<{ count: number }>('/notifications/notifications/unread_count/');
+    // The router registers 'notifications' under api/notifications/, and the viewset is also 'notifications'
+    // So the full path is /api/notifications/notifications/unread_count/
+    // apiFetch adds /api/v1/ prefix, so we need /notifications/notifications/unread_count/
+    const url = '/notifications/notifications/unread_count/';
+    console.log('[notifications-storage] Fetching unread count from:', url);
+    const response = await apiFetch<{ count: number }>(url);
+    console.log('[notifications-storage] Unread count response:', response);
     return response.count || 0;
   } catch (error) {
+    console.error('[notifications-storage] Error fetching unread count:', error);
     logError('Failed to get unread count', error);
     return 0;
   }

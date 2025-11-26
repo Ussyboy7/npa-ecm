@@ -27,8 +27,19 @@ const logToConsole = (level: LogLevel, args: unknown[]) => {
   target?.(...args);
 };
 
+// Track if logging is disabled to prevent infinite error loops
+let loggingDisabled = false;
+let consecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+const getBaseUrl = () => {
+  if (!isBrowser) return '';
+  const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1';
+  return base.endsWith('/') ? base.slice(0, -1) : base;
+};
+
 const flushLogs = async () => {
-  if (!isBrowser || batch.length === 0) {
+  if (!isBrowser || batch.length === 0 || loggingDisabled) {
     return;
   }
 
@@ -36,9 +47,8 @@ const flushLogs = async () => {
   const body = JSON.stringify({ entries: payload });
 
   try {
-    // Always use fetch with credentials instead of sendBeacon
-    // because sendBeacon doesn't send authentication cookies/headers
-    await fetch('/api/v1/support/client-logs/', {
+    const baseUrl = getBaseUrl();
+    const response = await fetch(`${baseUrl}/support/client-logs/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -46,11 +56,23 @@ const flushLogs = async () => {
       // Don't wait for response to avoid blocking
       keepalive: true,
     });
-  } catch (error) {
-    // Silently fail - client logging should not break the app
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('Failed to flush client logs', error);
+    
+    // Reset failure counter on success
+    if (response.ok) {
+      consecutiveFailures = 0;
+    } else {
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        loggingDisabled = true;
+      }
     }
+  } catch (error) {
+    consecutiveFailures++;
+    if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      loggingDisabled = true;
+    }
+    // Silently fail - client logging should not break the app
+    // Don't log errors about logging failures to prevent infinite loops
   }
 };
 
@@ -102,10 +124,11 @@ export const logError = (...args: unknown[]) => log('error', args);
 
 if (isBrowser) {
   window.addEventListener('beforeunload', () => {
-    if (batch.length) {
+    if (batch.length && !loggingDisabled) {
       const body = JSON.stringify({ entries: batch.splice(0, batch.length) });
+      const baseUrl = getBaseUrl();
       // Use fetch with keepalive for beforeunload (similar to sendBeacon but with auth)
-      fetch('/api/v1/support/client-logs/', {
+      fetch(`${baseUrl}/support/client-logs/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

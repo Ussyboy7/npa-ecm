@@ -1,7 +1,7 @@
 "use client";
 
 import { logError, logWarn } from '@/lib/client-logger';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
@@ -55,13 +55,20 @@ import {
   Maximize2,
   Minimize2,
   Filter,
+  Plus,
 } from 'lucide-react';
-import type { Minute, DistributionRecipient, Correspondence } from '@/lib/npa-structure';
+import type { Minute, DistributionRecipient, Correspondence, ParallelRoutingGroup } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
 import { getDelegationByCorrespondence } from '@/lib/delegation-storage';
 import { apiFetch } from '@/lib/api-client';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
+import { EditMinuteModal } from '@/components/correspondence/EditMinuteModal';
+import { ParallelRouteModal } from '@/components/correspondence/ParallelRouteModal';
+import { ParallelBranchStatus } from '@/components/correspondence/ParallelBranchStatus';
+import { CorrespondenceTreeView } from '@/components/correspondence/CorrespondenceTreeView';
+import { AdditionalMinuteModal } from '@/components/correspondence/AdditionalMinuteModal';
+import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { TreatmentModal } from '@/components/correspondence/TreatmentModal';
 import { MinuteDetailModal } from '@/components/correspondence/MinuteDetailModal';
 import { CompletionSummaryModal } from '@/components/correspondence/CompletionSummaryModal';
@@ -72,11 +79,13 @@ import { DocumentPreviewModal } from '@/components/correspondence/DocumentPrevie
 import { OfficeReassignModal } from '@/components/correspondence/OfficeReassignModal';
 import { downloadAsPDF, downloadAsWord } from '@/lib/document-generator';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
+import mammoth from 'mammoth';
 import { LinkDocumentDialog } from '@/components/correspondence/LinkDocumentDialog';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
+// Forms moved to DMS - FormsChecklistCard removed
 import {
   Tooltip,
   TooltipContent,
@@ -95,9 +104,90 @@ import {
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
 const buildDownloadUrl = (path?: string | null) => {
   if (!path) return undefined;
-  if (path.startsWith('http')) return path;
+  if (path.startsWith('http')) {
+    // If it's already a full URL, check if it has /api/media/ and fix it
+    try {
+      const url = new URL(path);
+      // Fix /api/media/ to /media/
+      if (url.pathname.startsWith('/api/media/')) {
+        url.pathname = url.pathname.replace('/api/media/', '/media/');
+        return url.toString();
+      }
+    } catch {
+      // Invalid URL, return as-is
+    }
+    return path;
+  }
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${normalized}`;
+  // Remove /api/ prefix if present in the path
+  const cleanedPath = normalized.replace(/^\/api\/media\//, '/media/');
+  return `${API_BASE_URL}${cleanedPath}`;
+};
+
+// Download handler that forces download instead of opening in new tab
+const handleDownload = async (url: string, filename: string) => {
+  try {
+    // Fix URL - handle both /api/media/ and http://host/api/media/ patterns
+    let fixedUrl = url;
+    
+    // If it's a full URL, parse and fix it
+    if (url.startsWith('http')) {
+      try {
+        const urlObj = new URL(url);
+        if (urlObj.pathname.startsWith('/api/media/')) {
+          urlObj.pathname = urlObj.pathname.replace('/api/media/', '/media/');
+          fixedUrl = urlObj.toString();
+        }
+      } catch (e) {
+        // If URL parsing fails, try string replacement
+        fixedUrl = url.replace(/\/api\/media\//, '/media/');
+      }
+    } else {
+      // Relative URL - remove /api/ prefix
+      fixedUrl = url.replace(/\/api\/media\//, '/media/').replace(/^\/api\/media\//, '/media/');
+    }
+    
+    // Ensure we have a full URL
+    if (!fixedUrl.startsWith('http')) {
+      const baseUrl = API_BASE_URL || 'http://localhost:8000';
+      fixedUrl = `${baseUrl}${fixedUrl.startsWith('/') ? fixedUrl : `/${fixedUrl}`}`;
+    }
+    
+    console.log('[handleDownload] Original URL:', url);
+    console.log('[handleDownload] Fixed URL:', fixedUrl);
+    
+    const token = localStorage.getItem('npa_ecm_access_token');
+    const response = await fetch(fixedUrl, {
+      credentials: 'include',
+      headers: token ? {
+        'Authorization': `Bearer ${token}`,
+      } : {},
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+    }
+    
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error('Download error:', error);
+    // Fallback: try to fix URL and open in new tab
+    const fallbackUrl = url.replace(/\/api\/media\//, '/media/');
+    if (fallbackUrl.startsWith('http')) {
+      window.open(fallbackUrl, '_blank');
+    } else {
+      const baseUrl = API_BASE_URL || 'http://localhost:8000';
+      window.open(`${baseUrl}${fallbackUrl.startsWith('/') ? fallbackUrl : `/${fallbackUrl}`}`, '_blank');
+    }
+  }
 };
 const CorrespondenceDetail = () => {
   const params = useParams();
@@ -106,7 +196,8 @@ const CorrespondenceDetail = () => {
   const { getCorrespondenceById, getMinutesByCorrespondenceId, updateCorrespondence, refreshData, syncFromApi } =
     useCorrespondence();
   const cachedCorrespondence = id ? getCorrespondenceById(id) : null;
-  const minutes = id ? getMinutesByCorrespondenceId(id) : [];
+  const contextMinutes = id ? getMinutesByCorrespondenceId(id) : [];
+  const [minutes, setMinutes] = useState<Minute[]>([]);
   const { currentUser: activeUser } = useCurrentUser();
   const {
     directorates,
@@ -125,12 +216,17 @@ const CorrespondenceDetail = () => {
   const isCompleted = (remoteCorrespondence?.status ?? initialStatus) === 'completed';
 
   const [showMinuteModal, setShowMinuteModal] = useState(false);
+  const [showEditMinuteModal, setShowEditMinuteModal] = useState(false);
+  const [showRecallMinuteModal, setShowRecallMinuteModal] = useState(false);
+  const [showAdditionalMinuteModal, setShowAdditionalMinuteModal] = useState(false);
+  const [showParallelRouteModal, setShowParallelRouteModal] = useState(false);
   const [showTreatmentModal, setShowTreatmentModal] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [showManualRouteModal, setShowManualRouteModal] = useState(false);
   const [showDelegateModal, setShowDelegateModal] = useState(false);
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [showRoutingDetails, setShowRoutingDetails] = useState(true);
+  const [viewMode, setViewMode] = useState<'chain' | 'tree'>('chain');
   const [selectedMinute, setSelectedMinute] = useState<Minute | null>(null);
   const [showMinuteDetail, setShowMinuteDetail] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -140,12 +236,14 @@ const CorrespondenceDetail = () => {
   const [linkedDocuments, setLinkedDocuments] = useState<DocumentRecord[]>([]);
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
   const [documentPreviewError, setDocumentPreviewError] = useState<string | null>(null);
+  const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [attachmentSearchQuery, setAttachmentSearchQuery] = useState('');
   const [selectedLinkedDocVersion, setSelectedLinkedDocVersion] = useState<Record<string, number>>({});
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [parallelRoutingGroups, setParallelRoutingGroups] = useState<ParallelRoutingGroup[]>([]);
 
   useEffect(() => {
     const linkedIds = correspondence?.linkedDocumentIds ?? [];
@@ -185,12 +283,24 @@ const CorrespondenceDetail = () => {
     };
   }, [correspondence?.linkedDocumentIds]);
 
-  // Load PDF as blob to avoid CORS/sandbox issues
+  // Load PDF or Word document as blob to avoid CORS/sandbox issues
   useEffect(() => {
     const firstAttachment = correspondence?.attachments?.[0];
     let currentBlobUrl: string | null = null;
 
-    if (firstAttachment?.fileUrl && firstAttachment.fileType === 'application/pdf') {
+    if (!firstAttachment?.fileUrl) {
+      setPdfBlobUrl(null);
+      setWordHtml(null);
+      setDocumentPreviewLoading(false);
+      setDocumentPreviewError(null);
+      return;
+    }
+
+    const fileName = firstAttachment.fileName || '';
+    const isPDF = firstAttachment.fileType === 'application/pdf';
+    const isWordDocx = fileName.toLowerCase().endsWith('.docx');
+
+    if (isPDF || isWordDocx) {
       setDocumentPreviewLoading(true);
       setDocumentPreviewError(null);
 
@@ -199,29 +309,48 @@ const CorrespondenceDetail = () => {
       })
         .then((response) => {
           if (!response.ok) {
-            throw new Error(`Failed to load PDF: ${response.status} ${response.statusText}`);
+            throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
           }
           return response.blob();
         })
         .then((blob) => {
-          const url = URL.createObjectURL(blob);
-          currentBlobUrl = url;
-          setPdfBlobUrl(url);
-          setDocumentPreviewLoading(false);
+          if (isPDF) {
+            const url = URL.createObjectURL(blob);
+            currentBlobUrl = url;
+            setPdfBlobUrl(url);
+            setWordHtml(null);
+            setDocumentPreviewLoading(false);
+          } else if (isWordDocx) {
+            // Convert Word document to HTML using mammoth
+            blob.arrayBuffer()
+              .then((arrayBuffer) => mammoth.convertToHtml({ arrayBuffer }))
+              .then((result) => {
+                setWordHtml(result.value);
+                setPdfBlobUrl(null);
+                setDocumentPreviewLoading(false);
+              })
+              .catch((err) => {
+                logError('Error converting Word document:', err);
+                setDocumentPreviewError(`Failed to convert Word document: ${err.message}`);
+                setWordHtml(null);
+                setDocumentPreviewLoading(false);
+              });
+          }
         })
         .catch((err) => {
-          logError('Error loading PDF', err);
-          setDocumentPreviewError('Failed to load PDF preview. Please try downloading the file.');
+          logError('Error loading file', err);
+          setDocumentPreviewError(`Failed to load ${isPDF ? 'PDF' : 'Word document'} preview. Please try downloading the file.`);
           setDocumentPreviewLoading(false);
         });
     } else {
-      // Cleanup blob URL if not a PDF
+      // Cleanup if not a previewable file type
       setPdfBlobUrl((prev) => {
         if (prev) {
           URL.revokeObjectURL(prev);
         }
         return null;
       });
+      setWordHtml(null);
       setDocumentPreviewLoading(false);
       setDocumentPreviewError(null);
     }
@@ -234,8 +363,9 @@ const CorrespondenceDetail = () => {
         }
         return null;
       });
+      setWordHtml(null);
     };
-  }, [correspondence?.attachments?.[0]?.fileUrl, correspondence?.attachments?.[0]?.fileType]);
+  }, [correspondence?.attachments?.[0]?.fileUrl, correspondence?.attachments?.[0]?.fileType, correspondence?.attachments?.[0]?.fileName]);
 
   useEffect(() => {
     if (!id) return;
@@ -243,12 +373,25 @@ const CorrespondenceDetail = () => {
     const hydrateFromApi = async () => {
       setDetailLoading(true);
       try {
-        const response = await apiFetch(`/correspondence/items/${id}/`);
+        const [corrResponse, minutesResponse] = await Promise.all([
+          apiFetch(`/correspondence/items/${id}/`),
+          apiFetch(`/correspondence/minutes/?correspondence=${id}`),
+        ]);
         if (!ignore) {
-          setRemoteCorrespondence(mapApiCorrespondence(response));
+          setRemoteCorrespondence(mapApiCorrespondence(corrResponse));
+          // Handle paginated response (DRF may return {count, next, previous, results: [...]})
+          const minutesData = Array.isArray(minutesResponse) 
+            ? minutesResponse 
+            : minutesResponse.results || [];
+          setMinutes(minutesData.map(mapApiMinute));
         }
       } catch (error) {
         logWarn('Failed to refresh correspondence detail', error);
+        // Fallback to context minutes if API fetch fails
+        if (!ignore && id) {
+          const fallbackMinutes = getMinutesByCorrespondenceId(id);
+          setMinutes(fallbackMinutes);
+        }
       } finally {
         if (!ignore) {
           setDetailLoading(false);
@@ -259,7 +402,7 @@ const CorrespondenceDetail = () => {
     return () => {
       ignore = true;
     };
-  }, [id]);
+  }, [id, getMinutesByCorrespondenceId]);
 
   useEffect(() => {
     if (!isCompleted) return;
@@ -269,28 +412,131 @@ const CorrespondenceDetail = () => {
     setShowDelegateModal(false);
   }, [isCompleted]);
 
+  // Mark minutes as opened when user views correspondence detail
+  useEffect(() => {
+    if (!correspondence || !activeUser?.id || detailLoading) return;
+
+    // Find minutes directed to current user that haven't been opened
+    const unopenedMinutes = minutes.filter(
+      (m) => 
+        !m.isOpened && 
+        m.toOfficeId === correspondence.currentOfficeId &&
+        correspondence.currentApproverId === activeUser.id
+    );
+
+    // Mark each unopened minute as opened
+    unopenedMinutes.forEach(async (minute) => {
+      try {
+        await apiFetch(`/correspondence/minutes/${minute.id}/mark-opened/`, {
+          method: 'POST',
+        });
+      } catch (error) {
+        // Silently fail - opening tracking is not critical
+        console.warn('Failed to mark minute as opened:', error);
+      }
+    });
+  }, [correspondence?.id, activeUser?.id, minutes, detailLoading, correspondence?.currentOfficeId, correspondence?.currentApproverId]);
+
+  // Fetch parallel routing groups
+  useEffect(() => {
+    if (!id || detailLoading) return;
+    let ignore = false;
+    const fetchParallelGroups = async () => {
+      try {
+        const response = await apiFetch(`/correspondence/parallel-routing-groups/?correspondence=${id}`);
+        if (ignore) return;
+        
+        // Handle paginated response (DRF may return {count, next, previous, results: [...]})
+        let groups: ParallelRoutingGroup[] = [];
+        if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
+          groups = response.results as ParallelRoutingGroup[];
+        } else if (Array.isArray(response)) {
+          groups = response as ParallelRoutingGroup[];
+        }
+        
+        // Log raw response for debugging
+        console.log('[ParallelRouting] Raw API response:', response);
+        console.log('[ParallelRouting] Extracted groups:', groups);
+        console.log('[ParallelRouting] Group IDs:', groups.map(g => g.id));
+        
+        // Deduplicate by ID using a Set for more reliable deduplication
+        const seenIds = new Set<string>();
+        const uniqueGroups = groups.filter((group) => {
+          const groupId = String(group.id);
+          if (seenIds.has(groupId)) {
+            console.warn('[ParallelRouting] Duplicate group ID detected:', groupId, group);
+            logWarn('Duplicate parallel routing group detected:', groupId);
+            return false;
+          }
+          seenIds.add(groupId);
+          return true;
+        });
+        
+        // Log for debugging
+        console.log('[ParallelRouting] Unique groups after deduplication:', uniqueGroups.length, 'out of', groups.length);
+        if (groups.length !== uniqueGroups.length) {
+          console.warn('[ParallelRouting] Filtered', groups.length - uniqueGroups.length, 'duplicate groups');
+          logWarn(`Filtered ${groups.length - uniqueGroups.length} duplicate parallel routing groups`);
+        }
+        
+        if (!ignore) {
+          console.log('[ParallelRouting] Setting parallel routing groups:', uniqueGroups);
+          setParallelRoutingGroups(uniqueGroups);
+        }
+      } catch (error) {
+        console.error('[ParallelRouting] Failed to fetch parallel routing groups:', error);
+        logWarn('Failed to fetch parallel routing groups', error);
+      }
+    };
+    void fetchParallelGroups();
+    return () => {
+      ignore = true;
+    };
+  }, [id, detailLoading]);
+
+  // Function to refresh minutes from API
+  const refreshMinutes = useCallback(async () => {
+    if (!id) return;
+    try {
+      const minutesResponse = await apiFetch(`/correspondence/minutes/?correspondence=${id}`);
+      const minutesData = Array.isArray(minutesResponse) 
+        ? minutesResponse 
+        : minutesResponse.results || [];
+      setMinutes(minutesData.map(mapApiMinute));
+    } catch (error) {
+      logWarn('Failed to refresh minutes', error);
+      // Fallback to context minutes if API fetch fails
+      const fallbackMinutes = getMinutesByCorrespondenceId(id);
+      setMinutes(fallbackMinutes);
+    }
+  }, [id, getMinutesByCorrespondenceId]);
+
   const handleMinuteClose = () => {
     setShowMinuteModal(false);
     refreshData();
     void syncFromApi();
+    void refreshMinutes();
   };
 
   const handleTreatmentClose = () => {
     setShowTreatmentModal(false);
     refreshData();
     void syncFromApi();
+    void refreshMinutes();
   };
 
   const handleCompletionClose = () => {
     setShowCompletionModal(false);
     refreshData();
     void syncFromApi();
+    void refreshMinutes();
   };
 
   const handleManualRouteClose = () => {
     setShowManualRouteModal(false);
     refreshData();
     void syncFromApi();
+    void refreshMinutes();
   };
 
   const handleDelegate = async (assistantId: string, assistantType: 'TA' | 'PA', notes: string) => {
@@ -342,6 +588,68 @@ const CorrespondenceDetail = () => {
     }
   };
 
+  // Check if user is executive (MDCS, EDCS, GMCS, AGMCS)
+  // Must be called before early returns to maintain hook order
+  const isExecutive = useMemo(() => {
+    if (!activeUser?.gradeLevel) return false;
+    const executiveGrades = ['MDCS', 'EDCS', 'GMCS', 'AGMCS'];
+    return executiveGrades.includes(activeUser.gradeLevel);
+  }, [activeUser?.gradeLevel]);
+
+  // Check if current user received a minute with "For Information" purpose
+  // Must be called before early returns to maintain hook order
+  const isForInformationOnly = useMemo(() => {
+    if (!activeUser?.id || !correspondence) return false;
+    // Check if any minute directed to current user has purpose "information"
+    const userMinutes = minutes.filter(
+      (m) => m.toOfficeId && correspondence.currentOfficeId === m.toOfficeId
+    );
+    // Also check if current user is the current approver and there's a minute with purpose "information"
+    const infoMinute = minutes.find(
+      (m) => m.purpose === 'information' && correspondence.currentApproverId === activeUser.id
+    );
+    return !!infoMinute || userMinutes.some((m) => m.purpose === 'information');
+  }, [minutes, activeUser?.id, correspondence?.currentApproverId, correspondence?.currentOfficeId]);
+
+  // Determine which parallel routing groups to show in the UI.
+  // We avoid clutter by:
+  // - de-duplicating by id
+  // - if there are active (incomplete) groups, showing only the most recent one
+  // - otherwise, showing only the most recently completed group
+  const visibleParallelGroups = useMemo(() => {
+    if (!parallelRoutingGroups || parallelRoutingGroups.length === 0) {
+      return [] as ParallelRoutingGroup[];
+    }
+
+    // De-duplicate by id
+    const seenIds = new Set<string>();
+    const unique = parallelRoutingGroups.filter((group) => {
+      const groupId = String(group.id);
+      if (seenIds.has(groupId)) {
+        console.warn('[ParallelRouting] Duplicate in state:', groupId);
+        return false;
+      }
+      seenIds.add(groupId);
+      return true;
+    });
+
+    // Sort by createdAt / updatedAt to find the most recent group(s)
+    const sorted = [...unique].sort((a, b) => {
+      const aTime = new Date(a.createdAt ?? a.updatedAt ?? 0).getTime();
+      const bTime = new Date(b.createdAt ?? b.updatedAt ?? 0).getTime();
+      return aTime - bTime;
+    });
+
+    const active = sorted.filter((g) => !g.isComplete);
+    if (active.length > 0) {
+      // Show only the most recent active group
+      return [active[active.length - 1]];
+    }
+
+    // All groups complete – show only the most recent completed one
+    return [sorted[sorted.length - 1]];
+  }, [parallelRoutingGroups]);
+
   if (!correspondence) {
     return (
       <DashboardLayout>
@@ -368,8 +676,18 @@ const CorrespondenceDetail = () => {
     : null;
   const isCurrentUserTurn = correspondence.currentApproverId === activeUser.id;
   const activeDelegation = getDelegationByCorrespondence(correspondence.id);
-  const actionsDisabled = detailLoading || isCompleted;
-  const turnRestrictedDisabled = actionsDisabled || !isCurrentUserTurn;
+
+  // Check if last minute was recalled and routing was reverted
+  const lastMinute = minutes[minutes.length - 1];
+  const isLastMinuteRecalled = lastMinute?.isRecalled ?? false;
+  const routingActions = ['minute', 'forward', 'approve', 'treat'];
+  const isRecalledAndReverted = isLastMinuteRecalled && 
+                                 lastMinute?.userId === activeUser?.id &&
+                                 routingActions.includes(lastMinute?.actionType ?? '');
+  
+  // If routing was reverted after recall, enable actions for the sender
+  const actionsDisabled = detailLoading || (isCompleted && !isRecalledAndReverted) || isForInformationOnly;
+  const turnRestrictedDisabled = actionsDisabled || (!isCurrentUserTurn && !isRecalledAndReverted);
   const completionPackageUrl = buildDownloadUrl(correspondence.completionPackage?.fileUrl ?? null);
   const completionGeneratedAt =
     correspondence.completionPackage?.generatedAt ??
@@ -543,8 +861,8 @@ const CorrespondenceDetail = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col min-h-screen">
-        <div className="border-b border-border bg-background px-6 py-4">
+      <div className="flex flex-col h-full min-h-0 overflow-hidden">
+        <div className="border-b border-border bg-background px-6 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button
@@ -680,7 +998,7 @@ const CorrespondenceDetail = () => {
           </div>
         </div>
 
-        <div className="border-b border-border bg-background/70 px-6 py-4">
+        <div className="border-b border-border bg-background/70 px-6 py-2">
           <HelpGuideCard
             title="Work the Correspondence"
             description="Review metadata, minute history, signatures, and routing chain. Use the actions on the right to minute, approve, treat, delegate, distribute (CC), print, download, or complete and archive."
@@ -692,16 +1010,21 @@ const CorrespondenceDetail = () => {
           />
         </div>
 
-        <div className="flex-1 flex">
-          <div className="w-[30%] border-r border-border bg-muted/30">
-            <div className="p-4 border-b border-border">
+        {/* Main content area: responsive 3-column layout (stacks on very small screens) */}
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 h-full overflow-hidden">
+          {/* Original Document / Metadata column */}
+          <section
+            aria-label="Original document and metadata"
+            className="w-full md:w-[34%] lg:w-[30%] xl:w-[32%] border-r border-border bg-muted/30 flex flex-col min-h-0 h-full overflow-hidden"
+          >
+            <div className="p-4 border-b border-border flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
                 Original Document
               </h3>
             </div>
-            <ScrollArea className="h-[calc(100vh-12rem)]">
-              <div className="p-4 space-y-4">
+            <ScrollArea className="h-full">
+              <div className="p-4 flex flex-col gap-4">
                 <Card>
                   <CardContent className="p-4 space-y-3">
                     <div className="space-y-2">
@@ -804,11 +1127,11 @@ const CorrespondenceDetail = () => {
                 </Card>
 
                 {/* Document Preview Area - Simplified */}
-                <div 
-                  className={`bg-white border border-border rounded-lg overflow-hidden shadow-sm transition-all flex flex-col ${
-                    isPreviewFullscreen 
-                      ? 'fixed inset-4 z-50' 
-                      : 'h-[600px]'
+                <div
+                  className={`bg-white border border-border rounded-lg overflow-hidden shadow-sm flex flex-col ${
+                    isPreviewFullscreen
+                      ? 'fixed inset-4 z-50'
+                      : 'h-[calc(100vh-260px)]'
                   }`}
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
@@ -970,11 +1293,12 @@ const CorrespondenceDetail = () => {
                       // If we have an attachment, show it
                       if (firstAttachment?.fileUrl) {
                         if (firstAttachment.fileType === 'application/pdf') {
-                          // Use blob URL to avoid CORS/sandbox issues
+                          // Use blob URL to avoid CORS/sandbox issues and fit the page to the available space
                           if (pdfBlobUrl) {
+                            const pdfSrc = `${pdfBlobUrl}#zoom=page-fit`;
                             return (
                               <iframe
-                                src={pdfBlobUrl}
+                                src={pdfSrc}
                                 className="w-full h-full border-0"
                                 title={`PDF Preview: ${firstAttachment.fileName || 'Document'}`}
                                 aria-label={`PDF document preview: ${firstAttachment.fileName || 'Document'}`}
@@ -1015,6 +1339,50 @@ const CorrespondenceDetail = () => {
                                   setDocumentPreviewLoading(false);
                                 }}
                               />
+                            </div>
+                          );
+                        } else if (firstAttachment.fileName?.toLowerCase().endsWith('.docx') && wordHtml) {
+                          // Word document preview
+                          return (
+                            <div 
+                              className="h-full overflow-auto p-6 prose prose-sm max-w-none"
+                              aria-label={`Word document preview: ${firstAttachment.fileName}`}
+                            >
+                              <div dangerouslySetInnerHTML={{ __html: wordHtml }} />
+                            </div>
+                          );
+                        } else if (firstAttachment.fileName?.toLowerCase().endsWith('.docx') && documentPreviewLoading) {
+                          // Loading Word document
+                          return (
+                            <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-muted/30">
+                              <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
+                              <p className="text-sm font-medium text-muted-foreground">
+                                Loading Word document...
+                              </p>
+                            </div>
+                          );
+                        } else if (firstAttachment.fileName?.toLowerCase().endsWith('.docx') && documentPreviewError) {
+                          // Error loading Word document
+                          return (
+                            <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-muted/30">
+                              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+                              <p className="text-sm font-medium text-destructive mb-2">
+                                {documentPreviewError}
+                              </p>
+                              <div className="flex gap-2 mt-4">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (firstAttachment.fileUrl) {
+                                      window.open(firstAttachment.fileUrl, '_blank');
+                                    }
+                                  }}
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download
+                                </Button>
+                              </div>
                             </div>
                           );
                         } else {
@@ -1303,17 +1671,40 @@ const CorrespondenceDetail = () => {
                 </div>
               </div>
             </ScrollArea>
-          </div>
+          </section>
 
-          <div className="flex-1 flex flex-col">
-            <div className="p-4 border-b border-border bg-background">
+          {/* Minute Thread / Parallel routing column */}
+          <section
+            aria-label="Minute thread and parallel routing status"
+            className="w-full md:flex-1 flex flex-col min-h-0 h-full overflow-hidden"
+          >
+            <div className="p-4 border-b border-border bg-background flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-secondary" />
                 Minute Thread (360° View)
               </h3>
             </div>
-            <ScrollArea className="flex-1 p-4">
-              <div className="space-y-4 max-w-3xl mx-auto">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-4 max-w-3xl mx-auto">
+                {/* Parallel Routing Groups Status */}
+                {visibleParallelGroups.length > 0 && (
+                  <div className="space-y-3 mb-4">
+                    {visibleParallelGroups.map((group, index) => {
+                      const groupBranches = minutes.filter(
+                        (m) => m.parallelGroupId === group.id && m.isParallelBranch
+                      );
+                      console.log(`[ParallelRouting] Rendering visible group ${index}:`, group.id, 'with', groupBranches.length, 'branches');
+                      return (
+                        <ParallelBranchStatus
+                          key={`parallel-group-${String(group.id)}-${index}`}
+                          parallelGroup={group}
+                          branches={groupBranches}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+
                 {minutes.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -1337,11 +1728,17 @@ const CorrespondenceDetail = () => {
                       <div key={minuteItem.id} className="relative">
                         {idx < minutes.length - 1 && (
                           <div
-                            className={`absolute left-8 top-16 w-0.5 h-8 ${isDownward ? 'bg-info' : 'bg-success'}`}
+                            className={`absolute left-8 top-16 w-0.5 h-8 ${
+                              minuteItem.isRecalled 
+                                ? 'bg-destructive/30' 
+                                : isDownward 
+                                ? 'bg-info' 
+                                : 'bg-success'
+                            }`}
                           />
                         )}
                         <Card
-                          className={`${minuteItem.userId === activeUser.id ? 'border-primary shadow-glow' : ''} cursor-pointer hover:shadow-md transition-all`}
+                          className={`${minuteItem.userId === activeUser.id ? 'border-primary shadow-glow' : ''} ${minuteItem.isRecalled ? 'opacity-75 border-destructive/30' : ''} cursor-pointer hover:shadow-md transition-all`}
                           onClick={() => {
                             setSelectedMinute(minuteItem);
                             setShowMinuteDetail(true);
@@ -1349,33 +1746,67 @@ const CorrespondenceDetail = () => {
                         >
                           <CardContent className="p-4">
                             <div className="flex gap-3">
-                              <Avatar className={`h-10 w-10 ${isDownward ? 'ring-2 ring-info' : 'ring-2 ring-success'}`}>
-                                <AvatarFallback className="text-xs font-semibold">
-                                  {displayName
-                                    .split(' ')
-                                    .map((namePart) => namePart[0])
-                                    .join('')
-                                    .slice(0, 2)
-                                    .toUpperCase()}
+                              <Avatar className={`h-10 w-10 ${minuteItem.isRecalled ? 'ring-2 ring-destructive/50' : isDownward ? 'ring-2 ring-info' : 'ring-2 ring-success'}`}>
+                                <AvatarFallback className={`text-xs font-semibold ${minuteItem.isRecalled ? 'bg-destructive/10 text-destructive' : ''}`}>
+                                  {minuteItem.isRecalled ? (
+                                    <X className="h-5 w-5" />
+                                  ) : (
+                                    displayName
+                                      .split(' ')
+                                      .map((namePart) => namePart[0])
+                                      .join('')
+                                      .slice(0, 2)
+                                      .toUpperCase()
+                                  )}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-2">
                                   <div>
-                                    <p className="font-semibold text-sm">{displayName}</p>
+                                    <div className="flex items-center gap-2">
+                                      <p className={`font-semibold text-sm ${minuteItem.isRecalled ? 'line-through text-muted-foreground' : ''}`}>
+                                        {displayName}
+                                      </p>
+                                      {minuteItem.isRecalled && (
+                                        <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20">
+                                          Recalled
+                                        </Badge>
+                                      )}
+                                    </div>
                                     <p className="text-xs text-muted-foreground">
                                       {systemRole} • {minuteItem.gradeLevel}
+                                      {minuteItem.toOfficeName && (
+                                        <span className="ml-1">• {minuteItem.toOfficeName}</span>
+                                      )}
                                     </p>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-xs gap-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {minuteItem.isParallelBranch && (
+                                      <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+                                        <Users className="h-3 w-3 mr-1" />
+                                        Parallel
+                                      </Badge>
+                                    )}
+                                    <Badge variant="outline" className={`text-xs gap-1 ${minuteItem.isRecalled ? 'bg-destructive/10 text-destructive border-destructive/20' : ''}`}>
                                       {ActionIcon && <ActionIcon className="h-3 w-3" />}
                                       {minuteItem.actionType}
+                                      {minuteItem.isRecalled && ' (Recalled)'}
                                     </Badge>
+                                    {minuteItem.purpose && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {minuteItem.purpose === 'information' ? 'Info' :
+                                         minuteItem.purpose === 'action' ? 'Action' :
+                                         minuteItem.purpose === 'comment' ? 'Comment' : 'Approval'}
+                                      </Badge>
+                                    )}
                                     <Badge
                                       variant={isDownward ? 'default' : 'secondary'}
                                       className={`text-xs gap-1 ${
-                                        isDownward ? 'bg-info/10 text-info' : 'bg-success/10 text-success'
+                                        minuteItem.isRecalled 
+                                          ? 'bg-destructive/10 text-destructive border-destructive/20'
+                                          : isDownward 
+                                          ? 'bg-info/10 text-info' 
+                                          : 'bg-success/10 text-success'
                                       }`}
                                     >
                                       {isDownward ? (
@@ -1393,10 +1824,27 @@ const CorrespondenceDetail = () => {
                                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                   </div>
                                 </div>
-                                <p className="text-sm text-foreground mb-2 line-clamp-2">{minuteItem.minuteText}</p>
-                                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                <p className={`text-sm mb-2 line-clamp-2 ${minuteItem.isRecalled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                                  {minuteItem.minuteText}
+                                </p>
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                                   <span>{formatDateTime(minuteItem.timestamp)}</span>
                                   <span>Step {minuteItem.stepNumber}</span>
+                                  {minuteItem.recalledAt && (
+                                    <span className="text-destructive">
+                                      • Recalled {formatDateTime(minuteItem.recalledAt)}
+                                    </span>
+                                  )}
+                                  {minuteItem.recallReason && (
+                                    <span className="text-muted-foreground italic">
+                                      • Reason: {minuteItem.recallReason}
+                                    </span>
+                                  )}
+                                  {minuteItem.isEdited && (
+                                    <Badge variant="outline" className="text-xs text-warning">
+                                      Edited
+                                    </Badge>
+                                  )}
                                   {minuteItem.actedBySecretary && (
                                     <Badge variant="outline" className="text-xs">
                                       Secretary
@@ -1414,6 +1862,85 @@ const CorrespondenceDetail = () => {
                                     <span>Signed {formatDateTime(minuteItem.signature.appliedAt)}</span>
                                   </div>
                                 )}
+                                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                                  {minuteItem.canBeEdited && minuteItem.userId === activeUser?.id && (
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-xs"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedMinute(minuteItem);
+                                          setShowEditMinuteModal(true);
+                                        }}
+                                      >
+                                        <RefreshCw className="h-3 w-3 mr-1" />
+                                        Edit
+                                      </Button>
+                                      {minuteItem.editWindowExpiresAt && (
+                                        <span className="text-xs text-muted-foreground">
+                                          {(() => {
+                                            const expiresAt = new Date(minuteItem.editWindowExpiresAt);
+                                            const now = new Date();
+                                            const diffMs = expiresAt.getTime() - now.getTime();
+                                            if (diffMs <= 0) return 'Edit window expired';
+                                            const diffMins = Math.floor(diffMs / 60000);
+                                            return `${diffMins} min left`;
+                                          })()}
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                  {minuteItem.canBeRecalled && minuteItem.userId === activeUser?.id && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs text-destructive hover:text-destructive"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedMinute(minuteItem);
+                                        setShowRecallMinuteModal(true);
+                                      }}
+                                    >
+                                      <X className="h-3 w-3 mr-1" />
+                                      Recall
+                                    </Button>
+                                  )}
+                                  {minuteItem.isRecalled && (
+                                    <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20">
+                                      Recalled
+                                    </Badge>
+                                  )}
+                                  {!minuteItem.isAdditional && !isCompleted && !minuteItem.isRecalled && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedMinute(minuteItem);
+                                        setShowAdditionalMinuteModal(true);
+                                      }}
+                                    >
+                                      <Plus className="h-3 w-3 mr-1" />
+                                      Add Instruction
+                                    </Button>
+                                  )}
+                                </div>
+                                {minuteItem.isAdditional && minuteItem.minuteType && (
+                                  <div className="mt-2">
+                                    <Badge variant="outline" className="text-xs bg-info/10 text-info border-info/20">
+                                      {minuteItem.minuteType === 'instruction' ? 'Additional Instruction' :
+                                       minuteItem.minuteType === 'clarification' ? 'Clarification' : 'Addendum'}
+                                    </Badge>
+                                    {minuteItem.relatesToMinuteId && (
+                                      <span className="text-xs text-muted-foreground ml-2">
+                                        Related to minute #{minutes.findIndex(m => m.id === minuteItem.relatesToMinuteId) + 1}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </CardContent>
@@ -1423,31 +1950,46 @@ const CorrespondenceDetail = () => {
                   })
                 )}
               </div>
-              <ScrollBar orientation="horizontal" />
             </ScrollArea>
-          </div>
+          </section>
 
-          <div className="w-[30%] border-l border-border bg-background">
-            <div className="p-4 border-b border-border">
+          {/* Actions / Routing chain column */}
+          <section
+            aria-label="Actions and routing chain"
+            className="w-full md:w-[28%] lg:w-[26%] xl:w-[25%] border-l border-border bg-background flex flex-col min-h-0 h-full overflow-hidden"
+          >
+            <div className="p-4 border-b border-border flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <Send className="h-4 w-4 text-accent" />
                 Actions
               </h3>
             </div>
-            <div className="p-4 space-y-4">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-4">
               {isCompleted ? (
                 <div className="space-y-3">
                   <div className="p-3 bg-muted/50 border border-border rounded-lg">
                     <p className="text-sm font-medium text-muted-foreground">
                       This correspondence is locked. No further routing or minutes are permitted.
                     </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Completed {completionGeneratedAt ? formatDateShort(completionGeneratedAt) : ''}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      This correspondence is locked for auditing.
+                    </p>
                   </div>
                   {completionPackageUrl && (
-                    <Button variant="secondary" className="w-full" asChild>
-                      <a href={completionPackageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        Download completion package
-                      </a>
+                    <Button 
+                      variant="secondary" 
+                      className="w-full"
+                      onClick={() => {
+                        const filename = `completion-package-${correspondence.referenceNumber || correspondence.id}.pdf`;
+                        handleDownload(completionPackageUrl, filename);
+                      }}
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Download completion package
                     </Button>
                   )}
                 </div>
@@ -1464,68 +2006,114 @@ const CorrespondenceDetail = () => {
 
                   {activeUser.gradeLevel === 'MDCS' ? (
                     <>
-                      <Button
-                        className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
-                        onClick={() => setShowMinuteModal(true)}
-                        disabled={turnRestrictedDisabled}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Review & Approve
-                      </Button>
-                      <Button
-                        className="w-full"
-                        variant="secondary"
-                        onClick={() => setShowTreatmentModal(true)}
-                        disabled={turnRestrictedDisabled}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Treat & Respond
-                      </Button>
+                      {isForInformationOnly ? (
+                        <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Info className="h-4 w-4" />
+                            <span>This correspondence is for information only. No actions permitted.</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <Button
+                            className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
+                            onClick={() => setShowMinuteModal(true)}
+                            disabled={turnRestrictedDisabled}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Review & Approve
+                          </Button>
+                          <Button
+                            className="w-full"
+                            variant="secondary"
+                            onClick={() => setShowTreatmentModal(true)}
+                            disabled={turnRestrictedDisabled}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Treat & Respond
+                          </Button>
+                        </>
+                      )}
                     </>
                   ) : correspondence.direction === 'downward' ? (
                     <>
-                      <Button
-                        className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
-                        onClick={() => setShowMinuteModal(true)}
-                        disabled={turnRestrictedDisabled}
-                      >
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Minute & Forward Down
-                      </Button>
-                      <Button
-                        className="w-full"
-                        variant="secondary"
-                        onClick={() => setShowTreatmentModal(true)}
-                        disabled={turnRestrictedDisabled}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Treat & Respond
-                      </Button>
+                      {isForInformationOnly ? (
+                        <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Info className="h-4 w-4" />
+                            <span>This correspondence is for information only. No actions permitted.</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <Button
+                            className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
+                            onClick={() => setShowMinuteModal(true)}
+                            disabled={turnRestrictedDisabled}
+                          >
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            Minute & Forward Down
+                          </Button>
+                          <Button
+                            className="w-full"
+                            variant="secondary"
+                            onClick={() => setShowTreatmentModal(true)}
+                            disabled={turnRestrictedDisabled}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Treat & Respond
+                          </Button>
+                        </>
+                      )}
                     </>
                   ) : (
-                    <Button
-                      className="w-full bg-gradient-success hover:opacity-90 transition-opacity"
-                      onClick={() => setShowMinuteModal(true)}
-                      disabled={turnRestrictedDisabled}
-                    >
-                      <ArrowUp className="h-4 w-4 mr-2" />
-                      Review & Forward Up
-                    </Button>
+                    <>
+                      {isForInformationOnly ? (
+                        <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Info className="h-4 w-4" />
+                            <span>This correspondence is for information only. No actions permitted.</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          className="w-full bg-gradient-success hover:opacity-90 transition-opacity"
+                          onClick={() => setShowMinuteModal(true)}
+                          disabled={turnRestrictedDisabled}
+                        >
+                          <ArrowUp className="h-4 w-4 mr-2" />
+                          Review & Forward Up
+                        </Button>
+                      )}
+                    </>
                   )}
 
-                  <Button
-                    className="w-full mt-3"
-                    variant="outline"
-                    onClick={() => setShowCompletionModal(true)}
-                    disabled={turnRestrictedDisabled}
-                  >
-                    <Archive className="h-4 w-4 mr-2" />
-                    Mark Complete & Archive
-                  </Button>
+                  {!isForInformationOnly && (
+                    <Button
+                      className="w-full mt-3"
+                      variant="outline"
+                      onClick={() => setShowCompletionModal(true)}
+                      disabled={turnRestrictedDisabled}
+                    >
+                      <Archive className="h-4 w-4 mr-2" />
+                      Mark Complete & Archive
+                    </Button>
+                  )}
 
                   <Separator />
 
                   <div className="space-y-2">
+                    {isExecutive && (
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={() => setShowParallelRouteModal(true)}
+                        disabled={turnRestrictedDisabled}
+                      >
+                        <Users className="h-4 w-4 mr-2" />
+                        Parallel Route
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       className="w-full justify-start"
@@ -1559,52 +2147,114 @@ const CorrespondenceDetail = () => {
                 </>
               )}
 
+              {/* Forms & Checklists Card */}
+              {/* Forms moved to DMS - use Link Document to attach completed form PDFs */}
+
               <Card>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm">Routing Chain</CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowRoutingDetails((prev) => !prev)}
-                    >
-                      <ChevronRight
-                        className={`h-4 w-4 transition-transform ${showRoutingDetails ? 'rotate-90' : ''}`}
-                      />
-                    </Button>
+                    <CardTitle className="text-sm">Routing {viewMode === 'tree' ? 'Tree' : 'Chain'}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 border rounded-md p-0.5">
+                        <Button
+                          variant={viewMode === 'chain' ? 'default' : 'ghost'}
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setViewMode('chain')}
+                        >
+                          Chain
+                        </Button>
+                        <Button
+                          variant={viewMode === 'tree' ? 'default' : 'ghost'}
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setViewMode('tree')}
+                        >
+                          Tree
+                        </Button>
+                      </div>
+                      {viewMode === 'chain' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowRoutingDetails((prev) => !prev)}
+                        >
+                          <ChevronRight
+                            className={`h-4 w-4 transition-transform ${showRoutingDetails ? 'rotate-90' : ''}`}
+                          />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <ScrollArea className="h-[320px] pr-4 -mr-4">
-                    <div className="space-y-4 p-4 pt-0">
-                      {minutes.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No routing history yet</p>
-                      ) : (
-                        minutes.map((minuteEntry, idx) => {
+                  {viewMode === 'tree' ? (
+                    <ScrollArea className="h-[320px] pr-4 -mr-4">
+                      <div className="space-y-4 p-4 pt-0">
+                        <CorrespondenceTreeView
+                          minutes={minutes}
+                          currentUserId={activeUser?.id}
+                          lookupUser={lookupUser}
+                          onMinuteClick={(minute) => {
+                            setSelectedMinute(minute);
+                            setShowMinuteDetail(true);
+                          }}
+                        />
+                      </div>
+                    </ScrollArea>
+                  ) : (
+                    <ScrollArea className="h-[320px] pr-4 -mr-4">
+                      <div className="space-y-4 p-4 pt-0">
+                        {minutes.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No routing history yet</p>
+                        ) : (
+                          // For routing chain, show only the main sequential minutes (exclude parallel branch minutes)
+                          minutes
+                            .filter((minuteEntry) => !minuteEntry.isParallelBranch)
+                            .map((minuteEntry, idx, arr) => {
                           const user = lookupUser(minuteEntry.userId);
-                          const isCurrentStep = idx === minutes.length - 1;
+                          // Don't show recalled minutes as current step
+                          const isCurrentStep = idx === minutes.length - 1 && !minuteEntry.isRecalled;
+                          const isRecalled = minuteEntry.isRecalled ?? false;
 
                           return (
                             <div key={minuteEntry.id} className="relative">
-                              {idx < minutes.length - 1 && (
-                                <div className="absolute left-3 top-8 w-0.5 h-4 bg-border" />
+                              {idx < arr.length - 1 && (
+                                <div className={`absolute left-3 top-8 w-0.5 h-4 ${isRecalled ? 'bg-destructive/20' : 'bg-border'}`} />
                               )}
                               <div
                                 className={`flex items-start gap-2 ${
                                   isCurrentStep ? 'bg-accent/10 -mx-2 px-2 py-1 rounded-lg' : ''
-                                }`}
+                                } ${isRecalled ? 'opacity-60' : ''}`}
                               >
                                 <div
                                   className={`mt-1 h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${
-                                    isCurrentStep ? 'bg-accent text-accent-foreground' : 'bg-success/10 text-success'
+                                    isRecalled
+                                      ? 'bg-destructive/10 text-destructive border border-destructive/20'
+                                      : isCurrentStep
+                                      ? 'bg-accent text-accent-foreground'
+                                      : 'bg-success/10 text-success'
                                   }`}
                                 >
-                                  {isCurrentStep ? '●' : <CheckCircle className="h-3 w-3" />}
+                                  {isRecalled ? (
+                                    <X className="h-3 w-3" />
+                                  ) : isCurrentStep ? (
+                                    '●'
+                                  ) : (
+                                    <CheckCircle className="h-3 w-3" />
+                                  )}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-semibold truncate">
-                                    {user?.name ?? minuteEntry.userName ?? 'Unknown User'}
-                                  </p>
+                                  <div className="flex items-center gap-2">
+                                    <p className={`text-xs font-semibold truncate ${isRecalled ? 'line-through' : ''}`}>
+                                      {user?.name ?? minuteEntry.userName ?? 'Unknown User'}
+                                    </p>
+                                    {isRecalled && (
+                                      <Badge variant="outline" className="text-[9px] h-4 bg-destructive/10 text-destructive border-destructive/20">
+                                        Recalled
+                                      </Badge>
+                                    )}
+                                  </div>
                                   <p className="text-[10px] text-muted-foreground">
                                     {(() => {
                                       let role = user?.systemRole ?? minuteEntry.userSystemRole ?? 'Team Member';
@@ -1619,10 +2269,21 @@ const CorrespondenceDetail = () => {
                                     <>
                                       <p className="text-[10px] text-muted-foreground mt-1">
                                         {minuteEntry.actionType} • {minuteEntry.direction}
+                                        {isRecalled && ' (Recalled)'}
                                       </p>
                                       <p className="text-[10px] text-muted-foreground">
                                         {formatDateShort(minuteEntry.timestamp)}
+                                        {minuteEntry.recalledAt && (
+                                          <span className="text-destructive ml-1">
+                                            • Recalled {formatDateShort(minuteEntry.recalledAt)}
+                                          </span>
+                                        )}
                                       </p>
+                                      {minuteEntry.recallReason && (
+                                        <p className="text-[10px] text-muted-foreground italic mt-1">
+                                          Reason: {minuteEntry.recallReason}
+                                        </p>
+                                      )}
                                       {minuteEntry.signature && (
                                         <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1">
                                           <ImageIcon className="h-3 w-3 text-primary" />
@@ -1643,64 +2304,89 @@ const CorrespondenceDetail = () => {
                         })
                       )}
 
-                      {correspondence.currentApproverId && (
-                        <div className="relative">
-                          {minutes.length > 0 && (
-                            <div className="absolute left-3 top-0 w-0.5 h-4 bg-border" />
-                          )}
-                          <div className="flex items-start gap-2 bg-primary/5 -mx-2 px-2 py-1 rounded-lg border border-primary/20">
-                            <div className="mt-1 h-6 w-6 rounded-full flex items-center justify-center animate-pulse bg-primary">
-                              <div className="h-2 w-2 rounded-full bg-primary-foreground" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-xs font-semibold">
-                                {lookupUser(correspondence.currentApproverId)?.name ?? 'Pending Approver'}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {lookupUser(correspondence.currentApproverId)?.systemRole ?? 'Awaiting assignment'}
-                              </p>
-                              <p className="text-[10px] text-primary font-medium mt-1">Awaiting Action</p>
+                      {(() => {
+                        // If the last minute was recalled, show the recalled minute's sender as current approver
+                        const nonRecalledMinutes = minutes.filter(m => !m.isRecalled);
+                        const lastMinute = minutes[minutes.length - 1];
+                        const lastNonRecalledMinute = nonRecalledMinutes[nonRecalledMinutes.length - 1];
+                        
+                        // Determine current approver: use correspondence.currentApproverId, 
+                        // but if last minute was recalled and it was a routing action, show the sender
+                        let currentApproverId = correspondence.currentApproverId;
+                        const routingActions = ['minute', 'forward', 'approve', 'treat'];
+                        
+                        if (lastMinute?.isRecalled && 
+                            routingActions.includes(lastMinute.actionType) && 
+                            lastMinute.userId) {
+                          // Last minute was recalled - show the sender as current approver
+                          currentApproverId = lastMinute.userId;
+                        } else if (lastNonRecalledMinute && 
+                                   lastNonRecalledMinute.toOfficeId && 
+                                   !correspondence.currentApproverId) {
+                          // If no current approver but there's a non-recalled minute with a recipient,
+                          // we might need to infer it, but for now use correspondence.currentApproverId
+                        }
+                        
+                        return currentApproverId ? (
+                          <div className="relative">
+                            {minutes.length > 0 && (
+                              <div className="absolute left-3 top-0 w-0.5 h-4 bg-border" />
+                            )}
+                            <div className="flex items-start gap-2 bg-primary/5 -mx-2 px-2 py-1 rounded-lg border border-primary/20">
+                              <div className="mt-1 h-6 w-6 rounded-full flex items-center justify-center animate-pulse bg-primary">
+                                <div className="h-2 w-2 rounded-full bg-primary-foreground" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold">
+                                  {lookupUser(currentApproverId)?.name ?? 'Pending Approver'}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {lookupUser(currentApproverId)?.systemRole ?? 'Awaiting assignment'}
+                                </p>
+                                <p className={`text-[10px] font-medium mt-1 ${
+                                  isCompleted ? 'text-success' : 'text-primary'
+                                }`}>
+                                  {isCompleted ? 'Completed' : 'Awaiting Action'}
+                                </p>
+                                {lastMinute?.isRecalled && lastMinute.userId === currentApproverId && (
+                                  <p className="text-[10px] text-muted-foreground italic mt-1">
+                                    Routing reverted after recall
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        ) : null;
+                      })()}
                     </div>
                   </ScrollArea>
+                  )}
                 </CardContent>
               </Card>
-            </div>
-          </div>
+              </div>
+            </ScrollArea>
+          </section>
         </div>
       </div>
 
-        {isCompleted && (
-          <div className="mx-6 mt-4 rounded-lg border border-success/30 bg-success/5 p-4 flex flex-wrap items-center gap-3">
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-success flex items-center gap-2">
-                <CheckCircle className="h-4 w-4" />
-                Completed{' '}
-                {completionGeneratedAt ? formatDateShort(completionGeneratedAt) : ''}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                This correspondence is locked for auditing. Download the completion package below.
-              </p>
-            </div>
-            {completionPackageUrl && (
-              <Button variant="secondary" asChild className="text-sm h-9">
-                <a href={completionPackageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Download completion package
-                </a>
-              </Button>
-            )}
-          </div>
-        )}
 
       <MinuteModal
         correspondence={correspondence}
         isOpen={showMinuteModal}
         onClose={handleMinuteClose}
         direction={correspondence.direction}
+      />
+
+      <ParallelRouteModal
+        correspondence={correspondence}
+        isOpen={showParallelRouteModal}
+        onClose={() => {
+          setShowParallelRouteModal(false);
+        }}
+        onSuccess={() => {
+          refreshData();
+          void syncFromApi();
+        }}
       />
 
       <TreatmentModal
@@ -1710,12 +2396,68 @@ const CorrespondenceDetail = () => {
       />
 
       {selectedMinute && (
-        <MinuteDetailModal
-          minute={selectedMinute}
-          open={showMinuteDetail}
-          onOpenChange={setShowMinuteDetail}
-          authorName={lookupUser(selectedMinute.userId)?.name ?? selectedMinute.userName}
-        />
+        <>
+          <MinuteDetailModal
+            minute={selectedMinute}
+            open={showMinuteDetail}
+            onOpenChange={setShowMinuteDetail}
+            authorName={lookupUser(selectedMinute.userId)?.name ?? selectedMinute.userName}
+          />
+          <EditMinuteModal
+            minute={selectedMinute}
+            isOpen={showEditMinuteModal}
+            onClose={() => {
+              setShowEditMinuteModal(false);
+              setSelectedMinute(null);
+            }}
+            onSuccess={() => {
+              setSelectedMinute(null);
+              refreshData();
+              void refreshMinutes();
+            }}
+          />
+          <RecallMinuteModal
+            minute={selectedMinute}
+            isOpen={showRecallMinuteModal}
+            onClose={() => {
+              setShowRecallMinuteModal(false);
+              setSelectedMinute(null);
+            }}
+            onSuccess={async () => {
+              setSelectedMinute(null);
+              // Force refresh of correspondence and minutes data
+              await syncFromApi();
+              refreshData();
+              await refreshMinutes();
+              // Also fetch the correspondence detail again to get updated routing
+              if (correspondence?.id) {
+                try {
+                  const updated = await apiFetch(`/correspondence/${correspondence.id}/`);
+                  if (updated) {
+                    setRemoteCorrespondence(mapApiCorrespondence(updated));
+                  }
+                } catch (error) {
+                  console.warn('Failed to refresh correspondence after recall:', error);
+                }
+              }
+            }}
+          />
+          <AdditionalMinuteModal
+            correspondence={correspondence}
+            isOpen={showAdditionalMinuteModal}
+            onClose={() => {
+              setShowAdditionalMinuteModal(false);
+              setSelectedMinute(null);
+            }}
+            onSuccess={() => {
+              setSelectedMinute(null);
+              refreshData();
+              void syncFromApi();
+              void refreshMinutes();
+            }}
+            preSelectedMinuteId={selectedMinute?.id}
+          />
+        </>
       )}
 
       <CompletionSummaryModal

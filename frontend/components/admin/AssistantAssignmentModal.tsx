@@ -23,6 +23,29 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'forward', label: 'Forward Documents' },
 ];
 
+const PERMISSION_PRESETS = [
+  {
+    name: 'Full Access',
+    description: 'All permissions',
+    permissions: ['view', 'draft', 'schedule', 'coordinate', 'forward'],
+  },
+  {
+    name: 'Read Only',
+    description: 'View documents only',
+    permissions: ['view'],
+  },
+  {
+    name: 'Administrative',
+    description: 'Calendar and meeting coordination',
+    permissions: ['view', 'schedule', 'coordinate'],
+  },
+  {
+    name: 'Document Management',
+    description: 'View, draft, and forward documents',
+    permissions: ['view', 'draft', 'forward'],
+  },
+];
+
 export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assignment }: AssistantAssignmentModalProps) => {
   const { addAssignment, updateAssignment, users, assistantAssignments } = useOrganization();
   const [formData, setFormData] = useState({
@@ -167,7 +190,26 @@ export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assi
           </div>
 
           <div className="space-y-2">
-            <Label>Permissions</Label>
+            <div className="flex items-center justify-between">
+              <Label>Permissions</Label>
+              <div className="flex gap-1 flex-wrap">
+                {PERMISSION_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.name}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, permissions: preset.permissions }));
+                    }}
+                    title={preset.description}
+                  >
+                    {preset.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-2 border rounded-md p-4">
               {AVAILABLE_PERMISSIONS.map(permission => (
                 <div key={permission.id} className="flex items-center space-x-2">
@@ -175,6 +217,7 @@ export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assi
                     id={permission.id}
                     checked={formData.permissions.includes(permission.id)}
                     onCheckedChange={() => togglePermission(permission.id)}
+                    aria-label={`Toggle ${permission.label} permission`}
                   />
                   <label htmlFor={permission.id} className="text-sm cursor-pointer">
                     {permission.label}

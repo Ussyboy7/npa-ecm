@@ -4,6 +4,7 @@ import { logError, logInfo, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
+import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
+import { FormDocumentEditor } from '@/components/dms/FormDocumentEditor';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -115,6 +117,7 @@ const DocumentDetailPage = () => {
   const [metadataErrors, setMetadataErrors] = useState<Record<string, string>>({});
   const [accessLogFilter, setAccessLogFilter] = useState<'all' | 'view' | 'download' | 'attempted-download'>('all');
   const [accessLogDateFilter, setAccessLogDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [formDocumentId, setFormDocumentId] = useState<string | null>(null);
 
   const { currentUser } = useCurrentUser();
   const { users: organizationUsers, divisions, departments } = useOrganization();
@@ -177,6 +180,35 @@ const DocumentDetailPage = () => {
           });
           setHasUnsavedChanges(false);
           setMetadataErrors({});
+          
+          // If this is a form document, fetch the form document ID
+          if (doc.documentType === 'form') {
+            try {
+              console.log('[DocumentDetail] Fetching form document for document:', params.id);
+              // Check if form_document is already in the document data
+              if (doc.form_document?.id) {
+                console.log('[DocumentDetail] Form document ID from document data:', doc.form_document.id);
+                setFormDocumentId(doc.form_document.id);
+              } else {
+                // Fallback: query form documents
+                const formDocs = await Promise.race([
+                  apiFetch<Array<{ id: string; document: { id: string } }>>(
+                    `/dms/form-documents/?document=${params.id}`
+                  ),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Form document query timeout')), 10000)
+                  )
+                ]) as Array<{ id: string; document: { id: string } }>;
+                
+                console.log('[DocumentDetail] Form documents query result:', formDocs);
+                if (formDocs && formDocs.length > 0) {
+                  setFormDocumentId(formDocs[0].id);
+                }
+              }
+            } catch (error) {
+              logError('Failed to load form document', error);
+            }
+          }
         }
 
         // Load collaboration data
@@ -193,11 +225,19 @@ const DocumentDetailPage = () => {
                 const session = await createEditorSession(params.id, currentUser.id, 'Viewing document');
                 if (!ignore) setCurrentEditorSession(session);
               } catch (createError: any) {
-                // If creation still fails, use the existing session we found
-                if (!ignore && existingSession) {
+                // If creation fails due to unique constraint, use the existing session
+                const isUniqueError = createError?.response?.data?.non_field_errors?.some?.(
+                  (msg: string) => msg.includes('unique') || msg.includes('must make a unique set')
+                ) || createError?.message?.includes('unique');
+                
+                if (isUniqueError && existingSession) {
+                  // Unique constraint error - session already exists, use it
+                  if (!ignore) setCurrentEditorSession(existingSession);
+                } else if (!ignore && existingSession) {
+                  // Other error, but we have existing session
                   setCurrentEditorSession(existingSession);
                 } else {
-                  logError('Failed to create/reactivate editor session', createError);
+                  logWarn('Failed to create/reactivate editor session (non-critical)', createError);
                 }
               }
             } else {
@@ -206,12 +246,30 @@ const DocumentDetailPage = () => {
                 const session = await createEditorSession(params.id, currentUser.id, 'Viewing document');
                 if (!ignore) setCurrentEditorSession(session);
               } catch (createError: any) {
-                // If creation fails, it's okay - we'll just not track the session
-                logWarn('Failed to create editor session (non-critical)', createError);
+                // Check if it's a unique constraint error - might have been created between check and create
+                const isUniqueError = createError?.response?.data?.non_field_errors?.some?.(
+                  (msg: string) => msg.includes('unique') || msg.includes('must make a unique set')
+                ) || createError?.message?.includes('unique');
+                
+                if (isUniqueError) {
+                  // Session was created by another request, try to fetch it
+                  try {
+                    const session = await getEditorSessionForUser(params.id, currentUser.id);
+                    if (session && !ignore) {
+                      setCurrentEditorSession(session);
+                    }
+                  } catch (fetchError) {
+                    logWarn('Failed to fetch editor session after unique error (non-critical)', fetchError);
+                  }
+                } else {
+                  // Other error - it's okay, we'll just not track the session
+                  logWarn('Failed to create editor session (non-critical)', createError);
+                }
               }
-            }
-          } catch (error) {
-            logError('Failed to handle editor session', error);
+        }
+      } catch (error) {
+            // Non-critical error - editor session tracking is optional
+            logWarn('Failed to handle editor session (non-critical)', error);
           }
 
           // Load active editors
@@ -504,7 +562,7 @@ const DocumentDetailPage = () => {
       if (oldStatus !== updated.status) {
         toast.success(`Document ${oldStatus} → ${updated.status}`);
       } else {
-        toast.success('Document details updated');
+      toast.success('Document details updated');
       }
     } catch (error: any) {
       logError('Failed to update metadata', error);
@@ -632,8 +690,9 @@ const DocumentDetailPage = () => {
   const primaryVersion = versions[0];
 
   return (
-    <DashboardLayout>
-      <div className="flex flex-col min-h-screen">
+    <ClientErrorBoundary>
+      <DashboardLayout>
+        <div className="flex flex-col min-h-screen">
         {/* Header */}
         <div className="border-b border-border bg-background px-6 py-4">
           <div className="flex items-center justify-between">
@@ -755,7 +814,7 @@ const DocumentDetailPage = () => {
                 <div className="space-y-2">
                   <Label htmlFor="doc-division">Division</Label>
                   <Select
-                    value={metadataDraft.divisionId ?? 'none'}
+                    value={metadataDraft.divisionId && metadataDraft.divisionId.trim() !== '' ? metadataDraft.divisionId : 'none'}
                     onValueChange={(value) =>
                       setMetadataDraft((prev) => ({ ...prev, divisionId: value === 'none' ? undefined : value }))
                     }
@@ -765,18 +824,20 @@ const DocumentDetailPage = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Unassigned</SelectItem>
-                      {divisions.map((division) => (
-                        <SelectItem key={division.id} value={division.id}>
-                          {division.name}
-                        </SelectItem>
-                      ))}
+                      {divisions
+                        .filter((division) => division.id && division.id.trim() !== '')
+                        .map((division) => (
+                          <SelectItem key={division.id} value={division.id}>
+                            {division.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="doc-department">Department</Label>
                   <Select
-                    value={metadataDraft.departmentId ?? 'none'}
+                    value={metadataDraft.departmentId && metadataDraft.departmentId.trim() !== '' ? metadataDraft.departmentId : 'none'}
                     onValueChange={(value) =>
                       setMetadataDraft((prev) => ({ ...prev, departmentId: value === 'none' ? undefined : value }))
                     }
@@ -786,11 +847,13 @@ const DocumentDetailPage = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Unassigned</SelectItem>
-                      {departments.map((department) => (
-                        <SelectItem key={department.id} value={department.id}>
-                          {department.name}
-                        </SelectItem>
-                      ))}
+                      {departments
+                        .filter((department) => department.id && department.id.trim() !== '')
+                        .map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -909,8 +972,8 @@ const DocumentDetailPage = () => {
                     disabled={!hasUnsavedChanges}
                     aria-label="Save document changes"
                   >
-                    Save Changes
-                  </Button>
+                  Save Changes
+                </Button>
                 </div>
               </div>
             </CardContent>
@@ -1013,22 +1076,22 @@ const DocumentDetailPage = () => {
                         )}
                         {/* Show Download button only if there's a fileUrl */}
                         {version.fileUrl && version.fileUrl.trim() !== '' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() => {
-                              const link = window.document.createElement('a');
-                              link.href = version.fileUrl as string;
-                              link.download = version.fileName;
-                              window.document.body.appendChild(link);
-                              link.click();
-                              window.document.body.removeChild(link);
-                            }}
-                          >
-                            <Download className="h-4 w-4" />
-                            Download
-                          </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => {
+                            const link = window.document.createElement('a');
+                            link.href = version.fileUrl as string;
+                            link.download = version.fileName;
+                            window.document.body.appendChild(link);
+                            link.click();
+                            window.document.body.removeChild(link);
+                          }}
+                        >
+                          <Download className="h-4 w-4" />
+                          Download
+                        </Button>
                         )}
                       </div>
                     </div>
@@ -1080,17 +1143,17 @@ const DocumentDetailPage = () => {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Active Editors */}
-              <div className="space-y-2">
+                <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-muted-foreground uppercase">Active Editors</span>
                   <Badge variant="outline" className="text-xs">
                     {activeEditorSessions.length} {activeEditorSessions.length === 1 ? 'editor' : 'editors'}
                   </Badge>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2">
                   {activeEditorSessions.length === 0 ? (
-                    <span className="text-xs text-muted-foreground">No one is currently editing.</span>
-                  ) : (
+                      <span className="text-xs text-muted-foreground">No one is currently editing.</span>
+                    ) : (
                     activeEditorSessions.map((session) => {
                       const user = userLookup.get(session.userId);
                       const editingSince = session.since ? new Date(session.since) : null;
@@ -1098,7 +1161,7 @@ const DocumentDetailPage = () => {
                         ? Math.floor((Date.now() - editingSince.getTime()) / 1000 / 60)
                         : null;
                       
-                      return (
+                        return (
                         <div
                           key={session.id}
                           className="flex items-center gap-2 px-2 py-1.5 border border-border rounded-md bg-background"
@@ -1119,16 +1182,16 @@ const DocumentDetailPage = () => {
                             )}
                           </div>
                         </div>
-                      );
-                    })
-                  )}
+                        );
+                      })
+                    )}
                 </div>
               </div>
 
               {/* Workspaces */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase">Workspaces</span>
+                <span className="text-xs font-semibold text-muted-foreground uppercase">Workspaces</span>
                   <Dialog open={workspaceManageOpen} onOpenChange={setWorkspaceManageOpen}>
                     <DialogTrigger asChild>
                       <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
@@ -1562,14 +1625,28 @@ const DocumentDetailPage = () => {
             </CardContent>
           </Card>
 
-          {/* Content Preview */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Content Preview</CardTitle>
-              <CardDescription>Latest version content for quick review.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {primaryVersion ? (
+          {/* Form Document Editor - Show for form documents */}
+          {document?.documentType === 'form' && formDocumentId ? (
+            <FormDocumentEditor documentId={params.id} formDocumentId={formDocumentId} />
+          ) : document?.documentType === 'form' ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Loading form document...</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Content Preview */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Content Preview</CardTitle>
+                  <CardDescription>Latest version content for quick review.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {primaryVersion ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1612,6 +1689,8 @@ const DocumentDetailPage = () => {
               )}
             </CardContent>
           </Card>
+            </>
+          )}
 
           {/* Related Correspondence */}
           <Card>
@@ -1789,7 +1868,8 @@ const DocumentDetailPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DashboardLayout>
+      </DashboardLayout>
+    </ClientErrorBoundary>
   );
 };
 

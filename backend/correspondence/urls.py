@@ -9,6 +9,7 @@ from .views import (
     CorrespondenceViewSet,
     DelegationViewSet,
     MinuteViewSet,
+    ParallelRoutingGroupViewSet,
 )
 
 
@@ -18,6 +19,7 @@ router.register(r"attachments", CorrespondenceAttachmentViewSet, basename="corre
 router.register(r"distribution", CorrespondenceDistributionViewSet, basename="correspondence-distribution")
 router.register(r"document-links", CorrespondenceDocumentLinkViewSet, basename="correspondence-document-link")
 router.register(r"minutes", MinuteViewSet, basename="minute")
+router.register(r"parallel-routing-groups", ParallelRoutingGroupViewSet, basename="parallel-routing-group")
 router.register(r"delegations", DelegationViewSet, basename="delegation")
 
 

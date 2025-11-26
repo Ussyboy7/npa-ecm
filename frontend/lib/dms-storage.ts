@@ -5,7 +5,7 @@ import type { User } from './npa-structure';
 // Re-export apiFetch and hasTokens for use in components
 export { apiFetch, hasTokens };
 
-export type DocumentType = 'letter' | 'memo' | 'circular' | 'policy' | 'report' | 'other';
+export type DocumentType = 'letter' | 'memo' | 'circular' | 'policy' | 'report' | 'form' | 'other';
 export type DocumentStatus = 'draft' | 'published' | 'archived';
 export type DocumentSensitivity = 'public' | 'internal' | 'confidential' | 'restricted';
 export type PermissionAccess = 'read' | 'write' | 'admin';
@@ -80,6 +80,21 @@ export interface DocumentRecord {
   updatedAt: string;
   workspaceIds: string[];
   activeEditors: DocumentCollaborator[];
+  form_document?: {
+    id: string;
+    template?: {
+      id: string;
+      name: string;
+      slug: string;
+    };
+    status?: string;
+    signature_workflow?: {
+      id: string;
+      status: string;
+      total_signatures?: number;
+      completed_signatures?: number;
+    };
+  };
 }
 
 export interface DocumentWorkspace {
@@ -180,6 +195,21 @@ const mapDocument = (item: any): DocumentRecord => ({
     : Array.isArray(item.activeEditors)
       ? mapActiveEditors(item.activeEditors)
       : [],
+  form_document: item.form_document ? {
+    id: String(item.form_document.id),
+    template: item.form_document.template ? {
+      id: String(item.form_document.template.id),
+      name: item.form_document.template.name,
+      slug: item.form_document.template.slug,
+    } : undefined,
+    status: item.form_document.status,
+    signature_workflow: item.form_document.signature_workflow ? {
+      id: String(item.form_document.signature_workflow.id),
+      status: item.form_document.signature_workflow.status,
+      total_signatures: item.form_document.signature_workflow.total_signatures,
+      completed_signatures: item.form_document.signature_workflow.completed_signatures,
+    } : undefined,
+  } : undefined,
 });
 
 const mapWorkspace = (item: any): DocumentWorkspace => ({
@@ -220,25 +250,45 @@ const buildDocumentQueryString = (params: DocumentQueryParams) => {
 
 export const queryDocuments = async (params: DocumentQueryParams = {}): Promise<PaginatedDocuments> => {
   if (!hasTokens()) {
+    console.warn('[DMS] No tokens available, returning empty results');
     return { results: [], count: 0, next: null, previous: null };
   }
 
   const query = buildDocumentQueryString(params);
-  const payload = await apiFetch<any>(
-    query ? `/dms/documents/?${query}` : '/dms/documents/',
-  );
+  const url = query ? `/dms/documents/?${query}` : '/dms/documents/';
+  console.log('[DMS] Fetching documents from:', url);
+  
+  try {
+    console.log('[DMS] Starting apiFetch...');
+    const payload = await Promise.race([
+      apiFetch<any>(url),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+      )
+    ]) as any;
+    
+    console.log('[DMS] Received payload:', { hasResults: !!payload, isArray: Array.isArray(payload), count: payload?.count });
 
-  const results = unwrapResults<any>(payload).map(mapDocument);
-  const count = typeof payload?.count === 'number' ? payload.count : results.length;
-  const next = typeof payload?.next === 'string' ? payload.next : null;
-  const previous = typeof payload?.previous === 'string' ? payload.previous : null;
+    const results = unwrapResults<any>(payload).map(mapDocument);
+    const count = typeof payload?.count === 'number' ? payload.count : results.length;
+    const next = typeof payload?.next === 'string' ? payload.next : null;
+    const previous = typeof payload?.previous === 'string' ? payload.previous : null;
 
-  return {
-    results,
-    count,
-    next,
-    previous,
-  };
+    console.log('[DMS] Mapped results:', { resultsCount: results.length, count, hasNext: !!next });
+    return {
+      results,
+      count,
+      next,
+      previous,
+    };
+  } catch (error) {
+    console.error('[DMS] Error in queryDocuments:', error);
+    console.error('[DMS] Error details:', { 
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    throw error;
+  }
 };
 
 export const fetchDocuments = async (): Promise<DocumentRecord[]> => {
@@ -476,35 +526,23 @@ export const shareDocument = async (
     departmentIds?: string[];
     shareToAll?: boolean;
     access?: PermissionAccess;
+    note?: string;
   },
 ): Promise<DocumentRecord> => {
   if (!hasTokens()) {
     throw new Error('Authentication required');
   }
 
-  const { userIds = [], divisionIds = [], departmentIds = [], shareToAll = false, access = 'read' } = options;
+  const { userIds = [], divisionIds = [], departmentIds = [], shareToAll = false, access = 'read', note = '' } = options;
 
   if (shareToAll) {
-    // Share to all users - get all active user IDs
-    const allUsersRaw = await apiFetch<any>('/accounts/users/');
-    // Handle both wrapped and unwrapped responses
-    const allUsers = Array.isArray(allUsersRaw) 
-      ? allUsersRaw 
-      : (allUsersRaw?.results || allUsersRaw?.raw || []);
-    const allUserIds = Array.isArray(allUsers)
-      ? allUsers.filter((u) => u.active !== false).map((u) => String(u.id))
-      : [];
-    
-    if (allUserIds.length === 0) {
-      throw new Error('No active users found');
-    }
-    
-    await apiFetch('/dms/permissions/', {
+    // Use the new share-to-all endpoint
+    await apiFetch('/dms/permissions/share-to-all/', {
       method: 'POST',
       body: JSON.stringify({
         document: documentId,
         access,
-        user_ids: allUserIds,
+        note,
       }),
     });
   } else {
@@ -518,6 +556,7 @@ export const shareDocument = async (
       body: JSON.stringify({
         document: documentId,
         access,
+        note,
         user_ids: Array.from(new Set(userIds.filter(Boolean))),
         division_ids: Array.from(new Set(divisionIds.filter(Boolean))),
         department_ids: Array.from(new Set(departmentIds.filter(Boolean))),

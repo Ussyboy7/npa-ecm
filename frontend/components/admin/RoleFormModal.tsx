@@ -12,9 +12,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import { useOrganization, Role } from "@/contexts/OrganizationContext";
 import { toast } from "@/hooks/use-toast";
 import { apiFetch } from "@/lib/api-client";
+import { AVAILABLE_ROLE_PERMISSIONS, PERMISSION_PRESETS, getPermissionsByCategory } from "@/lib/role-permissions";
 
 interface RoleFormModalProps {
   open: boolean;
@@ -32,6 +36,7 @@ export const RoleFormModal = ({
   const { users, refreshOrganizationData, addRole, updateRole } = useOrganization();
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");
+  const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -39,13 +44,16 @@ export const RoleFormModal = ({
       if (existingRole) {
         setRoleName(existingRole.name);
         setDescription(existingRole.description || "");
+        setPermissions(existingRole.permissions || {});
       } else {
         setRoleName("");
         setDescription("");
+        setPermissions({});
       }
     } else {
       setRoleName("");
       setDescription("");
+      setPermissions({});
     }
   }, [open, existingRole]);
 
@@ -68,6 +76,7 @@ export const RoleFormModal = ({
         await updateRole(existingRole.id, {
           name: roleName.trim(),
           description: description.trim() || undefined,
+          permissions: permissions,
         });
         toast({
           title: "Role updated",
@@ -79,6 +88,7 @@ export const RoleFormModal = ({
           name: roleName.trim(),
           description: description.trim() || undefined,
           isActive: true,
+          permissions: permissions,
         });
         toast({
           title: "Role created",
@@ -142,6 +152,67 @@ export const RoleFormModal = ({
               placeholder="Brief description of the role's responsibilities"
               autoComplete="off"
             />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Permissions</Label>
+              <div className="flex gap-1 flex-wrap">
+                {PERMISSION_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.name}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => {
+                      setPermissions(preset.permissions);
+                    }}
+                    title={preset.description}
+                  >
+                    {preset.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <ScrollArea className="h-[400px] border rounded-md p-4">
+              <div className="space-y-6">
+                {Object.entries(getPermissionsByCategory(AVAILABLE_ROLE_PERMISSIONS)).map(([category, perms]) => (
+                  <div key={category} className="space-y-2">
+                    <h4 className="text-sm font-semibold capitalize">{category}</h4>
+                    <div className="space-y-2 pl-2">
+                      {perms.map((perm) => (
+                        <div key={perm.id} className="flex items-start space-x-2">
+                          <Checkbox
+                            id={perm.id}
+                            checked={permissions[perm.id] || false}
+                            onCheckedChange={(checked) => {
+                              setPermissions(prev => ({
+                                ...prev,
+                                [perm.id]: checked === true,
+                              }));
+                            }}
+                            aria-label={`Toggle ${perm.label} permission`}
+                          />
+                          <div className="flex-1">
+                            <label
+                              htmlFor={perm.id}
+                              className="text-sm font-medium cursor-pointer"
+                            >
+                              {perm.label}
+                            </label>
+                            <p className="text-xs text-muted-foreground">{perm.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+            <div className="text-xs text-muted-foreground">
+              {Object.values(permissions).filter(Boolean).length} of {AVAILABLE_ROLE_PERMISSIONS.length} permissions selected
+            </div>
           </div>
 
           {existingRole && usersWithRole.length > 0 && (

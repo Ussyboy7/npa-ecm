@@ -14,6 +14,7 @@ from .models import (
     CorrespondenceDocumentLink,
     Delegation,
     Minute,
+    ParallelRoutingGroup,
 )
 
 
@@ -103,6 +104,32 @@ class MinuteSerializer(serializers.ModelSerializer):
         required=False,
     )
     to_office_name = serializers.CharField(source="to_office.name", read_only=True)
+    to_user = serializers.PrimaryKeyRelatedField(read_only=True)
+    to_user_id = serializers.PrimaryKeyRelatedField(
+        source="to_user",
+        queryset=Minute._meta.get_field("to_user").remote_field.model.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
+    to_user_name = serializers.SerializerMethodField()
+
+    can_be_edited = serializers.SerializerMethodField()
+    can_be_recalled = serializers.SerializerMethodField()
+    parent_minute_id = serializers.PrimaryKeyRelatedField(
+        source="parent_minute",
+        queryset=Minute.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
+    relates_to_minute_id = serializers.PrimaryKeyRelatedField(
+        source="relates_to_minute",
+        queryset=Minute.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
 
     class Meta:
         model = Minute
@@ -128,6 +155,47 @@ class MinuteSerializer(serializers.ModelSerializer):
             "to_office",
             "to_office_id",
             "to_office_name",
+            "to_user",
+            "to_user_id",
+            "to_user_name",
+            # Recall/Edit fields
+            "is_edited",
+            "edited_at",
+            "edit_window_expires_at",
+            "is_opened",
+            "opened_at",
+            "original_minute_text",
+            "edit_history",
+            "can_be_edited",
+            "is_recalled",
+            "recalled_at",
+            "recall_reason",
+            "can_be_recalled",
+            # Purpose-based routing
+            "purpose",
+            "requires_response",
+            "response_deadline",
+            # Parallel routing fields
+            "routing_type",
+            "parallel_group_id",
+            "is_parallel_branch",
+            "parent_minute",
+            "parent_minute_id",
+            "merge_strategy",
+            "branch_originator",
+            "branch_originator_id",
+            "branch_originator_name",
+            # Consultation routing fields
+            "is_consultation",
+            "consultation_from_branch",
+            "consultation_from_branch_id",
+            "consultation_to_branch",
+            "consultation_to_branch_id",
+            # Additional minutes/instructions
+            "minute_type",
+            "is_additional",
+            "relates_to_minute",
+            "relates_to_minute_id",
             "created_at",
             "updated_at",
         ]
@@ -141,7 +209,47 @@ class MinuteSerializer(serializers.ModelSerializer):
             "from_office_name",
             "to_office",
             "to_office_name",
+            "to_user",
+            "to_user_name",
+            "is_edited",
+            "edited_at",
+            "edit_window_expires_at",
+            "is_opened",
+            "opened_at",
+            "original_minute_text",
+            "edit_history",
+            "can_be_edited",
+            "parent_minute",
+            "relates_to_minute",
+            "branch_originator",
+            "consultation_from_branch",
+            "consultation_to_branch",
         ]
+
+    def get_can_be_edited(self, obj):
+        """Check if minute can still be edited."""
+        return obj.can_be_edited()
+
+    def get_can_be_recalled(self, obj):
+        """Check if minute can still be recalled."""
+        return obj.can_be_recalled()
+
+    def get_to_user_name(self, obj):
+        """Get the recipient user's name."""
+        if obj.to_user:
+            return obj.to_user.get_full_name() or obj.to_user.username
+        return None
+    
+    branch_originator_name = serializers.SerializerMethodField()
+    branch_originator_id = serializers.UUIDField(source="branch_originator.id", read_only=True, allow_null=True)
+    consultation_from_branch_id = serializers.UUIDField(source="consultation_from_branch.id", read_only=True, allow_null=True)
+    consultation_to_branch_id = serializers.UUIDField(source="consultation_to_branch.id", read_only=True, allow_null=True)
+    
+    def get_branch_originator_name(self, obj):
+        """Get the branch originator's name."""
+        if obj.branch_originator:
+            return obj.branch_originator.get_full_name() or obj.branch_originator.username
+        return None
 
 
 class CorrespondenceSerializer(serializers.ModelSerializer):
@@ -217,6 +325,10 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "completed_at",
             "completion_package",
             "completion_summary_generated_at",
+            # Parallel routing fields
+            "workflow_state",
+            "active_parallel_branches",
+            "completed_parallel_branches",
             "created_at",
             "updated_at",
         ]
@@ -256,6 +368,45 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
                 or (version.uploaded_at if version else None)
             ),
         }
+
+
+class ParallelRoutingGroupSerializer(serializers.ModelSerializer):
+    created_by = UserSerializer(read_only=True)
+    created_by_id = serializers.PrimaryKeyRelatedField(
+        source="created_by",
+        queryset=ParallelRoutingGroup._meta.get_field("created_by").remote_field.model.objects.all(),
+        write_only=True,
+    )
+    correspondence_id = serializers.PrimaryKeyRelatedField(
+        source="correspondence",
+        queryset=Correspondence.objects.all(),
+        write_only=True,
+    )
+
+    class Meta:
+        model = ParallelRoutingGroup
+        fields = [
+            "id",
+            "correspondence",
+            "correspondence_id",
+            "created_by",
+            "created_by_id",
+            "merge_strategy",
+            "is_complete",
+            "completed_at",
+            "total_branches",
+            "completed_branches",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "created_by",
+            "is_complete",
+            "completed_at",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class DelegationSerializer(serializers.ModelSerializer):

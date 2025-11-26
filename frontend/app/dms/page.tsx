@@ -2,8 +2,9 @@
 
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
+import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,18 +51,27 @@ import {
   Download,
   CheckSquare,
   Square,
+  PenTool,
+  Clock,
+  CheckCircle2,
+  X,
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
+import { CreateFormDocumentDialog } from '@/components/dms/CreateFormDocumentDialog';
 import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentQuickPreviewModal } from '@/components/dms/DocumentQuickPreviewModal';
 import { WorkspaceManagementDialog } from '@/components/dms/WorkspaceManagementDialog';
+import { DocumentCardSkeleton } from '@/components/dms/DocumentCardSkeleton';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Label } from '@/components/ui/label';
+import { getFormTemplates, getSignatures } from '@/lib/api/forms';
+import type { FormTemplate, FormSignature } from '@/lib/types/forms';
 
-const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'other'];
+const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
 const STATUS_OPTIONS: DocumentStatus[] = ['draft', 'published', 'archived'];
 
 const typeLabel = (type: DocumentType) => {
@@ -76,6 +86,8 @@ const typeLabel = (type: DocumentType) => {
       return 'Policy';
     case 'report':
       return 'Report';
+    case 'form':
+      return 'Form';
     default:
       return 'Other';
   }
@@ -124,6 +136,36 @@ const sensitivityBadgeVariant = (value: DocumentRecord['sensitivity']) => {
   }
 };
 
+const formStatusLabel = (status?: string) => {
+  switch (status) {
+    case 'draft':
+      return 'Draft';
+    case 'in_progress':
+      return 'In Progress';
+    case 'awaiting_signatures':
+      return 'Awaiting Signatures';
+    case 'completed':
+      return 'Completed';
+    default:
+      return status || 'Unknown';
+  }
+};
+
+const formStatusVariant = (status?: string): 'outline' | 'default' | 'secondary' | 'destructive' => {
+  switch (status) {
+    case 'draft':
+      return 'outline';
+    case 'in_progress':
+      return 'default';
+    case 'awaiting_signatures':
+      return 'secondary';
+    case 'completed':
+      return 'default';
+    default:
+      return 'outline';
+  }
+};
+
 // Document type icons
 const getDocumentTypeIcon = (type: DocumentType) => {
   switch (type) {
@@ -163,20 +205,45 @@ const SORT_OPTIONS: SortOption[] = [
 
 const DocumentManagementPage = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser } = useCurrentUser();
   const { users: organizationUsers, divisions, departments } = useOrganization();
+  
+  // Initialize filters from URL params or localStorage
+  const getInitialFilter = (key: string, defaultValue: string): string => {
+    if (typeof window === 'undefined') return defaultValue;
+    const urlParam = searchParams.get(key);
+    if (urlParam) return urlParam;
+    const saved = localStorage.getItem(`dms_filter_${key}`);
+    return saved || defaultValue;
+  };
+
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => {
+    const urlPage = searchParams.get('page');
+    return urlPage ? parseInt(urlPage, 10) : 1;
+  });
   const pageSize = 25;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState<DocumentType | 'all'>('all');
-  const [statusFilter, setStatusFilter] = useState<DocumentStatus | 'all'>('all');
-  const [divisionFilter, setDivisionFilter] = useState<string>('all');
-  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState(() => getInitialFilter('search', ''));
+  const [typeFilter, setTypeFilter] = useState<DocumentType | 'all'>(() => getInitialFilter('type', 'all') as DocumentType | 'all');
+  const [statusFilter, setStatusFilter] = useState<DocumentStatus | 'all'>(() => getInitialFilter('status', 'all') as DocumentStatus | 'all');
+  const [formStatusFilter, setFormStatusFilter] = useState<'all' | 'draft' | 'in_progress' | 'awaiting_signatures' | 'completed'>(() => {
+    const saved = getInitialFilter('formStatus', 'all');
+    return saved as 'all' | 'draft' | 'in_progress' | 'awaiting_signatures' | 'completed';
+  });
+  const [divisionFilter, setDivisionFilter] = useState<string>(() => getInitialFilter('division', 'all'));
+  const [departmentFilter, setDepartmentFilter] = useState<string>(() => getInitialFilter('department', 'all'));
+  const [authorFilter, setAuthorFilter] = useState<string>(() => getInitialFilter('author', 'all'));
+  const [dateRangeFilter, setDateRangeFilter] = useState<{ start?: string; end?: string }>(() => {
+    const start = getInitialFilter('dateStart', '');
+    const end = getInitialFilter('dateEnd', '');
+    return { start: start || undefined, end: end || undefined };
+  });
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [createFormDialogOpen, setCreateFormDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<DocumentRecord | null>(null);
   const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>(() => getCachedWorkspaces());
@@ -188,6 +255,10 @@ const DocumentManagementPage = () => {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [workspaceManageOpen, setWorkspaceManageOpen] = useState(false);
+  const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
+  const [formTemplatesLoading, setFormTemplatesLoading] = useState(false);
+  const [formTemplatesOpen, setFormTemplatesOpen] = useState(false);
+  const [selectedTemplateForForm, setSelectedTemplateForForm] = useState<FormTemplate | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('dms_recent_searches');
@@ -195,12 +266,15 @@ const DocumentManagementPage = () => {
     }
     return [];
   });
+  const [pendingSignaturesByWorkflow, setPendingSignaturesByWorkflow] = useState<Map<string, number>>(new Map());
   const totalPages = Math.max(1, Math.ceil(totalCount / customPageSize));
   const loadDocuments = useCallback(async () => {
+    console.log('[DMS] Loading documents...', { page, customPageSize, searchQuery, statusFilter, typeFilter });
     setLoading(true);
     setError(null);
     try {
       const ordering = sortOption.direction === 'desc' ? `-${sortOption.field}` : sortOption.field;
+      console.log('[DMS] Calling queryDocuments with:', { page, customPageSize, ordering });
       const response = await queryDocuments({
         page,
         pageSize: customPageSize,
@@ -211,17 +285,22 @@ const DocumentManagementPage = () => {
         departmentId: departmentFilter,
         ordering,
       });
+      console.log('[DMS] Received response:', { count: response.count, resultsCount: response.results.length });
       setDocuments(response.results);
       setTotalCount(response.count);
     } catch (err) {
+      console.error('[DMS] Error loading documents:', err);
       logError('Failed to load DMS documents', err);
       setDocuments([]);
       setTotalCount(0);
-      setError('Unable to load documents right now.');
+      const errorMessage = err instanceof Error ? err.message : 'Unable to load documents right now.';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
+      console.log('[DMS] Finished loading documents');
       setLoading(false);
     }
-  }, [page, customPageSize, searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter, sortOption]);
+  }, [page, customPageSize, searchQuery, statusFilter, typeFilter, formStatusFilter, divisionFilter, departmentFilter, sortOption.field, sortOption.direction]);
 
   const effectiveUser = useMemo(() => {
     if (currentUser) return currentUser;
@@ -233,6 +312,43 @@ const DocumentManagementPage = () => {
     workspaces.forEach((workspace) => map.set(workspace.id, workspace));
     return map;
   }, [workspaces]);
+
+  // Filter documents by form status, author, and date range
+  const filteredDocuments = useMemo(() => {
+    let filtered = documents;
+    
+    // Form status filter
+    if (typeFilter === 'form' && formStatusFilter !== 'all') {
+      filtered = filtered.filter((doc) => {
+        if (doc.documentType !== 'form') return false;
+        return doc.form_document?.status === formStatusFilter;
+      });
+    }
+    
+    // Author filter (client-side since backend doesn't support it yet)
+    if (authorFilter !== 'all') {
+      filtered = filtered.filter((doc) => doc.authorId === authorFilter);
+    }
+    
+    // Date range filter (client-side)
+    if (dateRangeFilter.start || dateRangeFilter.end) {
+      filtered = filtered.filter((doc) => {
+        const docDate = new Date(doc.createdAt);
+        if (dateRangeFilter.start) {
+          const startDate = new Date(dateRangeFilter.start);
+          if (docDate < startDate) return false;
+        }
+        if (dateRangeFilter.end) {
+          const endDate = new Date(dateRangeFilter.end);
+          endDate.setHours(23, 59, 59, 999); // Include entire end date
+          if (docDate > endDate) return false;
+        }
+        return true;
+      });
+    }
+    
+    return filtered;
+  }, [documents, typeFilter, formStatusFilter, authorFilter, dateRangeFilter]);
 
   useEffect(() => {
     let ignore = false;
@@ -253,9 +369,83 @@ const DocumentManagementPage = () => {
   }, []);
 
   useEffect(() => {
+    if (formTemplatesOpen && formTemplates.length === 0 && !formTemplatesLoading) {
+      setFormTemplatesLoading(true);
+      getFormTemplates({ is_active: true })
+        .then((templates) => {
+          setFormTemplates(templates);
+        })
+        .catch((error) => {
+          console.error('Failed to load form templates:', error);
+          toast.error('Failed to load form templates');
+        })
+        .finally(() => {
+          setFormTemplatesLoading(false);
+        });
+    }
+  }, [formTemplatesOpen, formTemplates.length, formTemplatesLoading]);
+
+  // Persist filters to URL and localStorage
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('search', searchQuery);
+    if (typeFilter !== 'all') params.set('type', typeFilter);
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (formStatusFilter !== 'all') params.set('formStatus', formStatusFilter);
+    if (divisionFilter !== 'all') params.set('division', divisionFilter);
+    if (departmentFilter !== 'all') params.set('department', departmentFilter);
+    if (authorFilter !== 'all') params.set('author', authorFilter);
+    if (dateRangeFilter.start) params.set('dateStart', dateRangeFilter.start);
+    if (dateRangeFilter.end) params.set('dateEnd', dateRangeFilter.end);
+    if (page > 1) params.set('page', String(page));
+    
+    // Update URL without navigation
+    const newUrl = params.toString() ? `/dms?${params.toString()}` : '/dms';
+    router.replace(newUrl, { scroll: false });
+    
+    // Save to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('dms_filter_search', searchQuery);
+      localStorage.setItem('dms_filter_type', typeFilter);
+      localStorage.setItem('dms_filter_status', statusFilter);
+      localStorage.setItem('dms_filter_formStatus', formStatusFilter);
+      localStorage.setItem('dms_filter_division', divisionFilter);
+      localStorage.setItem('dms_filter_department', departmentFilter);
+      localStorage.setItem('dms_filter_author', authorFilter);
+      if (dateRangeFilter.start) localStorage.setItem('dms_filter_dateStart', dateRangeFilter.start);
+      if (dateRangeFilter.end) localStorage.setItem('dms_filter_dateEnd', dateRangeFilter.end);
+    }
+  }, [searchQuery, typeFilter, statusFilter, formStatusFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, page, router]);
+
+  useEffect(() => {
     setPage(1);
     setSelectedDocuments(new Set());
-  }, [searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter, sortOption]);
+  }, [searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, sortOption]);
+
+  // Load pending signatures for current user
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadPendingSignatures = async () => {
+      try {
+        const pendingSigs = await getSignatures({ status: 'pending' });
+        // Create a map of workflow ID -> count of pending signatures for this user
+        const workflowCounts = new Map<string, number>();
+        pendingSigs.forEach((sig: FormSignature) => {
+          if (sig.workflow) {
+            const current = workflowCounts.get(sig.workflow) || 0;
+            workflowCounts.set(sig.workflow, current + 1);
+          }
+        });
+        setPendingSignaturesByWorkflow(workflowCounts);
+      } catch (error) {
+        console.error('Failed to load pending signatures:', error);
+        // Don't show error toast as this is a background operation
+      }
+    };
+
+    void loadPendingSignatures();
+  }, [currentUser, documents]); // Reload when documents change to catch new workflows
 
   // Save recent searches
   useEffect(() => {
@@ -298,8 +488,65 @@ const DocumentManagementPage = () => {
   }, [sortOption]);
 
   useEffect(() => {
-    loadDocuments();
+    let mounted = true;
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    const loadWithTimeout = async () => {
+      timeoutId = setTimeout(() => {
+        if (mounted) {
+          console.warn('[DMS] Document loading timeout after 30 seconds');
+          setError('Request is taking longer than expected. Please check your connection.');
+          setLoading(false);
+        }
+      }, 30000); // 30 second timeout
+
+      try {
+        await loadDocuments();
+      } finally {
+        if (mounted && timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+    };
+
+    void loadWithTimeout();
+
+    return () => {
+      mounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [loadDocuments]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + K: Focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[aria-label="Search documents"]') as HTMLInputElement;
+        searchInput?.focus();
+      }
+      // Ctrl/Cmd + N: New document
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !e.shiftKey) {
+        e.preventDefault();
+        if (effectiveUser) {
+          setUploadDialogOpen(true);
+        }
+      }
+      // Escape: Close modals
+      if (e.key === 'Escape') {
+        if (uploadDialogOpen) setUploadDialogOpen(false);
+        if (createFormDialogOpen) setCreateFormDialogOpen(false);
+        if (shareDialogOpen) setShareDialogOpen(false);
+        if (previewOpen) setPreviewOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [effectiveUser, uploadDialogOpen, createFormDialogOpen, shareDialogOpen, previewOpen]);
 
   const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
   const departmentLookup = useMemo(() => new Map(departments.map((department) => [department.id, department.name])), [departments]);
@@ -452,6 +699,28 @@ const DocumentManagementPage = () => {
                             <Badge variant={statusVariant(document.status)} className="capitalize">
                               {document.status}
                             </Badge>
+                            {/* Form-specific status badge */}
+                            {document.documentType === 'form' && document.form_document?.status && (
+                              <Badge variant={formStatusVariant(document.form_document.status)} className="capitalize">
+                                {formStatusLabel(document.form_document.status)}
+                              </Badge>
+                            )}
+                            {/* Pending signatures badge for forms */}
+                            {document.documentType === 'form' && 
+                             document.form_document?.signature_workflow?.id && 
+                             pendingSignaturesByWorkflow.has(document.form_document.signature_workflow.id) && (
+                              <Badge 
+                                variant="destructive" 
+                                className="gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(`/dms/${document.id}`);
+                                }}
+                              >
+                                <PenTool className="h-3 w-3" />
+                                {pendingSignaturesByWorkflow.get(document.form_document.signature_workflow.id)} pending signature{pendingSignaturesByWorkflow.get(document.form_document.signature_workflow.id) !== 1 ? 's' : ''}
+                              </Badge>
+                            )}
                             <Badge variant={sensitivityBadgeVariant(document.sensitivity)} className="capitalize">
                               {sensitivityLabel(document.sensitivity)}
                             </Badge>
@@ -510,17 +779,22 @@ const DocumentManagementPage = () => {
                           {document.workspaceIds.map((workspaceId) => {
                             const workspace = workspaceLookup.get(workspaceId);
                             if (!workspace) return null;
-                            // Calculate text color based on background luminance for contrast
+                            // Calculate text color based on background luminance for WCAG AA contrast
                             const getContrastColor = (bgColor: string): string => {
                               const hex = bgColor.replace('#', '');
-                              if (hex.length !== 6) return '#ffffff'; // Fallback to white
+                              if (hex.length !== 6) return '#000000'; // Fallback to black for better contrast
                               const r = parseInt(hex.substr(0, 2), 16);
                               const g = parseInt(hex.substr(2, 2), 16);
                               const b = parseInt(hex.substr(4, 2), 16);
-                              // Calculate relative luminance (0-1)
-                              const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-                              // Use dark text on light backgrounds, light text on dark backgrounds
-                              return luminance > 0.5 ? '#1f2937' : '#ffffff';
+                              // Calculate relative luminance using WCAG formula
+                              const normalize = (val: number) => {
+                                val = val / 255;
+                                return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+                              };
+                              const luminance = 0.2126 * normalize(r) + 0.7152 * normalize(g) + 0.0722 * normalize(b);
+                              // Use dark text on light backgrounds (luminance > 0.5), light text on dark backgrounds
+                              // Ensure minimum contrast ratio of 4.5:1 for WCAG AA
+                              return luminance > 0.5 ? '#000000' : '#ffffff';
                             };
                             return (
                               <Badge
@@ -563,6 +837,34 @@ const DocumentManagementPage = () => {
                           Latest version {latestVersion.versionNumber} · Uploaded {formatDateTime(latestVersion.uploadedAt)}
                         </div>
                       )}
+
+                      {/* Form-specific metadata */}
+                      {document.documentType === 'form' && document.form_document && (
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-2 border-t border-border/50">
+                          {document.form_document.template && (
+                            <div className="flex items-center gap-2">
+                              <FileCheck className="h-3 w-3" />
+                              <span className="font-medium">{document.form_document.template.name}</span>
+                            </div>
+                          )}
+                          {document.form_document.signature_workflow && (
+                            <div className="flex items-center gap-2">
+                              <PenTool className="h-3 w-3" />
+                              <span>
+                                {document.form_document.signature_workflow.completed_signatures ?? 0}/
+                                {document.form_document.signature_workflow.total_signatures ?? 0} signatures
+                              </span>
+                            </div>
+                          )}
+                          {document.form_document.signature_workflow?.id && 
+                           pendingSignaturesByWorkflow.has(document.form_document.signature_workflow.id) && (
+                            <div className="flex items-center gap-1 text-xs text-destructive font-medium">
+                              <PenTool className="h-3 w-3" />
+                              {pendingSignaturesByWorkflow.get(document.form_document.signature_workflow.id)} pending
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -575,8 +877,9 @@ const DocumentManagementPage = () => {
   };
 
   return (
-    <DashboardLayout>
-      <div className="p-6 space-y-6">
+    <ClientErrorBoundary>
+      <DashboardLayout>
+        <div className="p-6 space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
@@ -607,17 +910,83 @@ const DocumentManagementPage = () => {
               <Layers className="h-4 w-4" />
               Workspaces
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="gap-1"
-              onClick={() => setUploadDialogOpen(true)}
-              disabled={!effectiveUser}
-              aria-label="Create new document"
-            >
-              <FilePlus className="h-4 w-4" />
-              New Document
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                className="gap-1"
+                onClick={() => setUploadDialogOpen(true)}
+                disabled={!effectiveUser}
+                aria-label="Create new document"
+              >
+                <FilePlus className="h-4 w-4" />
+                New Document
+              </Button>
+              <div className="flex items-center gap-1">
+                <Popover open={formTemplatesOpen} onOpenChange={setFormTemplatesOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-1 bg-gradient-primary"
+                      disabled={!effectiveUser}
+                      aria-label="Create new form from template"
+                    >
+                      <FileCheck className="h-4 w-4" />
+                      New Form
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-0" align="end">
+                    <Command>
+                      <CommandInput placeholder="Search templates..." />
+                      <CommandList>
+                        <CommandEmpty>
+                          {formTemplatesLoading ? 'Loading templates...' : 'No templates found'}
+                        </CommandEmpty>
+                        <CommandGroup heading="Quick Create">
+                          <CommandItem
+                            onSelect={() => {
+                              setSelectedTemplateForForm(null);
+                              setFormTemplatesOpen(false);
+                              setCreateFormDialogOpen(true);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <FileCheck className="h-4 w-4 mr-2" />
+                            Create from any template
+                          </CommandItem>
+                        </CommandGroup>
+                        {formTemplates.length > 0 && (
+                          <CommandGroup heading="Popular Templates">
+                            {formTemplates.slice(0, 8).map((template) => (
+                              <CommandItem
+                                key={template.id}
+                                onSelect={() => {
+                                  setSelectedTemplateForForm(template);
+                                  setFormTemplatesOpen(false);
+                                  setCreateFormDialogOpen(true);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <FileCheck className="h-4 w-4 mr-2" />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{template.name}</span>
+                                  {template.description && (
+                                    <span className="text-xs text-muted-foreground line-clamp-1">
+                                      {template.description}
+                                    </span>
+                                  )}
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        )}
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -740,6 +1109,20 @@ const DocumentManagementPage = () => {
               ))}
             </SelectContent>
           </Select>
+          {typeFilter === 'form' && (
+            <Select value={formStatusFilter} onValueChange={(value) => setFormStatusFilter(value as typeof formStatusFilter)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Form Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Form Statuses</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="awaiting_signatures">Awaiting Signatures</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Select value={divisionFilter} onValueChange={setDivisionFilter}>
             <SelectTrigger>
               <SelectValue placeholder="Division" />
@@ -767,6 +1150,83 @@ const DocumentManagementPage = () => {
             </SelectContent>
           </Select>
         </div>
+        
+        {/* Advanced Filters Row */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Author Filter */}
+          <Select value={authorFilter} onValueChange={setAuthorFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Author" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Authors</SelectItem>
+              {Array.from(new Set(documents.map(d => d.authorId)))
+                .map(authorId => {
+                  const author = organizationUsers.find(u => u.id === authorId);
+                  return author ? { id: authorId, name: author.name } : null;
+                })
+                .filter(Boolean)
+                .map((author) => (
+                  <SelectItem key={author!.id} value={author!.id}>
+                    {author!.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          
+          {/* Date Range Filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2" aria-label="Date range filter">
+                <Calendar className="h-4 w-4" />
+                Date Range
+                {(dateRangeFilter.start || dateRangeFilter.end) && (
+                  <Badge variant="secondary" className="ml-1">
+                    {(dateRangeFilter.start && dateRangeFilter.end) ? '2' : '1'}
+                  </Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80" align="start">
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="dateStart">From Date</Label>
+                  <Input
+                    id="dateStart"
+                    type="date"
+                    value={dateRangeFilter.start || ''}
+                    onChange={(e) => setDateRangeFilter(prev => ({ ...prev, start: e.target.value }))}
+                    aria-label="Filter by start date"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="dateEnd">To Date</Label>
+                  <Input
+                    id="dateEnd"
+                    type="date"
+                    value={dateRangeFilter.end || ''}
+                    onChange={(e) => setDateRangeFilter(prev => ({ ...prev, end: e.target.value }))}
+                    aria-label="Filter by end date"
+                    className="mt-1"
+                  />
+                </div>
+                {(dateRangeFilter.start || dateRangeFilter.end) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDateRangeFilter({})}
+                    className="w-full"
+                    aria-label="Clear date filter"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Clear Date Filter
+                  </Button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
 
         {error && (
           <Card>
@@ -775,35 +1235,65 @@ const DocumentManagementPage = () => {
         )}
 
         {loading ? (
-          <Card>
-            <CardContent className="py-12 flex items-center justify-center gap-2 text-muted-foreground text-sm">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading documents…
-            </CardContent>
-          </Card>
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <DocumentCardSkeleton key={i} />
+            ))}
+          </div>
         ) : documents.length === 0 ? (
           <Card>
-            <CardContent className="py-12 text-center">
-              <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" aria-hidden="true" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">No documents found</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || divisionFilter !== 'all' || departmentFilter !== 'all'
-                  ? 'Try adjusting your search or filters to find what you\'re looking for.'
-                  : 'Get started by creating your first document.'}
-              </p>
-              {effectiveUser && (
-                <Button
-                  onClick={() => setUploadDialogOpen(true)}
-                  aria-label="Create new document"
-                >
-                  <FilePlus className="h-4 w-4 mr-2" />
-                  Create Document
-                </Button>
-              )}
+            <CardContent className="py-16 text-center">
+              <div className="flex flex-col items-center gap-4">
+                <div className="p-4 rounded-full bg-muted/50">
+                  <FileText className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-semibold text-foreground">No documents found</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    {searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || divisionFilter !== 'all' || departmentFilter !== 'all' || authorFilter !== 'all' || dateRangeFilter.start || dateRangeFilter.end
+                      ? 'Try adjusting your search or filters to find what you\'re looking for. You can also clear filters to see all documents.'
+                      : 'Get started by creating your first document. You can upload files, create forms, or compose documents using the rich text editor.'}
+                  </p>
+                </div>
+                {effectiveUser && (
+                  <div className="flex items-center gap-3 mt-4">
+                    <Button
+                      onClick={() => setUploadDialogOpen(true)}
+                      aria-label="Create new document"
+                    >
+                      <FilePlus className="h-4 w-4 mr-2" />
+                      Create Document
+                    </Button>
+                    {(searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || divisionFilter !== 'all' || departmentFilter !== 'all' || authorFilter !== 'all' || dateRangeFilter.start || dateRangeFilter.end) && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setTypeFilter('all');
+                          setStatusFilter('all');
+                          setDivisionFilter('all');
+                          setDepartmentFilter('all');
+                          setAuthorFilter('all');
+                          setDateRangeFilter({});
+                        }}
+                        aria-label="Clear all filters"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Clear Filters
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {!effectiveUser && (
+                  <p className="text-xs text-muted-foreground mt-4">
+                    Please log in to create and manage documents.
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
         ) : (
-          renderDocumentList(documents)
+          renderDocumentList(filteredDocuments)
         )}
 
         <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
@@ -950,15 +1440,32 @@ const DocumentManagementPage = () => {
       </div>
 
       {effectiveUser && (
-        <DocumentUploadDialog
-          open={uploadDialogOpen}
-          onOpenChange={setUploadDialogOpen}
-          mode="create"
-          currentUser={effectiveUser}
-          onComplete={() => {
-            void loadDocuments();
-          }}
-        />
+        <>
+          <CreateFormDocumentDialog
+            open={createFormDialogOpen}
+            onOpenChange={(open) => {
+              setCreateFormDialogOpen(open);
+              if (!open) {
+                setSelectedTemplateForForm(null);
+              }
+            }}
+            onComplete={(documentId) => {
+              router.push(`/dms/${documentId}`);
+              void loadDocuments();
+              setSelectedTemplateForForm(null);
+            }}
+            initialTemplate={selectedTemplateForForm}
+          />
+          <DocumentUploadDialog
+            open={uploadDialogOpen}
+            onOpenChange={setUploadDialogOpen}
+            mode="create"
+            currentUser={effectiveUser}
+            onComplete={() => {
+              void loadDocuments();
+            }}
+          />
+        </>
       )}
       <ShareDocumentDialog
         open={shareDialogOpen}
@@ -994,7 +1501,8 @@ const DocumentManagementPage = () => {
           }
         }}
       />
-    </DashboardLayout>
+      </DashboardLayout>
+    </ClientErrorBoundary>
   );
 };
 

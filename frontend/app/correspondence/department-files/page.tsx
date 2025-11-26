@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import {
   Mail,
@@ -14,10 +15,10 @@ import {
   Layers,
   Filter,
   Loader2,
-  ArrowDown,
-  ArrowUp,
   Archive,
   FileText,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -28,13 +29,48 @@ import { formatDateShort } from '@/lib/correspondence-helpers';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 
-const PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 25;
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+
 const buildDownloadUrl = (path?: string | null) => {
   if (!path) return undefined;
-  if (path.startsWith('http')) return path;
+  if (path.startsWith('http')) {
+    try {
+      const url = new URL(path);
+      if (url.pathname.startsWith('/api/media/')) {
+        url.pathname = url.pathname.replace('/api/media/', '/media/');
+        return url.toString();
+      }
+    } catch { }
+    return path;
+  }
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${normalized}`;
+  const cleanedPath = normalized.replace(/^\/api\/media\//, '/media/');
+  return `${API_BASE_URL}${cleanedPath}`;
+};
+
+const handleDownload = async (url: string, filename: string) => {
+  try {
+    const fixedUrl = url.replace(/\/api\/media\//, '/media/');
+    const token = localStorage.getItem('npa_ecm_access_token');
+    const response = await fetch(fixedUrl, {
+      credentials: 'include',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error('Download error:', error);
+    window.open(url.replace(/\/api\/media\//, '/media/'), '_blank');
+  }
 };
 
 const DepartmentFilesPage = () => {
@@ -45,38 +81,56 @@ const DepartmentFilesPage = () => {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [records, setRecords] = useState<Correspondence[]>([]);
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [directionFilter, setDirectionFilter] = useState<string>('all');
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['completed', 'archived']);
+  const [selectedDirections, setSelectedDirections] = useState<string[]>([]);
   const [yearFilter, setYearFilter] = useState<string>('all');
   const [availableYears, setAvailableYears] = useState<number[]>([]);
-  const [summary, setSummary] = useState({
-    total: 0,
-    completed: 0,
-    archived: 0,
-    officeOwned: 0,
-  });
+  const [summary, setSummary] = useState({ total: 0, completed: 0, archived: 0, officeOwned: 0 });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [goToPageInput, setGoToPageInput] = useState('');
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const userOfficeMemberships = useMemo(() => {
     if (!currentUser) return [];
-    return officeMemberships.filter(
-      (membership) => membership.userId === currentUser.id && membership.isActive,
-    );
+    return officeMemberships.filter((membership) => membership.userId === currentUser.id && membership.isActive);
   }, [currentUser, officeMemberships]);
 
-  const userOfficeIds = useMemo(
-    () => userOfficeMemberships.map((membership) => membership.officeId),
-    [userOfficeMemberships],
-  );
+  const userOfficeIds = useMemo(() => userOfficeMemberships.map((membership) => membership.officeId), [userOfficeMemberships]);
 
   const selectableOffices = useMemo(() => {
     if (!userOfficeIds.length) return [];
     const idSet = new Set(userOfficeIds);
     return offices.filter((office) => idSet.has(office.id));
   }, [offices, userOfficeIds]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedOfficeId !== 'all') count++;
+    if (selectedStatuses.length > 0 && !(selectedStatuses.length === 2 && selectedStatuses.includes('completed') && selectedStatuses.includes('archived'))) count++;
+    if (selectedDirections.length > 0) count++;
+    if (yearFilter !== 'all') count++;
+    return count;
+  }, [selectedOfficeId, selectedStatuses, selectedDirections, yearFilter]);
+
+  const toggleStatus = (status: string) => {
+    setSelectedStatuses((prev) => prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]);
+  };
+
+  const toggleDirection = (direction: string) => {
+    setSelectedDirections((prev) => prev.includes(direction) ? prev.filter((d) => d !== direction) : [...prev, direction]);
+  };
+
+  const clearAllFilters = () => {
+    setSelectedOfficeId('all');
+    setSelectedStatuses(['completed', 'archived']);
+    setSelectedDirections([]);
+    setYearFilter('all');
+    setQuery('');
+  };
 
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedQuery(query.trim()), 350);
@@ -85,7 +139,7 @@ const DepartmentFilesPage = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQuery, selectedOfficeId, statusFilter, directionFilter, yearFilter]);
+  }, [debouncedQuery, selectedOfficeId, selectedStatuses, selectedDirections, yearFilter, pageSize]);
 
   useEffect(() => {
     let ignore = false;
@@ -93,14 +147,11 @@ const DepartmentFilesPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams({
-          page: String(page),
-          page_size: String(PAGE_SIZE),
-        });
+        const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
         if (debouncedQuery) params.append('search', debouncedQuery);
         if (selectedOfficeId !== 'all') params.append('office', selectedOfficeId);
-        if (statusFilter !== 'all') params.append('status', statusFilter);
-        if (directionFilter !== 'all') params.append('direction', directionFilter);
+        if (selectedStatuses.length > 0) selectedStatuses.forEach((s) => params.append('status', s));
+        if (selectedDirections.length > 0) selectedDirections.forEach((d) => params.append('direction', d));
         if (yearFilter !== 'all') params.append('year', yearFilter);
 
         const response = await apiFetch<any>(`/correspondence/items/department-records/?${params.toString()}`);
@@ -130,260 +181,210 @@ const DepartmentFilesPage = () => {
     };
 
     fetchRecords();
-    return () => {
-      ignore = true;
-    };
-  }, [page, debouncedQuery, selectedOfficeId, statusFilter, directionFilter, yearFilter]);
+    return () => { ignore = true; };
+  }, [page, pageSize, debouncedQuery, selectedOfficeId, selectedStatuses, selectedDirections, yearFilter]);
 
-  const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(count / pageSize));
 
-  const renderRecords = () => {
-    if (loading) {
-      return (
-        <div className="py-12 text-center text-muted-foreground flex items-center justify-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading records…
-        </div>
-      );
+  const handleGoToPage = () => {
+    const pageNum = parseInt(goToPageInput, 10);
+    if (pageNum >= 1 && pageNum <= pageCount) {
+      setPage(pageNum);
+      setGoToPageInput('');
     }
-
-    if (error) {
-      return <div className="py-4 text-sm text-destructive">{error}</div>;
-    }
-
-    if (records.length === 0) {
-      return <div className="text-center py-12 text-muted-foreground text-sm">No departmental records match your filters.</div>;
-    }
-
-    return records.map((item) => {
-      const owningOffice = item.owningOfficeId
-        ? offices.find((office) => office.id === item.owningOfficeId)
-        : undefined;
-      const completionPackageUrl = buildDownloadUrl(item.completionPackage?.fileUrl ?? null);
-
-      return (
-        <Link
-          key={item.id}
-          href={`/correspondence/${item.id}`}
-          className="block border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-foreground truncate">{item.subject}</h3>
-            <Badge variant={item.status === 'archived' ? 'secondary' : 'outline'}>{item.status}</Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Ref: {item.referenceNumber || '—'} • Completed:{' '}
-            {item.completedAt ? formatDateShort(item.completedAt) : '—'}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Received: {item.receivedDate ? formatDateShort(item.receivedDate) : '—'}
-          </p>
-          {item.completionPackage && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline">Completion package</Badge>
-              <span>
-                Generated{' '}
-                {item.completionPackage.generatedAt
-                  ? formatDateShort(item.completionPackage.generatedAt)
-                  : 'recently'}
-              </span>
-              {completionPackageUrl && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  asChild
-                  className="text-xs h-7 px-3"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <a
-                    href={completionPackageUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1"
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    Download PDF
-                  </a>
-                </Button>
-              )}
-            </div>
-          )}
-          {owningOffice && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-              <Building2 className="h-3.5 w-3.5" />
-              {owningOffice.name}
-            </p>
-          )}
-        </Link>
-      );
-    });
   };
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
-            <Layers className="h-7 w-7 text-primary" />
-            Department Files & Records
-          </h1>
-          <p className="text-muted-foreground">
-            Finalized correspondence for your department, division, or offices.
-          </p>
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold">Department Files & Records</h1>
+            <p className="text-muted-foreground mt-1">Finalized correspondence for your department, division, or offices</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
+              <Filter className="h-4 w-4 mr-2" /> Filters
+              {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
+            </Button>
+          </div>
         </div>
 
         <HelpGuideCard
           title="Department Records"
           description="Respond to audits, compile reports, and reuse templates by searching your completed/archived correspondence."
-          links={[
-            { label: 'Correspondence Archive', href: '/correspondence/archived' },
-            { label: 'Help & Guides', href: '/help' },
-          ]}
+          links={[{ label: 'Correspondence Archive', href: '/correspondence/archived' }, { label: 'Help & Guides', href: '/help' }]}
         />
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="relative max-w-xl w-full">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search records by subject, reference, or participant..."
-              className="pl-10"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-            {selectableOffices.length > 0 && (
-              <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
-                <SelectTrigger className="w-[180px]">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Office" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All offices</SelectItem>
-                  {selectableOffices.map((office) => (
-                    <SelectItem key={office.id} value={office.id}>
-                      {office.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px]">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={directionFilter} onValueChange={setDirectionFilter}>
-              <SelectTrigger className="w-[140px]">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Direction" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All directions</SelectItem>
-                <SelectItem value="downward">Downward</SelectItem>
-                <SelectItem value="upward">Upward</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={yearFilter} onValueChange={setYearFilter}>
-              <SelectTrigger className="w-[120px]">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Year" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All years</SelectItem>
-                {availableYears.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        {/* Filters Panel */}
+        {showFilters && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Department Filters</CardTitle>
+                {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {selectableOffices.length > 0 && (
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Office</Label>
+                    <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Offices</SelectItem>
+                        {selectableOffices.map((office) => <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Status</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {['completed', 'archived'].map((status) => (
+                      <Badge key={status} variant={selectedStatuses.includes(status) ? 'default' : 'outline'} className="cursor-pointer capitalize text-xs" onClick={() => toggleStatus(status)}>
+                        {status}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Direction</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {['downward', 'upward'].map((direction) => (
+                      <Badge key={direction} variant={selectedDirections.includes(direction) ? 'default' : 'outline'} className="cursor-pointer capitalize text-xs" onClick={() => toggleDirection(direction)}>
+                        {direction === 'downward' ? '↓' : '↑'} {direction}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Year</Label>
+                  <Select value={yearFilter} onValueChange={setYearFilter}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Years</SelectItem>
+                      {Array.from(new Set(availableYears)).sort((a, b) => b - a).map((year) => <SelectItem key={`year-${year}`} value={year.toString()}>{year}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Search */}
+        <div className="relative max-w-xl">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search records by subject, reference, or participant..." className="pl-10" />
         </div>
 
+        {/* Summary Cards */}
         <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">Total records</p>
-                  <p className="text-2xl font-bold">{summary.total}</p>
+          {[
+            { label: 'Total Records', value: summary.total, icon: Layers, iconClass: 'text-primary' },
+            { label: 'Completed', value: summary.completed, icon: Mail, iconClass: 'text-success' },
+            { label: 'Archived', value: summary.archived, icon: Archive, iconClass: 'text-muted-foreground' },
+            { label: 'Owned by Your Offices', value: summary.officeOwned, icon: Building2, iconClass: 'text-info' },
+          ].map(({ label, value, icon: Icon, iconClass }) => (
+            <Card key={label}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-bold">{value}</p></div>
+                  <Icon className={`h-8 w-8 opacity-50 ${iconClass}`} />
                 </div>
-                <Layers className="h-8 w-8 text-primary opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold">{summary.completed}</p>
-                </div>
-                <Mail className="h-8 w-8 text-success opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">Archived</p>
-                  <p className="text-2xl font-bold">{summary.archived}</p>
-                </div>
-                <Archive className="h-8 w-8 text-muted-foreground opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-muted-foreground">Owned by your offices</p>
-                  <p className="text-2xl font-bold">{summary.officeOwned}</p>
-                </div>
-                <Building2 className="h-8 w-8 text-info opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        <Card className="shadow-soft">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
-              <Mail className="h-5 w-5 text-primary" />
-              {records.length} result{records.length === 1 ? '' : 's'} on this page
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">{renderRecords()}</CardContent>
-        </Card>
+        {loading ? (
+          <Card><CardContent className="py-12 text-center text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading records…</CardContent></Card>
+        ) : error ? (
+          <Card><CardContent className="py-4 text-sm text-destructive">{error}</CardContent></Card>
+        ) : records.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-12 text-muted-foreground text-sm">
+              {debouncedQuery || activeFilterCount > 0 ? 'No departmental records match your filters.' : 'No departmental records found.'}
+              {(debouncedQuery || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4 block mx-auto">Clear Filters</Button>}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {records.map((item) => {
+              const owningOffice = item.owningOfficeId ? offices.find((office) => office.id === item.owningOfficeId) : undefined;
+              const completionPackageUrl = buildDownloadUrl(item.completionPackage?.fileUrl ?? null);
 
-        {pageCount > 1 && !loading && !error && (
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-muted-foreground">
-              Showing page {page} of {pageCount} ({count} total)
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1}>
-                Previous
-              </Button>
-              <Button variant="outline" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page === pageCount}>
-                Next
-              </Button>
-            </div>
+              return (
+                <Link key={item.id} href={`/correspondence/${item.id}`} className="block border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-semibold text-foreground truncate">{item.subject}</h3>
+                    <Badge variant={item.status === 'archived' ? 'secondary' : 'outline'}>{item.status}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Ref: {item.referenceNumber || '—'} • Completed: {item.completedAt ? formatDateShort(item.completedAt) : '—'}</p>
+                  <p className="text-xs text-muted-foreground">Received: {item.receivedDate ? formatDateShort(item.receivedDate) : '—'}</p>
+                  {item.completionPackage && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="outline">Completion package</Badge>
+                      <span>Generated {item.completionPackage.generatedAt ? formatDateShort(item.completionPackage.generatedAt) : 'recently'}</span>
+                      {completionPackageUrl && (
+                        <Button variant="secondary" size="sm" className="text-xs h-7 px-3" onClick={(event) => { event.preventDefault(); event.stopPropagation(); const filename = `completion-package-${item.referenceNumber || item.id}.pdf`; handleDownload(completionPackageUrl, filename); }}>
+                          <FileText className="h-3.5 w-3.5 mr-1" />Download PDF
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {owningOffice && <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><Building2 className="h-3.5 w-3.5" />{owningOffice.name}</p>}
+                </Link>
+              );
+            })}
           </div>
         )}
+
+        {/* Pagination */}
+        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-muted-foreground">Showing {count === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count, (page - 1) * pageSize + records.length)}`} of {count} records</p>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground">Per page:</label>
+              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
+                <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1 || loading}><ChevronLeft className="h-4 w-4" />Previous</Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
+                let pageNum: number;
+                if (pageCount <= 5) pageNum = i + 1;
+                else if (page <= 3) pageNum = i + 1;
+                else if (page >= pageCount - 2) pageNum = pageCount - 4 + i;
+                else pageNum = page - 2 + i;
+                if (pageNum > pageCount) return null;
+                return <Button key={pageNum} variant={page === pageNum ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pageNum)} disabled={loading}>{pageNum}</Button>;
+              })}
+            </div>
+            {pageCount > 5 && (
+              <div className="flex items-center gap-1">
+                <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
+                <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
+              </div>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </div>
       </div>
     </DashboardLayout>
   );
 };
 
 export default DepartmentFilesPage;
-
-

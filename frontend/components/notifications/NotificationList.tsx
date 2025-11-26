@@ -32,14 +32,52 @@ export const NotificationList = ({ onClose }: NotificationListProps) => {
 
   const loadNotifications = useCallback(async () => {
     try {
-      // Fetch all notifications and filter out archived ones on the frontend
-      // The backend doesn't support multiple status values, so we fetch all and filter
-      const data = await getNotifications();
-      // Filter out archived notifications - we only want unread and read
-      const filtered = data.filter((n) => n.status !== 'archived');
-      setNotifications(filtered);
+      setLoading(true);
+      // Fetch unread notifications explicitly
+      const unreadData = await getNotifications({ status: 'unread' });
+      console.log('[NotificationList] Unread notifications:', unreadData);
+      
+      // Also fetch all notifications to show read ones
+      const allData = await getNotifications();
+      console.log('[NotificationList] All notifications:', allData);
+      
+      // Combine and deduplicate, prioritizing unread
+      const notificationMap = new Map<string, Notification>();
+      
+      // Add unread notifications first
+      unreadData.forEach((n) => {
+        if (n.status !== 'archived') {
+          notificationMap.set(n.id, n);
+        }
+      });
+      
+      // Add all other non-archived notifications
+      allData.forEach((n) => {
+        if (n.status !== 'archived' && !notificationMap.has(n.id)) {
+          notificationMap.set(n.id, n);
+        }
+      });
+      
+      // Sort by created date (newest first)
+      const sorted = Array.from(notificationMap.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      
+      console.log('[NotificationList] Final notifications to display:', sorted);
+      setNotifications(sorted);
     } catch (error) {
+      console.error('[NotificationList] Error loading notifications:', error);
       logError('Failed to load notifications', error);
+      // On error, try to at least fetch unread notifications
+      try {
+        const unreadData = await getNotifications({ status: 'unread' });
+        console.log('[NotificationList] Fallback unread notifications:', unreadData);
+        setNotifications(unreadData.filter((n) => n.status !== 'archived'));
+      } catch (fallbackError) {
+        console.error('[NotificationList] Fallback error:', fallbackError);
+        logError('Failed to load unread notifications as fallback', fallbackError);
+        setNotifications([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -142,7 +180,7 @@ export const NotificationList = ({ onClose }: NotificationListProps) => {
             </Button>
           )}
           <Button variant="ghost" size="sm" asChild className="text-xs h-7">
-            <Link href="/settings/notifications">
+            <Link href="/settings#notifications">
               <Settings className="h-3 w-3" />
             </Link>
           </Button>

@@ -13,7 +13,8 @@ from django.utils.text import slugify
 from common.upload_validators import validate_file_upload
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, mixins, status, viewsets
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -31,6 +32,7 @@ from .models import (
     DocumentPermission,
     DocumentVersion,
     DocumentWorkspace,
+    FormDocument,
 )
 from .serializers import (
     DocumentAccessLogSerializer,
@@ -41,6 +43,7 @@ from .serializers import (
     DocumentSerializer,
     DocumentVersionSerializer,
     DocumentWorkspaceSerializer,
+    FormDocumentSerializer,
 )
 
 
@@ -72,7 +75,7 @@ class DocumentPagination(PageNumberPagination):
 
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.none()
-    base_queryset = Document.all_objects.select_related("author", "division", "department").prefetch_related(
+    base_queryset = Document.all_objects.select_related("author", "division", "department", "form_document").prefetch_related(
         "workspaces",
         "versions",
         "permissions",
@@ -259,13 +262,11 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                 saved_path = default_storage.save(file_path, ContentFile(file_data, name=safe_filename))
                 
                 # Build full URL for the file
-                try:
-                    file_url = request.build_absolute_uri(settings.MEDIA_URL + saved_path)
-                except Exception:
-                    # Fallback if build_absolute_uri fails
-                    request_scheme = getattr(request, 'scheme', 'http')
-                    request_host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8000'
-                    file_url = f"{request_scheme}://{request_host}{settings.MEDIA_URL}{saved_path}"
+                # Build URL manually to avoid /api/ prefix from request path
+                request_scheme = getattr(request, 'scheme', 'http')
+                request_host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8000'
+                media_path = f"{settings.MEDIA_URL.rstrip('/')}/{saved_path}".replace('//', '/')
+                file_url = f"{request_scheme}://{request_host}{media_path}"
                 
                 # Update data with the new file URL (now a short path, not a long data URL)
                 data['file_url'] = file_url
@@ -312,6 +313,7 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         # Get document
         document = serializer.validated_data.get("document")
         access = serializer.validated_data.get("access", "read")
+        note = serializer.validated_data.get("note", "")
         user_ids = serializer.validated_data.get("user_ids", [])
         division_ids = serializer.validated_data.get("division_ids", [])
         department_ids = serializer.validated_data.get("department_ids", [])
@@ -344,13 +346,20 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
                 users = User.objects.filter(department=department, is_active=True)
                 notified_users.update(users)
         
+        # Build notification message with note if provided
+        base_message = f"{request.user.get_full_name() or request.user.username} has shared a document with you with {access} access."
+        if note:
+            message = f"{base_message}\n\nMessage: {note}"
+        else:
+            message = base_message
+        
         # Send notifications to all affected users
         for user in notified_users:
             if user.id != request.user.id:  # Don't notify the person sharing
                 NotificationService.create_notification(
                     recipient=user,
                     title=f"Document Shared: {document.title}",
-                    message=f"{request.user.get_full_name() or request.user.username} has shared a document with you with {access} access.",
+                    message=message,
                     notification_type=Notification.NotificationType.DOCUMENT,
                     priority=Notification.Priority.NORMAL,
                     sender=request.user,
@@ -363,23 +372,155 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
         
         # Create audit log
         from audit.models import ActivityLog
+        metadata = {
+            "permission_id": str(permission.id),
+            "user_count": len(user_ids) if user_ids else 0,
+            "division_count": len(division_ids) if division_ids else 0,
+            "department_count": len(department_ids) if department_ids else 0,
+            "access_level": access,
+        }
+        if note:
+            metadata["note"] = note
+        
         AuditService.log_document_activity(
             user=request.user,
             action=ActivityLog.ActionType.DOCUMENT_SHARED,
             document=document,
             request=request,
             description=f"Shared document with {len(notified_users)} user(s) with {access} access",
-            metadata={
-                "permission_id": str(permission.id),
-                "user_count": len(user_ids) if user_ids else 0,
-                "division_count": len(division_ids) if division_ids else 0,
-                "department_count": len(department_ids) if department_ids else 0,
-                "access_level": access,
-            },
+            metadata=metadata,
         )
         
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    @action(detail=False, methods=["post"], url_path="share-to-all")
+    def share_to_all(self, request):
+        """Share document with all active users in the system."""
+        document_id = request.data.get("document")
+        access = request.data.get("access", "read")
+        note = request.data.get("note", "")
+        
+        if not document_id:
+            raise ValidationError({"document": "Document ID is required"})
+        
+        try:
+            document = Document.objects.get(id=document_id)
+        except Document.DoesNotExist:
+            raise ValidationError({"document": "Document not found"})
+        
+        # Get all active users
+        from accounts.models import User
+        all_users = User.objects.filter(is_active=True)
+        user_ids = [str(user.id) for user in all_users]
+        
+        if not user_ids:
+            raise ValidationError({"detail": "No active users found"})
+        
+        # Create permission
+        permission = DocumentPermission.objects.create(
+            document=document,
+            access=access,
+            note=note,
+        )
+        permission.users.set(all_users)
+        
+        # Build notification message with note if provided
+        base_message = f"{request.user.get_full_name() or request.user.username} has shared a document with you with {access} access."
+        if note:
+            message = f"{base_message}\n\nMessage: {note}"
+        else:
+            message = base_message
+        
+        # Send notifications to all users
+        for user in all_users:
+            if user.id != request.user.id:  # Don't notify the person sharing
+                NotificationService.create_notification(
+                    recipient=user,
+                    title=f"Document Shared: {document.title}",
+                    message=message,
+                    notification_type=Notification.NotificationType.DOCUMENT,
+                    priority=Notification.Priority.NORMAL,
+                    sender=request.user,
+                    module="dms",
+                    related_object_type="document",
+                    related_object_id=str(document.id),
+                    action_url=f"/dms/{document.id}",
+                    action_required=False,
+                )
+        
+        # Create audit log
+        from audit.models import ActivityLog
+        metadata = {
+            "permission_id": str(permission.id),
+            "user_count": len(user_ids),
+            "access_level": access,
+            "share_to_all": True,
+        }
+        if note:
+            metadata["note"] = note
+        
+        AuditService.log_document_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.DOCUMENT_SHARED,
+            document=document,
+            request=request,
+            description=f"Shared document with all {len(user_ids)} active user(s) with {access} access",
+            metadata=metadata,
+        )
+        
+        serializer = self.get_serializer(permission)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        """Update document permission (e.g., change access level)."""
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        
+        old_access = instance.access
+        self.perform_update(serializer)
+        
+        # Create audit log for permission update
+        from audit.models import ActivityLog
+        AuditService.log_document_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.DOCUMENT_SHARED,
+            document=instance.document,
+            request=request,
+            description=f"Updated document permission access from {old_access} to {serializer.validated_data.get('access', old_access)}",
+            metadata={
+                "permission_id": str(instance.id),
+                "old_access": old_access,
+                "new_access": serializer.validated_data.get("access", old_access),
+            },
+        )
+        
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete document permission."""
+        instance = self.get_object()
+        document = instance.document
+        
+        # Create audit log before deletion
+        from audit.models import ActivityLog
+        AuditService.log_document_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.DOCUMENT_SHARED,
+            document=document,
+            request=request,
+            description=f"Removed document permission ({instance.access} access)",
+            metadata={
+                "permission_id": str(instance.id),
+                "access_level": instance.access,
+                "action": "removed",
+            },
+        )
+        
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class DocumentCommentViewSet(viewsets.ModelViewSet):
