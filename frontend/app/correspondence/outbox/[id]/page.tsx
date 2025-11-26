@@ -504,7 +504,7 @@ const OutboxDetailPage = () => {
                                     {minute.timestamp ? formatDateTime(minute.timestamp) : 'N/A'}
                                   </p>
                                 </div>
-                                <Badge variant={minute.actionType === 'approved' ? 'default' : 'secondary'}>
+                                <Badge variant={minute.actionType === 'approve' ? 'default' : 'secondary'}>
                                   {minute.actionType}
                                 </Badge>
                               </div>

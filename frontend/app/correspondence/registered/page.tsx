@@ -274,7 +274,7 @@ const RegisteredCorrespondencePage = () => {
 
                       return (
                         <TableRow key={item.id} className="hover:bg-muted/50">
-                          <TableCell className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</TableCell>
+                          <TableCell className="font-medium">{(page - 1) * pageSize + index + 1}</TableCell>
                           <TableCell>
                             <Link
                               href={`/correspondence/${item.id}`}

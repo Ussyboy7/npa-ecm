@@ -241,7 +241,7 @@ export default function SettingsPage() {
           email: userData.email || '',
           phone: userData.phone || '',
           bio: userData.bio || '',
-          jobTitle: userData.job_title || currentUser.title || '',
+          jobTitle: userData.job_title || currentUser.systemRole || '',
         });
         if (userData.profile_photo) {
           setProfilePhoto(userData.profile_photo);
@@ -715,7 +715,7 @@ export default function SettingsPage() {
   };
 
   const userInitials = currentUser
-    ? `${currentUser.firstName?.[0] || ''}${currentUser.lastName?.[0] || ''}`.toUpperCase() || 'U'
+    ? currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'
     : 'U';
 
   return (
@@ -811,11 +811,11 @@ export default function SettingsPage() {
                     <p className="text-sm text-muted-foreground">{profile.email}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Briefcase className="h-3 w-3" />
-                      <span>{profile.jobTitle || currentUser?.title || 'No title set'}</span>
+                      <span>{profile.jobTitle || currentUser?.systemRole || 'No title set'}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Building2 className="h-3 w-3" />
-                      <span>{currentUser?.divisionName || currentUser?.departmentName || 'No department'}</span>
+                      <span>{currentUser?.division || currentUser?.department || 'No department'}</span>
                     </div>
                   </div>
                 </div>
@@ -916,7 +916,7 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div>
                       <p className="text-muted-foreground">Job Title</p>
-                      <p className="font-medium">{currentUser?.title || 'Not set'}</p>
+                      <p className="font-medium">{currentUser?.systemRole || 'Not set'}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Grade Level</p>
@@ -924,11 +924,11 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <p className="text-muted-foreground">Division</p>
-                      <p className="font-medium">{currentUser?.divisionName || 'Not assigned'}</p>
+                      <p className="font-medium">{currentUser?.division || 'Not assigned'}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Department</p>
-                      <p className="font-medium">{currentUser?.departmentName || 'Not assigned'}</p>
+                      <p className="font-medium">{currentUser?.department || 'Not assigned'}</p>
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">Contact your administrator to update organization details.</p>

@@ -133,7 +133,8 @@ export const getActivityLogsForObject = async (
   objectType: string,
   objectId: string
 ): Promise<ActivityLog[]> => {
-  return getActivityLogs({ objectType, objectId });
+  const response = await getActivityLogs({ objectType, objectId });
+  return response.results;
 };
 
 /**
@@ -143,6 +144,7 @@ export const getMyActivityLogs = async (params?: {
   action?: string;
   module?: string;
 }): Promise<ActivityLog[]> => {
-  return getActivityLogs(params);
+  const response = await getActivityLogs(params);
+  return response.results;
 };
 

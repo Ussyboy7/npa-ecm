@@ -111,7 +111,7 @@ export default function WorkflowTemplateEditorPage() {
       newErrors.name = "Template name is required";
     }
 
-    if (!formData.slug.trim() && !isNew && !isClone) {
+    if (!formData.slug?.trim() && !isNew && !isClone) {
       newErrors.slug = "Slug is required";
     }
 
@@ -161,7 +161,7 @@ export default function WorkflowTemplateEditorPage() {
     }
   };
 
-  const handleStepsChange = (steps: typeof template.steps) => {
+  const handleStepsChange = (steps: WorkflowTemplate['steps']) => {
     if (template) {
       setTemplate({ ...template, steps });
     }

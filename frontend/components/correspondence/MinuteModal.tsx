@@ -764,7 +764,7 @@ const [newTemplateName, setNewTemplateName] = useState('');
         correspondenceUpdatePayload.current_office = finalOfficeId;
       }
       // Update correspondence - this is critical for routing
-      const updateResponse = await apiFetch(`/correspondence/items/${correspondence.id}/`, {
+      const updateResponse = await apiFetch<any>(`/correspondence/items/${correspondence.id}/`, {
         method: 'PATCH',
         body: JSON.stringify(correspondenceUpdatePayload),
       });

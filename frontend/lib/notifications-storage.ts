@@ -46,6 +46,7 @@ export interface NotificationPreferences {
   priorityLow: boolean;
   priorityNormal: boolean;
   priorityHigh: boolean;
+  soundEnabled?: boolean;
   priorityUrgent: boolean;
   typeWorkflow: boolean;
   typeDocument: boolean;

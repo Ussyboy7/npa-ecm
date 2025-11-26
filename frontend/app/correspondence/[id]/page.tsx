@@ -374,15 +374,15 @@ const CorrespondenceDetail = () => {
       setDetailLoading(true);
       try {
         const [corrResponse, minutesResponse] = await Promise.all([
-          apiFetch(`/correspondence/items/${id}/`),
-          apiFetch(`/correspondence/minutes/?correspondence=${id}`),
+          apiFetch<any>(`/correspondence/items/${id}/`),
+          apiFetch<any>(`/correspondence/minutes/?correspondence=${id}`),
         ]);
         if (!ignore) {
           setRemoteCorrespondence(mapApiCorrespondence(corrResponse));
           // Handle paginated response (DRF may return {count, next, previous, results: [...]})
           const minutesData = Array.isArray(minutesResponse) 
             ? minutesResponse 
-            : minutesResponse.results || [];
+            : (minutesResponse?.results || []);
           setMinutes(minutesData.map(mapApiMinute));
         }
       } catch (error) {
@@ -498,10 +498,10 @@ const CorrespondenceDetail = () => {
   const refreshMinutes = useCallback(async () => {
     if (!id) return;
     try {
-      const minutesResponse = await apiFetch(`/correspondence/minutes/?correspondence=${id}`);
+      const minutesResponse = await apiFetch<any>(`/correspondence/minutes/?correspondence=${id}`);
       const minutesData = Array.isArray(minutesResponse) 
         ? minutesResponse 
-        : minutesResponse.results || [];
+        : (minutesResponse?.results || []);
       setMinutes(minutesData.map(mapApiMinute));
     } catch (error) {
       logWarn('Failed to refresh minutes', error);
@@ -697,6 +697,13 @@ const CorrespondenceDetail = () => {
   const lookupUser = (userId?: string) => {
     if (!userId) return undefined;
     return organizationUsers.find((user) => user.id === userId);
+  };
+
+  // Wrapper for CorrespondenceTreeView that expects specific return type
+  const lookupUserForTree = (userId: string): { name: string; email?: string } | null => {
+    const user = organizationUsers.find((u) => u.id === userId);
+    if (!user) return null;
+    return { name: user.name, email: user.email };
   };
 
   const formatFileSize = (bytes?: number) => {
@@ -2194,7 +2201,7 @@ const CorrespondenceDetail = () => {
                         <CorrespondenceTreeView
                           minutes={minutes}
                           currentUserId={activeUser?.id}
-                          lookupUser={lookupUser}
+                          lookupUser={lookupUserForTree}
                           onMinuteClick={(minute) => {
                             setSelectedMinute(minute);
                             setShowMinuteDetail(true);

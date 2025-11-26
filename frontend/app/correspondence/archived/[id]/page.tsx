@@ -450,15 +450,15 @@ const ArchiveDetailPage = () => {
                                   <div>
                                     <p className="font-medium">{user?.name || minute.userName || 'Unknown User'}</p>
                                     <p className="text-xs text-muted-foreground">
-                                      {minute.createdAt ? formatDateTime(minute.createdAt) : 'N/A'}
+                                      {minute.timestamp ? formatDateTime(minute.timestamp) : 'N/A'}
                                     </p>
                                   </div>
-                                  <Badge variant={minute.action === 'approved' ? 'default' : 'secondary'}>
-                                    {minute.action}
+                                  <Badge variant={minute.actionType === 'approve' ? 'default' : 'secondary'}>
+                                    {minute.actionType}
                                   </Badge>
                                 </div>
-                                {minute.comment && (
-                                  <p className="text-sm text-muted-foreground mt-2">{minute.comment}</p>
+                                {minute.minuteText && (
+                                  <p className="text-sm text-muted-foreground mt-2">{minute.minuteText}</p>
                                 )}
                               </div>
                             </div>
