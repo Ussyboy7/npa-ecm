@@ -1,5 +1,8 @@
 "use client";
 
+// Force dynamic rendering - useSearchParams requires this
+export const dynamic = 'force-dynamic';
+
 import { useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";

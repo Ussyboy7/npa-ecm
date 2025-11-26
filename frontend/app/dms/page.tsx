@@ -1,5 +1,8 @@
 "use client";
 
+// Force dynamic rendering - useSearchParams requires this
+export const dynamic = 'force-dynamic';
+
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
