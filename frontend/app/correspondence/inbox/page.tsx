@@ -150,10 +150,8 @@ const CorrespondenceInbox = () => {
       }
     });
 
-    // Also add from user's direct assignments (if any)
-    if (currentUser?.divisionId) divisionIds.add(currentUser.divisionId);
-    if (currentUser?.departmentId) departmentIds.add(currentUser.departmentId);
-    if (currentUser?.directorateId) directorateIds.add(currentUser.directorateId);
+    // Note: User type has division/department/directorate as names, not IDs
+    // The office memberships above already capture the user's organizational units
 
     return { divisionIds, departmentIds, directorateIds };
   }, [userOfficeMemberships, offices, currentUser]);
