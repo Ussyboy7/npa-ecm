@@ -275,7 +275,7 @@ export const ParallelRouteModal = ({
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Parallel Routing</DialogTitle>
+            <DialogTitle>Access Restricted</DialogTitle>
             <DialogDescription>
               Only executives (MD, ED, GM, AGM) can create parallel routes.
             </DialogDescription>
@@ -296,10 +296,10 @@ export const ParallelRouteModal = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            Parallel Route
+            Send to Multiple Recipients
           </DialogTitle>
           <DialogDescription>
-            Route this correspondence to multiple recipients simultaneously. Each recipient will work on their branch independently.
+            Send to multiple people at the same time. Each recipient works on their branch independently, saving time for concurrent reviews.
           </DialogDescription>
         </DialogHeader>
 
@@ -519,7 +519,7 @@ export const ParallelRouteModal = ({
             ) : (
               <>
                 <Users className="h-4 w-4 mr-2" />
-                Create Parallel Route ({recipients.length})
+                Send to {recipients.length} Recipient{recipients.length !== 1 ? 's' : ''}
               </>
             )}
           </Button>

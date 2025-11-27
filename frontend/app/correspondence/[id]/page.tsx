@@ -73,11 +73,9 @@ import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal
 import { TreatmentModal } from '@/components/correspondence/TreatmentModal';
 import { MinuteDetailModal } from '@/components/correspondence/MinuteDetailModal';
 import { CompletionSummaryModal } from '@/components/correspondence/CompletionSummaryModal';
-import { ManualRouteModal } from '@/components/correspondence/ManualRouteModal';
 import { DelegateModal } from '@/components/correspondence/DelegateModal';
 import { PrintPreviewModal } from '@/components/correspondence/PrintPreviewModal';
 import { DocumentPreviewModal } from '@/components/correspondence/DocumentPreviewModal';
-import { OfficeReassignModal } from '@/components/correspondence/OfficeReassignModal';
 import { downloadAsPDF, downloadAsWord } from '@/lib/document-generator';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import mammoth from 'mammoth';
@@ -223,9 +221,7 @@ const CorrespondenceDetailContent = () => {
   const [showParallelRouteModal, setShowParallelRouteModal] = useState(false);
   const [showTreatmentModal, setShowTreatmentModal] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const [showManualRouteModal, setShowManualRouteModal] = useState(false);
   const [showDelegateModal, setShowDelegateModal] = useState(false);
-  const [showReassignModal, setShowReassignModal] = useState(false);
   const [showRoutingDetails, setShowRoutingDetails] = useState(true);
   const [viewMode, setViewMode] = useState<'chain' | 'tree'>('chain');
   const [selectedMinute, setSelectedMinute] = useState<Minute | null>(null);
@@ -409,7 +405,6 @@ const CorrespondenceDetailContent = () => {
     if (!isCompleted) return;
     setShowMinuteModal(false);
     setShowTreatmentModal(false);
-    setShowManualRouteModal(false);
     setShowDelegateModal(false);
   }, [isCompleted]);
 
@@ -533,12 +528,6 @@ const CorrespondenceDetailContent = () => {
     void refreshMinutes();
   };
 
-  const handleManualRouteClose = () => {
-    setShowManualRouteModal(false);
-    refreshData();
-    void syncFromApi();
-    void refreshMinutes();
-  };
 
   const handleDelegate = async (assistantId: string, assistantType: 'TA' | 'PA', notes: string) => {
     if (!correspondence || !activeUser) return;
@@ -2119,27 +2108,9 @@ const CorrespondenceDetailContent = () => {
                         disabled={turnRestrictedDisabled}
                       >
                         <Users className="h-4 w-4 mr-2" />
-                        Parallel Route
+                        Send to Multiple Recipients
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start"
-                      onClick={() => setShowReassignModal(true)}
-                      disabled={actionsDisabled}
-                    >
-                      <Building2 className="h-4 w-4 mr-2" />
-                      Reassign Office / Approver
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start"
-                      onClick={() => setShowManualRouteModal(true)}
-                      disabled={turnRestrictedDisabled}
-                    >
-                      <Send className="h-4 w-4 mr-2" />
-                      Manual Route
-                    </Button>
                     <Button
                       variant="outline"
                       className="w-full justify-start"
@@ -2478,18 +2449,6 @@ const CorrespondenceDetailContent = () => {
         }}
         correspondence={correspondence}
         minutes={minutes}
-      />
-
-      <OfficeReassignModal
-        correspondence={correspondence}
-        isOpen={showReassignModal}
-        onClose={() => setShowReassignModal(false)}
-      />
-
-      <ManualRouteModal
-        correspondence={correspondence}
-        isOpen={showManualRouteModal}
-        onClose={handleManualRouteClose}
       />
 
       <DocumentPreviewModal
