@@ -581,13 +581,14 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       return false;
     }
 
-    if (!forwardTo) {
-      setForwardToError('Please select who to forward to');
+    // Must select either a person OR an office
+    if (!forwardTo && !targetOfficeId) {
+      setForwardToError('Please select a person or office to forward to');
       return false;
     }
 
     // Prevent routing to users who have already acted on this correspondence
-    if (usersWhoAlreadyActed.has(forwardTo)) {
+    if (forwardTo && usersWhoAlreadyActed.has(forwardTo)) {
       setForwardToError('This user has already acted on this correspondence. Please select a different recipient.');
       return false;
     }
@@ -859,7 +860,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       }, 200);
 
       toast.success('Minute added successfully', {
-        description: `Forwarded to ${forwardUser?.name ?? 'selected user'}${targetOfficeId ? ` • Routed to ${officeOptions.find((office) => office.id === targetOfficeId)?.name ?? 'office'}` : ''}`,
+        description: forwardTo 
+          ? `Forwarded to ${forwardUser?.name ?? 'selected user'}`
+          : `Routed to ${officeOptions.find((office) => office.id === targetOfficeId)?.name ?? 'office'} inbox`,
       });
     } catch (error: any) {
       logError('Failed to record minute', error);
@@ -1207,8 +1210,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               <div className="flex items-center gap-2">
                 <Send className="h-4 w-4 text-muted-foreground" />
                 <Label className="text-sm font-semibold">Route To *</Label>
-                <Badge variant={forwardTo ? 'default' : 'outline'} className="text-xs">
-                  {forwardTo ? '1 recipient' : '0 recipients'}
+                <Badge variant={(forwardTo || targetOfficeId) ? 'default' : 'outline'} className="text-xs">
+                  {forwardTo ? '1 person' : targetOfficeId ? '1 office' : '0 recipients'}
                 </Badge>
               </div>
               {forwardToError && (
@@ -1221,16 +1224,101 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
 
             {/* Selection Form - Grid Layout like Distribution */}
             <div className="space-y-3 p-4 border border-border rounded-lg bg-muted/30">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Person Column */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Route Type Column */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Route Type</Label>
+                  <Select 
+                    value={forwardTo ? 'person' : (targetOfficeId ? 'office' : 'person')} 
+                    onValueChange={(v) => {
+                      if (v === 'office') {
+                        setForwardTo('');
+                        setForwardToError('');
+                      } else {
+                        setTargetOfficeId('');
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="person">
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="h-4 w-4" />
+                          Person
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="office">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          Office
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Person or Office Column */}
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <UserIcon className="h-3 w-3" /> Person
+                    {(!forwardTo && targetOfficeId) ? (
+                      <><Building2 className="h-3 w-3" /> Office</>
+                    ) : (
+                      <><UserIcon className="h-3 w-3" /> Person</>
+                    )}
                   </Label>
-                  <Select value={forwardTo} onValueChange={setForwardTo}>
-                    <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
-                      <SelectValue placeholder="Select person" />
-                    </SelectTrigger>
+                  {(!forwardTo && targetOfficeId) ? (
+                    /* Office Selector */
+                    <Select value={targetOfficeId} onValueChange={(v) => {
+                      setTargetOfficeId(v);
+                      setForwardTo('');
+                      setForwardToError('');
+                    }}>
+                      <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
+                        <SelectValue placeholder="Select office" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              placeholder="Search offices..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="pl-8 h-8"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        </div>
+                        {officeOptions
+                          .filter(office => 
+                            !searchQuery.trim() || 
+                            office.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            office.code?.toLowerCase().includes(searchQuery.toLowerCase())
+                          )
+                          .map(office => (
+                            <SelectItem key={office.id} value={office.id}>
+                              <div className="flex flex-col">
+                                <span>{office.name}</span>
+                                <span className="text-xs text-muted-foreground uppercase">
+                                  {office.officeType}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    /* Person Selector */
+                    <Select value={forwardTo} onValueChange={(v) => {
+                      setForwardTo(v);
+                      setForwardToError('');
+                    }}>
+                      <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
                     <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
                       {/* Search Input */}
                       <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
@@ -1319,6 +1407,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                       )}
                     </SelectContent>
                   </Select>
+                  )}
                 </div>
 
                 {/* Purpose Column */}
@@ -1361,7 +1450,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               </div>
             </div>
 
-            {/* Selected Recipient Card */}
+            {/* Selected Recipient Card - Person */}
             {forwardTo && (() => {
               const recipientUser = findUserById(forwardTo);
               const recipientInfo = getUserOfficeInfo(forwardTo);
@@ -1423,11 +1512,55 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               );
             })()}
 
-            {!forwardTo && (
+            {/* Selected Recipient Card - Office */}
+            {!forwardTo && targetOfficeId && (() => {
+              const selectedOffice = offices.find(o => o.id === targetOfficeId);
+              return (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Selected Office
+                  </Label>
+                  <Card className="border-secondary/30 bg-secondary/5">
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="h-10 w-10 rounded-full bg-secondary/10 flex items-center justify-center">
+                            <Building2 className="h-5 w-5 text-secondary-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{selectedOffice?.name}</p>
+                            <p className="text-xs text-muted-foreground uppercase">
+                              {selectedOffice?.officeType}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Will be routed to office inbox
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            Office
+                          </Badge>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 ml-2 text-muted-foreground hover:text-destructive"
+                          onClick={() => setTargetOfficeId('')}
+                          aria-label="Remove office"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })()}
+
+            {!forwardTo && !targetOfficeId && (
               <Card className="border-dashed">
                 <CardContent className="p-4 text-center">
                   <p className="text-sm text-muted-foreground">
-                    No recipient selected. Choose a person to route this correspondence.
+                    No recipient selected. Choose a person or office to route this correspondence.
                   </p>
                 </CardContent>
               </Card>
@@ -1563,7 +1696,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           )}
 
           {/* Preview */}
-          {minuteText && forwardTo && (
+          {minuteText && (forwardTo || targetOfficeId) && (
             <Card className="bg-muted/30 border-accent/20">
               <CardContent className="p-4">
                 <Label className="text-sm font-semibold mb-2 block">Preview</Label>
@@ -1594,7 +1727,11 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                   </div>
                   <p className="text-muted-foreground">
                     <strong>{currentUser?.name}</strong> will minute and forward to{' '}
-                    <strong>{findUserById(forwardTo)?.name}</strong>
+                    <strong>
+                      {forwardTo 
+                        ? findUserById(forwardTo)?.name 
+                        : offices.find(o => o.id === targetOfficeId)?.name + ' (Office Inbox)'}
+                    </strong>
                   </p>
                   {applySignature && userSignature && selectedTemplate && (
                     <p className="text-xs text-muted-foreground">
@@ -1657,7 +1794,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           type="minute"
           data={{
             currentUserName: currentUser?.name ?? '',
-            recipientName: findUserById(forwardTo)?.name || '',
+            recipientName: forwardTo 
+              ? (findUserById(forwardTo)?.name || '')
+              : (offices.find(o => o.id === targetOfficeId)?.name + ' (Office)' || ''),
             actionType,
             content: minuteText,
             direction: isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection),
