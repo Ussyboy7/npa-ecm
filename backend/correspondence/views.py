@@ -506,12 +506,15 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         """Get correspondence assigned to the current user."""
         user = request.user
         
-        # Base queryset: items assigned to user or in their division
+        # Find parallel routes assigned to this user
+        # Include both 'parallel' and 'waiting_merge' workflow states
+        # Also check that the correspondence is not completed
         from correspondence.models import Minute
         parallel_correspondence_ids = Minute.objects.filter(
             to_user=user,
             is_parallel_branch=True,
-            correspondence__workflow_state='parallel'
+            correspondence__workflow_state__in=['parallel', 'waiting_merge'],
+            correspondence__status__in=['pending', 'in-progress']
         ).values_list('correspondence_id', flat=True).distinct()
         
         queryset = self.base_queryset.filter(is_deleted=False).filter(
