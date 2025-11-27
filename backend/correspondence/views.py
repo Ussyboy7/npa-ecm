@@ -352,6 +352,111 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(correspondence)
         return Response(serializer.data)
 
+    @action(detail=False, methods=["get"], url_path="sidebar-counts")
+    def sidebar_counts(self, request):
+        """
+        Get counts for sidebar badges.
+        Returns counts for office inbox, my inbox, and outbox.
+        Optimized for performance - only returns counts, no data.
+        """
+        user = request.user
+        
+        # Get user's office IDs
+        office_ids = self._get_user_office_ids(user)
+        
+        # === Office Inbox Count ===
+        from correspondence.models import Minute, CorrespondenceDistribution
+        from organization.models import OfficeMembership, Office
+        
+        office_inbox_count = 0
+        if office_ids or user.is_superuser:
+            # Get parallel routing correspondence IDs
+            parallel_correspondence_ids = Minute.objects.filter(
+                to_user=user,
+                is_parallel_branch=True,
+                correspondence__workflow_state='parallel'
+            ).values_list('correspondence_id', flat=True).distinct()
+            
+            # Get user's organizational units from their office memberships
+            user_offices = OfficeMembership.objects.filter(
+                user=user, is_active=True
+            ).select_related('office').values_list('office', flat=True)
+            
+            user_office_objs = Office.objects.filter(id__in=user_offices)
+            user_division_ids = set(user_office_objs.values_list('division_id', flat=True))
+            user_department_ids = set(user_office_objs.values_list('department_id', flat=True))
+            user_directorate_ids = set(user_office_objs.values_list('directorate_id', flat=True))
+            
+            # Also include user's direct division/department from profile
+            if hasattr(user, 'division_id') and user.division_id:
+                user_division_ids.add(user.division_id)
+            if hasattr(user, 'department_id') and user.department_id:
+                user_department_ids.add(user.department_id)
+            if hasattr(user, 'directorate_id') and user.directorate_id:
+                user_directorate_ids.add(user.directorate_id)
+            
+            # Remove None values
+            user_division_ids.discard(None)
+            user_department_ids.discard(None)
+            user_directorate_ids.discard(None)
+            
+            # Get correspondence IDs where user is a distribution recipient
+            distribution_filter = Q()
+            if user_division_ids:
+                distribution_filter |= Q(division_id__in=user_division_ids)
+            if user_department_ids:
+                distribution_filter |= Q(department_id__in=user_department_ids)
+            if user_directorate_ids:
+                distribution_filter |= Q(directorate_id__in=user_directorate_ids)
+            
+            distribution_correspondence_ids = []
+            if distribution_filter:
+                distribution_correspondence_ids = CorrespondenceDistribution.objects.filter(
+                    distribution_filter
+                ).values_list('correspondence_id', flat=True).distinct()
+            
+            if user.is_superuser and not office_ids:
+                office_inbox_queryset = self.base_queryset.filter(
+                    is_deleted=False
+                ).exclude(status=Correspondence.Status.COMPLETED)
+            else:
+                office_inbox_queryset = self.base_queryset.filter(is_deleted=False).filter(
+                    Q(current_office_id__in=office_ids) | 
+                    Q(owning_office_id__in=office_ids) |
+                    Q(id__in=parallel_correspondence_ids) |
+                    Q(id__in=distribution_correspondence_ids)
+                ).exclude(status=Correspondence.Status.COMPLETED)
+            
+            office_inbox_count = office_inbox_queryset.count()
+        
+        # === My Inbox Count ===
+        # Items directly assigned to user + parallel routes
+        my_parallel_ids = Minute.objects.filter(
+            to_user=user,
+            is_parallel_branch=True,
+            correspondence__workflow_state__in=['parallel', 'waiting_merge'],
+            correspondence__status__in=['pending', 'in-progress']
+        ).values_list('correspondence_id', flat=True).distinct()
+        
+        my_inbox_count = self.base_queryset.filter(is_deleted=False).filter(
+            Q(current_approver=user) | 
+            Q(id__in=my_parallel_ids)
+        ).exclude(status=Correspondence.Status.COMPLETED).count()
+        
+        # === Outbox Count ===
+        # Items created by user that are still pending or in-progress
+        outbox_count = self.base_queryset.filter(
+            is_deleted=False,
+            created_by=user,
+            status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
+        ).count()
+        
+        return Response({
+            "officeInbox": office_inbox_count,
+            "myInbox": my_inbox_count,
+            "outbox": outbox_count,
+        })
+
     @action(detail=False, methods=["get"], url_path="office-inbox")
     def office_inbox(self, request):
         user = request.user

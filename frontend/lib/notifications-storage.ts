@@ -30,6 +30,60 @@ export interface Notification {
   updatedAt: string;
 }
 
+// API response uses snake_case, frontend uses camelCase
+interface ApiNotification {
+  id: string;
+  recipient: string;
+  recipient_name: string;
+  sender?: string;
+  sender_name?: string;
+  sender_email?: string;
+  title: string;
+  message: string;
+  notification_type: string;
+  priority: string;
+  status: string;
+  module: string;
+  related_object_type?: string;
+  related_object_id?: string;
+  action_url?: string;
+  action_required: boolean;
+  email_sent: boolean;
+  email_sent_at?: string;
+  read_at?: string;
+  expires_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Map API notification (snake_case) to frontend notification (camelCase)
+ */
+const mapApiNotification = (api: ApiNotification): Notification => ({
+  id: api.id,
+  recipient: api.recipient,
+  recipientName: api.recipient_name,
+  sender: api.sender,
+  senderName: api.sender_name,
+  senderEmail: api.sender_email,
+  title: api.title,
+  message: api.message,
+  notificationType: api.notification_type as Notification['notificationType'],
+  priority: api.priority as Notification['priority'],
+  status: api.status as Notification['status'],
+  module: api.module,
+  relatedObjectType: api.related_object_type,
+  relatedObjectId: api.related_object_id,
+  actionUrl: api.action_url,
+  actionRequired: api.action_required,
+  emailSent: api.email_sent,
+  emailSentAt: api.email_sent_at,
+  readAt: api.read_at,
+  expiresAt: api.expires_at,
+  createdAt: api.created_at,
+  updatedAt: api.updated_at,
+});
+
 export interface NotificationPreferences {
   id: string;
   user: string;
@@ -105,12 +159,15 @@ export const getNotifications = async (params?: {
     console.log('[notifications-storage] Received response:', response, 'Type:', typeof response, 'IsArray:', Array.isArray(response));
     
     // Handle paginated response (DRF returns {count, next, previous, results: [...]})
+    let apiNotifications: ApiNotification[] = [];
     if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
-      return response.results as Notification[];
+      apiNotifications = response.results;
+    } else if (Array.isArray(response)) {
+      apiNotifications = response;
     }
     
-    // Handle direct array response (fallback)
-    return Array.isArray(response) ? response : [];
+    // Map snake_case API response to camelCase frontend model
+    return apiNotifications.map(mapApiNotification);
   } catch (error) {
     console.error('[notifications-storage] Error fetching notifications:', error);
     throw error;

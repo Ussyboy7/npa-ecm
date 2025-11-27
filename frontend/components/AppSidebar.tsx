@@ -47,16 +47,16 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
+import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { Badge } from "@/components/ui/badge";
-import { useCorrespondence } from "@/contexts/CorrespondenceContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 
 export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const { currentUser, hydrated } = useCurrentUser();
-  const { correspondence } = useCorrespondence();
   const { officeMemberships } = useOrganization();
+  const { counts } = useSidebarCounts();
 
   const permissions = useUserPermissions(currentUser ?? undefined);
 
@@ -67,31 +67,10 @@ export function AppSidebar() {
       .map((membership) => membership.officeId);
   }, [currentUser?.id, officeMemberships]);
 
-  const officeInboxCount = useMemo(() => {
-    if (!correspondence.length) return 0;
-    const inboxItems = userOfficeIds.length
-      ? correspondence.filter(
-          (item) =>
-            item.currentOfficeId && userOfficeIds.includes(item.currentOfficeId) && item.status !== 'completed',
-        )
-      : currentUser?.isSuperuser
-        ? correspondence.filter((item) => item.status !== 'completed')
-        : [];
-    return inboxItems.length;
-  }, [correspondence, currentUser?.isSuperuser, userOfficeIds]);
-
-  const myInboxCount = useMemo(() => {
-    if (!currentUser) return 0;
-    return correspondence.filter((item) => item.currentApproverId === currentUser.id).length;
-  }, [correspondence, currentUser?.id]);
-
-  const outboxCount = useMemo(() => {
-    if (!currentUser) return 0;
-    const pendingStatuses = new Set(['pending', 'in-progress']);
-    return correspondence.filter(
-      (item) => item.createdById === currentUser.id && pendingStatuses.has(item.status),
-    ).length;
-  }, [correspondence, currentUser?.id]);
+  // Use API-provided counts for accuracy
+  const officeInboxCount = counts.officeInbox;
+  const myInboxCount = counts.myInbox;
+  const outboxCount = counts.outbox;
 
   const hasCorrespondenceAccess =
     permissions.canViewCorrespondenceRegistry ||
@@ -209,10 +188,10 @@ export function AppSidebar() {
                       <Inbox className="h-4 w-4" />
                       {!isCollapsed && <span>My Inbox</span>}
                     </div>
-                    {!isCollapsed && (
+                    {!isCollapsed && myInboxCount > 0 && (
                       <Badge
-                        variant={myInboxCount > 0 ? 'secondary' : 'secondary'}
-                        className={myInboxCount > 0 ? 'ml-auto' : 'ml-auto opacity-70'}
+                        variant="default"
+                        className="ml-auto"
                       >
                         {myInboxCount}
                       </Badge>
