@@ -9,6 +9,7 @@ export interface Directorate {
   id: string;
   name: string;
   code: string;
+  shortName?: string;
   description?: string;
   executiveDirectorId?: string;
   isActive: boolean;
@@ -18,6 +19,7 @@ export interface Division {
   id: string;
   name: string;
   code: string;
+  shortName?: string;
   directorateId: string;
   generalManagerId?: string | null;
   isActive: boolean;
@@ -27,6 +29,7 @@ export interface Department {
   id: string;
   name: string;
   code: string;
+  shortName?: string;
   divisionId: string;
   assistantGeneralManagerId?: string | null;
   isActive: boolean;
@@ -244,6 +247,7 @@ const mapApiDirectorate = (item: any): Directorate => ({
   id: String(item.id),
   name: item.name ?? 'Directorate',
   code: item.code ?? `DIR-${String(item.id).slice(0, 6).toUpperCase()}`,
+  shortName: item.short_name ?? item.shortName ?? undefined,
   description: item.description ?? '',
   executiveDirectorId: normalizeId(item.executive_director ?? item.executive_director_id),
   isActive: item.is_active ?? true,
@@ -253,6 +257,7 @@ const mapApiDivision = (item: any): Division => ({
   id: String(item.id),
   name: item.name ?? 'Division',
   code: item.code ?? `DIV-${String(item.id).slice(0, 6).toUpperCase()}`,
+  shortName: item.short_name ?? item.shortName ?? undefined,
   directorateId: normalizeId(item.directorate ?? item.directorate_id) ?? '',
   generalManagerId:
     item.general_manager === null || item.general_manager === undefined
@@ -265,6 +270,7 @@ const mapApiDepartment = (item: any): Department => ({
   id: String(item.id),
   name: item.name ?? 'Department',
   code: item.code ?? `DEPT-${String(item.id).slice(0, 6).toUpperCase()}`,
+  shortName: item.short_name ?? item.shortName ?? undefined,
   divisionId: normalizeId(item.division ?? item.division_id) ?? '',
   assistantGeneralManagerId:
     item.head_of_department === null || item.head_of_department === undefined
