@@ -190,12 +190,11 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 # Save file to storage
                 saved_path = default_storage.save(file_path, file)
 
-                # Build full URL for the file
-                # Build URL manually to avoid /api/ prefix from request path
-                request_scheme = getattr(request, 'scheme', 'http')
-                request_host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8000'
-                media_path = f"{settings.MEDIA_URL.rstrip('/')}/{saved_path}".replace('//', '/')
-                file_url = f"{request_scheme}://{request_host}{media_path}"
+                # Build relative URL for the file (browser will resolve to current domain)
+                media_url = settings.MEDIA_URL or '/media/'
+                if not media_url.startswith('/'):
+                    media_url = f'/{media_url}'
+                file_url = f"{media_url.rstrip('/')}/{saved_path}"
                 
                 # Create attachment record
                 CorrespondenceAttachment.objects.create(

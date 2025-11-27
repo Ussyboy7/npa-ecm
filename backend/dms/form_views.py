@@ -144,10 +144,11 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
                 file_path = f"dms_versions/{form_doc.document.id}/{version.file_name}"
                 saved_path = default_storage.save(file_path, ContentFile(pdf_bytes))
                 
-                # Build URL
-                request_scheme = getattr(request, "scheme", "http")
-                request_host = request.get_host() if hasattr(request, "get_host") else "localhost:8000"
-                version.file_url = f"{request_scheme}://{request_host}/media/{saved_path}"
+                # Build relative URL (browser will resolve to current domain)
+                media_url = settings.MEDIA_URL or '/media/'
+                if not media_url.startswith('/'):
+                    media_url = f'/{media_url}'
+                version.file_url = f"{media_url.rstrip('/')}/{saved_path}"
                 version.save()
                 
                 serializer = DocumentVersionSerializer(version, context={"request": request})

@@ -363,21 +363,14 @@ class CompletionPackageService:
 
     @staticmethod
     def _build_media_url(path: str, request=None) -> str:
-        """Build media URL. Returns relative path for storage, full URL if request provided."""
+        """Build media URL. Always returns relative path (browser resolves to current domain)."""
         media_url = settings.MEDIA_URL or "/media/"
+        if not media_url.startswith("/"):
+            media_url = f"/{media_url}"
         if not media_url.endswith("/"):
             media_url = f"{media_url}/"
-        relative_path = f"{media_url}{path}".replace("//", "/")
-        
-        # If request is provided, build absolute URL
-        # Build URL manually to avoid /api/ prefix from request path
-        if request:
-            request_scheme = getattr(request, 'scheme', 'http')
-            request_host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8000'
-            return f"{request_scheme}://{request_host}{relative_path}"
-        
-        # Return relative path (will be converted to full URL by serializer if needed)
-        return relative_path
+        # Always return relative path - avoids hardcoded IPs in Docker environments
+        return f"{media_url}{path}".replace("//", "/")
 
     @classmethod
     def _resolve_stakeholders(cls, correspondence: Correspondence) -> List[User]:
