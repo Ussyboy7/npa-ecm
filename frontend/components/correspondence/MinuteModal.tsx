@@ -103,6 +103,8 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');
   const [personSearchQuery, setPersonSearchQuery] = useState('');
   const [officeSearchQuery, setOfficeSearchQuery] = useState('');
+  const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
+  const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userSignature, setUserSignature] = useState<StoredSignature | null>(null);
   const [applySignature, setApplySignature] = useState(false);
@@ -119,7 +121,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   };
   const [userSignaturePreferences, setUserSignaturePreferences] = useState<UserSignaturePreferences>(defaultUserSignaturePreferences);
   const { currentUser: activeUser } = useCurrentUser();
-  const { assistantAssignments, users: organizationUsers, offices, officeMemberships } = useOrganization();
+  const { assistantAssignments, users: organizationUsers, offices, officeMemberships, directorates, divisions } = useOrganization();
 
   const allDirectoryUsers = organizationUsers;
   const activeDirectoryUsers = useMemo(
@@ -180,6 +182,36 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     () => activeOffices.slice().sort((a, b) => a.name.localeCompare(b.name)),
     [activeOffices],
   );
+
+  // Filtered divisions for office filter (based on selected directorate)
+  const filteredOfficeDivisions = useMemo(() => {
+    if (officeFilterDirectorate === 'all') return divisions;
+    return divisions.filter(d => d.directorateId === officeFilterDirectorate);
+  }, [divisions, officeFilterDirectorate]);
+
+  // Filtered offices based on directorate, division, and search
+  const filteredOfficeOptions = useMemo(() => {
+    let result = [...officeOptions];
+
+    if (officeFilterDirectorate !== 'all') {
+      result = result.filter(o => o.directorateId === officeFilterDirectorate);
+    }
+
+    if (officeFilterDivision !== 'all') {
+      result = result.filter(o => o.divisionId === officeFilterDivision);
+    }
+
+    if (officeSearchQuery.trim()) {
+      const query = officeSearchQuery.toLowerCase();
+      result = result.filter(o =>
+        o.name.toLowerCase().includes(query) ||
+        o.code?.toLowerCase().includes(query) ||
+        o.officeType?.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [officeOptions, officeFilterDirectorate, officeFilterDivision, officeSearchQuery]);
   const primaryOfficeMembership = useMemo(
     () =>
       currentUser
@@ -292,6 +324,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         setSelectedDirection(initialDirection);
         setPersonSearchQuery('');
         setOfficeSearchQuery('');
+        setOfficeFilterDirectorate('all');
+        setOfficeFilterDivision('all');
         setActionType('minute');
         setApplySignature(false);
         setNewTemplateName('');
@@ -864,6 +898,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           setDraftId(null);
           setPersonSearchQuery('');
           setOfficeSearchQuery('');
+          setOfficeFilterDirectorate('all');
+          setOfficeFilterDivision('all');
         }, 100);
       }, 200);
 
@@ -1247,6 +1283,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                       } else {
                         setTargetOfficeId('');
                         setOfficeSearchQuery('');
+                        setOfficeFilterDirectorate('all');
+                        setOfficeFilterDivision('all');
                       }
                     }}
                   >
@@ -1289,8 +1327,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                       <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
                         <SelectValue placeholder="Select office" />
                       </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
+                      <SelectContent className="max-h-[400px] w-[350px]">
+                        {/* Search & Filters */}
+                        <div className="p-2 border-b border-border sticky top-0 bg-popover z-10 space-y-2">
                           <div className="relative">
                             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
@@ -1302,14 +1341,43 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                               onKeyDown={(e) => e.stopPropagation()}
                             />
                           </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              value={officeFilterDirectorate}
+                              onChange={(e) => {
+                                setOfficeFilterDirectorate(e.target.value);
+                                setOfficeFilterDivision('all');
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-7 text-xs rounded border border-input bg-background px-2"
+                            >
+                              <option value="all">All Directorates</option>
+                              {directorates.map(d => (
+                                <option key={d.id} value={d.id}>{d.shortName || d.name}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={officeFilterDivision}
+                              onChange={(e) => setOfficeFilterDivision(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-7 text-xs rounded border border-input bg-background px-2"
+                            >
+                              <option value="all">All Divisions</option>
+                              {filteredOfficeDivisions.map(d => (
+                                <option key={d.id} value={d.id}>{d.shortName || d.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="text-xs text-muted-foreground text-center">
+                            {filteredOfficeOptions.length} of {officeOptions.length} offices
+                          </div>
                         </div>
-                        {officeOptions
-                          .filter(office => 
-                            !officeSearchQuery.trim() || 
-                            office.name.toLowerCase().includes(officeSearchQuery.toLowerCase()) ||
-                            office.code?.toLowerCase().includes(officeSearchQuery.toLowerCase())
-                          )
-                          .map(office => (
+                        {filteredOfficeOptions.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            No offices found
+                          </div>
+                        ) : (
+                          filteredOfficeOptions.map(office => (
                             <SelectItem key={office.id} value={office.id}>
                               <div className="flex flex-col">
                                 <span>{office.name}</span>
@@ -1318,7 +1386,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                                 </span>
                               </div>
                             </SelectItem>
-                          ))}
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   ) : (
