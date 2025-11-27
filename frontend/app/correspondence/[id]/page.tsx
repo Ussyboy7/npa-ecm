@@ -1683,14 +1683,13 @@ const CorrespondenceDetailContent = () => {
             </div>
             <ScrollArea className="h-full">
               <div className="p-4 space-y-4 max-w-3xl mx-auto">
-                {/* Parallel Routing Groups Status */}
+                {/* Parallel Routing Status - Compact banner */}
                 {visibleParallelGroups.length > 0 && (
-                  <div className="space-y-3 mb-4">
+                  <div className="space-y-2 mb-3">
                     {visibleParallelGroups.map((group, index) => {
                       const groupBranches = minutes.filter(
                         (m) => m.parallelGroupId === group.id && m.isParallelBranch
                       );
-                      console.log(`[ParallelRouting] Rendering visible group ${index}:`, group.id, 'with', groupBranches.length, 'branches');
                       return (
                         <ParallelBranchStatus
                           key={`parallel-group-${String(group.id)}-${index}`}
