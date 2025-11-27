@@ -27,6 +27,11 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { toast } from 'sonner';
 import {
   MessageSquare,
@@ -42,6 +47,9 @@ import {
   Search,
   Building2,
   Loader2,
+  X,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { 
   getDivisionById,
@@ -52,8 +60,6 @@ import {
   type DistributionRecipient,
   type User,
 } from '@/lib/npa-structure';
-import { UserSelector } from '@/components/shared/UserSelector';
-import { OfficeSelector } from '@/components/shared/OfficeSelector';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
@@ -104,6 +110,7 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
 const [minuteTemplates, setMinuteTemplates] = useState<DocumentTemplate[]>([]);
 const [selectedMinuteTemplateId, setSelectedMinuteTemplateId] = useState<string | null>(null);
 const [newTemplateName, setNewTemplateName] = useState('');
+const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   const defaultUserSignaturePreferences: UserSignaturePreferences = {
     templateOverrides: {},
     autoApplyForMinutes: false,
@@ -152,6 +159,19 @@ const [newTemplateName, setNewTemplateName] = useState('');
     (id: string) => activeDirectoryUsers.find((user) => user.id === id),
     [activeDirectoryUsers],
   );
+
+  // Get user's primary office and division info
+  const getUserOfficeInfo = useCallback((userId: string) => {
+    const membership = officeMemberships.find(
+      (m) => m.userId === userId && m.isPrimary && m.isActive
+    );
+    if (!membership) return null;
+    const office = offices.find(o => o.id === membership.officeId);
+    const user = findUserById(userId);
+    const division = user?.division ? getDivisionById(user.division) : null;
+    const directorate = division?.directorateId ? getDirectorateById(division.directorateId) : null;
+    return { office, division, directorate };
+  }, [officeMemberships, offices, findUserById]);
 
   const activeOffices = useMemo(() => offices.filter((office) => office.isActive), [offices]);
   const officeOptions = useMemo(
@@ -989,293 +1009,323 @@ const [newTemplateName, setNewTemplateName] = useState('');
             </>
           )}
 
-          {/* Your Minute */}
-          <div className="space-y-2">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-wrap items-center gap-2">
-                <Label className="text-sm font-medium text-muted-foreground">Minute templates</Label>
-                <Select
-                  value={selectedMinuteTemplateId ?? 'none'}
-                  onValueChange={(value) => setSelectedMinuteTemplateId(value === 'none' ? null : value)}
-                >
-                  <SelectTrigger className="w-[220px]">
-                    <SelectValue placeholder="Choose a template" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No template</SelectItem>
-                    {filteredMinuteTemplates.length > 0 ? (
-                      filteredMinuteTemplates.map(template => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.title}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="__empty" disabled>
-                        No templates available
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleApplyMinuteTemplate}
-                  disabled={!selectedMinuteTemplate}
-                >
-                  Insert
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDeleteSelectedMinuteTemplate}
-                  disabled={!canDeleteSelectedTemplate}
-                  className="text-destructive hover:text-destructive/80"
-                >
-                  Remove
-                </Button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  value={newTemplateName}
-                  onChange={(e) => setNewTemplateName(e.target.value)}
-                  placeholder="Name for new template"
-                  className="w-full md:w-[240px]"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleSaveMinuteTemplate}
-                  disabled={!minuteText.trim()}
-                >
-                  Save Template
-                </Button>
-              </div>
-            </div>
-            {selectedMinuteTemplate && (
-              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground space-y-1 bg-muted/30">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-foreground text-sm">{selectedMinuteTemplate.title}</span>
-                  <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                    {selectedMinuteTemplate.scope === 'user'
-                      ? 'Personal'
-                      : selectedMinuteTemplate.scope === 'department'
-                      ? 'Department'
-                      : selectedMinuteTemplate.scope === 'division'
-                      ? 'Division'
-                      : selectedMinuteTemplate.scope === 'directorate'
-                      ? 'Directorate'
-                      : 'Organization'}
-                  </Badge>
+          {/* Direction & Action Type Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Direction Selection */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                {isMD ? <ArrowDown className="h-4 w-4 text-info" /> : <ArrowUp className="h-4 w-4 text-success" />}
+                Direction {!isMD && '*'}
+              </Label>
+              {canChooseDirection ? (
+                <RadioGroup value={selectedDirection} onValueChange={(v: any) => {
+                  setSelectedDirection(v);
+                  setForwardTo(''); // Reset forward to when direction changes
+                }}>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="upward" id="direction-upward" />
+                    <Label htmlFor="direction-upward" className="font-normal cursor-pointer flex items-center gap-2">
+                      <ArrowUp className="h-4 w-4 text-success" />
+                      Upward
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="downward" id="direction-downward" />
+                    <Label htmlFor="direction-downward" className="font-normal cursor-pointer flex items-center gap-2">
+                      <ArrowDown className="h-4 w-4 text-info" />
+                      Downward
+                    </Label>
+                  </div>
+                </RadioGroup>
+              ) : (
+                <div className="p-3 bg-muted/50 border border-border rounded-lg flex items-center gap-2">
+                  <ArrowDown className="h-4 w-4 text-info" />
+                  <span className="text-sm">Downward only</span>
                 </div>
-                {selectedMinuteTemplate.description && (
-                  <p className="text-[11px]">{selectedMinuteTemplate.description}</p>
-                )}
-                <p className="text-foreground text-[11px] leading-relaxed">
-                  {getTemplatePlainText(selectedMinuteTemplate)}
-                </p>
-              </div>
-            )}
-            <Label htmlFor="minute">Your Minute *</Label>
+              )}
+            </div>
+
+            {/* Action Type */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                Action Type
+              </Label>
+              <RadioGroup value={actionType} onValueChange={(v: any) => setActionType(v)}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="minute" id="minute-only" />
+                  <Label htmlFor="minute-only" className="font-normal cursor-pointer">
+                    Minute only
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="approve" id="approve-forward" />
+                  <Label htmlFor="approve-forward" className="font-normal cursor-pointer flex items-center gap-1">
+                    Approve & Forward
+                    {actionType === 'approve' && !userSignature && (
+                      <AlertCircle className="h-3 w-3 text-destructive" />
+                    )}
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+          </div>
+
+          {/* Your Minute */}
+          <div className="space-y-3">
+            <Label htmlFor="minute" className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              Your Minute *
+            </Label>
+
+            {/* Collapsible Template Section */}
+            <Collapsible open={templateSectionOpen} onOpenChange={setTemplateSectionOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between">
+                  <span className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Minute Templates
+                    {filteredMinuteTemplates.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {filteredMinuteTemplates.length}
+                      </Badge>
+                    )}
+                  </span>
+                  {templateSectionOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-3 space-y-3">
+                <div className="p-3 border border-border rounded-lg bg-muted/30 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select
+                      value={selectedMinuteTemplateId ?? 'none'}
+                      onValueChange={(value) => setSelectedMinuteTemplateId(value === 'none' ? null : value)}
+                    >
+                      <SelectTrigger className="w-[200px] h-8">
+                        <SelectValue placeholder="Choose a template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No template</SelectItem>
+                        {filteredMinuteTemplates.map(template => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleApplyMinuteTemplate}
+                      disabled={!selectedMinuteTemplate}
+                    >
+                      Insert
+                    </Button>
+                    {canDeleteSelectedTemplate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleDeleteSelectedMinuteTemplate}
+                        className="text-destructive hover:text-destructive/80"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {selectedMinuteTemplate && (
+                    <div className="rounded-md border border-dashed p-2 text-xs bg-background">
+                      <p className="font-medium text-foreground mb-1">{selectedMinuteTemplate.title}</p>
+                      <p className="text-muted-foreground line-clamp-2">
+                        {getTemplatePlainText(selectedMinuteTemplate)}
+                      </p>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      value={newTemplateName}
+                      onChange={(e) => setNewTemplateName(e.target.value)}
+                      placeholder="Save current as template..."
+                      className="flex-1 min-w-[150px] h-8"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSaveMinuteTemplate}
+                      disabled={!minuteText.trim()}
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
             <Textarea
               id="minute"
               placeholder="Enter your comments, instructions, or recommendations..."
               value={minuteText}
               onChange={(e) => handleTextChange(e.target.value)}
-              className="min-h-[120px] resize-none"
+              className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''}`}
               maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
               aria-label="Minute text"
               aria-required="true"
               aria-invalid={!!minuteTextError}
-              aria-describedby="minute-text-help"
+              aria-describedby="minute-text-help minute-text-error"
             />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Use @ to mention others</span>
-              <span className={characterCount > MODAL_CONSTANTS.MINUTE_TEXT.MAX ? 'text-destructive' : ''}>
-                {characterCount} / {MODAL_CONSTANTS.MINUTE_TEXT.MAX} characters
+            <div className="flex justify-between text-xs">
+              {minuteTextError ? (
+                <span className="text-destructive flex items-center gap-1" id="minute-text-error" role="alert">
+                  <AlertCircle className="h-3 w-3" />
+                  {minuteTextError}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Use @ to mention others</span>
+              )}
+              <span className={
+                characterCount > MODAL_CONSTANTS.MINUTE_TEXT.MAX 
+                  ? 'text-destructive' 
+                  : characterCount > MODAL_CONSTANTS.MINUTE_TEXT.MAX * 0.9 
+                    ? 'text-warning' 
+                    : 'text-muted-foreground'
+              }>
+                {characterCount} / {MODAL_CONSTANTS.MINUTE_TEXT.MAX}
               </span>
             </div>
           </div>
 
-          {/* Direction Selection (for users below MD only) */}
-          {canChooseDirection && (
-            <div className="space-y-2">
-              <Label>Direction *</Label>
-              <RadioGroup value={selectedDirection} onValueChange={(v: any) => {
-                setSelectedDirection(v);
-                setForwardTo(''); // Reset forward to when direction changes
-              }}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="upward" id="direction-upward" />
-                  <Label htmlFor="direction-upward" className="font-normal cursor-pointer flex items-center gap-2">
-                    <ArrowUp className="h-4 w-4 text-success" />
-                    Upward (Send to higher level)
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="downward" id="direction-downward" />
-                  <Label htmlFor="direction-downward" className="font-normal cursor-pointer flex items-center gap-2">
-                    <ArrowDown className="h-4 w-4 text-info" />
-                    Downward (Send to lower level)
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
-          )}
-          
-          {/* MD Direction Info (read-only) */}
-          {isMD && (
-            <div className="space-y-2">
-              <Label>Direction</Label>
-              <div className="p-3 bg-muted/50 border border-border rounded-lg flex items-center gap-2">
-                <ArrowDown className="h-4 w-4 text-info" />
-                <span className="text-sm font-medium">Downward (MD can only send to lower levels)</span>
-              </div>
-            </div>
-          )}
-
           {/* Route To - Distribution Style */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Send className="h-4 w-4 text-muted-foreground" />
-              <Label className="text-sm font-semibold">Route To</Label>
-              <Badge variant="outline" className="text-xs">
-                {forwardTo ? '1 recipient' : '0 recipients'}
-              </Badge>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Send className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-semibold">Route To *</Label>
+                <Badge variant={forwardTo ? 'default' : 'outline'} className="text-xs">
+                  {forwardTo ? '1 recipient' : '0 recipients'}
+                </Badge>
+              </div>
+              {forwardToError && (
+                <span className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {forwardToError}
+                </span>
+              )}
             </div>
 
             {/* Selection Form - Grid Layout like Distribution */}
             <div className="space-y-3 p-4 border border-border rounded-lg bg-muted/30">
-              <div className="grid grid-cols-3 gap-3">
-                {/* Type Column */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Person Column */}
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Type</Label>
-                  <Select 
-                    value={forwardTo ? 'person' : (targetOfficeId ? 'office' : 'person')} 
-                    onValueChange={(v) => {
-                      if (v === 'office') {
-                        setForwardTo('');
-                      } else {
-                        setTargetOfficeId('');
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <UserIcon className="h-3 w-3" /> Person
+                  </Label>
+                  <Select value={forwardTo} onValueChange={setForwardTo}>
+                    <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
+                      <SelectValue placeholder="Select person" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="person">
-                        <div className="flex items-center gap-2">
-                          <UserIcon className="h-4 w-4" />
-                          Person
+                    <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
+                      {/* Search Input */}
+                      <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            placeholder="Search by name, role..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-8 h-8"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          />
                         </div>
-                      </SelectItem>
-                      <SelectItem value="office">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4" />
-                          Office
+                      </div>
+                      
+                      {assistantList.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-primary">
+                            Assistants ({assistantList.length})
+                          </div>
+                          {assistantList.map((user) => {
+                            const userInfo = getUserOfficeInfo(user.id);
+                            return (
+                              <SelectItem key={user.id} value={user.id}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{user.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {user.systemRole}
+                                    {userInfo?.office && ` • ${userInfo.office.name}`}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                          <Separator className="my-1" />
+                        </>
+                      )}
+
+                      {filteredNext && !searchQuery.trim() && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-success">
+                            Suggested Next
+                          </div>
+                          <SelectItem value={filteredNext.id}>
+                            <div className="flex items-center gap-2">
+                              <CheckCircle className="h-3 w-3 text-success shrink-0" />
+                              <div className="flex flex-col">
+                                <span className="font-medium">{filteredNext.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {filteredNext.systemRole} • {filteredNext.gradeLevel}
+                                </span>
+                              </div>
+                            </div>
+                          </SelectItem>
+                          <Separator className="my-1" />
+                        </>
+                      )}
+
+                      {approverList.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                            All Recipients ({approverList.length})
+                          </div>
+                          {approverList.slice(0, 30).map(user => {
+                            const userInfo = getUserOfficeInfo(user.id);
+                            return (
+                              <SelectItem key={user.id} value={user.id}>
+                                <div className="flex flex-col">
+                                  <span>{user.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {user.systemRole}
+                                    {userInfo?.division && ` • ${userInfo.division.name}`}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </>
+                      )}
+
+                      {approverList.length === 0 && !assistantList.length && !filteredNext && (
+                        <div className="p-4 text-center text-sm text-muted-foreground">
+                          No recipients available
                         </div>
-                      </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Person/Office Column */}
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    {(forwardTo || !targetOfficeId) ? 'Person' : 'Office'}
-                  </Label>
-                  {(forwardTo || !targetOfficeId) ? (
-                    <Select value={forwardTo} onValueChange={setForwardTo}>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Select person" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
-                        {/* Search Input */}
-                        <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
-                          <div className="relative">
-                            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              placeholder="Search..."
-                              value={searchQuery}
-                              onChange={(e) => setSearchQuery(e.target.value)}
-                              className="pl-8 h-8"
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                        </div>
-                        
-                        {assistantList.length > 0 && (
-                          <>
-                            <div className="px-2 py-1.5 text-xs font-semibold text-primary">
-                              Assistants ({assistantList.length})
-                            </div>
-                            {assistantList.map((user) => {
-                              const assignment = assistantAssignmentsById.get(user.id);
-                              return (
-                                <SelectItem key={user.id} value={user.id}>
-                                  <span>{user.name}</span>
-                                </SelectItem>
-                              );
-                            })}
-                            <Separator className="my-1" />
-                          </>
-                        )}
-
-                        {filteredNext && !searchQuery.trim() && (
-                          <>
-                            <div className="px-2 py-1.5 text-xs font-semibold text-success">
-                              Suggested
-                            </div>
-                            <SelectItem value={filteredNext.id}>
-                              <div className="flex items-center gap-2">
-                                <CheckCircle className="h-3 w-3 text-success" />
-                                <span>{filteredNext.name}</span>
-                              </div>
-                            </SelectItem>
-                            <Separator className="my-1" />
-                          </>
-                        )}
-
-                        {approverList.length > 0 && (
-                          <>
-                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                              All Recipients ({approverList.length})
-                            </div>
-                            {approverList.slice(0, 30).map(user => (
-                              <SelectItem key={user.id} value={user.id}>
-                                {user.name}
-                              </SelectItem>
-                            ))}
-                          </>
-                        )}
-
-                        {approverList.length === 0 && !assistantList.length && !filteredNext && (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            No recipients available
-                          </div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Select value={targetOfficeId} onValueChange={setTargetOfficeId}>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Select office" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        {officeOptions.map(office => (
-                          <SelectItem key={office.id} value={office.id}>
-                            {office.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
                 {/* Purpose Column */}
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Purpose</Label>
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <FileText className="h-3 w-3" /> Purpose
+                  </Label>
                   <Select value={purpose} onValueChange={(v: any) => setPurpose(v)}>
                     <SelectTrigger className="h-9">
                       <SelectValue />
@@ -1283,25 +1333,25 @@ const [newTemplateName, setNewTemplateName] = useState('');
                     <SelectContent>
                       <SelectItem value="action">
                         <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4" />
+                          <CheckCircle className="h-4 w-4 text-warning" />
                           For Action
                         </div>
                       </SelectItem>
                       <SelectItem value="information">
                         <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4" />
+                          <FileText className="h-4 w-4 text-info" />
                           For Information
                         </div>
                       </SelectItem>
                       <SelectItem value="comment">
                         <div className="flex items-center gap-2">
-                          <MessageSquare className="h-4 w-4" />
+                          <MessageSquare className="h-4 w-4 text-success" />
                           For Comment
                         </div>
                       </SelectItem>
                       <SelectItem value="approval">
                         <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4" />
+                          <CheckCircle className="h-4 w-4 text-primary" />
                           For Approval
                         </div>
                       </SelectItem>
@@ -1312,82 +1362,76 @@ const [newTemplateName, setNewTemplateName] = useState('');
             </div>
 
             {/* Selected Recipient Card */}
-            {forwardTo && (
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">
-                  Selected Recipient
-                </Label>
-                <Card className="border-border">
-                  <CardContent className="p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 flex-1">
-                        <UserIcon className="h-4 w-4 text-primary" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium">{findUserById(forwardTo)?.name}</p>
-                          <p className="text-xs text-muted-foreground capitalize">
-                            {findUserById(forwardTo)?.systemRole} • {findUserById(forwardTo)?.gradeLevel}
-                          </p>
+            {forwardTo && (() => {
+              const recipientUser = findUserById(forwardTo);
+              const recipientInfo = getUserOfficeInfo(forwardTo);
+              return (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Selected Recipient
+                  </Label>
+                  <Card className="border-primary/30 bg-primary/5">
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <UserIcon className="h-5 w-5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{recipientUser?.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {recipientUser?.systemRole} • {recipientUser?.gradeLevel}
+                            </p>
+                            {recipientInfo && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {recipientInfo.office?.name}
+                                {recipientInfo.division && ` • ${recipientInfo.division.name}`}
+                              </p>
+                            )}
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs gap-1 shrink-0 ${
+                              purpose === 'information' ? 'bg-info/10 text-info border-info/20' :
+                              purpose === 'action' ? 'bg-warning/10 text-warning border-warning/20' :
+                              purpose === 'comment' ? 'bg-success/10 text-success border-success/20' :
+                              'bg-primary/10 text-primary border-primary/20'
+                            }`}
+                          >
+                            {purpose === 'information' ? <FileText className="h-3 w-3" /> :
+                             purpose === 'action' ? <CheckCircle className="h-3 w-3" /> :
+                             purpose === 'comment' ? <MessageSquare className="h-3 w-3" /> :
+                             <CheckCircle className="h-3 w-3" />}
+                            {purpose === 'information' ? 'Info' : 
+                             purpose === 'action' ? 'Action' : 
+                             purpose === 'comment' ? 'Comment' : 'Approval'}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant="outline"
-                          className={`text-xs gap-1 ${
-                            purpose === 'information' ? 'bg-info/10 text-info border-info/20' :
-                            purpose === 'action' ? 'bg-warning/10 text-warning border-warning/20' :
-                            purpose === 'comment' ? 'bg-success/10 text-success border-success/20' :
-                            'bg-primary/10 text-primary border-primary/20'
-                          }`}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 ml-2 text-muted-foreground hover:text-destructive"
+                          onClick={() => setForwardTo('')}
+                          aria-label="Remove recipient"
                         >
-                          {purpose === 'information' ? <FileText className="h-3 w-3" /> :
-                           purpose === 'action' ? <CheckCircle className="h-3 w-3" /> :
-                           purpose === 'comment' ? <MessageSquare className="h-3 w-3" /> :
-                           <CheckCircle className="h-3 w-3" />}
-                          {purpose === 'information' ? 'Info' : 
-                           purpose === 'action' ? 'Action' : 
-                           purpose === 'comment' ? 'Comment' : 'Approval'}
-                        </Badge>
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 ml-2"
-                        onClick={() => setForwardTo('')}
-                      >
-                        <AlertCircle className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
+                    </CardContent>
+                  </Card>
+                </div>
+              );
+            })()}
 
             {!forwardTo && (
               <Card className="border-dashed">
                 <CardContent className="p-4 text-center">
                   <p className="text-sm text-muted-foreground">
-                    No recipient selected. Choose a person or office to route this correspondence.
+                    No recipient selected. Choose a person to route this correspondence.
                   </p>
                 </CardContent>
               </Card>
             )}
-          </div>
-
-          {/* Action Type */}
-          <div className="space-y-2">
-            <Label>Action Type</Label>
-            <RadioGroup value={actionType} onValueChange={(v: any) => setActionType(v)}>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="minute" id="minute-only" />
-                <Label htmlFor="minute-only" className="font-normal cursor-pointer">
-                  Minute (comment only)
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="approve" id="approve-forward" />
-                <Label htmlFor="approve-forward" className="font-normal cursor-pointer">
-                  Approve & Forward
-                </Label>
-              </div>
-            </RadioGroup>
           </div>
 
           {/* Digital Signature */}
