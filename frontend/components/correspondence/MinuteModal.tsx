@@ -100,7 +100,9 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
   const [distribution, setDistribution] = useState<DistributionRecipient[]>([]);
   const [targetOfficeId, setTargetOfficeId] = useState<string>('');
   const [selectedDirection, setSelectedDirection] = useState<'upward' | 'downward'>(initialDirection);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [routeType, setRouteType] = useState<'person' | 'office'>('person');
+  const [personSearchQuery, setPersonSearchQuery] = useState('');
+  const [officeSearchQuery, setOfficeSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userSignature, setUserSignature] = useState<StoredSignature | null>(null);
   const [applySignature, setApplySignature] = useState(false);
@@ -285,8 +287,11 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         setMinuteText('');
         setCharacterCount(0);
         setForwardTo('');
+        setTargetOfficeId('');
+        setRouteType('person');
         setSelectedDirection(initialDirection);
-        setSearchQuery('');
+        setPersonSearchQuery('');
+        setOfficeSearchQuery('');
         setActionType('minute');
         setApplySignature(false);
         setNewTemplateName('');
@@ -469,19 +474,19 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   );
 
   const filteredAssistants = useMemo(
-    () => filterUsersBySearch(assistantCandidates, searchQuery, { includeDivision: true, includeDepartment: true, includeEmail: true }),
-    [assistantCandidates, searchQuery]
+    () => filterUsersBySearch(assistantCandidates, personSearchQuery, { includeDivision: true, includeDepartment: true, includeEmail: true }),
+    [assistantCandidates, personSearchQuery]
   );
   const filteredApprovers = useMemo(
-    () => filterUsersBySearch(baseApproversWithoutAssistants, searchQuery, { includeDivision: true, includeDepartment: true, includeEmail: true }),
-    [baseApproversWithoutAssistants, searchQuery]
+    () => filterUsersBySearch(baseApproversWithoutAssistants, personSearchQuery, { includeDivision: true, includeDepartment: true, includeEmail: true }),
+    [baseApproversWithoutAssistants, personSearchQuery]
   );
   const filteredNext = filteredApprovers[0] ?? filteredAssistants[0] ?? null;
   const nextIsAssistant = filteredNext ? assistantAssignmentsById.has(filteredNext.id) : false;
-  const approverList = !searchQuery.trim() && filteredNext && !nextIsAssistant && filteredApprovers.length > 0 && filteredApprovers[0].id === filteredNext.id
+  const approverList = !personSearchQuery.trim() && filteredNext && !nextIsAssistant && filteredApprovers.length > 0 && filteredApprovers[0].id === filteredNext.id
     ? filteredApprovers.slice(1)
     : filteredApprovers;
-  const assistantList = !searchQuery.trim() && filteredNext && nextIsAssistant
+  const assistantList = !personSearchQuery.trim() && filteredNext && nextIsAssistant
     ? filteredAssistants.filter((user, index) => !(index === 0 && user.id === filteredNext.id))
     : filteredAssistants;
 
@@ -851,11 +856,14 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           setMinuteTextError('');
           setForwardTo('');
           setForwardToError('');
+          setTargetOfficeId('');
+          setRouteType('person');
           setActionType('minute');
           setDistribution([]);
           setHasDraft(false);
           setDraftId(null);
-          setSearchQuery('');
+          setPersonSearchQuery('');
+          setOfficeSearchQuery('');
         }, 100);
       }, 200);
 
@@ -1229,13 +1237,16 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Route Type</Label>
                   <Select 
-                    value={forwardTo ? 'person' : (targetOfficeId ? 'office' : 'person')} 
-                    onValueChange={(v) => {
+                    value={routeType} 
+                    onValueChange={(v: 'person' | 'office') => {
+                      setRouteType(v);
                       if (v === 'office') {
                         setForwardTo('');
                         setForwardToError('');
+                        setPersonSearchQuery('');
                       } else {
                         setTargetOfficeId('');
+                        setOfficeSearchQuery('');
                       }
                     }}
                   >
@@ -1262,13 +1273,13 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 {/* Person or Office Column */}
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    {(!forwardTo && targetOfficeId) ? (
+                    {routeType === 'office' ? (
                       <><Building2 className="h-3 w-3" /> Office</>
                     ) : (
                       <><UserIcon className="h-3 w-3" /> Person</>
                     )}
                   </Label>
-                  {(!forwardTo && targetOfficeId) ? (
+                  {routeType === 'office' ? (
                     /* Office Selector */
                     <Select value={targetOfficeId} onValueChange={(v) => {
                       setTargetOfficeId(v);
@@ -1284,8 +1295,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
                               placeholder="Search offices..."
-                              value={searchQuery}
-                              onChange={(e) => setSearchQuery(e.target.value)}
+                              value={officeSearchQuery}
+                              onChange={(e) => setOfficeSearchQuery(e.target.value)}
                               className="pl-8 h-8"
                               onClick={(e) => e.stopPropagation()}
                               onKeyDown={(e) => e.stopPropagation()}
@@ -1294,9 +1305,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                         </div>
                         {officeOptions
                           .filter(office => 
-                            !searchQuery.trim() || 
-                            office.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            office.code?.toLowerCase().includes(searchQuery.toLowerCase())
+                            !officeSearchQuery.trim() || 
+                            office.name.toLowerCase().includes(officeSearchQuery.toLowerCase()) ||
+                            office.code?.toLowerCase().includes(officeSearchQuery.toLowerCase())
                           )
                           .map(office => (
                             <SelectItem key={office.id} value={office.id}>
@@ -1319,21 +1330,21 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                       <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
                         <SelectValue placeholder="Select person" />
                       </SelectTrigger>
-                    <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
-                      {/* Search Input */}
-                      <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
-                        <div className="relative">
-                          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            placeholder="Search by name, role..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-8 h-8"
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                          />
+                      <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
+                        {/* Search Input */}
+                        <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              placeholder="Search by name, role..."
+                              value={personSearchQuery}
+                              onChange={(e) => setPersonSearchQuery(e.target.value)}
+                              className="pl-8 h-8"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            />
+                          </div>
                         </div>
-                      </div>
                       
                       {assistantList.length > 0 && (
                         <>
@@ -1358,7 +1369,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                         </>
                       )}
 
-                      {filteredNext && !searchQuery.trim() && (
+                      {filteredNext && !personSearchQuery.trim() && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-success">
                             Suggested Next
