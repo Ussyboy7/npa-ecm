@@ -1,9 +1,6 @@
 "use client";
 
-// Force dynamic rendering - useSearchParams requires this
-export const dynamic = 'force-dynamic';
-
-import { useMemo, useState, useEffect } from "react";
+import { Suspense, useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
@@ -24,6 +21,7 @@ import {
   ArrowDown,
   Plus,
   Download,
+  Loader2,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
@@ -50,7 +48,7 @@ type SortState = {
 
 const getGradeLabel = (code: string | undefined) => getGradeLevelByCode(code)?.name;
 
-const UserManagementPage = () => {
+const UserManagementPageContent = () => {
   const { users, divisions, departments } = useOrganization();
   const searchParams = useSearchParams();
   
@@ -797,5 +795,20 @@ const UserManagementPage = () => {
     </ClientErrorBoundary>
   );
 };
+
+// Wrap in Suspense for useSearchParams
+const UserManagementPage = () => (
+  <Suspense fallback={
+    <DashboardLayout>
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    </DashboardLayout>
+  }>
+    <UserManagementPageContent />
+  </Suspense>
+);
 
 export default UserManagementPage;

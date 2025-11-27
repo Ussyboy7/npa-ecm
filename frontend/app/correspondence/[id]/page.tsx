@@ -1,8 +1,6 @@
 "use client";
 
-// Force dynamic rendering - useSearchParams requires this
-export const dynamic = 'force-dynamic';
-
+import { Suspense } from 'react';
 import { logError, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -192,7 +190,7 @@ const handleDownload = async (url: string, filename: string) => {
     }
   }
 };
-const CorrespondenceDetail = () => {
+const CorrespondenceDetailContent = () => {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
@@ -2545,5 +2543,20 @@ const CorrespondenceDetail = () => {
     </DashboardLayout>
   );
 };
+
+// Wrap in Suspense for useSearchParams
+const CorrespondenceDetail = () => (
+  <Suspense fallback={
+    <DashboardLayout>
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    </DashboardLayout>
+  }>
+    <CorrespondenceDetailContent />
+  </Suspense>
+);
 
 export default CorrespondenceDetail;

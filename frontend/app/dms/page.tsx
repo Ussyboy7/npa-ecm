@@ -1,8 +1,6 @@
 "use client";
 
-// Force dynamic rendering - useSearchParams requires this
-export const dynamic = 'force-dynamic';
-
+import { Suspense } from 'react';
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -206,7 +204,7 @@ const SORT_OPTIONS: SortOption[] = [
   { field: 'title', direction: 'desc', label: 'Title (Z-A)' },
 ];
 
-const DocumentManagementPage = () => {
+const DocumentManagementPageContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser } = useCurrentUser();
@@ -1508,5 +1506,20 @@ const DocumentManagementPage = () => {
     </ClientErrorBoundary>
   );
 };
+
+// Wrap in Suspense for useSearchParams
+const DocumentManagementPage = () => (
+  <Suspense fallback={
+    <DashboardLayout>
+      <div className="container mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    </DashboardLayout>
+  }>
+    <DocumentManagementPageContent />
+  </Suspense>
+);
 
 export default DocumentManagementPage;

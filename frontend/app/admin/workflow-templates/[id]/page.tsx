@@ -1,14 +1,11 @@
 "use client";
 
-// Force dynamic rendering - useSearchParams requires this
-export const dynamic = 'force-dynamic';
-
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { WorkflowTemplateForm } from "@/components/admin/WorkflowTemplateForm";
 import { WorkflowStepsBuilder } from "@/components/admin/WorkflowStepsBuilder";
 import {
@@ -19,7 +16,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import type { WorkflowTemplate, WorkflowTemplateFormData } from "@/lib/types/workflow";
 
-export default function WorkflowTemplateEditorPage() {
+function WorkflowTemplateEditorPageContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -353,6 +350,23 @@ export default function WorkflowTemplateEditorPage() {
           )}
       </div>
     </DashboardLayout>
+  );
+}
+
+// Wrap in Suspense for useSearchParams
+export default function WorkflowTemplateEditorPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="container mx-auto p-6">
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        </div>
+      </DashboardLayout>
+    }>
+      <WorkflowTemplateEditorPageContent />
+    </Suspense>
   );
 }
 
