@@ -1318,78 +1318,80 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                     )}
                   </Label>
                   {routeType === 'office' ? (
-                    /* Office Selector */
-                    <Select value={targetOfficeId} onValueChange={(v) => {
-                      setTargetOfficeId(v);
-                      setForwardTo('');
-                      setForwardToError('');
-                    }}>
-                      <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
-                        <SelectValue placeholder="Select office" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[400px] w-[350px]">
-                        {/* Search & Filters */}
-                        <div className="p-2 border-b border-border sticky top-0 bg-popover z-10 space-y-2">
-                          <div className="relative">
-                            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              placeholder="Search offices..."
-                              value={officeSearchQuery}
-                              onChange={(e) => setOfficeSearchQuery(e.target.value)}
-                              className="pl-8 h-8"
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <select
-                              value={officeFilterDirectorate}
-                              onChange={(e) => {
-                                setOfficeFilterDirectorate(e.target.value);
-                                setOfficeFilterDivision('all');
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-7 text-xs rounded border border-input bg-background px-2"
-                            >
-                              <option value="all">All Directorates</option>
-                              {directorates.map(d => (
-                                <option key={d.id} value={d.id}>{d.shortName || d.name}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={officeFilterDivision}
-                              onChange={(e) => setOfficeFilterDivision(e.target.value)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-7 text-xs rounded border border-input bg-background px-2"
-                            >
-                              <option value="all">All Divisions</option>
-                              {filteredOfficeDivisions.map(d => (
-                                <option key={d.id} value={d.id}>{d.shortName || d.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="text-xs text-muted-foreground text-center">
-                            {filteredOfficeOptions.length} of {officeOptions.length} offices
-                          </div>
-                        </div>
-                        {filteredOfficeOptions.length === 0 ? (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            No offices found
-                          </div>
-                        ) : (
-                          filteredOfficeOptions.map(office => (
-                            <SelectItem key={office.id} value={office.id}>
-                              <div className="flex flex-col">
-                                <span>{office.name}</span>
-                                <span className="text-xs text-muted-foreground uppercase">
-                                  {office.officeType}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
+                    /* Office Selector - with filters in form area */
+                    <div className="space-y-2">
+                      {/* Filter Row */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Select 
+                          value={officeFilterDirectorate} 
+                          onValueChange={(v) => {
+                            setOfficeFilterDirectorate(v);
+                            setOfficeFilterDivision('all');
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Directorate" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Directorates</SelectItem>
+                            {directorates.map(d => (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.shortName || d.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select 
+                          value={officeFilterDivision} 
+                          onValueChange={setOfficeFilterDivision}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Division" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Divisions</SelectItem>
+                            {filteredOfficeDivisions.map(d => (
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.shortName || d.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {/* Office Dropdown */}
+                      <Select value={targetOfficeId} onValueChange={(v) => {
+                        setTargetOfficeId(v);
+                        setForwardTo('');
+                        setForwardToError('');
+                      }}>
+                        <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
+                          <SelectValue placeholder="Select office" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          {filteredOfficeOptions.length === 0 ? (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              No offices found
+                            </div>
+                          ) : (
+                            filteredOfficeOptions.map(office => (
+                              <SelectItem key={office.id} value={office.id}>
+                                <div className="flex items-center justify-between gap-2 w-full">
+                                  <span>{office.name}</span>
+                                  <span className="text-[10px] text-muted-foreground uppercase">
+                                    {office.officeType}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {(officeFilterDirectorate !== 'all' || officeFilterDivision !== 'all') && (
+                        <p className="text-xs text-muted-foreground">
+                          Showing {filteredOfficeOptions.length} of {officeOptions.length} offices
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     /* Person Selector */
                     <Select value={forwardTo} onValueChange={(v) => {
