@@ -995,20 +995,20 @@ export default function SettingsPage() {
                     {/* In-App Notifications */}
                     <div className="space-y-4">
                       <h3 className="text-sm font-semibold">In-App Notifications</h3>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-0.5">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
                             <Label>In-App Notifications</Label>
                             <p className="text-sm text-muted-foreground">Receive notifications within the application</p>
+                            </div>
+                            <Switch
+                              checked={notificationPrefs.inAppEnabled ?? true}
+                              onCheckedChange={(checked) =>
+                                setNotificationPrefs({ ...notificationPrefs, inAppEnabled: checked })
+                              }
+                            />
                           </div>
-                          <Switch
-                            checked={notificationPrefs.inAppEnabled ?? true}
-                            onCheckedChange={(checked) =>
-                              setNotificationPrefs({ ...notificationPrefs, inAppEnabled: checked })
-                            }
-                          />
-                        </div>
-                        {notificationPrefs.inAppEnabled && (
+                          {notificationPrefs.inAppEnabled && (
                           <>
                             <div className="flex items-center justify-between pl-6">
                               <div className="space-y-0.5">
@@ -1037,60 +1037,60 @@ export default function SettingsPage() {
                               />
                             </div>
                           </>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <Separator />
+                      <Separator />
 
                     {/* Email Notifications */}
                     <div className="space-y-4">
                       <h3 className="text-sm font-semibold">Email Notifications</h3>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-0.5">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
                             <Label>Email Notifications</Label>
                             <p className="text-sm text-muted-foreground">Receive notifications via email</p>
+                            </div>
+                            <Switch
+                              checked={notificationPrefs.emailEnabled ?? true}
+                              onCheckedChange={(checked) =>
+                                setNotificationPrefs({ ...notificationPrefs, emailEnabled: checked })
+                              }
+                            />
                           </div>
-                          <Switch
-                            checked={notificationPrefs.emailEnabled ?? true}
-                            onCheckedChange={(checked) =>
-                              setNotificationPrefs({ ...notificationPrefs, emailEnabled: checked })
-                            }
-                          />
-                        </div>
-                        {notificationPrefs.emailEnabled && (
-                          <>
-                            <div className="flex items-center justify-between pl-6">
-                              <div className="space-y-0.5">
+                          {notificationPrefs.emailEnabled && (
+                            <>
+                              <div className="flex items-center justify-between pl-6">
+                                <div className="space-y-0.5">
                                 <Label className="text-sm">Urgent Only</Label>
                                 <p className="text-xs text-muted-foreground">Only send emails for urgent priority</p>
+                                </div>
+                                <Switch
+                                  checked={notificationPrefs.emailUrgentOnly ?? false}
+                                  onCheckedChange={(checked) =>
+                                    setNotificationPrefs({ ...notificationPrefs, emailUrgentOnly: checked })
+                                  }
+                                />
                               </div>
-                              <Switch
-                                checked={notificationPrefs.emailUrgentOnly ?? false}
-                                onCheckedChange={(checked) =>
-                                  setNotificationPrefs({ ...notificationPrefs, emailUrgentOnly: checked })
-                                }
-                              />
-                            </div>
-                            <div className="flex items-center justify-between pl-6">
-                              <div className="space-y-0.5">
+                              <div className="flex items-center justify-between pl-6">
+                                <div className="space-y-0.5">
                                 <Label className="text-sm">Daily Digest</Label>
                                 <p className="text-xs text-muted-foreground">Receive a daily summary instead of individual emails</p>
+                                </div>
+                                <Switch
+                                  checked={notificationPrefs.emailDigest ?? false}
+                                  onCheckedChange={(checked) =>
+                                    setNotificationPrefs({ ...notificationPrefs, emailDigest: checked })
+                                  }
+                                />
                               </div>
-                              <Switch
-                                checked={notificationPrefs.emailDigest ?? false}
-                                onCheckedChange={(checked) =>
-                                  setNotificationPrefs({ ...notificationPrefs, emailDigest: checked })
-                                }
-                              />
-                            </div>
-                          </>
-                        )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    <Separator />
+                      <Separator />
 
                     {/* Quiet Hours */}
                     <div className="space-y-4">
@@ -1098,12 +1098,12 @@ export default function SettingsPage() {
                         <Clock className="h-4 w-4" /> Quiet Hours
                       </h3>
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between">
                           <div className="space-y-0.5">
                             <Label>Enable Quiet Hours</Label>
                             <p className="text-sm text-muted-foreground">Pause non-urgent notifications during set hours</p>
                           </div>
-                          <Switch
+                            <Switch
                             checked={notificationPrefs.quietHoursEnabled ?? false}
                             onCheckedChange={(checked) =>
                               setNotificationPrefs({ ...notificationPrefs, quietHoursEnabled: checked })
@@ -1204,41 +1204,41 @@ export default function SettingsPage() {
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-normal">Correspondence</Label>
                           <Switch
-                            checked={notificationPrefs.moduleCorrespondence ?? true}
-                            onCheckedChange={(checked) =>
-                              setNotificationPrefs({ ...notificationPrefs, moduleCorrespondence: checked })
-                            }
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
+                              checked={notificationPrefs.moduleCorrespondence ?? true}
+                              onCheckedChange={(checked) =>
+                                setNotificationPrefs({ ...notificationPrefs, moduleCorrespondence: checked })
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
                           <Label className="text-sm font-normal">Document Management</Label>
-                          <Switch
-                            checked={notificationPrefs.moduleDms ?? true}
-                            onCheckedChange={(checked) =>
-                              setNotificationPrefs({ ...notificationPrefs, moduleDms: checked })
-                            }
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
+                            <Switch
+                              checked={notificationPrefs.moduleDms ?? true}
+                              onCheckedChange={(checked) =>
+                                setNotificationPrefs({ ...notificationPrefs, moduleDms: checked })
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
                           <Label className="text-sm font-normal">Workflow</Label>
-                          <Switch
-                            checked={notificationPrefs.moduleWorkflow ?? true}
-                            onCheckedChange={(checked) =>
-                              setNotificationPrefs({ ...notificationPrefs, moduleWorkflow: checked })
-                            }
-                          />
-                        </div>
-                        <div className="flex items-center justify-between">
+                            <Switch
+                              checked={notificationPrefs.moduleWorkflow ?? true}
+                              onCheckedChange={(checked) =>
+                                setNotificationPrefs({ ...notificationPrefs, moduleWorkflow: checked })
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
                           <Label className="text-sm font-normal">System</Label>
-                          <Switch
-                            checked={notificationPrefs.moduleSystem ?? true}
-                            onCheckedChange={(checked) =>
-                              setNotificationPrefs({ ...notificationPrefs, moduleSystem: checked })
-                            }
-                          />
+                            <Switch
+                              checked={notificationPrefs.moduleSystem ?? true}
+                              onCheckedChange={(checked) =>
+                                setNotificationPrefs({ ...notificationPrefs, moduleSystem: checked })
+                              }
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
 
                     <Separator />
 
@@ -1264,7 +1264,7 @@ export default function SettingsPage() {
                             <SelectItem value="90">90 days</SelectItem>
                           </SelectContent>
                         </Select>
-                      </div>
+                    </div>
                     </div>
 
                     <Separator />
@@ -1492,19 +1492,19 @@ export default function SettingsPage() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Upload Section */}
-                  <div className="space-y-4">
-                    <div className="space-y-2">
+                <div className="space-y-4">
+                  <div className="space-y-2">
                       <Label>Upload New Signature</Label>
                       <div className="flex gap-2">
-                        <Input
-                          type="file"
-                          accept="image/png,image/jpeg,image/svg+xml"
-                          onChange={handleSignatureUpload}
-                          disabled={isUploading}
+                      <Input
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml"
+                        onChange={handleSignatureUpload}
+                        disabled={isUploading}
                           className="flex-1"
-                        />
-                      </div>
+                      />
                     </div>
+                  </div>
 
                     {!signature && (
                       <div className="p-8 border-2 border-dashed rounded-lg text-center text-muted-foreground">
@@ -1527,7 +1527,7 @@ export default function SettingsPage() {
                         </div>
                         <Button 
                           variant="destructive" 
-                          size="sm"
+                          size="sm" 
                           onClick={() => setShowDeleteSignatureDialog(true)}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
@@ -1545,7 +1545,7 @@ export default function SettingsPage() {
                         <p className="text-xs text-muted-foreground">
                           <strong>File:</strong> {signature.fileName || 'Unknown'}
                         </p>
-                      </div>
+                    </div>
                     </div>
                   )}
                 </div>
@@ -1562,160 +1562,160 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <Tabs defaultValue="personal" className="space-y-4">
-                  <TabsList>
+                    <TabsList>
                     <TabsTrigger value="personal">My Preferences</TabsTrigger>
-                    <TabsTrigger value="organization">Organization Templates</TabsTrigger>
-                  </TabsList>
+                      <TabsTrigger value="organization">Organization Templates</TabsTrigger>
+                    </TabsList>
 
                   <TabsContent value="personal" className="space-y-4">
                     <p className="text-sm text-muted-foreground">
                       Override organization defaults with your personal preferences for each action type.
-                    </p>
+                        </p>
                     
                     <div className="grid gap-4 sm:grid-cols-2">
-                      {templateTypes.map((type) => {
+                          {templateTypes.map((type) => {
                         const templatesForType = signatureTemplates.filter(t => t.templateType === type);
                         const orgDefault = templatesForType.find(t => t.defaultApply) ?? templatesForType[0];
-                        const selectedValue = signaturePreferences.templateOverrides?.[type] ?? '__organization__';
+                            const selectedValue = signaturePreferences.templateOverrides?.[type] ?? '__organization__';
                         
-                        return (
-                          <Card key={type} className="border-muted">
-                            <CardHeader className="pb-2">
+                            return (
+                              <Card key={type} className="border-muted">
+                                <CardHeader className="pb-2">
                               <CardTitle className="text-sm capitalize flex items-center gap-2">
                                 <FileText className="h-4 w-4" />
                                 {type}
                               </CardTitle>
-                            </CardHeader>
+                                </CardHeader>
                             <CardContent>
-                              <Select
-                                value={selectedValue}
-                                onValueChange={(value) => handleTemplateOverrideChange(type, value)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select template" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__organization__">
+                                    <Select
+                                      value={selectedValue}
+                                      onValueChange={(value) => handleTemplateOverrideChange(type, value)}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select template" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__organization__">
                                     Use organization default
                                     {orgDefault && <span className="text-xs text-muted-foreground ml-2">({orgDefault.name})</span>}
-                                  </SelectItem>
-                                  {templatesForType.map(template => (
-                                    <SelectItem key={template.id} value={template.id}>
+                                        </SelectItem>
+                                        {templatesForType.map(template => (
+                                          <SelectItem key={template.id} value={template.id}>
                                       {template.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
 
-                    <Separator />
+                        <Separator />
 
-                    <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Switch
-                          checked={signaturePreferences.autoApplyForMinutes ?? false}
-                          onCheckedChange={handleAutoApplyMinutesChange}
-                        />
+                            <Switch
+                              checked={signaturePreferences.autoApplyForMinutes ?? false}
+                              onCheckedChange={handleAutoApplyMinutesChange}
+                            />
                         <span className="text-sm">Auto-apply signature to minutes</span>
-                      </div>
+                          </div>
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" onClick={handleResetPersonalPreferences} disabled={!hasPreferenceChanges}>
-                          Reset
-                        </Button>
+                              Reset
+                            </Button>
                         <Button size="sm" onClick={handleSavePersonalPreferences} disabled={!hasPreferenceChanges}>
-                          Save Preferences
-                        </Button>
+                              Save Preferences
+                            </Button>
+                        </div>
                       </div>
-                    </div>
-                  </TabsContent>
+                    </TabsContent>
 
                   <TabsContent value="organization" className="space-y-4">
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground">
                         Organization-wide templates used as defaults for all users.
-                      </p>
+                        </p>
                       <Button variant="outline" size="sm" onClick={resetOrganizationTemplates}>
                         <RefreshCcw className="h-4 w-4 mr-2" />
-                        Reset to Default
-                      </Button>
-                    </div>
+                          Reset to Default
+                        </Button>
+                      </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
-                      {signatureTemplates.map(template => {
-                        const isEditing = editingTemplateId === template.id;
-                        const draft = isEditing ? templateDraft : template;
+                        {signatureTemplates.map(template => {
+                          const isEditing = editingTemplateId === template.id;
+                          const draft = isEditing ? templateDraft : template;
                         
-                        return (
-                          <Card key={template.id} className="border-muted">
+                          return (
+                            <Card key={template.id} className="border-muted">
                             <CardHeader className="pb-2">
-                              <div className="flex items-center justify-between">
-                                {isEditing ? (
-                                  <Input
-                                    value={draft?.name ?? ''}
-                                    onChange={(e) => updateTemplateDraft('name', e.target.value)}
+                                <div className="flex items-center justify-between">
+                                  {isEditing ? (
+                                    <Input
+                                      value={draft?.name ?? ''}
+                                      onChange={(e) => updateTemplateDraft('name', e.target.value)}
                                     className="h-8 text-sm font-semibold"
-                                  />
-                                ) : (
-                                  <CardTitle className="text-sm">{template.name}</CardTitle>
-                                )}
+                                    />
+                                  ) : (
+                                    <CardTitle className="text-sm">{template.name}</CardTitle>
+                                  )}
                                 <Badge variant="outline" className="text-xs capitalize">{template.templateType}</Badge>
-                              </div>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                              {isEditing ? (
-                                <Textarea
-                                  value={draft?.format ?? ''}
-                                  onChange={(e) => updateTemplateDraft('format', e.target.value)}
-                                  className="text-xs font-mono"
-                                  rows={4}
-                                />
-                              ) : (
-                                <div className="p-2 bg-muted/50 rounded text-xs font-mono whitespace-pre-wrap">
-                                  {template.format}
                                 </div>
-                              )}
+                              </CardHeader>
+                            <CardContent className="space-y-3">
+                                  {isEditing ? (
+                                    <Textarea
+                                      value={draft?.format ?? ''}
+                                      onChange={(e) => updateTemplateDraft('format', e.target.value)}
+                                      className="text-xs font-mono"
+                                      rows={4}
+                                    />
+                                  ) : (
+                                <div className="p-2 bg-muted/50 rounded text-xs font-mono whitespace-pre-wrap">
+                                        {template.format}
+                                    </div>
+                                  )}
                               
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Switch
-                                    checked={draft?.defaultApply ?? false}
-                                    onCheckedChange={(checked) => updateTemplateDraft('defaultApply', checked)}
-                                    disabled={!isEditing}
-                                  />
+                                    <div className="flex items-center gap-2">
+                                      <Switch
+                                        checked={draft?.defaultApply ?? false}
+                                        onCheckedChange={(checked) => updateTemplateDraft('defaultApply', checked)}
+                                        disabled={!isEditing}
+                                      />
                                   <span className="text-xs text-muted-foreground">Default</span>
                                 </div>
-                                
-                                {isEditing ? (
+
+                                  {isEditing ? (
                                   <div className="flex gap-1">
                                     <Button size="sm" variant="ghost" onClick={cancelEditTemplate}>
                                       <X className="h-4 w-4" />
-                                    </Button>
+                                      </Button>
                                     <Button size="sm" onClick={saveTemplateChanges}>
                                       <Check className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                ) : (
+                                      </Button>
+                                    </div>
+                                  ) : (
                                   <Button size="sm" variant="ghost" onClick={() => beginEditTemplate(template)}>
                                     <Pencil className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                                    </Button>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
-
+        
         {/* Dialogs */}
         
         {/* Password Change Dialog */}

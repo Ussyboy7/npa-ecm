@@ -341,7 +341,7 @@ const Reports = () => {
             </Button>
             <Button size="sm" onClick={() => handleExport('pdf')} disabled={!data || exporting !== null}>
               <FileDown className="h-4 w-4 mr-2" /> PDF
-            </Button>
+          </Button>
           </div>
         </div>
 
@@ -364,7 +364,7 @@ const Reports = () => {
 
         {/* Filters Panel */}
         {showFilters && (
-          <Card>
+        <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Report Filters</CardTitle>
@@ -417,33 +417,33 @@ const Reports = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Division</Label>
-                  <Select value={selectedDivision} onValueChange={setSelectedDivision} disabled={loading}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Divisions</SelectItem>
-                      {availableDivisions.map((division) => (
-                        <SelectItem key={division.id} value={division.id}>
-                          {division.name} {division.code ? `(${division.code})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select value={selectedDivision} onValueChange={setSelectedDivision} disabled={loading}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Divisions</SelectItem>
+                    {availableDivisions.map((division) => (
+                      <SelectItem key={division.id} value={division.id}>
+                        {division.name} {division.code ? `(${division.code})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Time Period</Label>
-                  <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={loading}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7">Last 7 Days</SelectItem>
-                      <SelectItem value="30">Last 30 Days</SelectItem>
-                      <SelectItem value="90">Last 90 Days</SelectItem>
-                      <SelectItem value="365">Last Year</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={loading}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">Last 7 Days</SelectItem>
+                    <SelectItem value="30">Last 30 Days</SelectItem>
+                    <SelectItem value="90">Last 90 Days</SelectItem>
+                    <SelectItem value="365">Last Year</SelectItem>
+                  </SelectContent>
+                </Select>
                 </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Type</Label>
@@ -507,11 +507,11 @@ const Reports = () => {
                         />
                       </Badge>
                     ))}
-                  </div>
-                </div>
+              </div>
+            </div>
               )}
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
         )}
 
         {/* Summary Cards with Comparison */}
@@ -523,7 +523,7 @@ const Reports = () => {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <div className="text-2xl font-bold">{metrics.total}</div>
+              <div className="text-2xl font-bold">{metrics.total}</div>
                 <TrendIndicator value={comparison.totalChange} />
               </div>
               <p className="text-xs text-muted-foreground mt-1">{metrics.urgent} urgent items</p>
@@ -537,7 +537,7 @@ const Reports = () => {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <div className="text-2xl font-bold">{metrics.completionRate}%</div>
+              <div className="text-2xl font-bold">{metrics.completionRate}%</div>
                 <TrendIndicator value={comparison.completionRateChange} />
               </div>
               <Progress value={metrics.completionRate} className="mt-2 h-2" />
@@ -573,7 +573,7 @@ const Reports = () => {
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <div className="text-2xl font-bold">{metrics.avgProcessingTime} days</div>
+              <div className="text-2xl font-bold">{metrics.avgProcessingTime} days</div>
                 <TrendIndicator value={comparison.avgProcessingTimeChange} inverse />
               </div>
               <p className="text-xs text-muted-foreground mt-1">For completed items</p>
@@ -1022,19 +1022,19 @@ const Reports = () => {
                     .slice()
                     .sort((a, b) => b.rate - a.rate)
                     .map((division, index) => (
-                      <div key={division.name} className="space-y-2">
+                    <div key={division.name} className="space-y-2">
                         <div className="flex justify-between items-center text-sm">
                           <div className="flex items-center gap-3">
                             <Badge variant={index === 0 ? 'default' : 'secondary'}>#{index + 1}</Badge>
-                            <span className="font-medium">{division.name}</span>
+                        <span className="font-medium">{division.name}</span>
                           </div>
                           <div className="text-muted-foreground">
-                            {division.completed}/{division.total} ({division.rate}%)
+                          {division.completed}/{division.total} ({division.rate}%)
                           </div>
-                        </div>
-                        <Progress value={division.rate} className="h-2" />
                       </div>
-                    ))}
+                        <Progress value={division.rate} className="h-2" />
+                    </div>
+                  ))}
                   {divisionData.length === 0 && <p className="text-sm text-muted-foreground">No division activity to display.</p>}
                 </div>
               </CardContent>

@@ -383,7 +383,7 @@ const CorrespondenceInbox = () => {
                     <Badge variant="outline" className={`gap-1 ${getPurposeColor(ccInfo.purpose)}`}>
                       <Copy className="h-3 w-3" />
                       {getPurposeLabel(ccInfo.purpose)}
-                    </Badge>
+                  </Badge>
                   )}
                   <Badge variant={getPriorityColor(corr.priority)}>{corr.priority.toUpperCase()}</Badge>
                   <Badge variant="outline" className="gap-1">

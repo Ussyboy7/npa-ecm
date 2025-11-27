@@ -57,6 +57,7 @@ import {
   Minimize2,
   Filter,
   Plus,
+  Clock,
 } from 'lucide-react';
 import type { Minute, DistributionRecipient, Correspondence, ParallelRoutingGroup } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -67,7 +68,6 @@ import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { EditMinuteModal } from '@/components/correspondence/EditMinuteModal';
 import { ParallelRouteModal } from '@/components/correspondence/ParallelRouteModal';
 import { ParallelBranchStatus } from '@/components/correspondence/ParallelBranchStatus';
-import { CorrespondenceTreeView } from '@/components/correspondence/CorrespondenceTreeView';
 import { AdditionalMinuteModal } from '@/components/correspondence/AdditionalMinuteModal';
 import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { TreatmentModal } from '@/components/correspondence/TreatmentModal';
@@ -222,8 +222,6 @@ const CorrespondenceDetailContent = () => {
   const [showTreatmentModal, setShowTreatmentModal] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [showDelegateModal, setShowDelegateModal] = useState(false);
-  const [showRoutingDetails, setShowRoutingDetails] = useState(true);
-  const [viewMode, setViewMode] = useState<'chain' | 'tree'>('chain');
   const [selectedMinute, setSelectedMinute] = useState<Minute | null>(null);
   const [showMinuteDetail, setShowMinuteDetail] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -997,13 +995,14 @@ const CorrespondenceDetailContent = () => {
 
         <div className="border-b border-border bg-background/70 px-6 py-2">
           <HelpGuideCard
-            title="Work the Correspondence"
-            description="Review metadata, minute history, signatures, and routing chain. Use the actions on the right to minute, approve, treat, delegate, distribute (CC), print, download, or complete and archive."
+            title="Correspondence Workspace"
+            description="Review the document and routing history. Use the Actions panel to route, respond, or complete this item."
             links={[
               { label: 'Help & Guides', href: '/help' },
-              { label: 'Linked Documents', href: '#linked-documents' },
             ]}
             className="bg-background"
+            dismissible
+            dismissKey="correspondence-detail"
           />
         </div>
 
@@ -1678,7 +1677,7 @@ const CorrespondenceDetailContent = () => {
             <div className="p-4 border-b border-border bg-background flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-secondary" />
-                Minute Thread (360° View)
+                Minute Thread
               </h3>
             </div>
             <ScrollArea className="h-full">
@@ -1704,8 +1703,8 @@ const CorrespondenceDetailContent = () => {
                 {minutes.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No minutes yet</p>
-                    <p className="text-sm">Be the first to add a minute</p>
+                    <p className="font-medium">No minutes yet</p>
+                    <p className="text-sm">Use the Actions panel to minute and route this correspondence</p>
                   </div>
                 ) : (
                   minutes.map((minuteItem, idx) => {
@@ -1920,7 +1919,7 @@ const CorrespondenceDetailContent = () => {
                                       }}
                                     >
                                       <Plus className="h-3 w-3 mr-1" />
-                                      Add Instruction
+                                      Add Note
                                     </Button>
                                   )}
                                 </div>
@@ -1962,17 +1961,90 @@ const CorrespondenceDetailContent = () => {
             </div>
             <ScrollArea className="h-full">
               <div className="p-4 space-y-4">
+              {/* Current Status Card */}
+              {(() => {
+                const daysPending = correspondence.receivedDate 
+                  ? Math.floor((Date.now() - new Date(correspondence.receivedDate).getTime()) / (1000 * 60 * 60 * 24))
+                  : 0;
+                const lastMinute = minutes[minutes.length - 1];
+                let currentApproverId = correspondence.currentApproverId;
+                const routingActions = ['minute', 'forward', 'approve', 'treat'];
+                
+                if (lastMinute?.isRecalled && 
+                    routingActions.includes(lastMinute.actionType) && 
+                    lastMinute.userId) {
+                  currentApproverId = lastMinute.userId;
+                }
+                
+                const currentApprover = currentApproverId ? lookupUser(currentApproverId) : null;
+                const slaWarning = daysPending >= 5;
+                const slaBreach = daysPending >= 7;
+                
+                return (
+                  <Card className={`${slaBreach ? 'border-destructive/50 bg-destructive/5' : slaWarning ? 'border-warning/50 bg-warning/5' : ''}`}>
+                    <CardContent className="p-3">
+                      <div className="flex items-start gap-3">
+                        <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                          isCompleted ? 'bg-success/20' : isCurrentUserTurn ? 'bg-primary animate-pulse' : 'bg-muted'
+                        }`}>
+                          {isCompleted ? (
+                            <CheckCircle className="h-5 w-5 text-success" />
+                          ) : isCurrentUserTurn ? (
+                            <div className="h-3 w-3 rounded-full bg-primary-foreground" />
+                          ) : (
+                            <Clock className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium truncate">
+                              {isCompleted ? 'Completed' : currentApprover?.name ?? 'Pending Assignment'}
+                            </p>
+                            {isCurrentUserTurn && !isCompleted && (
+                              <Badge variant="default" className="text-[10px] h-5">Your Turn</Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {isCompleted 
+                              ? `Closed ${completionGeneratedAt ? formatDateShort(completionGeneratedAt) : ''}`
+                              : currentApprover?.systemRole ?? 'Awaiting action'
+                            }
+                          </p>
+                          {!isCompleted && (
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <Badge 
+                                variant={slaBreach ? 'destructive' : slaWarning ? 'outline' : 'secondary'} 
+                                className={`text-[10px] h-5 ${slaWarning && !slaBreach ? 'border-warning text-warning' : ''}`}
+                              >
+                                {daysPending} {daysPending === 1 ? 'day' : 'days'} pending
+                              </Badge>
+                              {slaBreach && (
+                                <Badge variant="destructive" className="text-[10px] h-5">
+                                  SLA Breach
+                                </Badge>
+                              )}
+                              {slaWarning && !slaBreach && (
+                                <Badge variant="outline" className="text-[10px] h-5 border-warning text-warning">
+                                  SLA Warning
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
               {isCompleted ? (
                 <div className="space-y-3">
-                  <div className="p-3 bg-muted/50 border border-border rounded-lg">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      This correspondence is locked. No further routing or minutes are permitted.
+                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                    <p className="text-sm font-medium text-success">
+                      Correspondence Completed
                     </p>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Completed {completionGeneratedAt ? formatDateShort(completionGeneratedAt) : ''}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      This correspondence is locked for auditing.
+                      Closed{completionGeneratedAt ? ` on ${formatDateShort(completionGeneratedAt)}` : ''}. This item is now archived and read-only for audit purposes.
                     </p>
                   </div>
                   {completionPackageUrl && (
@@ -2006,7 +2078,7 @@ const CorrespondenceDetailContent = () => {
                         <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Info className="h-4 w-4" />
-                            <span>This correspondence is for information only. No actions permitted.</span>
+                            <span>For Information Only – No action required</span>
                           </div>
                         </div>
                       ) : (
@@ -2017,7 +2089,7 @@ const CorrespondenceDetailContent = () => {
                             disabled={turnRestrictedDisabled}
                           >
                             <CheckCircle className="h-4 w-4 mr-2" />
-                            Review & Approve
+                            Minute & Approve
                           </Button>
                           <Button
                             className="w-full"
@@ -2037,7 +2109,7 @@ const CorrespondenceDetailContent = () => {
                         <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Info className="h-4 w-4" />
-                            <span>This correspondence is for information only. No actions permitted.</span>
+                            <span>For Information Only – No action required</span>
                           </div>
                         </div>
                       ) : (
@@ -2048,7 +2120,7 @@ const CorrespondenceDetailContent = () => {
                             disabled={turnRestrictedDisabled}
                           >
                             <MessageSquare className="h-4 w-4 mr-2" />
-                            Minute & Forward Down
+                            Minute & Route
                           </Button>
                           <Button
                             className="w-full"
@@ -2068,7 +2140,7 @@ const CorrespondenceDetailContent = () => {
                         <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Info className="h-4 w-4" />
-                            <span>This correspondence is for information only. No actions permitted.</span>
+                            <span>For Information Only – No action required</span>
                           </div>
                         </div>
                       ) : (
@@ -2078,7 +2150,7 @@ const CorrespondenceDetailContent = () => {
                           disabled={turnRestrictedDisabled}
                         >
                           <ArrowUp className="h-4 w-4 mr-2" />
-                          Review & Forward Up
+                          Endorse & Forward
                         </Button>
                       )}
                     </>
@@ -2125,222 +2197,6 @@ const CorrespondenceDetailContent = () => {
                 </>
               )}
 
-              {/* Forms & Checklists Card */}
-              {/* Forms moved to DMS - use Link Document to attach completed form PDFs */}
-
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm">Routing {viewMode === 'tree' ? 'Tree' : 'Chain'}</CardTitle>
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 border rounded-md p-0.5">
-                        <Button
-                          variant={viewMode === 'chain' ? 'default' : 'ghost'}
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setViewMode('chain')}
-                        >
-                          Chain
-                        </Button>
-                        <Button
-                          variant={viewMode === 'tree' ? 'default' : 'ghost'}
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setViewMode('tree')}
-                        >
-                          Tree
-                        </Button>
-                      </div>
-                      {viewMode === 'chain' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowRoutingDetails((prev) => !prev)}
-                        >
-                          <ChevronRight
-                            className={`h-4 w-4 transition-transform ${showRoutingDetails ? 'rotate-90' : ''}`}
-                          />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {viewMode === 'tree' ? (
-                    <ScrollArea className="h-[320px] pr-4 -mr-4">
-                      <div className="space-y-4 p-4 pt-0">
-                        <CorrespondenceTreeView
-                          minutes={minutes}
-                          currentUserId={activeUser?.id}
-                          lookupUser={lookupUserForTree}
-                          onMinuteClick={(minute) => {
-                            setSelectedMinute(minute);
-                            setShowMinuteDetail(true);
-                          }}
-                        />
-                      </div>
-                    </ScrollArea>
-                  ) : (
-                    <ScrollArea className="h-[320px] pr-4 -mr-4">
-                      <div className="space-y-4 p-4 pt-0">
-                        {minutes.length === 0 ? (
-                          <p className="text-xs text-muted-foreground">No routing history yet</p>
-                        ) : (
-                          // For routing chain, show only the main sequential minutes (exclude parallel branch minutes)
-                          minutes
-                            .filter((minuteEntry) => !minuteEntry.isParallelBranch)
-                            .map((minuteEntry, idx, arr) => {
-                          const user = lookupUser(minuteEntry.userId);
-                          // Don't show recalled minutes as current step
-                          const isCurrentStep = idx === minutes.length - 1 && !minuteEntry.isRecalled;
-                          const isRecalled = minuteEntry.isRecalled ?? false;
-
-                          return (
-                            <div key={minuteEntry.id} className="relative">
-                              {idx < arr.length - 1 && (
-                                <div className={`absolute left-3 top-8 w-0.5 h-4 ${isRecalled ? 'bg-destructive/20' : 'bg-border'}`} />
-                              )}
-                              <div
-                                className={`flex items-start gap-2 ${
-                                  isCurrentStep ? 'bg-accent/10 -mx-2 px-2 py-1 rounded-lg' : ''
-                                } ${isRecalled ? 'opacity-60' : ''}`}
-                              >
-                                <div
-                                  className={`mt-1 h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${
-                                    isRecalled
-                                      ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                                      : isCurrentStep
-                                      ? 'bg-accent text-accent-foreground'
-                                      : 'bg-success/10 text-success'
-                                  }`}
-                                >
-                                  {isRecalled ? (
-                                    <X className="h-3 w-3" />
-                                  ) : isCurrentStep ? (
-                                    '●'
-                                  ) : (
-                                    <CheckCircle className="h-3 w-3" />
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <p className={`text-xs font-semibold truncate ${isRecalled ? 'line-through' : ''}`}>
-                                      {user?.name ?? minuteEntry.userName ?? 'Unknown User'}
-                                    </p>
-                                    {isRecalled && (
-                                      <Badge variant="outline" className="text-[9px] h-4 bg-destructive/10 text-destructive border-destructive/20">
-                                        Recalled
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    {(() => {
-                                      let role = user?.systemRole ?? minuteEntry.userSystemRole ?? 'Team Member';
-                                      // Filter out UUIDs (strings with dashes and length > 30)
-                                      if (role && role.includes('-') && role.length > 30) {
-                                        role = user?.systemRole ?? 'Team Member';
-                                      }
-                                      return role;
-                                    })()}
-                                  </p>
-                                  {showRoutingDetails && (
-                                    <>
-                                      <p className="text-[10px] text-muted-foreground mt-1">
-                                        {minuteEntry.actionType} • {minuteEntry.direction}
-                                        {isRecalled && ' (Recalled)'}
-                                      </p>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        {formatDateShort(minuteEntry.timestamp)}
-                                        {minuteEntry.recalledAt && (
-                                          <span className="text-destructive ml-1">
-                                            • Recalled {formatDateShort(minuteEntry.recalledAt)}
-                                          </span>
-                                        )}
-                                      </p>
-                                      {minuteEntry.recallReason && (
-                                        <p className="text-[10px] text-muted-foreground italic mt-1">
-                                          Reason: {minuteEntry.recallReason}
-                                        </p>
-                                      )}
-                                      {minuteEntry.signature && (
-                                        <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1">
-                                          <ImageIcon className="h-3 w-3 text-primary" />
-                                          Signed
-                                        </p>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                                {minuteEntry.actedBySecretary && (
-                                  <Badge variant="outline" className="text-[9px] h-4">
-                                    Sec
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-
-                      {(() => {
-                        // If the last minute was recalled, show the recalled minute's sender as current approver
-                        const nonRecalledMinutes = minutes.filter(m => !m.isRecalled);
-                        const lastMinute = minutes[minutes.length - 1];
-                        const lastNonRecalledMinute = nonRecalledMinutes[nonRecalledMinutes.length - 1];
-                        
-                        // Determine current approver: use correspondence.currentApproverId, 
-                        // but if last minute was recalled and it was a routing action, show the sender
-                        let currentApproverId = correspondence.currentApproverId;
-                        const routingActions = ['minute', 'forward', 'approve', 'treat'];
-                        
-                        if (lastMinute?.isRecalled && 
-                            routingActions.includes(lastMinute.actionType) && 
-                            lastMinute.userId) {
-                          // Last minute was recalled - show the sender as current approver
-                          currentApproverId = lastMinute.userId;
-                        } else if (lastNonRecalledMinute && 
-                                   lastNonRecalledMinute.toOfficeId && 
-                                   !correspondence.currentApproverId) {
-                          // If no current approver but there's a non-recalled minute with a recipient,
-                          // we might need to infer it, but for now use correspondence.currentApproverId
-                        }
-                        
-                        return currentApproverId ? (
-                          <div className="relative">
-                            {minutes.length > 0 && (
-                              <div className="absolute left-3 top-0 w-0.5 h-4 bg-border" />
-                            )}
-                            <div className="flex items-start gap-2 bg-primary/5 -mx-2 px-2 py-1 rounded-lg border border-primary/20">
-                              <div className="mt-1 h-6 w-6 rounded-full flex items-center justify-center animate-pulse bg-primary">
-                                <div className="h-2 w-2 rounded-full bg-primary-foreground" />
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-xs font-semibold">
-                                  {lookupUser(currentApproverId)?.name ?? 'Pending Approver'}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  {lookupUser(currentApproverId)?.systemRole ?? 'Awaiting assignment'}
-                                </p>
-                                <p className={`text-[10px] font-medium mt-1 ${
-                                  isCompleted ? 'text-success' : 'text-primary'
-                                }`}>
-                                  {isCompleted ? 'Completed' : 'Awaiting Action'}
-                                </p>
-                                {lastMinute?.isRecalled && lastMinute.userId === currentApproverId && (
-                                  <p className="text-[10px] text-muted-foreground italic mt-1">
-                                    Routing reverted after recall
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
-                    </div>
-                  </ScrollArea>
-                  )}
-                </CardContent>
-              </Card>
               </div>
             </ScrollArea>
           </section>

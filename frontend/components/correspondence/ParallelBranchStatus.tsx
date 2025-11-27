@@ -21,8 +21,13 @@ export const ParallelBranchStatus = ({
 }: ParallelBranchStatusProps) => {
   const [expanded, setExpanded] = useState(false);
   
-  const progress = parallelGroup.totalBranches > 0
-    ? (parallelGroup.completedBranches / parallelGroup.totalBranches) * 100
+  // Safeguard against undefined/NaN values
+  const totalBranches = parallelGroup.totalBranches ?? branches.length ?? 0;
+  const completedBranches = parallelGroup.completedBranches ?? 0;
+  const remaining = Math.max(0, totalBranches - completedBranches);
+  
+  const progress = totalBranches > 0
+    ? (completedBranches / totalBranches) * 100
     : 0;
 
   // Group branches by recipient
@@ -50,7 +55,7 @@ export const ParallelBranchStatus = ({
         <div className="flex items-center gap-2">
           <CheckCircle className="h-4 w-4 text-success" />
           <span className="text-sm font-medium text-success">
-            All {parallelGroup.totalBranches} recipients responded
+            All {totalBranches} recipients responded
           </span>
         </div>
         <Badge variant="default" className="bg-success text-success-foreground text-xs">
@@ -71,17 +76,17 @@ export const ParallelBranchStatus = ({
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">
-              Awaiting {parallelGroup.totalBranches - parallelGroup.completedBranches} of {parallelGroup.totalBranches}
+              Awaiting {remaining} of {totalBranches}
             </span>
           </div>
           
           {/* Mini progress dots */}
           <div className="flex items-center gap-1">
-            {Array.from({ length: parallelGroup.totalBranches }).map((_, i) => (
+            {Array.from({ length: totalBranches }).map((_, i) => (
               <div
                 key={i}
                 className={`w-2 h-2 rounded-full ${
-                  i < parallelGroup.completedBranches 
+                  i < completedBranches 
                     ? 'bg-success' 
                     : 'bg-muted-foreground/30'
                 }`}

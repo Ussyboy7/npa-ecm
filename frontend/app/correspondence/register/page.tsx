@@ -665,15 +665,15 @@ const CorrespondenceRegister = () => {
     <DashboardLayout>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
-        <div>
+          <div>
           <h1 className="text-3xl font-bold">Register Correspondence</h1>
-          <p className="text-muted-foreground mt-1">
-            Capture and initiate inward or outward correspondence from your office
-          </p>
+            <p className="text-muted-foreground mt-1">
+                Capture and initiate inward or outward correspondence from your office
+            </p>
         </div>
 
         <HelpGuideCard
-          title="Office-based Registration"
+            title="Office-based Registration"
           description="Each executive office retains its own registry workspace. Choose your office, register inward correspondence, or capture drafts before dispatching outward."
           links={[
             { label: "Correspondence Inbox", href: "/correspondence/inbox" },
@@ -721,15 +721,15 @@ const CorrespondenceRegister = () => {
                 <Separator />
 
                 <div className="flex gap-2">
-                  {(['inward', 'outward'] as const).map((type) => (
-                    <Button
-                      key={type}
-                      type="button"
-                      variant={flowType === type ? 'default' : 'outline'}
+                {(['inward', 'outward'] as const).map((type) => (
+                  <Button
+                    key={type}
+                    type="button"
+                    variant={flowType === type ? 'default' : 'outline'}
                       size="sm"
-                      onClick={() => setFlowType(type)}
+                    onClick={() => setFlowType(type)}
                       className="flex-1"
-                    >
+                  >
                       {type === 'inward' ? (
                         <>
                           <ArrowRight className="h-4 w-4 mr-2" />
@@ -740,21 +740,21 @@ const CorrespondenceRegister = () => {
                           <ArrowLeft className="h-4 w-4 mr-2" />
                           Outward
                         </>
-                      )}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {flowType === 'inward'
+                    )}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {flowType === 'inward'
                     ? 'Capture external or inter-agency correspondence received by your office.'
                     : 'Register drafts prepared by your office before dispatching outward.'}
-                </p>
-              </CardContent>
-            </Card>
+              </p>
+            </CardContent>
+          </Card>
 
             {/* Form Steps */}
             <form onSubmit={handleSubmit}>
-              <Card>
+          <Card>
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">Registration Details</CardTitle>
@@ -779,41 +779,41 @@ const CorrespondenceRegister = () => {
                     <TabsContent value="basics" className="space-y-4 pt-4">
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="subject">Subject *</Label>
-                          <Input
-                            id="subject"
-                            placeholder="e.g. Request for ICT infrastructure upgrade"
-                            value={formData.subject}
+                  <Label htmlFor="subject">Subject *</Label>
+                  <Input
+                    id="subject"
+                    placeholder="e.g. Request for ICT infrastructure upgrade"
+                    value={formData.subject}
                             onChange={(e) => {
                               setFormData((prev) => ({ ...prev, subject: e.target.value }));
                               if (errors.subject) setErrors(prev => ({ ...prev, subject: '' }));
-                            }}
-                            className={errors.subject ? 'border-destructive' : ''}
-                          />
-                          {errors.subject && (
+                    }}
+                    className={errors.subject ? 'border-destructive' : ''}
+                  />
+                  {errors.subject && (
                             <p className="text-xs text-destructive">{errors.subject}</p>
-                          )}
-                        </div>
+                  )}
+              </div>
 
-                        <div className="space-y-2">
-                          <Label htmlFor="referenceNumber">Reference Number</Label>
-                          <div className="flex gap-2">
-                            <Input
-                              id="referenceNumber"
-                              value={formData.referenceNumber}
+              <div className="space-y-2">
+                  <Label htmlFor="referenceNumber">Reference Number</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="referenceNumber"
+                      value={formData.referenceNumber}
                               onChange={(e) => setFormData({ ...formData, referenceNumber: e.target.value })}
                               className="flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
                               size="icon"
-                              onClick={() => setFormData({ ...formData, referenceNumber: generateReferenceNumber() })}
-                            >
+                      onClick={() => setFormData({ ...formData, referenceNumber: generateReferenceNumber() })}
+                    >
                               <RefreshCcw className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
+                    </Button>
+                  </div>
+                </div>
 
                         <div className="space-y-2">
                           <Label htmlFor="priority">Priority</Label>
@@ -873,76 +873,76 @@ const CorrespondenceRegister = () => {
                           </Select>
                         </div>
 
-                        {flowType === 'inward' ? (
-                          <>
-                            <div className="space-y-2">
+                {flowType === 'inward' ? (
+                  <>
+                    <div className="space-y-2">
                               <Label htmlFor="senderReference">Sender's Reference</Label>
-                              <Input
-                                id="senderReference"
+                  <Input
+                        id="senderReference"
                                 placeholder="Reference on the letter"
-                                value={formData.senderReference}
+                        value={formData.senderReference}
                                 onChange={(e) => setFormData((prev) => ({ ...prev, senderReference: e.target.value }))}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="letterDate">Date of Letter</Label>
-                              <Input
-                                id="letterDate"
-                                type="date"
-                                value={formData.letterDate}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="letterDate">Date of Letter</Label>
+                      <Input
+                        id="letterDate"
+                        type="date"
+                        value={formData.letterDate}
                                 onChange={(e) => setFormData((prev) => ({ ...prev, letterDate: e.target.value }))}
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="receivedDate">Date Received *</Label>
-                              <Input
-                                id="receivedDate"
-                                type="date"
-                                value={formData.receivedDate}
-                                onChange={(e) => setFormData({ ...formData, receivedDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="receivedDate">Date Received *</Label>
+                      <Input
+                        id="receivedDate"
+                        type="date"
+                        value={formData.receivedDate}
+                        onChange={(e) => setFormData({ ...formData, receivedDate: e.target.value })}
                                 className={errors.receivedDate ? 'border-destructive' : ''}
-                              />
+                  />
                               {errors.receivedDate && (
                                 <p className="text-xs text-destructive">{errors.receivedDate}</p>
                               )}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="space-y-2">
-                              <Label htmlFor="letterDate">Date of Letter *</Label>
-                              <Input
-                                id="letterDate"
-                                type="date"
-                                value={formData.letterDate}
+                </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="letterDate">Date of Letter *</Label>
+                      <Input
+                        id="letterDate"
+                        type="date"
+                        value={formData.letterDate}
                                 onChange={(e) => {
                                   setFormData((prev) => ({ ...prev, letterDate: e.target.value }));
                                   if (errors.letterDate) setErrors(prev => ({ ...prev, letterDate: '' }));
-                                }}
-                                className={errors.letterDate ? 'border-destructive' : ''}
-                              />
-                              {errors.letterDate && (
+                        }}
+                        className={errors.letterDate ? 'border-destructive' : ''}
+                      />
+                      {errors.letterDate && (
                                 <p className="text-xs text-destructive">{errors.letterDate}</p>
-                              )}
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="dispatchDate">Date of Dispatch *</Label>
-                              <Input
-                                id="dispatchDate"
-                                type="date"
-                                value={formData.dispatchDate}
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="dispatchDate">Date of Dispatch *</Label>
+                      <Input
+                        id="dispatchDate"
+                        type="date"
+                        value={formData.dispatchDate}
                                 onChange={(e) => {
                                   setFormData((prev) => ({ ...prev, dispatchDate: e.target.value }));
                                   if (errors.dispatchDate) setErrors(prev => ({ ...prev, dispatchDate: '' }));
-                                }}
-                                className={errors.dispatchDate ? 'border-destructive' : ''}
-                              />
-                              {errors.dispatchDate && (
+                        }}
+                        className={errors.dispatchDate ? 'border-destructive' : ''}
+                      />
+                      {errors.dispatchDate && (
                                 <p className="text-xs text-destructive">{errors.dispatchDate}</p>
-                              )}
-                            </div>
-                          </>
-                        )}
+                      )}
+                    </div>
+                  </>
+                )}
                       </div>
 
                       <div className="flex justify-end pt-4">
@@ -956,14 +956,14 @@ const CorrespondenceRegister = () => {
                     {/* Sender/Recipient Tab */}
                     <TabsContent value="sender" className="space-y-4 pt-4">
                       <div className="grid gap-4 sm:grid-cols-2">
-                        {flowType === 'inward' ? (
+                {flowType === 'inward' ? (
                           <>
                             <div className="space-y-2 sm:col-span-2">
                               <Label htmlFor="senderName">From Whom *</Label>
-                              <Input
-                                id="senderName"
-                                placeholder="Enter sender's name"
-                                value={formData.senderName}
+                  <Input
+                    id="senderName"
+                    placeholder="Enter sender's name"
+                    value={formData.senderName}
                                 onChange={(e) => {
                                   setFormData({ ...formData, senderName: e.target.value });
                                   if (errors.senderName) setErrors(prev => ({ ...prev, senderName: '' }));
@@ -973,46 +973,46 @@ const CorrespondenceRegister = () => {
                               {errors.senderName && (
                                 <p className="text-xs text-destructive">{errors.senderName}</p>
                               )}
-                            </div>
-                            <div className="space-y-2">
+                </div>
+                  <div className="space-y-2">
                               <Label htmlFor="senderOrganization">Sender Organization</Label>
-                              <Input
-                                id="senderOrganization"
+                  <Input
+                    id="senderOrganization"
                                 placeholder="Organization name"
-                                value={formData.senderOrganization}
-                                onChange={(e) => setFormData({ ...formData, senderOrganization: e.target.value })}
-                              />
-                            </div>
-                            <div className="space-y-2">
+                    value={formData.senderOrganization}
+                    onChange={(e) => setFormData({ ...formData, senderOrganization: e.target.value })}
+                  />
+                </div>
+                    <div className="space-y-2">
                               <Label htmlFor="senderEmail">Sender Email</Label>
-                              <Input
-                                id="senderEmail"
-                                type="email"
-                                placeholder="sender@example.com"
-                                value={formData.senderEmail}
-                                onChange={(e) => {
-                                  setFormData({ ...formData, senderEmail: e.target.value });
+                      <Input
+                        id="senderEmail"
+                        type="email"
+                        placeholder="sender@example.com"
+                        value={formData.senderEmail}
+                        onChange={(e) => {
+                          setFormData({ ...formData, senderEmail: e.target.value });
                                   if (errors.senderEmail) setErrors(prev => ({ ...prev, senderEmail: '' }));
-                                }}
-                                className={errors.senderEmail ? 'border-destructive' : ''}
-                              />
-                              {errors.senderEmail && (
+                        }}
+                        className={errors.senderEmail ? 'border-destructive' : ''}
+                      />
+                      {errors.senderEmail && (
                                 <p className="text-xs text-destructive">{errors.senderEmail}</p>
-                              )}
-                            </div>
-                            <div className="space-y-2">
+                      )}
+                    </div>
+                    <div className="space-y-2">
                               <Label htmlFor="senderPhone">Sender Phone</Label>
-                              <Input
-                                id="senderPhone"
-                                type="tel"
-                                placeholder="+234 123 456 7890"
-                                value={formData.senderPhone}
-                                onChange={(e) => setFormData({ ...formData, senderPhone: e.target.value })}
-                              />
-                            </div>
-                          </>
+                      <Input
+                        id="senderPhone"
+                        type="tel"
+                        placeholder="+234 123 456 7890"
+                        value={formData.senderPhone}
+                        onChange={(e) => setFormData({ ...formData, senderPhone: e.target.value })}
+                      />
+                    </div>
+                  </>
                         ) : (
-                          <>
+                  <>
                             <div className="space-y-2 sm:col-span-2">
                               <Label>Originating Office</Label>
                               <div className="p-3 rounded-lg bg-muted/50 border">
@@ -1024,47 +1024,47 @@ const CorrespondenceRegister = () => {
                             </div>
                             <div className="space-y-2 sm:col-span-2">
                               <Label htmlFor="recipientName">To Whom *</Label>
-                              <Input
-                                id="recipientName"
-                                placeholder="Recipient name or office"
-                                value={formData.recipientName}
+                      <Input
+                        id="recipientName"
+                        placeholder="Recipient name or office"
+                        value={formData.recipientName}
                                 onChange={(e) => {
                                   setFormData((prev) => ({ ...prev, recipientName: e.target.value }));
                                   if (errors.recipientName) setErrors(prev => ({ ...prev, recipientName: '' }));
-                                }}
-                                className={errors.recipientName ? 'border-destructive' : ''}
-                              />
-                              {errors.recipientName && (
+                        }}
+                        className={errors.recipientName ? 'border-destructive' : ''}
+                      />
+                      {errors.recipientName && (
                                 <p className="text-xs text-destructive">{errors.recipientName}</p>
-                              )}
-                            </div>
-                            <div className="space-y-2">
+                      )}
+                    </div>
+                    <div className="space-y-2">
                               <Label htmlFor="recipientEmail">Recipient Email</Label>
-                              <Input
-                                id="recipientEmail"
-                                type="email"
-                                placeholder="recipient@example.com"
-                                value={formData.recipientEmail}
-                                onChange={(e) => {
-                                  setFormData({ ...formData, recipientEmail: e.target.value });
+                      <Input
+                        id="recipientEmail"
+                        type="email"
+                        placeholder="recipient@example.com"
+                        value={formData.recipientEmail}
+                        onChange={(e) => {
+                          setFormData({ ...formData, recipientEmail: e.target.value });
                                   if (errors.recipientEmail) setErrors(prev => ({ ...prev, recipientEmail: '' }));
-                                }}
-                                className={errors.recipientEmail ? 'border-destructive' : ''}
-                              />
-                              {errors.recipientEmail && (
+                        }}
+                        className={errors.recipientEmail ? 'border-destructive' : ''}
+                      />
+                      {errors.recipientEmail && (
                                 <p className="text-xs text-destructive">{errors.recipientEmail}</p>
-                              )}
-                            </div>
-                            <div className="space-y-2">
+                      )}
+                    </div>
+                    <div className="space-y-2">
                               <Label htmlFor="recipientPhone">Recipient Phone</Label>
-                              <Input
-                                id="recipientPhone"
-                                type="tel"
-                                placeholder="+234 123 456 7890"
-                                value={formData.recipientPhone}
-                                onChange={(e) => setFormData({ ...formData, recipientPhone: e.target.value })}
-                              />
-                            </div>
+                      <Input
+                        id="recipientPhone"
+                        type="tel"
+                        placeholder="+234 123 456 7890"
+                        value={formData.recipientPhone}
+                        onChange={(e) => setFormData({ ...formData, recipientPhone: e.target.value })}
+                      />
+                    </div>
                             <div className="space-y-2">
                               <Label htmlFor="senderOrganization">External Recipient Org</Label>
                               <Input
@@ -1074,8 +1074,8 @@ const CorrespondenceRegister = () => {
                                 onChange={(e) => setFormData({ ...formData, senderOrganization: e.target.value })}
                               />
                             </div>
-                          </>
-                        )}
+                  </>
+                )}
                       </div>
 
                       <div className="flex justify-between pt-4">
@@ -1190,7 +1190,7 @@ const CorrespondenceRegister = () => {
                           )}
                         </div>
 
-                        {flowType === 'outward' && (
+                {flowType === 'outward' && (
                           <div className="space-y-4">
                             <Separator />
                             <div>
@@ -1201,77 +1201,77 @@ const CorrespondenceRegister = () => {
                               {errors.distribution && (
                                 <p className="text-sm text-destructive mb-2">{errors.distribution}</p>
                               )}
-                              <div className="grid gap-4 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-3">
                                 <div className="space-y-2">
                                   <p className="text-sm font-medium">Directorates</p>
                                   <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
-                                    {directorates.length === 0 ? (
+                          {directorates.length === 0 ? (
                                       <p className="text-xs text-muted-foreground">No directorates</p>
-                                    ) : (
-                                      directorates.map((dir) => (
+                          ) : (
+                            directorates.map((dir) => (
                                         <label key={dir.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded">
-                                          <Checkbox
-                                            checked={directorateDistribution.includes(dir.id)}
-                                            onCheckedChange={(checked) =>
-                                              setDirectorateDistribution((prev) =>
+                                <Checkbox
+                                  checked={directorateDistribution.includes(dir.id)}
+                                  onCheckedChange={(checked) =>
+                                    setDirectorateDistribution((prev) =>
                                                 checked ? [...prev, dir.id] : prev.filter((item) => item !== dir.id),
-                                              )
-                                            }
-                                          />
-                                          <span className="truncate">{dir.name}</span>
-                                        </label>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
+                                    )
+                                  }
+                                />
+                                <span className="truncate">{dir.name}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
                                 <div className="space-y-2">
                                   <p className="text-sm font-medium">Divisions</p>
                                   <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
-                                    {divisions.length === 0 ? (
+                          {divisions.length === 0 ? (
                                       <p className="text-xs text-muted-foreground">No divisions</p>
-                                    ) : (
-                                      divisions.map((division) => (
+                          ) : (
+                            divisions.map((division) => (
                                         <label key={division.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded">
-                                          <Checkbox
-                                            checked={divisionDistribution.includes(division.id)}
-                                            onCheckedChange={(checked) =>
-                                              setDivisionDistribution((prev) =>
+                                <Checkbox
+                                  checked={divisionDistribution.includes(division.id)}
+                                  onCheckedChange={(checked) =>
+                                    setDivisionDistribution((prev) =>
                                                 checked ? [...prev, division.id] : prev.filter((item) => item !== division.id),
-                                              )
-                                            }
-                                          />
-                                          <span className="truncate">{division.name}</span>
-                                        </label>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
+                                    )
+                                  }
+                                />
+                                <span className="truncate">{division.name}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                      </div>
                                 <div className="space-y-2">
                                   <p className="text-sm font-medium">Departments</p>
                                   <div className="max-h-40 overflow-y-auto rounded-lg border p-3 space-y-2">
-                                    {departments.length === 0 ? (
+                          {departments.length === 0 ? (
                                       <p className="text-xs text-muted-foreground">No departments</p>
-                                    ) : (
-                                      departments.map((department) => (
+                          ) : (
+                            departments.map((department) => (
                                         <label key={department.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded">
-                                          <Checkbox
-                                            checked={departmentDistribution.includes(department.id)}
-                                            onCheckedChange={(checked) =>
-                                              setDepartmentDistribution((prev) =>
+                                <Checkbox
+                                  checked={departmentDistribution.includes(department.id)}
+                                  onCheckedChange={(checked) =>
+                                    setDepartmentDistribution((prev) =>
                                                 checked ? [...prev, department.id] : prev.filter((item) => item !== department.id),
-                                              )
-                                            }
-                                          />
-                                          <span className="truncate">{department.name}</span>
-                                        </label>
-                                      ))
-                                    )}
+                                    )
+                                  }
+                                />
+                                <span className="truncate">{department.name}</span>
+                              </label>
+                            ))
+                          )}
                                   </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                       </div>
 
                       <div className="flex justify-between pt-4">
@@ -1283,13 +1283,13 @@ const CorrespondenceRegister = () => {
                           Next: Documents
                           <ArrowRight className="h-4 w-4 ml-2" />
                         </Button>
-                      </div>
+                        </div>
                     </TabsContent>
 
                     {/* Documents Tab */}
                     <TabsContent value="documents" className="space-y-4 pt-4">
                       <div className="space-y-4">
-                        <div className="space-y-2">
+                <div className="space-y-2">
                           <Label>Upload Documents *</Label>
                           <div
                             role="button"
@@ -1335,12 +1335,12 @@ const CorrespondenceRegister = () => {
                                   e.target.value = '';
                                 }
                               }}
-                            />
-                          </div>
+                          />
+                        </div>
                           {errors.documentFiles && (
                             <p className="text-xs text-destructive">{errors.documentFiles}</p>
                           )}
-                        </div>
+                      </div>
 
                         {documentFiles.length > 0 && (
                           <div className="space-y-2">
@@ -1358,8 +1358,8 @@ const CorrespondenceRegister = () => {
                                       <p className="text-xs text-muted-foreground">
                                         {(file.size / 1024 / 1024).toFixed(2)} MB
                                       </p>
-                                    </div>
-                                  </div>
+                          </div>
+                            </div>
                                   <Button
                                     type="button"
                                     variant="ghost"
@@ -1368,10 +1368,10 @@ const CorrespondenceRegister = () => {
                                   >
                                     <X className="h-4 w-4" />
                                   </Button>
-                                </div>
-                              ))}
-                            </div>
                           </div>
+                              ))}
+                </div>
+                </div>
                         )}
 
                         <Separator />
@@ -1379,12 +1379,12 @@ const CorrespondenceRegister = () => {
                         <div className="grid gap-4 sm:grid-cols-2">
                           <div className="space-y-2 sm:col-span-2">
                             <Label htmlFor="tags">Tags</Label>
-                            <Input
-                              id="tags"
+                  <Input
+                    id="tags"
                               placeholder="e.g. infrastructure, urgent, budget (comma-separated)"
-                              value={formData.tags}
-                              onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                            />
+                    value={formData.tags}
+                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                  />
                             {formData.tags && (
                               <div className="flex flex-wrap gap-1 mt-2">
                                 {formData.tags.split(',').map((tag, i) => tag.trim() && (
@@ -1395,20 +1395,20 @@ const CorrespondenceRegister = () => {
                                 ))}
                               </div>
                             )}
-                          </div>
+                </div>
 
                           <div className="space-y-2 sm:col-span-2">
-                            <Label htmlFor="remarks">Remarks</Label>
-                            <Textarea
-                              id="remarks"
-                              placeholder="Add registry notes or routing instructions"
-                              value={formData.remarks}
+                  <Label htmlFor="remarks">Remarks</Label>
+                  <Textarea
+                    id="remarks"
+                    placeholder="Add registry notes or routing instructions"
+                    value={formData.remarks}
                               onChange={(e) => setFormData((prev) => ({ ...prev, remarks: e.target.value }))}
                               rows={3}
-                            />
+                  />
                           </div>
-                        </div>
-                      </div>
+                </div>
+              </div>
 
                       <div className="flex justify-between pt-4">
                         <Button type="button" variant="outline" onClick={goToPrevStep}>
@@ -1428,7 +1428,7 @@ const CorrespondenceRegister = () => {
                             </>
                           )}
                         </Button>
-                      </div>
+                    </div>
                     </TabsContent>
                   </Tabs>
                 </CardContent>
@@ -1466,22 +1466,22 @@ const CorrespondenceRegister = () => {
                   </div>
                   <div className="flex items-start justify-between">
                     <span className="text-muted-foreground">Priority</span>
-                    <Badge
-                      variant={
+                      <Badge
+                        variant={
                         formData.priority === 'urgent' ? 'destructive' :
                         formData.priority === 'high' ? 'default' :
                         formData.priority === 'low' ? 'outline' : 'secondary'
-                      }
-                    >
+                        }
+                      >
                       {formData.priority}
-                    </Badge>
-                  </div>
+                      </Badge>
+                    </div>
                   <div className="flex items-start justify-between">
                     <span className="text-muted-foreground">Assigned to</span>
                     <span className="font-medium text-right max-w-[150px] truncate">
                       {selectedAssigneeName || '—'}
-                    </span>
-                  </div>
+                      </span>
+                    </div>
                   <Separator />
                   <div className="flex items-start justify-between">
                     <span className="text-muted-foreground">Documents</span>
@@ -1504,19 +1504,19 @@ const CorrespondenceRegister = () => {
                 <Separator />
 
                 <div className="space-y-2">
-                  <Button
-                    type="button"
-                    variant="outline"
+            <Button 
+              type="button" 
+              variant="outline"
                     size="sm"
                     className="w-full"
-                    onClick={handleSaveDraft}
-                  >
+              onClick={handleSaveDraft}
+            >
                     <Save className="h-4 w-4 mr-2" />
-                    Save Draft
-                  </Button>
+              Save Draft
+            </Button>
                   {hasDraft && (
-                    <Button
-                      type="button"
+              <Button 
+                type="button" 
                       variant="ghost"
                       size="sm"
                       className="w-full text-destructive hover:text-destructive"
@@ -1540,20 +1540,20 @@ const CorrespondenceRegister = () => {
                   variant="ghost"
                   size="sm"
                   className="w-full justify-start"
-                  onClick={() => router.push('/correspondence/inbox')}
-                >
+                onClick={() => router.push('/correspondence/inbox')}
+              >
                   <Mail className="h-4 w-4 mr-2" />
                   My Inbox
-                </Button>
-                <Button
+              </Button>
+              <Button 
                   variant="ghost"
                   size="sm"
                   className="w-full justify-start"
                   onClick={() => router.push('/correspondence/registered')}
-                >
+              >
                   <FileText className="h-4 w-4 mr-2" />
                   Registered Items
-                </Button>
+              </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1565,7 +1565,7 @@ const CorrespondenceRegister = () => {
                 </Button>
               </CardContent>
             </Card>
-          </div>
+            </div>
         </div>
       </div>
     </DashboardLayout>

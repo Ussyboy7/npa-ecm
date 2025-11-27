@@ -204,7 +204,7 @@ const OutboxPage = () => {
             <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
               <Filter className="h-4 w-4 mr-2" /> Filters
               {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
-            </Button>
+          </Button>
             <Button size="sm" asChild><Link href="/correspondence/register"><Mail className="h-4 w-4 mr-2" />Register New</Link></Button>
           </div>
         </div>
@@ -235,7 +235,7 @@ const OutboxPage = () => {
                       </Badge>
                     ))}
                   </div>
-                </div>
+          </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Priority</Label>
                   <div className="flex flex-wrap gap-1">
@@ -249,24 +249,24 @@ const OutboxPage = () => {
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Date From</Label>
                   <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-                </div>
+            </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Date To</Label>
                   <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-                </div>
+            </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Sort By</Label>
                   <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                      <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
-                      <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
-                      <SelectItem value="created-desc">Created (Newest)</SelectItem>
-                      <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <SelectContent>
+                  <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+                  <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
+                  <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
+                  <SelectItem value="created-desc">Created (Newest)</SelectItem>
+                  <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
               </div>
             </CardContent>
           </Card>
@@ -299,34 +299,34 @@ const OutboxPage = () => {
 
         {error && <Card><CardContent className="py-4 text-sm text-destructive flex items-center gap-2"><AlertCircle className="h-4 w-4" />{error}</CardContent></Card>}
 
-        {loading ? (
+              {loading ? (
           <Card><CardContent className="py-12 text-center text-muted-foreground text-sm flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading outbox items...</CardContent></Card>
-        ) : outboxItems.length === 0 ? (
+            ) : outboxItems.length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">
-              <Send className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                <Send className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground mb-2">{debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'You have no drafts or pending dispatch items at the moment.'}</p>
               {(debouncedQuery || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">Clear Filters</Button>}
             </CardContent>
           </Card>
-        ) : (
+            ) : (
           <div className="space-y-3">
             {outboxItems.map((item) => {
               const division = item.divisionId ? divisions.find((div) => div.id === item.divisionId) : undefined;
               const currentApprover = item.currentApproverId ? organizationUsers.find((user) => user.id === item.currentApproverId) : undefined;
-              const daysPending = calculateDaysPending(item);
+                const daysPending = calculateDaysPending(item);
 
-              return (
+                return (
                 <Link key={item.id} href={`/correspondence/outbox/${item.id}`} className="block border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
-                  <div className="flex items-start gap-4">
+                    <div className="flex items-start gap-4">
                     <div className={`p-3 rounded-lg ${item.priority === 'urgent' ? 'bg-destructive/10' : item.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
                       <Mail className={`h-5 w-5 ${item.priority === 'urgent' ? 'text-destructive' : item.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="flex-1 min-w-0">
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-foreground truncate mb-1">{item.subject}</h3>
-                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
                             <Badge variant={getPriorityColor(item.priority)}>{item.priority.toUpperCase()}</Badge>
                             <Badge variant="outline" className="gap-1">{item.direction === 'downward' ? (<><ArrowDown className="h-3 w-3 text-info" />Downward</>) : (<><ArrowUp className="h-3 w-3 text-success" />Upward</>)}</Badge>
                             <Badge variant="secondary" className={getStatusColor(item.status)}>{item.status.replace('-', ' ')}</Badge>
@@ -335,16 +335,16 @@ const OutboxPage = () => {
                         </div>
                         <span className="text-xs text-muted-foreground whitespace-nowrap">{item.updatedAt ? formatDateShort(item.updatedAt) : '—'}</span>
                       </div>
-                      <div className="space-y-1 text-sm text-muted-foreground">
+                        <div className="space-y-1 text-sm text-muted-foreground">
                         <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /><span>Ref: {item.referenceNumber}</span></div>
                         {item.senderName && <div className="flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" /><span>From: {item.senderName}</span></div>}
                         {division && <div className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5" /><span>Division: {division.name}</span></div>}
                         {currentApprover && <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /><span>Current Approver: {currentApprover.name}</span></div>}
                       </div>
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              );
+                  </Link>
+                );
             })}
           </div>
         )}
@@ -383,8 +383,8 @@ const OutboxPage = () => {
               <div className="flex items-center gap-1">
                 <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
                 <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
-              </div>
-            )}
+          </div>
+        )}
             <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
           </div>
         </div>

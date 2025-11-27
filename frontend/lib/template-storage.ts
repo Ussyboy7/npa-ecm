@@ -4,7 +4,7 @@ import type { User } from './npa-structure';
 
 export type TemplateScope = 'organization' | 'directorate' | 'division' | 'department' | 'user';
 
-export type TemplateType = 'document' | 'minute';
+export type TemplateType = 'document' | 'minute' | 'treatment';
 
 export type DocumentTemplate = {
   id: string;
