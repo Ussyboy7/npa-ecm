@@ -224,21 +224,21 @@ const DepartmentFilesPage = () => {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Department Filters</CardTitle>
                 {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
-              </div>
+          </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                {selectableOffices.length > 0 && (
+            {selectableOffices.length > 0 && (
                   <div>
                     <Label className="text-sm font-medium mb-2 block">Office</Label>
-                    <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
+              <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                <SelectContent>
                         <SelectItem value="all">All Offices</SelectItem>
                         {selectableOffices.map((office) => <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+              </SelectContent>
+            </Select>
+          </div>
                 )}
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Status</Label>
@@ -290,15 +290,15 @@ const DepartmentFilesPage = () => {
             { label: 'Owned by Your Offices', value: summary.officeOwned, icon: Building2, iconClass: 'text-info' },
           ].map(({ label, value, icon: Icon, iconClass }) => (
             <Card key={label}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
                   <div><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-bold">{value}</p></div>
                   <Icon className={`h-8 w-8 opacity-50 ${iconClass}`} />
                 </div>
               </CardContent>
             </Card>
           ))}
-        </div>
+              </div>
 
         {loading ? (
           <Card><CardContent className="py-12 text-center text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading records…</CardContent></Card>
@@ -322,7 +322,7 @@ const DepartmentFilesPage = () => {
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-semibold text-foreground truncate">{item.subject}</h3>
                     <Badge variant={item.status === 'archived' ? 'secondary' : 'outline'}>{item.status}</Badge>
-                  </div>
+        </div>
                   <p className="text-xs text-muted-foreground mt-1">Ref: {item.referenceNumber || '—'} • Completed: {item.completedAt ? formatDateShort(item.completedAt) : '—'}</p>
                   <p className="text-xs text-muted-foreground">Received: {item.receivedDate ? formatDateShort(item.receivedDate) : '—'}</p>
                   {item.completionPackage && (
@@ -332,7 +332,7 @@ const DepartmentFilesPage = () => {
                       {completionPackageUrl && (
                         <Button variant="secondary" size="sm" className="text-xs h-7 px-3" onClick={(event) => { event.preventDefault(); event.stopPropagation(); const filename = `completion-package-${item.referenceNumber || item.id}.pdf`; handleDownload(completionPackageUrl, filename); }}>
                           <FileText className="h-3.5 w-3.5 mr-1" />Download PDF
-                        </Button>
+              </Button>
                       )}
                     </div>
                   )}
@@ -377,8 +377,8 @@ const DepartmentFilesPage = () => {
               <div className="flex items-center gap-1">
                 <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
                 <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
-              </div>
-            )}
+          </div>
+        )}
             <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
           </div>
         </div>

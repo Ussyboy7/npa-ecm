@@ -382,7 +382,7 @@ const AuditTrailPage = () => {
                   <div className={`p-3 rounded-lg ${bgClass}`}>
                     <Icon className={`h-6 w-6 ${iconClass}`} />
                   </div>
-                  <div>
+        <div>
                     <p className="text-sm text-muted-foreground">{label}</p>
                     <p className="text-2xl font-semibold">{value}</p>
                   </div>
@@ -396,13 +396,13 @@ const AuditTrailPage = () => {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="relative max-w-xl w-full">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+                <Input
               placeholder="Search by user, action, description, object..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
-            />
-          </div>
+                />
+              </div>
         </div>
 
         {/* Filters */}
@@ -416,50 +416,50 @@ const AuditTrailPage = () => {
               <div className="w-full md:w-48 space-y-1">
                 <Label className="text-xs text-muted-foreground">Action Type</Label>
                 <Select value={actionFilter} onValueChange={setActionFilter}>
-                  <SelectTrigger>
+                <SelectTrigger>
                     <SelectValue placeholder="All Actions" />
-                  </SelectTrigger>
-                  <SelectContent>
+                </SelectTrigger>
+                <SelectContent>
                     <SelectItem value="all">All Actions</SelectItem>
                     {ACTION_TYPES.map((action) => (
                       <SelectItem key={action.value} value={action.value}>
                         {action.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               </div>
               <div className="w-full md:w-48 space-y-1">
                 <Label className="text-xs text-muted-foreground">Module</Label>
                 <Select value={moduleFilter} onValueChange={setModuleFilter}>
-                  <SelectTrigger>
+                <SelectTrigger>
                     <SelectValue placeholder="All Modules" />
-                  </SelectTrigger>
-                  <SelectContent>
+                </SelectTrigger>
+                <SelectContent>
                     <SelectItem value="all">All Modules</SelectItem>
                     {MODULES.map((module) => (
                       <SelectItem key={module.value} value={module.value}>
                         {module.label}
                       </SelectItem>
                     ))}
-                  </SelectContent>
-                </Select>
+                </SelectContent>
+              </Select>
               </div>
               <div className="w-full md:w-40 space-y-1">
                 <Label className="text-xs text-muted-foreground">Severity</Label>
                 <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                  <SelectTrigger>
+                <SelectTrigger>
                     <SelectValue placeholder="All Severities" />
-                  </SelectTrigger>
-                  <SelectContent>
+                </SelectTrigger>
+                <SelectContent>
                     <SelectItem value="all">All Severities</SelectItem>
                     {SEVERITIES.map((severity) => (
                       <SelectItem key={severity.value} value={severity.value}>
                         {severity.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               </div>
               <div className="w-full md:w-36 space-y-1">
                 <Label className="text-xs text-muted-foreground">Status</Label>
@@ -477,14 +477,14 @@ const AuditTrailPage = () => {
               <div className="w-full md:w-48 space-y-1">
                 <Label className="text-xs text-muted-foreground">Sort Order</Label>
                 <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as 'asc' | 'desc')}>
-                  <SelectTrigger>
+                <SelectTrigger>
                     <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+                </SelectTrigger>
+                <SelectContent>
                     <SelectItem value="desc">Newest First</SelectItem>
                     <SelectItem value="asc">Oldest First</SelectItem>
-                  </SelectContent>
-                </Select>
+                </SelectContent>
+              </Select>
               </div>
               {(actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || debouncedSearch) && (
                 <div className="flex items-end">
@@ -672,8 +672,8 @@ const AuditTrailPage = () => {
               Next
               <ChevronRight className="h-4 w-4" />
             </Button>
-          </div>
-        </div>
+                      </div>
+                    </div>
       </div>
     </DashboardLayout>
   );

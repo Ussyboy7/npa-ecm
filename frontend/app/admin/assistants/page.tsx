@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
+import { 
   Briefcase,
   Plus,
   Search,
@@ -211,24 +211,24 @@ const AssistantsManagement = () => {
     <ClientErrorBoundary>
       <DashboardLayout>
         <div className="p-6 space-y-6">
-          {/* Header */}
+        {/* Header */}
           <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
                   <Briefcase className="h-8 w-8 text-primary" />
                   Assistants
-                </h1>
-                <p className="text-muted-foreground mt-1">
+            </h1>
+            <p className="text-muted-foreground mt-1">
                   Manage Technical Assistants (TAs) and Personal Assistants (PAs) for executives
-                </p>
+            </p>
               </div>
               <Button onClick={() => handleAssignAssistant()} className="bg-gradient-primary">
                 <Plus className="h-4 w-4 mr-2" />
                 Assign Assistant
               </Button>
-            </div>
           </div>
+        </div>
 
           {/* Stats Overview */}
           <div className="grid gap-4 md:grid-cols-5">
@@ -237,25 +237,25 @@ const AssistantsManagement = () => {
               onClick={() => setTypeFilter("all")}
             >
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-lg bg-primary/10">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-primary/10">
                     <Users className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
+                </div>
+                <div>
                     <p className="text-xs text-muted-foreground">Total Assistants</p>
                     <p className="text-2xl font-bold">{stats.total}</p>
-                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
             <Card 
               className={`cursor-pointer transition-all hover:shadow-md ${typeFilter === "TA" ? "ring-2 ring-primary" : ""}`}
               onClick={() => setTypeFilter("TA")}
             >
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-lg bg-info/10">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-lg bg-info/10">
                     <UserCog className="h-5 w-5 text-info" />
                   </div>
                   <div>
@@ -274,43 +274,43 @@ const AssistantsManagement = () => {
                 <div className="flex items-center gap-4">
                   <div className="p-3 rounded-lg bg-success/10">
                     <User className="h-5 w-5 text-success" />
-                  </div>
-                  <div>
+                </div>
+                <div>
                     <p className="text-xs text-muted-foreground">Personal (PA)</p>
                     <p className="text-2xl font-bold">{stats.pas}</p>
-                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
-            <Card>
+          <Card>
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4">
                   <div className="p-3 rounded-lg bg-warning/10">
                     <Shield className="h-5 w-5 text-warning" />
-                  </div>
-                  <div>
+                </div>
+                <div>
                     <p className="text-xs text-muted-foreground">Executives</p>
                     <p className="text-2xl font-bold">{stats.executives}</p>
-                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
-            <Card>
+          <Card>
               <CardContent className="p-5">
-                <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4">
                   <div className="p-3 rounded-lg bg-secondary/10">
                     <Briefcase className="h-5 w-5 text-secondary" />
-                  </div>
-                  <div>
+                </div>
+                <div>
                     <p className="text-xs text-muted-foreground">With Assistants</p>
                     <p className="text-2xl font-bold">{stats.withAssistants}</p>
-                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
           {/* Main Content */}
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="space-y-4">
@@ -328,13 +328,13 @@ const AssistantsManagement = () => {
 
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
                     placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 w-64"
-                  />
+          />
                 </div>
                 {viewMode === "all" && (
                   <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
@@ -349,7 +349,7 @@ const AssistantsManagement = () => {
                   </Select>
                 )}
               </div>
-            </div>
+        </div>
 
             {/* By Executive View */}
             <TabsContent value="executives" className="space-y-4">
@@ -365,43 +365,43 @@ const AssistantsManagement = () => {
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   {filteredExecutives.map((executive) => {
-                    const assignments = getAssistantsForExecutive(executive.id);
-                    const canManage = canManageExecutive(executive.id);
+            const assignments = getAssistantsForExecutive(executive.id);
+            const canManage = canManageExecutive(executive.id);
 
-                    return (
+            return (
                       <Card key={executive.id} className="group">
                         <CardHeader className="pb-3">
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-3">
-                              <div className="p-2 rounded-lg bg-primary/10">
+                      <div className="p-2 rounded-lg bg-primary/10">
                                 <Shield className="h-5 w-5 text-primary" />
-                              </div>
-                              <div>
+                      </div>
+                      <div>
                                 <CardTitle className="text-base">{executive.name}</CardTitle>
                                 <CardDescription className="text-xs">
                                   {executive.systemRole} • {executive.gradeLevel}
                                 </CardDescription>
                               </div>
-                            </div>
+                      </div>
                             <div className="flex items-center gap-2">
                               <Badge variant={assignments.length > 0 ? "default" : "secondary"}>
                                 {assignments.length} assistant{assignments.length !== 1 ? "s" : ""}
-                              </Badge>
+                      </Badge>
                               {canManage && (
-                                <Button
+                    <Button 
                                   size="icon"
                                   variant="ghost"
                                   className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={() => handleAssignAssistant(executive.id)}
-                                >
+                      onClick={() => handleAssignAssistant(executive.id)}
+                    >
                                   <Plus className="h-4 w-4" />
-                                </Button>
+                    </Button>
                               )}
                             </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          {assignments.length === 0 ? (
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {assignments.length === 0 ? (
                             <div className="text-center py-6 border border-dashed rounded-lg">
                               <Briefcase className="h-8 w-8 mx-auto mb-2 text-muted-foreground opacity-50" />
                               <p className="text-sm text-muted-foreground">No assistants assigned</p>
@@ -415,16 +415,16 @@ const AssistantsManagement = () => {
                                   Assign first assistant
                                 </Button>
                               )}
-                            </div>
-                          ) : (
+                    </div>
+                  ) : (
                             <div className="space-y-2">
                               {assignments.map((assignment) => {
-                                const assistant = getAssistantInfo(assignment.assistantId);
-                                return (
-                                  <div
-                                    key={assignment.id}
+                        const assistant = getAssistantInfo(assignment.assistantId);
+                        return (
+                          <div
+                            key={assignment.id}
                                     className="flex items-center justify-between p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors"
-                                  >
+                          >
                                     <div className="flex items-center gap-3">
                                       <div className={`p-1.5 rounded ${assignment.type === "TA" ? "bg-info/10" : "bg-success/10"}`}>
                                         {assignment.type === "TA" ? (
@@ -432,14 +432,14 @@ const AssistantsManagement = () => {
                                         ) : (
                                           <User className="h-4 w-4 text-success" />
                                         )}
-                                      </div>
+                                </div>
                                       <div>
                                         <p className="font-medium text-sm">{assistant?.name || "Unknown"}</p>
                                         <p className="text-xs text-muted-foreground">
                                           {assignment.specialization || "General"} • {assignment.permissions.length} permissions
-                                        </p>
-                                      </div>
-                                    </div>
+                                </p>
+                              </div>
+                            </div>
                                     <div className="flex items-center gap-1">
                                       <Badge variant="outline" className="text-xs">
                                         {assignment.type}
@@ -449,7 +449,7 @@ const AssistantsManagement = () => {
                                           <DropdownMenuTrigger asChild>
                                             <Button variant="ghost" size="icon" className="h-7 w-7">
                                               <MoreVertical className="h-4 w-4" />
-                                            </Button>
+                              </Button>
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent align="end">
                                             <DropdownMenuItem onClick={() => handleEditAssignment(assignment)}>
@@ -457,32 +457,32 @@ const AssistantsManagement = () => {
                                               Edit Permissions
                                             </DropdownMenuItem>
                                             <DropdownMenuItem 
-                                              onClick={() => handleRemoveAssistant(assignment.id)}
+                                onClick={() => handleRemoveAssistant(assignment.id)}
                                               className="text-destructive"
-                                            >
+                              >
                                               <UserMinus className="h-4 w-4 mr-2" />
                                               Remove
                                             </DropdownMenuItem>
                                           </DropdownMenuContent>
                                         </DropdownMenu>
                                       )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
                             </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
                 </div>
               )}
             </TabsContent>
 
             {/* All Assistants View */}
             <TabsContent value="all" className="space-y-4">
-              <Card>
+            <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg">All Assistant Assignments</CardTitle>
                   <CardDescription>
@@ -582,37 +582,37 @@ const AssistantsManagement = () => {
                       </Table>
                     </div>
                   )}
-                </CardContent>
-              </Card>
+              </CardContent>
+            </Card>
             </TabsContent>
           </Tabs>
-        </div>
+      </div>
 
         {/* Assignment Modal */}
-        <AssistantAssignmentModal
-          open={assignmentModalOpen}
-          onOpenChange={setAssignmentModalOpen}
-          executiveId={selectedExecutiveId}
-          assignment={selectedAssignment}
-        />
+      <AssistantAssignmentModal
+        open={assignmentModalOpen}
+        onOpenChange={setAssignmentModalOpen}
+        executiveId={selectedExecutiveId}
+        assignment={selectedAssignment}
+      />
 
         {/* Remove Confirmation */}
-        <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Remove Assistant</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to remove this assistant assignment? This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+      <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Assistant</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this assistant assignment? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction onClick={confirmRemove} className="bg-destructive text-destructive-foreground">
                 Remove
               </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </DashboardLayout>
     </ClientErrorBoundary>
   );

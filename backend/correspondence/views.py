@@ -375,18 +375,61 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         elif office_ids:
             # Include correspondence where:
             # 1. current_office or owning_office is in user's offices, OR
-            # 2. User is a recipient of a parallel branch (for parallel routing)
-            from correspondence.models import Minute
+            # 2. User is a recipient of a parallel branch (for parallel routing), OR
+            # 3. User's division/department/directorate is in the distribution list (CC)
+            from correspondence.models import Minute, CorrespondenceDistribution
+            from organization.models import OfficeMembership
+            
             parallel_correspondence_ids = Minute.objects.filter(
                 to_user=user,
                 is_parallel_branch=True,
                 correspondence__workflow_state='parallel'
             ).values_list('correspondence_id', flat=True).distinct()
             
+            # Get user's organizational units from their office memberships
+            user_offices = OfficeMembership.objects.filter(
+                user=user, is_active=True
+            ).select_related('office').values_list('office', flat=True)
+            
+            from organization.models import Office
+            user_office_objs = Office.objects.filter(id__in=user_offices)
+            user_division_ids = set(user_office_objs.values_list('division_id', flat=True))
+            user_department_ids = set(user_office_objs.values_list('department_id', flat=True))
+            user_directorate_ids = set(user_office_objs.values_list('directorate_id', flat=True))
+            
+            # Also include user's direct division/department from profile
+            if hasattr(user, 'division_id') and user.division_id:
+                user_division_ids.add(user.division_id)
+            if hasattr(user, 'department_id') and user.department_id:
+                user_department_ids.add(user.department_id)
+            if hasattr(user, 'directorate_id') and user.directorate_id:
+                user_directorate_ids.add(user.directorate_id)
+            
+            # Remove None values
+            user_division_ids.discard(None)
+            user_department_ids.discard(None)
+            user_directorate_ids.discard(None)
+            
+            # Get correspondence IDs where user is a distribution recipient
+            distribution_filter = Q()
+            if user_division_ids:
+                distribution_filter |= Q(division_id__in=user_division_ids)
+            if user_department_ids:
+                distribution_filter |= Q(department_id__in=user_department_ids)
+            if user_directorate_ids:
+                distribution_filter |= Q(directorate_id__in=user_directorate_ids)
+            
+            distribution_correspondence_ids = []
+            if distribution_filter:
+                distribution_correspondence_ids = CorrespondenceDistribution.objects.filter(
+                    distribution_filter
+                ).values_list('correspondence_id', flat=True).distinct()
+            
             queryset = self.base_queryset.filter(is_deleted=False).filter(
                 Q(current_office_id__in=office_ids) | 
                 Q(owning_office_id__in=office_ids) |
-                Q(id__in=parallel_correspondence_ids)
+                Q(id__in=parallel_correspondence_ids) |
+                Q(id__in=distribution_correspondence_ids)
             )
         else:
             return Response(

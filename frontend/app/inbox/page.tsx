@@ -215,7 +215,7 @@ const ExecutiveInbox = () => {
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex justify-between items-start">
-          <div>
+        <div>
             <h1 className="text-3xl font-bold">My Inbox</h1>
             <p className="text-muted-foreground mt-1">All correspondence requiring your attention</p>
           </div>
@@ -341,7 +341,7 @@ const ExecutiveInbox = () => {
               </Select>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1 || loading}><ChevronLeft className="h-4 w-4" />Previous</Button>
             <div className="flex items-center gap-1">
               {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
@@ -353,7 +353,7 @@ const ExecutiveInbox = () => {
                 if (pageNum > pageCount) return null;
                 return <Button key={pageNum} variant={page === pageNum ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pageNum)} disabled={loading}>{pageNum}</Button>;
               })}
-            </div>
+                </div>
             {pageCount > 5 && (
               <div className="flex items-center gap-1">
                 <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
