@@ -31,6 +31,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Copy,
 } from 'lucide-react';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
@@ -132,6 +133,52 @@ const CorrespondenceInbox = () => {
     const membershipOfficeIds = new Set(userOfficeIds);
     return offices.filter((office) => membershipOfficeIds.has(office.id));
   }, [isSuperuser, offices, userOfficeIds]);
+
+  // Get user's organizational unit IDs for CC/distribution matching
+  const userOrgIds = useMemo(() => {
+    const divisionIds = new Set<string>();
+    const departmentIds = new Set<string>();
+    const directorateIds = new Set<string>();
+
+    // Get from user's offices
+    userOfficeMemberships.forEach((membership) => {
+      const office = offices.find((o) => o.id === membership.officeId);
+      if (office) {
+        if (office.divisionId) divisionIds.add(office.divisionId);
+        if (office.departmentId) departmentIds.add(office.departmentId);
+        if (office.directorateId) directorateIds.add(office.directorateId);
+      }
+    });
+
+    // Also add from user's direct assignments (if any)
+    if (currentUser?.divisionId) divisionIds.add(currentUser.divisionId);
+    if (currentUser?.departmentId) departmentIds.add(currentUser.departmentId);
+    if (currentUser?.directorateId) directorateIds.add(currentUser.directorateId);
+
+    return { divisionIds, departmentIds, directorateIds };
+  }, [userOfficeMemberships, offices, currentUser]);
+
+  // Helper to check if user is a CC recipient and get the purpose
+  const getCCInfo = (corr: Correspondence): { isCC: boolean; purpose?: string } => {
+    if (!corr.distribution || corr.distribution.length === 0) {
+      return { isCC: false };
+    }
+
+    for (const recipient of corr.distribution) {
+      // Check if user's org matches this distribution entry
+      if (recipient.type === 'division' && recipient.divisionId && userOrgIds.divisionIds.has(recipient.divisionId)) {
+        return { isCC: true, purpose: recipient.purpose };
+      }
+      if (recipient.type === 'department' && recipient.departmentId && userOrgIds.departmentIds.has(recipient.departmentId)) {
+        return { isCC: true, purpose: recipient.purpose };
+      }
+      if (recipient.type === 'directorate' && recipient.directorateId && userOrgIds.directorateIds.has(recipient.directorateId)) {
+        return { isCC: true, purpose: recipient.purpose };
+      }
+    }
+
+    return { isCC: false };
+  };
 
   // Count active filters for badge
   const activeFilterCount = useMemo(() => {
@@ -298,18 +345,48 @@ const CorrespondenceInbox = () => {
     const overdue = isOverdue(corr);
     const daysPending = calculateDaysPending(corr);
     const daysPendingColor = daysPending > 5 ? 'destructive' : daysPending > 2 ? 'default' : 'secondary';
+    const ccInfo = getCCInfo(corr);
+
+    const getPurposeLabel = (purpose?: string) => {
+      switch (purpose) {
+        case 'action': return 'For Action';
+        case 'information': return 'For Info';
+        case 'comment': return 'For Comment';
+        default: return 'CC';
+      }
+    };
+
+    const getPurposeColor = (purpose?: string) => {
+      switch (purpose) {
+        case 'action': return 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800';
+        case 'information': return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
+        case 'comment': return 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
+        default: return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700';
+      }
+    };
 
     return (
       <Link href={`/correspondence/${corr.id}`} className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer block">
         <div className="flex items-start gap-4">
-          <div className={`p-3 rounded-lg ${corr.priority === 'urgent' ? 'bg-destructive/10' : corr.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
+          <div className={`p-3 rounded-lg relative ${corr.priority === 'urgent' ? 'bg-destructive/10' : corr.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
             <Mail className={`h-5 w-5 ${corr.priority === 'urgent' ? 'text-destructive' : corr.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
+            {ccInfo.isCC && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                <Copy className="h-2.5 w-2.5 text-white" />
+              </div>
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3 mb-2">
               <div className="flex-1 min-w-0">
                 <h4 className="font-semibold text-foreground truncate mb-1">{corr.subject}</h4>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {ccInfo.isCC && (
+                    <Badge variant="outline" className={`gap-1 ${getPurposeColor(ccInfo.purpose)}`}>
+                      <Copy className="h-3 w-3" />
+                      {getPurposeLabel(ccInfo.purpose)}
+                    </Badge>
+                  )}
                   <Badge variant={getPriorityColor(corr.priority)}>{corr.priority.toUpperCase()}</Badge>
                   <Badge variant="outline" className="gap-1">
                     {corr.direction === 'downward' ? (<><ArrowDown className="h-3 w-3 text-info" />Downward</>) : (<><ArrowUp className="h-3 w-3 text-success" />Upward</>)}
