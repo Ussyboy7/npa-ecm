@@ -286,7 +286,7 @@ const MyDocuments = () => {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Document Filters</CardTitle>
                 {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
-              </div>
+          </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -303,33 +303,33 @@ const MyDocuments = () => {
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Type</Label>
                   <div className="flex flex-wrap gap-1">
-                    {DOCUMENT_TYPES.map((type) => (
+              {DOCUMENT_TYPES.map((type) => (
                       <Badge key={type} variant={selectedTypes.includes(type) ? 'default' : 'outline'} className="cursor-pointer capitalize text-xs" onClick={() => toggleType(type)}>
-                        {typeLabel(type)}
+                  {typeLabel(type)}
                       </Badge>
-                    ))}
+              ))}
                   </div>
                 </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Division</Label>
-                  <Select value={divisionFilter} onValueChange={setDivisionFilter}>
+          <Select value={divisionFilter} onValueChange={setDivisionFilter}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Divisions</SelectItem>
+            <SelectContent>
+              <SelectItem value="all">All Divisions</SelectItem>
                       {divisions.map((division) => <SelectItem key={division.id} value={division.id}>{division.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+            </SelectContent>
+          </Select>
                 </div>
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Department</Label>
-                  <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Departments</SelectItem>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
                       {departments.map((department) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+            </SelectContent>
+          </Select>
+        </div>
               </div>
             </CardContent>
           </Card>
@@ -396,13 +396,13 @@ const MyDocuments = () => {
           </div>
         </div>
 
-        <ShareDocumentDialog
-          open={shareDialogOpen}
+      <ShareDocumentDialog
+        open={shareDialogOpen}
           onOpenChange={(open) => { setShareDialogOpen(open); if (!open) setShareTarget(null); }}
-          document={shareTarget}
-          currentUserId={currentUser?.id}
+        document={shareTarget}
+        currentUserId={currentUser?.id}
           onShared={() => { void loadDocuments(); }}
-        />
+      />
       </div>
     </DashboardLayout>
   );

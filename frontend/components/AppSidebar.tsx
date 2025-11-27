@@ -100,7 +100,7 @@ export function AppSidebar() {
 
   const shouldShowRecordsArchive =
     hasCorrespondenceAccess ||
-    userOfficeIds.length > 0 ||
+      userOfficeIds.length > 0 ||
     Boolean(currentUser?.division || currentUser?.department);
 
   const shouldShowOutbox = permissions.canRegisterCorrespondence || outboxCount > 0;
@@ -393,9 +393,9 @@ export function AppSidebar() {
                         <Link href="/admin/templates-hub">
                           <LayoutTemplate className="h-4 w-4" />
                           {!isCollapsed && <span>Templates Hub</span>}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
 
                     <SidebarMenuItem>
                       <SidebarMenuButton asChild isActive={isActive('/admin/assistants')}>
