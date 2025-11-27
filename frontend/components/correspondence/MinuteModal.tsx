@@ -1133,338 +1133,242 @@ const [newTemplateName, setNewTemplateName] = useState('');
             </div>
           )}
 
-          {/* Unified Routing Section */}
-          <div className="space-y-3">
+          {/* Route To - Distribution Style */}
+          <div className="space-y-4">
             <div className="flex items-center gap-2">
               <Send className="h-4 w-4 text-muted-foreground" />
               <Label className="text-sm font-semibold">Route To</Label>
-              {(targetOfficeId || forwardTo) && (
-                <Badge variant="outline" className="text-xs">
-                  {forwardTo ? 'Person' : 'Office'}
-                </Badge>
-              )}
+              <Badge variant="outline" className="text-xs">
+                {forwardTo ? '1 recipient' : '0 recipients'}
+              </Badge>
             </div>
 
-            <Card className="border-border">
-              <CardContent className="p-3 space-y-3">
-                {/* Office Selection */}
+            {/* Selection Form - Grid Layout like Distribution */}
+            <div className="space-y-3 p-4 border border-border rounded-lg bg-muted/30">
+              <div className="grid grid-cols-3 gap-3">
+                {/* Type Column */}
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Building2 className="h-3.5 w-3.5" /> Destination Office
-                  </Label>
-                  <OfficeSelector
-                    offices={officeOptions}
-                    value={targetOfficeId}
-                    onValueChange={setTargetOfficeId}
-                    placeholder={correspondence.currentOfficeName ?? 'Select destination office'}
-                    showKeepCurrent
-                    currentOfficeName={correspondence.currentOfficeName}
-                    keepCurrentLabel={`Keep current (${correspondence.currentOfficeName ?? 'Unassigned'})`}
-                    maxHeight="280px"
-                  />
-                </div>
-
-                <Separator />
-
-                {/* Person Selection - moved here from below */}
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <UserIcon className="h-3.5 w-3.5" /> Forward to Person *
-                  </Label>
-                  <Select value={forwardTo} onValueChange={setForwardTo}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select recipient" />
+                  <Label className="text-xs text-muted-foreground">Type</Label>
+                  <Select 
+                    value={forwardTo ? 'person' : (targetOfficeId ? 'office' : 'person')} 
+                    onValueChange={(v) => {
+                      if (v === 'office') {
+                        setForwardTo('');
+                      } else {
+                        setTargetOfficeId('');
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
-                      {/* Search Input */}
-                      <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
-                        <div className="relative">
-                          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            placeholder="Search by name, email, role, or division..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-8 h-9"
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                          />
+                    <SelectContent>
+                      <SelectItem value="person">
+                        <div className="flex items-center gap-2">
+                          <UserIcon className="h-4 w-4" />
+                          Person
                         </div>
-                      </div>
-                      
-                      {assistantList.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-primary">
-                            Assistant Team ({assistantList.length})
-                          </div>
-                          {assistantList.map((user) => {
-                            const assignment = assistantAssignmentsById.get(user.id);
-                            const assistantLabel = assignment?.type === 'TA' ? 'Technical Assistant' : 'Personal Assistant';
-                            return (
-                              <SelectItem key={user.id} value={user.id}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{user.name}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {assistantLabel} • {user.systemRole}
-                                  </span>
-                                  {assignment?.permissions.length ? (
-                                    <span className="text-[11px] text-muted-foreground">
-                                      Permissions: {assignment.permissions.join(', ')}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                          <Separator className="my-1" />
-                        </>
-                      )}
-
-                      {isMD ? (
-                        <>
-                          {/* MD can see all lower-level users grouped by grade level */}
-                          {(() => {
-                            const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map(g => g.code);
-                            const mdGradeIndex = gradeOrder.indexOf('MDCS');
-                            const lowerGrades = gradeOrder.slice(mdGradeIndex + 1);
-                            
-                            const filteredByGrade = lowerGrades.map(gradeCode => {
-                              const gradeUsers = approverList.filter(u => u.gradeLevel === gradeCode);
-                              if (gradeUsers.length === 0) return null;
-                              
-                              const gradeLevel = GRADE_LEVELS.find(g => g.code === gradeCode);
-                              
-                              return (
-                                <div key={gradeCode}>
-                                  <div className="px-2 py-1.5 text-xs font-semibold text-primary sticky top-[41px] bg-popover">
-                                    {gradeLevel?.name} ({gradeCode}) - {gradeUsers.length} user{gradeUsers.length !== 1 ? 's' : ''}
-                                  </div>
-                                  {gradeUsers.map(user => {
-                                    const userDivision = user.division ? getDivisionById(user.division) : null;
-                                    const userDirectorateId = userDivision?.directorateId ?? user.directorate ?? null;
-                                    const userDirectorate = userDirectorateId ? getDirectorateById(userDirectorateId) : null;
-                                    const userOfficeMembership = officeMemberships.find(
-                                      (m) => m.userId === user.id && m.isPrimary && m.isActive
-                                    );
-                                    const userOffice = userOfficeMembership ? offices.find(o => o.id === userOfficeMembership.officeId) : null;
-                                    
-                                    return (
-                                      <SelectItem key={user.id} value={user.id}>
-                                        <div className="flex flex-col">
-                                          <span className="font-medium">{user.name}</span>
-                                          <span className="text-xs text-muted-foreground">
-                                            {user.systemRole} • {user.gradeLevel}
-                                          </span>
-                                          {(userOffice || userDivision || userDirectorate) && (
-                                            <span className="text-[11px] text-muted-foreground mt-0.5">
-                                              {userOffice?.name || ''}
-                                              {userOffice && (userDivision || userDirectorate) ? ' • ' : ''}
-                                              {userDivision?.name || ''}
-                                              {userDivision && userDirectorate ? ' • ' : ''}
-                                              {userDirectorate?.name || ''}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </SelectItem>
-                                    );
-                                  })}
-                                  <Separator className="my-1" />
-                                </div>
-                              );
-                            }).filter(Boolean);
-                            
-                            if (searchQuery.trim() && filteredByGrade.length === 0) {
-                              return (
-                                <div className="p-4 text-center text-sm text-muted-foreground">
-                                  No users found matching "{searchQuery}"
-                                </div>
-                              );
-                            }
-                            
-                            return filteredByGrade;
-                          })()}
-                        </>
-                      ) : (
-                        <>
-                          {filteredNext && !searchQuery.trim() && (
-                            <>
-                              <div className="px-2 py-1.5 text-xs font-semibold text-primary">
-                                {nextIsAssistant ? 'Suggested Assistant' : 'Suggested Next'}
-                              </div>
-                              <SelectItem value={filteredNext.id}>
-                                <div className="flex items-center gap-2">
-                                  <CheckCircle className="h-4 w-4 text-success flex-shrink-0" />
-                                  <div className="flex flex-col flex-1 min-w-0">
-                                    <p className="font-medium">{filteredNext?.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {filteredNext?.systemRole} • {filteredNext?.gradeLevel}
-                                    </p>
-                                    {(() => {
-                                      const nextDivision = filteredNext?.division ? getDivisionById(filteredNext.division) : null;
-                                      const nextDirectorateId = nextDivision?.directorateId ?? filteredNext?.directorate ?? null;
-                                      const nextDirectorate = nextDirectorateId ? getDirectorateById(nextDirectorateId) : null;
-                                      const nextOfficeMembership = officeMemberships.find(
-                                        (m) => m.userId === filteredNext?.id && m.isPrimary && m.isActive
-                                      );
-                                      const nextOffice = nextOfficeMembership ? offices.find(o => o.id === nextOfficeMembership.officeId) : null;
-                                      
-                                      if (nextOffice || nextDivision || nextDirectorate) {
-                                        return (
-                                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                                            {nextOffice?.name || ''}
-                                            {nextOffice && (nextDivision || nextDirectorate) ? ' • ' : ''}
-                                            {nextDivision?.name || ''}
-                                            {nextDivision && nextDirectorate ? ' • ' : ''}
-                                            {nextDirectorate?.name || ''}
-                                          </p>
-                                        );
-                                      }
-                                      return null;
-                                    })()}
-                                  </div>
-                                </div>
-                              </SelectItem>
-                              <Separator className="my-1" />
-                            </>
-                          )}
-                          
-                          {approverList.length > 0 ? (
-                            <>
-                              {(() => {
-                                // Group users by directorate/division/office for better organization
-                                const groupedUsers = new Map<string, typeof approverList>();
-                                const currentDirectorateName = correspondence.currentOfficeDirectorateId
-                                  ? getDirectorateById(correspondence.currentOfficeDirectorateId)?.name ?? 'Unknown'
-                                  : null;
-                                
-                                approverList.forEach(user => {
-                                  const userDivision = user.division ? getDivisionById(user.division) : null;
-                                  const userDirectorateId = userDivision?.directorateId ?? user.directorate ?? null;
-                                  const userDirectorate = userDirectorateId ? getDirectorateById(userDirectorateId) : null;
-                                  const userOfficeMembership = officeMemberships.find(
-                                    (m) => m.userId === user.id && m.isPrimary && m.isActive
-                                  );
-                                  const userOffice = userOfficeMembership ? offices.find(o => o.id === userOfficeMembership.officeId) : null;
-                                  
-                                  let groupKey = 'Other';
-                                  if (userDirectorate) {
-                                    groupKey = userDirectorate.name;
-                                  } else if (userDivision) {
-                                    groupKey = userDivision.name;
-                                  } else if (userOffice) {
-                                    groupKey = userOffice.name;
-                                  }
-                                  
-                                  if (!groupedUsers.has(groupKey)) {
-                                    groupedUsers.set(groupKey, []);
-                                  }
-                                  groupedUsers.get(groupKey)!.push(user);
-                                });
-                                
-                                // Sort groups: current directorate first, then alphabetically
-                                const sortedGroups = Array.from(groupedUsers.entries()).sort((a, b) => {
-                                  if (currentDirectorateName && a[0] === currentDirectorateName) return -1;
-                                  if (currentDirectorateName && b[0] === currentDirectorateName) return 1;
-                                  return a[0].localeCompare(b[0]);
-                                });
-                                
-                                if (searchQuery.trim() || sortedGroups.length === 1) {
-                                  // If searching or only one group, show flat list
-                                  return (
-                                    <>
-                                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                                        {searchQuery.trim() ? 'Search Results' : 'Alternative Recipients'} ({approverList.length})
-                                      </div>
-                                      {approverList.slice(0, 50).map(user => {
-                                        const userDivision = user.division ? getDivisionById(user.division) : null;
-                                        const userDirectorateId = userDivision?.directorateId ?? user.directorate ?? null;
-                                        const userDirectorate = userDirectorateId ? getDirectorateById(userDirectorateId) : null;
-                                        const userOfficeMembership = officeMemberships.find(
-                                          (m) => m.userId === user.id && m.isPrimary && m.isActive
-                                        );
-                                        const userOffice = userOfficeMembership ? offices.find(o => o.id === userOfficeMembership.officeId) : null;
-                                        
-                                        return (
-                                          <SelectItem key={user.id} value={user.id}>
-                                            <div className="flex flex-col">
-                                              <span className="font-medium">{user.name}</span>
-                                              <span className="text-xs text-muted-foreground">
-                                                {user.systemRole} • {user.gradeLevel}
-                                              </span>
-                                              {(userOffice || userDivision || userDirectorate) && (
-                                                <span className="text-[11px] text-muted-foreground mt-0.5">
-                                                  {userOffice?.name || ''}
-                                                  {userOffice && (userDivision || userDirectorate) ? ' • ' : ''}
-                                                  {userDivision?.name || ''}
-                                                  {userDivision && userDirectorate ? ' • ' : ''}
-                                                  {userDirectorate?.name || ''}
-                                                </span>
-                                              )}
-                                            </div>
-                                          </SelectItem>
-                                        );
-                                      })}
-                                    </>
-                                  );
-                                }
-                                
-                                // Show grouped list
-                                return sortedGroups.map(([groupName, users]) => (
-                                  <div key={groupName}>
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-primary sticky top-[41px] bg-popover">
-                                      {groupName} ({users.length})
-                                    </div>
-                                    {users.slice(0, 30).map(user => {
-                                      const userDivision = user.division ? getDivisionById(user.division) : null;
-                                      const userDirectorateId = userDivision?.directorateId ?? user.directorate ?? null;
-                                      const userDirectorate = userDirectorateId ? getDirectorateById(userDirectorateId) : null;
-                                      const userOfficeMembership = officeMemberships.find(
-                                        (m) => m.userId === user.id && m.isPrimary && m.isActive
-                                      );
-                                      const userOffice = userOfficeMembership ? offices.find(o => o.id === userOfficeMembership.officeId) : null;
-                                      
-                                      return (
-                                        <SelectItem key={user.id} value={user.id}>
-                                          <div className="flex flex-col">
-                                            <span className="font-medium">{user.name}</span>
-                                            <span className="text-xs text-muted-foreground">
-                                              {user.systemRole} • {user.gradeLevel}
-                                            </span>
-                                            {userOffice && (
-                                              <span className="text-[11px] text-muted-foreground mt-0.5">
-                                                {userOffice.name}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </SelectItem>
-                                      );
-                                    })}
-                                    <Separator className="my-1" />
-                                  </div>
-                                ));
-                              })()}
-                            </>
-                          ) : (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                              {searchQuery.trim() 
-                                ? `No users found matching "${searchQuery}"`
-                                : 'No available recipients. All users in your hierarchy have already acted on this correspondence.'}
-                            </div>
-                          )}
-                        </>
-                      )}
+                      </SelectItem>
+                      <SelectItem value="office">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          Office
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
-                  {forwardTo && (
-                    <div className="p-2 bg-primary/5 rounded-md border border-primary/20">
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <CheckCircle className="h-3 w-3 text-primary" />
-                        Selected: <span className="font-medium text-foreground">{findUserById(forwardTo)?.name}</span>
-                      </p>
-                    </div>
+                </div>
+
+                {/* Person/Office Column */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    {(forwardTo || !targetOfficeId) ? 'Person' : 'Office'}
+                  </Label>
+                  {(forwardTo || !targetOfficeId) ? (
+                    <Select value={forwardTo} onValueChange={setForwardTo}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select person" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
+                        {/* Search Input */}
+                        <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              placeholder="Search..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="pl-8 h-8"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        </div>
+                        
+                        {assistantList.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-primary">
+                              Assistants ({assistantList.length})
+                            </div>
+                            {assistantList.map((user) => {
+                              const assignment = assistantAssignmentsById.get(user.id);
+                              return (
+                                <SelectItem key={user.id} value={user.id}>
+                                  <span>{user.name}</span>
+                                </SelectItem>
+                              );
+                            })}
+                            <Separator className="my-1" />
+                          </>
+                        )}
+
+                        {filteredNext && !searchQuery.trim() && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-success">
+                              Suggested
+                            </div>
+                            <SelectItem value={filteredNext.id}>
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-success" />
+                                <span>{filteredNext.name}</span>
+                              </div>
+                            </SelectItem>
+                            <Separator className="my-1" />
+                          </>
+                        )}
+
+                        {approverList.length > 0 && (
+                          <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                              All Recipients ({approverList.length})
+                            </div>
+                            {approverList.slice(0, 30).map(user => (
+                              <SelectItem key={user.id} value={user.id}>
+                                {user.name}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+
+                        {approverList.length === 0 && !assistantList.length && !filteredNext && (
+                          <div className="p-4 text-center text-sm text-muted-foreground">
+                            No recipients available
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select value={targetOfficeId} onValueChange={setTargetOfficeId}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select office" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[300px]">
+                        {officeOptions.map(office => (
+                          <SelectItem key={office.id} value={office.id}>
+                            {office.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+
+                {/* Purpose Column */}
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Purpose</Label>
+                  <Select value={purpose} onValueChange={(v: any) => setPurpose(v)}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="action">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4" />
+                          For Action
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="information">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          For Information
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="comment">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          For Comment
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="approval">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4" />
+                          For Approval
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Selected Recipient Card */}
+            {forwardTo && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">
+                  Selected Recipient
+                </Label>
+                <Card className="border-border">
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <UserIcon className="h-4 w-4 text-primary" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{findUserById(forwardTo)?.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {findUserById(forwardTo)?.systemRole} • {findUserById(forwardTo)?.gradeLevel}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs gap-1 ${
+                            purpose === 'information' ? 'bg-info/10 text-info border-info/20' :
+                            purpose === 'action' ? 'bg-warning/10 text-warning border-warning/20' :
+                            purpose === 'comment' ? 'bg-success/10 text-success border-success/20' :
+                            'bg-primary/10 text-primary border-primary/20'
+                          }`}
+                        >
+                          {purpose === 'information' ? <FileText className="h-3 w-3" /> :
+                           purpose === 'action' ? <CheckCircle className="h-3 w-3" /> :
+                           purpose === 'comment' ? <MessageSquare className="h-3 w-3" /> :
+                           <CheckCircle className="h-3 w-3" />}
+                          {purpose === 'information' ? 'Info' : 
+                           purpose === 'action' ? 'Action' : 
+                           purpose === 'comment' ? 'Comment' : 'Approval'}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 ml-2"
+                        onClick={() => setForwardTo('')}
+                      >
+                        <AlertCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {!forwardTo && (
+              <Card className="border-dashed">
+                <CardContent className="p-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No recipient selected. Choose a person or office to route this correspondence.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Action Type */}
@@ -1484,48 +1388,6 @@ const [newTemplateName, setNewTemplateName] = useState('');
                 </Label>
               </div>
             </RadioGroup>
-          </div>
-
-          {/* Purpose Selection */}
-          <div className="space-y-2">
-            <Label>Purpose *</Label>
-            <Select value={purpose} onValueChange={(v: any) => setPurpose(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select purpose" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="action">
-                  <div className="flex flex-col">
-                    <span className="font-medium">For Action</span>
-                    <span className="text-xs text-muted-foreground">Recipient must take action</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="information">
-                  <div className="flex flex-col">
-                    <span className="font-medium">For Information</span>
-                    <span className="text-xs text-muted-foreground">View-only, no actions permitted</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="comment">
-                  <div className="flex flex-col">
-                    <span className="font-medium">For Comment</span>
-                    <span className="text-xs text-muted-foreground">Can provide input but doesn't block workflow</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="approval">
-                  <div className="flex flex-col">
-                    <span className="font-medium">For Approval</span>
-                    <span className="text-xs text-muted-foreground">Must approve or reject</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {purpose === 'information' && '⚠️ Recipients will not be able to take any actions on this correspondence.'}
-              {purpose === 'action' && 'Recipients must take action before workflow can continue.'}
-              {purpose === 'comment' && 'Recipients can provide input but workflow can continue independently.'}
-              {purpose === 'approval' && 'Recipients must approve or reject before workflow can continue.'}
-            </p>
           </div>
 
           {/* Digital Signature */}
