@@ -1,14 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+// AlertDialog removed - using separate Dialog for confirmation to avoid nesting issues
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -418,8 +410,15 @@ export const DelegateModal = ({
   };
 
   const handleConfirm = async () => {
+    console.log('[DelegateModal] handleConfirm called');
+    console.log('[DelegateModal] selectedAssistant:', selectedAssistant);
+    console.log('[DelegateModal] availableAssistants:', availableAssistants);
+    
     const assignment = availableAssistants.find(a => a.assistantId === selectedAssistant);
+    console.log('[DelegateModal] Found assignment:', assignment);
+    
     if (!assignment) {
+      console.log('[DelegateModal] No assignment found, showing error');
       toast.error('Invalid assistant selection');
       setShowConfirmation(false);
       return;
@@ -428,8 +427,18 @@ export const DelegateModal = ({
     setIsSubmitting(true);
     try {
       const expiresAt = calculateExpiryDate(delegationDuration);
+      console.log('[DelegateModal] Calling onDelegate with:', {
+        assistantId: selectedAssistant,
+        type: assignment.type,
+        notes: delegationNotes,
+        duration: delegationDuration,
+        expiresAt
+      });
+      
       // Await the async onDelegate call
       await onDelegate(selectedAssistant, assignment.type, delegationNotes, delegationDuration, expiresAt);
+      
+      console.log('[DelegateModal] onDelegate completed successfully');
       setShowConfirmation(false);
       onOpenChange(false);
       // Reset form state
@@ -438,6 +447,7 @@ export const DelegateModal = ({
       setDelegationDuration('until_completed');
       setCustomExpiryDate('');
     } catch (error) {
+      console.error('[DelegateModal] onDelegate failed:', error);
       logError('Failed to delegate correspondence', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
@@ -848,58 +858,63 @@ export const DelegateModal = ({
         </DialogFooter>
       </DialogContent>
 
-      {/* Confirmation Dialog */}
-      <AlertDialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
+      {/* Confirmation Dialog - Using separate Dialog to avoid nesting issues */}
+      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
               <UserCheck className="h-5 w-5 text-primary" />
               Confirm Delegation
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3">
-                <p>
-                  You are about to delegate this correspondence to:
-                </p>
-                <div className="p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-foreground">{selectedAssistantData?.userName}</p>
-                      <Badge variant={selectedAssistantData?.type === 'PA' ? 'default' : 'secondary'} className="text-xs">
-                        {selectedAssistantData?.type === 'PA' ? 'Personal Assistant' : 'Technical Assistant'}
-                      </Badge>
-                    </div>
-                  </div>
+            </DialogTitle>
+            <DialogDescription>
+              You are about to delegate this correspondence
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 py-4">
+            <div className="p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <User className="h-4 w-4 text-primary" />
                 </div>
-                
-              {delegationNotes && (
-                  <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Instructions:</p>
-                    <p className="text-sm text-foreground">{delegationNotes}</p>
-                  </div>
-                )}
-
-                {/* Duration info */}
-                <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
-                  <Timer className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">
-                    <span className="text-muted-foreground">Duration: </span>
-                    <span className="font-medium text-foreground">{getDurationDisplayText()}</span>
-                  </span>
+                <div>
+                  <p className="font-medium text-foreground">{selectedAssistantData?.userName}</p>
+                  <Badge variant={selectedAssistantData?.type === 'PA' ? 'default' : 'secondary'} className="text-xs">
+                    {selectedAssistantData?.type === 'PA' ? 'Personal Assistant' : 'Technical Assistant'}
+                  </Badge>
                 </div>
-
-                <p className="text-xs text-muted-foreground">
-                  The assistant will be able to act on your behalf based on their assigned permissions. You will be notified of any actions taken.
-                </p>
               </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-            {/* Using Button instead of AlertDialogAction to prevent auto-close during async operation */}
+            </div>
+            
+            {delegationNotes && (
+              <div className="p-3 bg-muted/50 rounded-lg border border-border">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Instructions:</p>
+                <p className="text-sm text-foreground">{delegationNotes}</p>
+              </div>
+            )}
+
+            {/* Duration info */}
+            <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+              <Timer className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">
+                <span className="text-muted-foreground">Duration: </span>
+                <span className="font-medium text-foreground">{getDurationDisplayText()}</span>
+              </span>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              The assistant will be notified and can act on your behalf based on their permissions.
+            </p>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowConfirmation(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
             <Button
               onClick={handleConfirm}
               disabled={isSubmitting}
@@ -917,9 +932,9 @@ export const DelegateModal = ({
                 </>
               )}
             </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };

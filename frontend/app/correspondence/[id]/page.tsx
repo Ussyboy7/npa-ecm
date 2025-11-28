@@ -535,7 +535,12 @@ const CorrespondenceDetailContent = () => {
     duration?: string,
     expiresAt?: string
   ) => {
-    if (!correspondence || !activeUser) return;
+    console.log('[page.tsx handleDelegate] Called with:', { assistantId, assistantType, notes, duration, expiresAt });
+    
+    if (!correspondence || !activeUser) {
+      console.log('[page.tsx handleDelegate] Early return - no correspondence or activeUser');
+      return;
+    }
 
     // Create per-correspondence delegation via new backend API
     const payload = {
@@ -544,6 +549,8 @@ const CorrespondenceDetailContent = () => {
       notes: notes || '',
       expires_at: expiresAt || null,
     };
+    
+    console.log('[page.tsx handleDelegate] Sending API request with payload:', payload);
 
     try {
       // Create the correspondence delegation (sends notification to assistant)
@@ -555,6 +562,8 @@ const CorrespondenceDetailContent = () => {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      
+      console.log('[page.tsx handleDelegate] API response:', response);
 
       // Also save to localStorage for UI state (backwards compatibility)
       const newDelegation: Delegation = {
