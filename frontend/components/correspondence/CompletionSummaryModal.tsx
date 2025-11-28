@@ -18,24 +18,25 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { 
   FileCheck,
   Send,
   Edit3,
   Users,
   Download,
-  Building2,
-  Layers,
-  Network,
-  Loader2
+  CheckSquare,
+  Square,
+  Loader2,
+  FileText,
+  Calendar,
+  Clock,
+  User
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api-client';
-import { type Correspondence, type Minute, getDivisionById, getDepartmentById } from '@/lib/npa-structure';
+import { type Correspondence, type Minute } from '@/lib/npa-structure';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization } from '@/contexts/OrganizationContext';
 
 interface CompletionSummaryModalProps {
@@ -51,40 +52,69 @@ export const CompletionSummaryModal = ({
   correspondence,
   minutes 
 }: CompletionSummaryModalProps) => {
-  const { updateCorrespondence, syncFromApi } = useCorrespondence();
+  const { syncFromApi } = useCorrespondence();
   const { currentUser } = useCurrentUser();
-  const permissions = useUserPermissions(currentUser ?? undefined);
   const { users } = useOrganization();
   const [isEditing, setIsEditing] = useState(false);
-  const [summary, setSummary] = useState(generateAutoSummary(correspondence, minutes));
-  const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>(
-    minutes.map(m => m.userId)
-  );
+  const [summary, setSummary] = useState(generateAutoSummary(correspondence, minutes, users));
   const [stakeholdersError, setStakeholdersError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const allowedArchiveLevels = useMemo(
-    () => permissions.allowedArchiveLevels,
-    [permissions.allowedArchiveLevels]
-  );
-  const [archiveLevel, setArchiveLevel] = useState<'department' | 'division' | 'directorate'>(
-    allowedArchiveLevels[allowedArchiveLevels.length - 1] ?? 'department'
-  );
 
+  // Get all unique stakeholders who participated in processing this correspondence
+  const stakeholders = useMemo(() => {
+    const participantMap = new Map<string, { id: string; name: string; role: string; department?: string }>();
+    
+    // Add all minute creators
+    minutes.forEach(minute => {
+      if (!participantMap.has(minute.userId)) {
+        const user = users.find((u) => u.id === minute.userId);
+        participantMap.set(minute.userId, {
+          id: minute.userId,
+          name: user?.name || 'Unknown User',
+          role: minute.gradeLevel,
+          department: user?.department
+        });
+      }
+    });
+
+    // Add current approver if exists and not already included
+    if (correspondence.currentApproverId && !participantMap.has(correspondence.currentApproverId)) {
+      const user = users.find((u) => u.id === correspondence.currentApproverId);
+      if (user) {
+        participantMap.set(correspondence.currentApproverId, {
+          id: correspondence.currentApproverId,
+          name: user.name,
+          role: user.gradeLevel || 'Staff',
+          department: user.department
+        });
+      }
+    }
+
+    // Add correspondence creator if not already included
+    if (correspondence.createdBy && !participantMap.has(correspondence.createdBy)) {
+      const user = users.find((u) => u.id === correspondence.createdBy);
+      if (user) {
+        participantMap.set(correspondence.createdBy, {
+          id: correspondence.createdBy,
+          name: user.name,
+          role: user.gradeLevel || 'Staff',
+          department: user.department
+        });
+      }
+    }
+
+    return Array.from(participantMap.values());
+  }, [minutes, users, correspondence.currentApproverId, correspondence.createdBy]);
+
+  // Auto-select all stakeholders by default
+  const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>([]);
+  
+  // Initialize selected stakeholders when stakeholders list changes
   useEffect(() => {
-    if (!allowedArchiveLevels.includes(archiveLevel)) {
-      setArchiveLevel(allowedArchiveLevels[allowedArchiveLevels.length - 1] ?? 'department');
-    }
-  }, [allowedArchiveLevels, archiveLevel]);
-
-  const stakeholders = minutes.reduce((acc, minute) => {
-    if (!acc.find((s) => s.id === minute.userId)) {
-      const user = users.find((u) => u.id === minute.userId);
-      acc.push({ id: minute.userId, name: user?.name || 'Unknown User', role: minute.gradeLevel });
-    }
-    return acc;
-  }, [] as { id: string; name: string; role: string }[]);
+    setSelectedStakeholders(stakeholders.map(s => s.id));
+  }, [stakeholders]);
 
   const handleToggleStakeholder = (userId: string) => {
     setSelectedStakeholders(prev =>
@@ -115,7 +145,7 @@ export const CompletionSummaryModal = ({
   const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
-      // Update correspondence status to archived via API
+      // Update correspondence status to completed via API
       await apiFetch(`/correspondence/items/${correspondence.id}/`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -126,9 +156,8 @@ export const CompletionSummaryModal = ({
 
       await syncFromApi();
 
-      const levelName = archiveLevel === 'department' ? 'Department' : archiveLevel === 'division' ? 'Division' : 'Directorate';
-      toast.success('Correspondence archived successfully', {
-        description: `Archived at ${levelName} level. Summary will be sent to ${selectedStakeholders.length} stakeholder(s)`
+      toast.success('Correspondence completed & archived', {
+        description: `Completion summary will be sent to ${selectedStakeholders.length} participant(s)`
       });
 
       setShowConfirmation(false);
@@ -143,25 +172,272 @@ export const CompletionSummaryModal = ({
     }
   };
 
+  const handleSelectAll = () => {
+    setSelectedStakeholders(stakeholders.map(s => s.id));
+    if (stakeholdersError) setStakeholdersError('');
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedStakeholders([]);
+  };
+
+  const allSelected = selectedStakeholders.length === stakeholders.length;
+  const noneSelected = selectedStakeholders.length === 0;
+
   const handleExportPDF = async () => {
     setIsExporting(true);
     try {
-      // TODO: Implement actual PDF export via backend
-      // For now, create a simple text-based export
-      const pdfContent = generateAutoSummary(correspondence, minutes);
-      const blob = new Blob([pdfContent], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `completion-summary-${correspondence.referenceNumber}-${new Date().toISOString().split('T')[0]}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      toast.success('Summary exported successfully', {
-        description: 'Download started'
+      // Generate PDF using browser's print functionality with styled HTML
+      const selectedStakeholderNames = stakeholders
+        .filter(s => selectedStakeholders.includes(s.id))
+        .map(s => `${s.name} (${s.role})`)
+        .join(', ');
+
+      const processingTime = calculateProcessingTime(correspondence.receivedDate);
+      const completionDate = new Date().toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
       });
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Completion Summary - ${correspondence.referenceNumber}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+              font-family: 'Times New Roman', Times, serif; 
+              padding: 40px;
+              max-width: 800px;
+              margin: 0 auto;
+              line-height: 1.6;
+              color: #333;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #1a365d;
+              padding-bottom: 20px;
+              margin-bottom: 30px;
+            }
+            .logo-text {
+              font-size: 18px;
+              font-weight: bold;
+              color: #1a365d;
+              margin-bottom: 5px;
+            }
+            .doc-title {
+              font-size: 24px;
+              font-weight: bold;
+              color: #1a365d;
+              margin-top: 15px;
+            }
+            .section {
+              margin-bottom: 25px;
+            }
+            .section-title {
+              font-size: 14px;
+              font-weight: bold;
+              color: #1a365d;
+              text-transform: uppercase;
+              border-bottom: 1px solid #ccc;
+              padding-bottom: 5px;
+              margin-bottom: 10px;
+            }
+            .field {
+              margin-bottom: 12px;
+            }
+            .field-label {
+              font-weight: bold;
+              color: #555;
+              font-size: 12px;
+              text-transform: uppercase;
+            }
+            .field-value {
+              font-size: 14px;
+              margin-top: 3px;
+            }
+            .routing-path {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+              margin-top: 10px;
+            }
+            .routing-step {
+              background: #f0f4f8;
+              padding: 6px 12px;
+              border-radius: 4px;
+              font-size: 12px;
+              border: 1px solid #d0d7de;
+            }
+            .minutes-list {
+              margin-top: 10px;
+            }
+            .minute-item {
+              padding: 12px;
+              background: #f8f9fa;
+              border-left: 3px solid #1a365d;
+              margin-bottom: 10px;
+            }
+            .minute-header {
+              font-weight: bold;
+              font-size: 13px;
+              color: #1a365d;
+            }
+            .minute-text {
+              font-size: 13px;
+              margin-top: 5px;
+              font-style: italic;
+            }
+            .minute-date {
+              font-size: 11px;
+              color: #666;
+              margin-top: 5px;
+            }
+            .footer {
+              margin-top: 40px;
+              padding-top: 20px;
+              border-top: 1px solid #ccc;
+              font-size: 11px;
+              color: #666;
+              text-align: center;
+            }
+            .status-badge {
+              display: inline-block;
+              padding: 4px 12px;
+              background: #22c55e;
+              color: white;
+              border-radius: 4px;
+              font-size: 12px;
+              font-weight: bold;
+            }
+            .stats-grid {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 15px;
+              margin-top: 15px;
+            }
+            .stat-box {
+              text-align: center;
+              padding: 15px;
+              background: #f0f4f8;
+              border-radius: 8px;
+            }
+            .stat-value {
+              font-size: 20px;
+              font-weight: bold;
+              color: #1a365d;
+            }
+            .stat-label {
+              font-size: 11px;
+              color: #666;
+              text-transform: uppercase;
+            }
+            @media print {
+              body { padding: 20px; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="logo-text">NIGERIAN PORTS AUTHORITY</div>
+            <div style="font-size: 12px; color: #666;">Enterprise Content Management System</div>
+            <div class="doc-title">Correspondence Completion Summary</div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Correspondence Details</div>
+            <div class="field">
+              <div class="field-label">Reference Number</div>
+              <div class="field-value">${correspondence.referenceNumber}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Subject</div>
+              <div class="field-value">${correspondence.subject}</div>
+            </div>
+            <div class="field">
+              <div class="field-label">Status</div>
+              <div class="field-value"><span class="status-badge">COMPLETED</span></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Timeline</div>
+            <div class="stats-grid">
+              <div class="stat-box">
+                <div class="stat-value">${new Date(correspondence.receivedDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                <div class="stat-label">Date Received</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-value">${completionDate}</div>
+                <div class="stat-label">Date Completed</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-value">${processingTime}</div>
+                <div class="stat-label">Processing Time</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Routing Path (${minutes.length} steps)</div>
+            <div class="routing-path">
+              ${minutes.map((m, idx) => {
+                const user = users.find(u => u.id === m.userId);
+                return `<div class="routing-step">${idx + 1}. ${user?.name || 'Unknown'} (${m.gradeLevel})</div>`;
+              }).join(' → ')}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Minute Thread</div>
+            <div class="minutes-list">
+              ${minutes.length > 0 ? minutes.map(m => {
+                const user = users.find(u => u.id === m.userId);
+                return `
+                  <div class="minute-item">
+                    <div class="minute-header">${user?.name || 'Unknown'} — ${m.gradeLevel}</div>
+                    <div class="minute-text">"${m.minuteText}"</div>
+                    <div class="minute-date">${new Date(m.createdAt).toLocaleString('en-GB')}</div>
+                  </div>
+                `;
+              }).join('') : '<p style="color: #666; font-style: italic;">No minutes recorded.</p>'}
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Participants Notified (${selectedStakeholders.length})</div>
+            <div class="field-value">${selectedStakeholderNames || 'None selected'}</div>
+          </div>
+
+          <div class="footer">
+            <p>Generated by NPA ECM System on ${new Date().toLocaleString('en-GB')}</p>
+            <p>This is an official completion summary document.</p>
+          </div>
+        </body>
+        </html>
+      `;
+
+      // Open print dialog
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        printWindow.focus();
+        
+        // Slight delay to ensure content is loaded
+        setTimeout(() => {
+          printWindow.print();
+        }, 250);
+        
+        toast.success('PDF export ready', {
+          description: 'Use Print → Save as PDF in the dialog'
+        });
+      } else {
+        throw new Error('Could not open print window. Please check popup blocker settings.');
+      }
     } catch (error) {
       logError('Failed to export PDF', error);
       toast.error('Unable to export summary', {
@@ -172,16 +448,30 @@ export const CompletionSummaryModal = ({
     }
   };
 
+  // Calculate processing time
+  function calculateProcessingTime(receivedDate: string): string {
+    const received = new Date(receivedDate);
+    const now = new Date();
+    const diffMs = now.getTime() - received.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    if (diffDays > 0) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+    }
+    return `${diffHours} hour${diffHours !== 1 ? 's' : ''}`;
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5 text-success" />
-            Correspondence Completion Summary
+            Complete & Archive Correspondence
           </DialogTitle>
           <DialogDescription>
-            Review and send summary to all stakeholders
+            Mark this correspondence as complete and notify all participants
           </DialogDescription>
         </DialogHeader>
 
@@ -269,122 +559,100 @@ export const CompletionSummaryModal = ({
             )}
           </div>
 
-          {/* Stakeholder Selection */}
+          {/* Participants Selection */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <Label>
-                Stakeholders ({selectedStakeholders.length} selected) * 
-                <span className="text-muted-foreground text-xs font-normal ml-1">(Required)</span>
-              </Label>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <Label>
+                  Notify Participants ({selectedStakeholders.length} of {stakeholders.length} selected)
+                  <span className="text-muted-foreground text-xs font-normal ml-1">*</span>
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSelectAll}
+                  disabled={allSelected}
+                  className="h-7 text-xs"
+                >
+                  <CheckSquare className="h-3 w-3 mr-1" />
+                  Select All
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDeselectAll}
+                  disabled={noneSelected}
+                  className="h-7 text-xs"
+                >
+                  <Square className="h-3 w-3 mr-1" />
+                  Deselect All
+                </Button>
+              </div>
             </div>
-            <div className={`border rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto ${stakeholdersError ? 'border-destructive' : 'border-border'}`}>
-              {stakeholders.map(stakeholder => (
-                <div key={stakeholder.id} className="flex items-center gap-3">
-                  <Checkbox
-                    id={stakeholder.id}
-                    checked={selectedStakeholders.includes(stakeholder.id)}
-                    onCheckedChange={() => {
-                      handleToggleStakeholder(stakeholder.id);
-                      if (stakeholdersError) setStakeholdersError('');
-                    }}
-                    aria-label={`Select ${stakeholder.name} as stakeholder`}
-                  />
-                  <Label 
-                    htmlFor={stakeholder.id} 
-                    className="flex-1 cursor-pointer font-normal"
-                  >
-                    <span className="font-medium">{stakeholder.name}</span>
-                    <span className="text-xs text-muted-foreground ml-2">
-                      ({stakeholder.role})
-                    </span>
-                  </Label>
-                </div>
-              ))}
-            </div>
+            
+            {stakeholders.length === 0 ? (
+              <div className="border rounded-lg p-4 bg-muted/30 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No participants found. The correspondence creator will be notified.
+                </p>
+              </div>
+            ) : (
+              <div className={`border rounded-lg p-4 space-y-2 max-h-48 overflow-y-auto ${stakeholdersError ? 'border-destructive' : 'border-border'}`}>
+                {stakeholders.map(stakeholder => (
+                  <div key={stakeholder.id} className="flex items-center gap-3 p-2 rounded hover:bg-accent/50 transition-colors">
+                    <Checkbox
+                      id={stakeholder.id}
+                      checked={selectedStakeholders.includes(stakeholder.id)}
+                      onCheckedChange={() => {
+                        handleToggleStakeholder(stakeholder.id);
+                        if (stakeholdersError) setStakeholdersError('');
+                      }}
+                      aria-label={`Select ${stakeholder.name} as participant`}
+                    />
+                    <Label 
+                      htmlFor={stakeholder.id} 
+                      className="flex-1 cursor-pointer font-normal"
+                    >
+                      <div className="flex items-center gap-2">
+                        <User className="h-3 w-3 text-muted-foreground" />
+                        <span className="font-medium">{stakeholder.name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-5">
+                        {stakeholder.role}{stakeholder.department ? ` • ${stakeholder.department}` : ''}
+                      </span>
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            )}
             {stakeholdersError && (
               <p className="text-xs text-destructive" role="alert">
                 {stakeholdersError}
               </p>
             )}
-          </div>
-
-          {/* Archive Level Selection */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <FileCheck className="h-4 w-4 text-muted-foreground" />
-              <Label>Archive Level *</Label>
-            </div>
-            <div className="p-4 border border-border rounded-lg bg-muted/30">
-              <RadioGroup value={archiveLevel} onValueChange={(v: any) => setArchiveLevel(v)}>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors">
-                    <RadioGroupItem
-                      value="department"
-                      id="archive-department"
-                      className="mt-1"
-                      disabled={!allowedArchiveLevels.includes('department')}
-                    />
-                    <Label htmlFor="archive-department" className="flex-1 cursor-pointer">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Building2 className="h-4 w-4 text-primary" />
-                        <span className="font-semibold">Departmental Archive</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Only visible to members of this department
-                      </p>
-                    </Label>
-                  </div>
-                  
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors">
-                    <RadioGroupItem
-                      value="division"
-                      id="archive-division"
-                      className="mt-1"
-                      disabled={!allowedArchiveLevels.includes('division')}
-                    />
-                    <Label htmlFor="archive-division" className="flex-1 cursor-pointer">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Layers className="h-4 w-4 text-secondary" />
-                        <span className="font-semibold">Divisional Archive</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Visible to only division head (General Manager)
-                      </p>
-                    </Label>
-                  </div>
-                  
-                  <div className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors">
-                    <RadioGroupItem
-                      value="directorate"
-                      id="archive-directorate"
-                      className="mt-1"
-                      disabled={!allowedArchiveLevels.includes('directorate')}
-                    />
-                    <Label htmlFor="archive-directorate" className="flex-1 cursor-pointer">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Network className="h-4 w-4 text-success" />
-                        <span className="font-semibold">Directorate Archive</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Visible to only directorate head (Executive Director or Managing Director)
-                      </p>
-                    </Label>
-                  </div>
-                </div>
-              </RadioGroup>
-            </div>
-          </div>
-
-          {/* Preview Email */}
-          <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
-            <p className="text-sm font-semibold mb-2">Email Preview:</p>
             <p className="text-xs text-muted-foreground">
-              Subject: Completion Summary - {correspondence.referenceNumber}
+              All selected participants will receive an email notification with the completion summary and attachments.
             </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              This summary will be sent to all selected stakeholders with a PDF attachment.
-            </p>
+          </div>
+
+          {/* Email Notification Preview */}
+          <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Send className="h-4 w-4 text-success" />
+              <p className="text-sm font-semibold">Notification Preview</p>
+            </div>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <p><strong>Subject:</strong> Correspondence Completed - {correspondence.referenceNumber}</p>
+              <p><strong>Recipients:</strong> {selectedStakeholders.length} participant(s)</p>
+              <p className="mt-2 pt-2 border-t border-success/20">
+                This notification will include the completion summary, minute thread, and any attachments.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -418,19 +686,19 @@ export const CompletionSummaryModal = ({
             </Button>
             <Button 
               onClick={handleSendSummary} 
-              disabled={isSubmitting || isExporting}
-              className="bg-gradient-secondary"
-              aria-label="Archive correspondence and send summary"
+              disabled={isSubmitting || isExporting || noneSelected}
+              className="bg-gradient-success"
+              aria-label="Complete correspondence and notify participants"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Archiving...
+                  Completing...
                 </>
               ) : (
                 <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Archive & Send Summary
+                  <FileCheck className="h-4 w-4 mr-2" />
+                  Complete & Notify
                 </>
               )}
             </Button>
@@ -442,32 +710,50 @@ export const CompletionSummaryModal = ({
       <AlertDialog open={showConfirmation} onOpenChange={setShowConfirmation}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Archive & Send Summary</AlertDialogTitle>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <FileCheck className="h-5 w-5 text-success" />
+              Confirm Completion
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to archive this correspondence and send the completion summary?
+              Are you sure you want to mark this correspondence as complete?
             </AlertDialogDescription>
-            <div className="mt-3">
-              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                <li>Archive level: <strong>{archiveLevel === 'department' ? 'Department' : archiveLevel === 'division' ? 'Division' : 'Directorate'}</strong></li>
-                <li>Recipients: <strong>{selectedStakeholders.length} stakeholder(s)</strong></li>
-                <li>This action cannot be undone</li>
+            <div className="mt-4 p-3 bg-muted rounded-lg">
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span>Reference: <strong>{correspondence.referenceNumber}</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span>Notify: <strong>{selectedStakeholders.length} participant(s)</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span>Processing time: <strong>{calculateProcessingTime(correspondence.receivedDate)}</strong></span>
+                </li>
               </ul>
             </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              This action cannot be undone. The correspondence will be archived and all selected participants will receive a notification.
+            </p>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirm}
               disabled={isSubmitting}
-              className="bg-gradient-secondary hover:opacity-90"
+              className="bg-gradient-success hover:opacity-90"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Archiving...
+                  Completing...
                 </>
               ) : (
-                'Confirm Archive'
+                <>
+                  <FileCheck className="h-4 w-4 mr-2" />
+                  Confirm Completion
+                </>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -477,25 +763,44 @@ export const CompletionSummaryModal = ({
   );
 };
 
-function generateAutoSummary(correspondence: Correspondence, minutes: Minute[]): string {
-  const routingPath = minutes.map(m => m.gradeLevel).join(' → ');
+function generateAutoSummary(correspondence: Correspondence, minutes: Minute[], users: any[]): string {
+  const routingPath = minutes.map(m => {
+    const user = users.find(u => u.id === m.userId);
+    return `${user?.name || 'Unknown'} (${m.gradeLevel})`;
+  }).join(' → ');
+  
   const actions = minutes
     .filter(m => m.actionType === 'treat')
-    .map(m => `- ${m.minuteText}`)
+    .map(m => {
+      const user = users.find(u => u.id === m.userId);
+      return `- ${user?.name || 'Unknown'}: ${m.minuteText}`;
+    })
     .join('\n');
 
-  return `Subject: ${correspondence.subject}
+  const receivedDate = new Date(correspondence.receivedDate);
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - receivedDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  return `CORRESPONDENCE COMPLETION SUMMARY
+================================
+
+Subject: ${correspondence.subject}
 
 Reference: ${correspondence.referenceNumber}
 
-Date Received: ${new Date(correspondence.receivedDate).toLocaleDateString()}
+Date Received: ${receivedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
 
-Routing Path: ${routingPath}
+Date Completed: ${now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+
+Processing Time: ${diffDays} day(s)
+
+Routing Path:
+${routingPath || 'Direct processing'}
 
 Key Actions Taken:
-${actions || '- Actions completed as per instructions'}
+${actions || '- Processed as per standard procedures'}
 
-Final Outcome: Successfully completed and ready for archival.
+Final Outcome: Successfully completed and archived.
 
-Participants: ${minutes.length} stakeholder(s) involved in processing`;
+Participants: ${minutes.length} officer(s) involved in processing this correspondence.`;
 }
