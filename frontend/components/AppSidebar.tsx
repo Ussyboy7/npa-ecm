@@ -9,6 +9,7 @@ import {
   FileText,
   Inbox,
   Users,
+  Users2,
   Settings,
   ChevronDown,
   ChevronLeft,
@@ -71,6 +72,7 @@ export function AppSidebar() {
   const officeInboxCount = counts.officeInbox;
   const myInboxCount = counts.myInbox;
   const outboxCount = counts.outbox;
+  const delegatedCount = counts.delegated;
 
   const hasCorrespondenceAccess =
     permissions.canViewCorrespondenceRegistry ||
@@ -199,6 +201,27 @@ export function AppSidebar() {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+
+              {delegatedCount > 0 && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive('/inbox/delegated')}>
+                    <Link href="/inbox/delegated" className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Users2 className="h-4 w-4" />
+                        {!isCollapsed && <span>Delegated to Me</span>}
+                      </div>
+                      {!isCollapsed && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-auto bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                        >
+                          {delegatedCount}
+                        </Badge>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
 
               {permissions.canRegisterCorrespondence && (
                 <SidebarMenuItem>

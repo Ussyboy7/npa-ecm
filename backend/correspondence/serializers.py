@@ -10,6 +10,7 @@ from organization.models import Department, Division, Directorate, Office
 from .models import (
     Correspondence,
     CorrespondenceAttachment,
+    CorrespondenceDelegation,
     CorrespondenceDistribution,
     CorrespondenceDocumentLink,
     Delegation,
@@ -441,4 +442,70 @@ class DelegationSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "principal", "assistant", "created_at", "updated_at"]
+
+
+class CorrespondenceDelegationSerializer(serializers.ModelSerializer):
+    """Serializer for per-correspondence delegations."""
+    
+    principal = UserSerializer(read_only=True)
+    principal_id = serializers.PrimaryKeyRelatedField(
+        source="principal",
+        queryset=CorrespondenceDelegation._meta.get_field("principal").remote_field.model.objects.all(),
+        write_only=True,
+    )
+    assistant = UserSerializer(read_only=True)
+    assistant_id = serializers.PrimaryKeyRelatedField(
+        source="assistant",
+        queryset=CorrespondenceDelegation._meta.get_field("assistant").remote_field.model.objects.all(),
+        write_only=True,
+    )
+    correspondence_id = serializers.PrimaryKeyRelatedField(
+        source="correspondence",
+        queryset=Correspondence.objects.all(),
+        write_only=True,
+    )
+    correspondence = serializers.SerializerMethodField()
+    is_active = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CorrespondenceDelegation
+        fields = [
+            "id",
+            "correspondence",
+            "correspondence_id",
+            "principal",
+            "principal_id",
+            "assistant",
+            "assistant_id",
+            "delegation",
+            "notes",
+            "status",
+            "delegated_at",
+            "expires_at",
+            "completed_at",
+            "revoked_at",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id", "correspondence", "principal", "assistant",
+            "delegated_at", "completed_at", "revoked_at",
+            "created_at", "updated_at", "is_active",
+        ]
+    
+    def get_correspondence(self, obj):
+        """Return basic correspondence info."""
+        return {
+            "id": str(obj.correspondence.id),
+            "reference_number": obj.correspondence.reference_number,
+            "subject": obj.correspondence.subject,
+            "correspondence_type": obj.correspondence.correspondence_type,
+            "status": obj.correspondence.status,
+            "priority": obj.correspondence.priority,
+        }
+    
+    def get_is_active(self, obj):
+        """Check if delegation is still active."""
+        return obj.is_active()
 

@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     CorrespondenceAttachmentViewSet,
+    CorrespondenceDelegationViewSet,
     CorrespondenceDistributionViewSet,
     CorrespondenceDocumentLinkViewSet,
     CorrespondenceViewSet,
@@ -21,6 +22,7 @@ router.register(r"document-links", CorrespondenceDocumentLinkViewSet, basename="
 router.register(r"minutes", MinuteViewSet, basename="minute")
 router.register(r"parallel-routing-groups", ParallelRoutingGroupViewSet, basename="parallel-routing-group")
 router.register(r"delegations", DelegationViewSet, basename="delegation")
+router.register(r"correspondence-delegations", CorrespondenceDelegationViewSet, basename="correspondence-delegation")
 
 
 urlpatterns = router.urls

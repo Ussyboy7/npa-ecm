@@ -11,6 +11,8 @@ export type Delegation = {
   delegatedAt: string;
   status: 'active' | 'completed' | 'revoked';
   completedAt?: string;
+  duration?: string; // 'until_completed', '24h', '3d', '1w', '2w', 'custom'
+  expiresAt?: string; // ISO date string
 };
 
 const STORAGE_KEY = 'npa-delegations';

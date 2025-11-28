@@ -32,6 +32,7 @@ from dms.models import DocumentVersion
 from .models import (
     Correspondence,
     CorrespondenceAttachment,
+    CorrespondenceDelegation,
     CorrespondenceDistribution,
     CorrespondenceDocumentLink,
     Delegation,
@@ -40,6 +41,7 @@ from .models import (
 )
 from .serializers import (
     CorrespondenceAttachmentSerializer,
+    CorrespondenceDelegationSerializer,
     CorrespondenceDistributionSerializer,
     CorrespondenceDocumentLinkSerializer,
     CorrespondenceSerializer,
@@ -450,10 +452,18 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
         ).count()
         
+        # === Delegated Count ===
+        # Items delegated TO the current user (as assistant)
+        delegated_count = CorrespondenceDelegation.objects.filter(
+            assistant=user,
+            status=CorrespondenceDelegation.Status.ACTIVE
+        ).count()
+        
         return Response({
             "officeInbox": office_inbox_count,
             "myInbox": my_inbox_count,
             "outbox": outbox_count,
+            "delegated": delegated_count,
         })
 
     @action(detail=False, methods=["get"], url_path="office-inbox")
@@ -2325,3 +2335,194 @@ class DelegationViewSet(viewsets.ModelViewSet):
     pagination_class = None
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["principal", "assistant", "active"]
+
+
+class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint for per-correspondence delegations.
+    Allows executives to delegate specific correspondences to their assistants.
+    """
+    queryset = CorrespondenceDelegation.objects.select_related(
+        "correspondence", "principal", "assistant", "delegation"
+    )
+    serializer_class = CorrespondenceDelegationSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ["correspondence", "principal", "assistant", "status"]
+    search_fields = ["correspondence__subject", "correspondence__reference_number"]
+
+    def get_queryset(self):
+        """Filter delegations based on user role."""
+        user = self.request.user
+        qs = super().get_queryset()
+        
+        # User can see delegations they created (as principal) or received (as assistant)
+        return qs.filter(Q(principal=user) | Q(assistant=user))
+
+    def perform_create(self, serializer):
+        """Create delegation and send notification to assistant."""
+        principal = self.request.user
+        assistant = serializer.validated_data.get("assistant")
+        correspondence = serializer.validated_data.get("correspondence")
+        notes = serializer.validated_data.get("notes", "")
+        
+        # Check if there's already an active delegation for this correspondence
+        existing = CorrespondenceDelegation.objects.filter(
+            correspondence=correspondence,
+            principal=principal,
+            status=CorrespondenceDelegation.Status.ACTIVE
+        ).first()
+        
+        if existing:
+            raise ValidationError({
+                "detail": "You already have an active delegation for this correspondence."
+            })
+        
+        # Find the general delegation assignment (if exists)
+        delegation = Delegation.objects.filter(
+            principal=principal,
+            assistant=assistant,
+            active=True
+        ).first()
+        
+        # Save the correspondence delegation
+        instance = serializer.save(
+            principal=principal,
+            delegation=delegation
+        )
+        
+        # Send notification to assistant
+        self._send_delegation_notification(instance, notes)
+        
+        # Log the delegation
+        logger.info(
+            f"Correspondence {correspondence.reference_number} delegated "
+            f"from {principal.get_full_name()} to {assistant.get_full_name()}"
+        )
+
+    def _send_delegation_notification(self, delegation, notes):
+        """Send notification to the assistant about the delegation."""
+        try:
+            NotificationService.create_notification(
+                recipient=delegation.assistant,
+                notification_type="delegation",
+                title="New Correspondence Delegated to You",
+                message=(
+                    f"{delegation.principal.get_full_name()} has delegated correspondence "
+                    f"'{delegation.correspondence.subject}' ({delegation.correspondence.reference_number}) to you."
+                    + (f" Instructions: {notes}" if notes else "")
+                ),
+                action_url=f"/correspondence/{delegation.correspondence.id}",
+                related_object_type="correspondence",
+                related_object_id=str(delegation.correspondence.id),
+                priority="high" if delegation.correspondence.priority == "urgent" else "medium"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send delegation notification: {e}")
+
+    @action(detail=False, methods=["get"])
+    def my_delegated_items(self, request):
+        """Get all correspondences delegated TO the current user (as assistant)."""
+        user = request.user
+        delegations = CorrespondenceDelegation.objects.filter(
+            assistant=user,
+            status=CorrespondenceDelegation.Status.ACTIVE
+        ).select_related("correspondence", "principal")
+        
+        serializer = self.get_serializer(delegations, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def my_delegations(self, request):
+        """Get all correspondences delegated BY the current user (as principal)."""
+        user = request.user
+        delegations = CorrespondenceDelegation.objects.filter(
+            principal=user,
+            status=CorrespondenceDelegation.Status.ACTIVE
+        ).select_related("correspondence", "assistant")
+        
+        serializer = self.get_serializer(delegations, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def revoke(self, request, pk=None):
+        """Revoke a delegation."""
+        delegation = self.get_object()
+        
+        # Only the principal can revoke
+        if delegation.principal != request.user:
+            return Response(
+                {"detail": "Only the executive who delegated can revoke."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if delegation.status != CorrespondenceDelegation.Status.ACTIVE:
+            return Response(
+                {"detail": f"Delegation is already {delegation.status}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        delegation.revoke()
+        
+        # Notify assistant about revocation
+        try:
+            NotificationService.create_notification(
+                recipient=delegation.assistant,
+                notification_type="delegation",
+                title="Delegation Revoked",
+                message=(
+                    f"{delegation.principal.get_full_name()} has revoked the delegation for "
+                    f"'{delegation.correspondence.subject}' ({delegation.correspondence.reference_number})."
+                ),
+                action_url=f"/correspondence/{delegation.correspondence.id}",
+                related_object_type="correspondence",
+                related_object_id=str(delegation.correspondence.id),
+                priority="medium"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send revocation notification: {e}")
+        
+        serializer = self.get_serializer(delegation)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def complete(self, request, pk=None):
+        """Mark a delegation as completed."""
+        delegation = self.get_object()
+        
+        # Only assistant can mark as completed
+        if delegation.assistant != request.user:
+            return Response(
+                {"detail": "Only the assistant can mark delegation as completed."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if delegation.status != CorrespondenceDelegation.Status.ACTIVE:
+            return Response(
+                {"detail": f"Delegation is already {delegation.status}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        delegation.complete()
+        
+        # Notify principal about completion
+        try:
+            NotificationService.create_notification(
+                recipient=delegation.principal,
+                notification_type="delegation",
+                title="Delegated Correspondence Handled",
+                message=(
+                    f"{delegation.assistant.get_full_name()} has completed handling "
+                    f"'{delegation.correspondence.subject}' ({delegation.correspondence.reference_number})."
+                ),
+                action_url=f"/correspondence/{delegation.correspondence.id}",
+                related_object_type="correspondence",
+                related_object_id=str(delegation.correspondence.id),
+                priority="medium"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send completion notification: {e}")
+        
+        serializer = self.get_serializer(delegation)
+        return Response(serializer.data)

@@ -7,12 +7,14 @@ export interface SidebarCounts {
   officeInbox: number;
   myInbox: number;
   outbox: number;
+  delegated: number;
 }
 
 const DEFAULT_COUNTS: SidebarCounts = {
   officeInbox: 0,
   myInbox: 0,
   outbox: 0,
+  delegated: 0,
 };
 
 // Cache the counts to avoid flashing on navigation

@@ -566,3 +566,91 @@ class Delegation(UUIDModel, TimeStampedModel):
 
     class Meta:
         unique_together = ("principal", "assistant")
+
+
+class CorrespondenceDelegation(UUIDModel, TimeStampedModel):
+    """
+    Per-correspondence delegation record.
+    Tracks when a specific correspondence is delegated from an executive to their assistant.
+    """
+    
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        COMPLETED = "completed", "Completed"
+        REVOKED = "revoked", "Revoked"
+        EXPIRED = "expired", "Expired"
+    
+    correspondence = models.ForeignKey(
+        "Correspondence",
+        related_name="correspondence_delegations",
+        on_delete=models.CASCADE,
+    )
+    principal = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="correspondence_delegations_given",
+        on_delete=models.CASCADE,
+        help_text="The executive who delegated the correspondence",
+    )
+    assistant = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="correspondence_delegations_received",
+        on_delete=models.CASCADE,
+        help_text="The assistant who received the delegation",
+    )
+    delegation = models.ForeignKey(
+        Delegation,
+        related_name="correspondence_delegations",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Reference to the general delegation assignment",
+    )
+    notes = models.TextField(blank=True, help_text="Instructions from the executive")
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    delegated_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ["-delegated_at"]
+        # Only one active delegation per correspondence per principal
+        constraints = [
+            models.UniqueConstraint(
+                fields=["correspondence", "principal"],
+                condition=models.Q(status="active"),
+                name="unique_active_delegation_per_correspondence",
+            )
+        ]
+    
+    def __str__(self):
+        return f"Delegation: {self.correspondence.reference_number} from {self.principal} to {self.assistant}"
+    
+    def revoke(self):
+        """Revoke this delegation."""
+        from django.utils import timezone
+        self.status = self.Status.REVOKED
+        self.revoked_at = timezone.now()
+        self.save(update_fields=["status", "revoked_at"])
+    
+    def complete(self):
+        """Mark delegation as completed (usually when correspondence is completed)."""
+        from django.utils import timezone
+        self.status = self.Status.COMPLETED
+        self.completed_at = timezone.now()
+        self.save(update_fields=["status", "completed_at"])
+    
+    def is_active(self):
+        """Check if delegation is still active."""
+        from django.utils import timezone
+        if self.status != self.Status.ACTIVE:
+            return False
+        if self.expires_at and timezone.now() > self.expires_at:
+            self.status = self.Status.EXPIRED
+            self.save(update_fields=["status"])
+            return False
+        return True

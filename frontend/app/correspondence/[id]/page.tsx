@@ -58,11 +58,12 @@ import {
   Filter,
   Plus,
   Clock,
+  RotateCcw as RotateCcwIcon,
 } from 'lucide-react';
 import type { Minute, DistributionRecipient, Correspondence, ParallelRoutingGroup } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
-import { getDelegationByCorrespondence } from '@/lib/delegation-storage';
+import { getDelegationByCorrespondence, revokeDelegation, addDelegation, type Delegation } from '@/lib/delegation-storage';
 import { apiFetch } from '@/lib/api-client';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { EditMinuteModal } from '@/components/correspondence/EditMinuteModal';
@@ -527,52 +528,72 @@ const CorrespondenceDetailContent = () => {
   };
 
 
-  const handleDelegate = async (assistantId: string, assistantType: 'TA' | 'PA', notes: string) => {
+  const handleDelegate = async (
+    assistantId: string, 
+    assistantType: 'TA' | 'PA', 
+    notes: string,
+    duration?: string,
+    expiresAt?: string
+  ) => {
     if (!correspondence || !activeUser) return;
 
-    const assignment = assistantAssignments.find(
-      (entry) => entry.executiveId === activeUser.id && entry.assistantId === assistantId,
-    );
-
-    const permissions = assignment?.permissions ?? [];
-    const canMinute = permissions.includes('minute') || assistantType === 'PA' || assistantType === 'TA';
-    const canForward = permissions.includes('forward') || assistantType === 'PA' || assistantType === 'TA';
-    const canApprove = permissions.includes('approve') || assistantType === 'TA';
-
+    // Create per-correspondence delegation via new backend API
     const payload = {
-      principal_id: activeUser.id,
+      correspondence_id: correspondence.id,
       assistant_id: assistantId,
-      can_minute: canMinute,
-      can_forward: canForward,
-      can_approve: canApprove,
-      active: true,
-      starts_at: null,
-      ends_at: null,
+      notes: notes || '',
+      expires_at: expiresAt || null,
     };
 
     try {
-      if (assignment?.id) {
-        await apiFetch(`/correspondence/delegations/${assignment.id}/`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await apiFetch('/correspondence/delegations/', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-      }
+      // Create the correspondence delegation (sends notification to assistant)
+      const response = await apiFetch<{
+        id: string;
+        status: string;
+        delegated_at: string;
+      }>('/correspondence/correspondence-delegations/', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      // Also save to localStorage for UI state (backwards compatibility)
+      const newDelegation: Delegation = {
+        id: response.id,
+        correspondenceId: correspondence.id,
+        executiveId: activeUser.id,
+        assistantId,
+        assistantType,
+        delegationNotes: notes,
+        delegatedAt: response.delegated_at || new Date().toISOString(),
+        status: 'active',
+        duration: duration || 'until_completed',
+        expiresAt,
+      };
+      addDelegation(newDelegation);
 
       await refreshOrganizationData();
       await syncFromApi();
-      toast.success(`Successfully delegated to ${assistantType}`, {
-        description: notes ? `Instructions recorded: ${notes}` : undefined,
+      
+      const assistantName = users.find(u => u.id === assistantId)?.name || assistantType;
+      toast.success(`Successfully delegated to ${assistantName}`, {
+        description: notes 
+          ? `Instructions sent: "${notes.substring(0, 50)}${notes.length > 50 ? '...' : ''}"` 
+          : `${assistantName} will be notified and can now work on this correspondence.`,
       });
     } catch (error) {
       logError('Failed to delegate correspondence', error);
-      toast.error('Unable to delegate correspondence', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
+      const errorMessage = error instanceof Error ? error.message : 'Please try again.';
+      
+      // Handle specific error cases
+      if (errorMessage.includes('already have an active delegation')) {
+        toast.error('Delegation already exists', {
+          description: 'You already have an active delegation for this correspondence. Revoke it first to delegate again.',
+        });
+      } else {
+        toast.error('Unable to delegate correspondence', {
+          description: errorMessage,
+        });
+      }
     }
   };
 
@@ -2182,15 +2203,69 @@ const CorrespondenceDetailContent = () => {
                         Send to Multiple Recipients
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start"
-                      onClick={() => setShowDelegateModal(true)}
-                      disabled={turnRestrictedDisabled || !!activeDelegation}
-                    >
-                      <UserIcon className="h-4 w-4 mr-2" />
-                      {activeDelegation ? 'Already Delegated' : 'Delegate to TA/PA'}
-                    </Button>
+                    {activeDelegation ? (
+                      <div className="space-y-2">
+                        {/* Active Delegation Info */}
+                        <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                          <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-1">
+                            <UserIcon className="h-4 w-4" />
+                            <span className="text-xs font-medium">Active Delegation</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Delegated to {users.find(u => u.id === activeDelegation.assistantId)?.name || 'Assistant'}
+                            {activeDelegation.delegatedAt && (
+                              <> on {new Date(activeDelegation.delegatedAt).toLocaleDateString()}</>
+                            )}
+                          </p>
+                        </div>
+                        {/* Recall Button */}
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                          onClick={async () => {
+                            if (activeDelegation.id) {
+                              try {
+                                // Call backend API to revoke delegation
+                                await apiFetch(`/correspondence/correspondence-delegations/${activeDelegation.id}/revoke/`, {
+                                  method: 'POST',
+                                });
+                                
+                                // Also update localStorage
+                                revokeDelegation(activeDelegation.id);
+                                
+                                toast.success('Delegation recalled', {
+                                  description: 'The assistant has been notified. You can now take action on this correspondence directly.'
+                                });
+                                
+                                // Refresh data
+                                await syncFromApi();
+                              } catch (error) {
+                                console.error('Failed to recall delegation:', error);
+                                // Still try to revoke locally
+                                revokeDelegation(activeDelegation.id);
+                                toast.success('Delegation recalled locally', {
+                                  description: 'You can now take action on this correspondence directly.'
+                                });
+                                window.location.reload();
+                              }
+                            }
+                          }}
+                        >
+                          <RotateCcwIcon className="h-4 w-4 mr-2" />
+                          Recall Delegation
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        onClick={() => setShowDelegateModal(true)}
+                        disabled={turnRestrictedDisabled}
+                      >
+                        <UserIcon className="h-4 w-4 mr-2" />
+                        Delegate to TA/PA
+                      </Button>
+                    )}
                   </div>
 
                   <Separator />

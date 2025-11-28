@@ -34,8 +34,11 @@ import {
   UserPlus,
   ArrowLeft,
   Briefcase,
-  Users
+  Users,
+  CalendarDays,
+  Timer
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { logError } from '@/lib/client-logger';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
@@ -76,14 +79,38 @@ const INSTRUCTION_TEMPLATES = [
   { label: 'Review & Summarize', text: 'Review the correspondence and provide a summary with recommendations.' },
   { label: 'Urgent Action', text: 'This is urgent. Please action immediately and keep me informed.' },
   { label: 'Follow Up', text: 'Please follow up with the sender and report back.' },
+  { label: 'Briefing Note', text: 'Please prepare a briefing note with key points and background information.' },
+  { label: 'Schedule Meeting', text: 'Please schedule a meeting with the sender to discuss this matter.' },
+  { label: 'Obtain Info', text: 'Please obtain additional information/clarification from the sender.' },
+  { label: 'Coordinate', text: 'Please coordinate with the relevant department and provide status update.' },
+  { label: 'Research', text: 'Please research this matter and provide findings with recommendations.' },
+  { label: 'Acknowledge Receipt', text: 'Please acknowledge receipt of this correspondence on my behalf.' },
 ];
+
+// Delegation duration options
+const DURATION_OPTIONS = [
+  { value: 'until_completed', label: 'Until Completed', description: 'Active until correspondence is closed' },
+  { value: '24h', label: '24 Hours', description: 'Expires in 1 day' },
+  { value: '3d', label: '3 Days', description: 'Expires in 3 days' },
+  { value: '1w', label: '1 Week', description: 'Expires in 7 days' },
+  { value: '2w', label: '2 Weeks', description: 'Expires in 14 days' },
+  { value: 'custom', label: 'Custom Date', description: 'Set a specific expiry date' },
+];
+
+interface DelegationOptions {
+  assistantId: string;
+  assistantType: 'TA' | 'PA';
+  notes: string;
+  duration: string;
+  expiresAt?: string; // ISO date string for custom expiry
+}
 
 interface DelegateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   correspondenceId: string;
   executiveId: string;
-  onDelegate: (assistantId: string, assistantType: 'TA' | 'PA', notes: string) => void;
+  onDelegate: (assistantId: string, assistantType: 'TA' | 'PA', notes: string, duration?: string, expiresAt?: string) => void;
 }
 
 export const DelegateModal = ({
@@ -93,27 +120,40 @@ export const DelegateModal = ({
   executiveId,
   onDelegate,
 }: DelegateModalProps) => {
-  const { assistantAssignments, users, addAssignment, directorates, divisions, departments } = useOrganization();
+  const { assistantAssignments, users, addAssignment, directorates, divisions, departments, refreshOrganizationData } = useOrganization();
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   
+  // Duration state
+  const [delegationDuration, setDelegationDuration] = useState('until_completed');
+  const [customExpiryDate, setCustomExpiryDate] = useState('');
+  
   // Assignment mode state
   const [isAssigningMode, setIsAssigningMode] = useState(false);
   const [newAssistantId, setNewAssistantId] = useState('');
   const [newAssistantType, setNewAssistantType] = useState<'TA' | 'PA'>('PA');
   const [isAssigning, setIsAssigning] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Get the executive's user object to determine their organizational scope
   const executive = users.find(u => u.id === executiveId);
 
   // Get assistants assigned to this executive
+  // Debug: Log assignment data to help troubleshoot (using String() for type-safe comparison)
+  console.log('[DelegateModal] Debug Info:', {
+    currentUserId: executiveId,
+    totalAssignments: assistantAssignments.length,
+    matchingCount: assistantAssignments.filter(a => String(a.executiveId) === String(executiveId)).length,
+  });
+
+  // Filter assignments for this executive (handle string/number type mismatch)
   const availableAssistants = assistantAssignments
-    .filter(assignment => assignment.executiveId === executiveId)
+    .filter(assignment => String(assignment.executiveId) === String(executiveId))
     .map(assignment => {
-      const user = users.find(u => u.id === assignment.assistantId);
+      const user = users.find(u => String(u.id) === String(assignment.assistantId));
       return {
         ...assignment,
         userName: user?.name || 'Unknown User',
@@ -242,8 +282,56 @@ export const DelegateModal = ({
       setIsAssigningMode(false);
       setNewAssistantId('');
       setNewAssistantType('PA');
+      setDelegationDuration('until_completed');
+      setCustomExpiryDate('');
+      setIsRefreshing(false);
+    } else {
+      // Refresh organization data when modal opens to ensure we have latest assignments
+      const doRefresh = async () => {
+        setIsRefreshing(true);
+        try {
+          await refreshOrganizationData();
+        } catch (error) {
+          logError('Failed to refresh organization data', error);
+        } finally {
+          setIsRefreshing(false);
+        }
+      };
+      doRefresh();
     }
-  }, [open]);
+  }, [open, refreshOrganizationData]);
+
+  // Calculate expiry date based on duration
+  const calculateExpiryDate = (duration: string): string | undefined => {
+    if (duration === 'until_completed') return undefined;
+    if (duration === 'custom') return customExpiryDate || undefined;
+    
+    const now = new Date();
+    switch (duration) {
+      case '24h':
+        now.setHours(now.getHours() + 24);
+        break;
+      case '3d':
+        now.setDate(now.getDate() + 3);
+        break;
+      case '1w':
+        now.setDate(now.getDate() + 7);
+        break;
+      case '2w':
+        now.setDate(now.getDate() + 14);
+        break;
+    }
+    return now.toISOString();
+  };
+
+  // Get duration display text
+  const getDurationDisplayText = () => {
+    const option = DURATION_OPTIONS.find(d => d.value === delegationDuration);
+    if (delegationDuration === 'custom' && customExpiryDate) {
+      return `Expires: ${new Date(customExpiryDate).toLocaleDateString()}`;
+    }
+    return option?.label || 'Until Completed';
+  };
 
   const handleAssignAssistant = async () => {
     if (!newAssistantId) {
@@ -281,10 +369,21 @@ export const DelegateModal = ({
       if (errorMessage.includes('unique set') || errorMessage.includes('already')) {
         const assignedUser = users.find(u => u.id === newAssistantId);
         toast.error(`${assignedUser?.name || 'This user'} is already assigned as your assistant`, {
-          description: 'Please select a different staff member'
+          description: 'Refreshing your assistant list...'
         });
-        // Remove from selection since they're already assigned
+        // Refresh to sync the list, then switch back to delegation mode
+        await refreshOrganizationData();
+        setIsAssigningMode(false);
         setNewAssistantId('');
+        // Auto-select the newly synced assistant if they appear in the list
+        setTimeout(() => {
+          const syncedAssignment = assistantAssignments.find(
+            a => a.executiveId === executiveId && a.assistantId === newAssistantId
+          );
+          if (syncedAssignment) {
+            setSelectedAssistant(newAssistantId);
+          }
+        }, 500);
       } else {
         toast.error('Failed to assign assistant', {
           description: 'Please try again or contact support'
@@ -329,7 +428,8 @@ export const DelegateModal = ({
 
     setIsSubmitting(true);
     try {
-      onDelegate(selectedAssistant, assignment.type, delegationNotes);
+      const expiresAt = calculateExpiryDate(delegationDuration);
+      onDelegate(selectedAssistant, assignment.type, delegationNotes, delegationDuration, expiresAt);
       setShowConfirmation(false);
       onOpenChange(false);
     } catch (error) {
@@ -364,29 +464,45 @@ export const DelegateModal = ({
         <div className="space-y-4">
           {availableAssistants.length === 0 && !isAssigningMode ? (
             <div className="text-center py-6 space-y-4">
-              <div className="mx-auto w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-                <Users className="h-7 w-7 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">No Assistants Assigned</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  You don't have any TA or PA assigned to you yet.
-                </p>
-              </div>
-              
-              <div className="pt-2 space-y-2">
-                <Button
-                  onClick={() => setIsAssigningMode(true)}
-                  className="w-full"
-                  variant="default"
-                >
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Assign TA/PA Now
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Or contact the Registry/HR department for assistance
-                </p>
-              </div>
+              {isRefreshing ? (
+                <>
+                  <div className="mx-auto w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+                    <Loader2 className="h-7 w-7 text-muted-foreground animate-spin" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Loading Assistants...</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Checking for assigned TA/PA
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mx-auto w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+                    <Users className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">No Assistants Assigned</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      You don't have any TA or PA assigned to you yet.
+                    </p>
+                  </div>
+                  
+                  <div className="pt-2 space-y-2">
+                    <Button
+                      onClick={() => setIsAssigningMode(true)}
+                      className="w-full"
+                      variant="default"
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Assign TA/PA Now
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Or contact the Registry/HR department for assistance
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           ) : isAssigningMode ? (
             /* Assignment Mode UI */
@@ -594,6 +710,43 @@ export const DelegateModal = ({
                 </div>
               )}
 
+              {/* Delegation Duration */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Timer className="h-4 w-4 text-muted-foreground" />
+                  Delegation Duration
+                </Label>
+                <Select value={delegationDuration} onValueChange={setDelegationDuration}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select duration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DURATION_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        <div className="flex items-center gap-2">
+                          <span>{option.label}</span>
+                          <span className="text-xs text-muted-foreground">• {option.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* Custom date picker */}
+                {delegationDuration === 'custom' && (
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      value={customExpiryDate}
+                      onChange={(e) => setCustomExpiryDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      className="flex-1"
+                    />
+                  </div>
+                )}
+              </div>
+
               {/* Delegation Instructions */}
               <div className="space-y-2">
                 <Label htmlFor="notes" className="flex items-center gap-2">
@@ -723,6 +876,15 @@ export const DelegateModal = ({
                     <p className="text-sm text-foreground">{delegationNotes}</p>
                   </div>
                 )}
+
+                {/* Duration info */}
+                <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">
+                  <Timer className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">
+                    <span className="text-muted-foreground">Duration: </span>
+                    <span className="font-medium text-foreground">{getDurationDisplayText()}</span>
+                  </span>
+                </div>
 
                 <p className="text-xs text-muted-foreground">
                   The assistant will be able to act on your behalf based on their assigned permissions. You will be notified of any actions taken.
