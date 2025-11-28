@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -900,7 +899,8 @@ export const DelegateModal = ({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            {/* Using Button instead of AlertDialogAction to prevent auto-close during async operation */}
+            <Button
               onClick={handleConfirm}
               disabled={isSubmitting}
               className="bg-primary hover:opacity-90"
@@ -916,7 +916,7 @@ export const DelegateModal = ({
                   Confirm Delegation
                 </>
               )}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
