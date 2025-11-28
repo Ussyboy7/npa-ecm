@@ -110,7 +110,7 @@ interface DelegateModalProps {
   onOpenChange: (open: boolean) => void;
   correspondenceId: string;
   executiveId: string;
-  onDelegate: (assistantId: string, assistantType: 'TA' | 'PA', notes: string, duration?: string, expiresAt?: string) => void;
+  onDelegate: (assistantId: string, assistantType: 'TA' | 'PA', notes: string, duration?: string, expiresAt?: string) => Promise<void>;
 }
 
 export const DelegateModal = ({
@@ -429,9 +429,15 @@ export const DelegateModal = ({
     setIsSubmitting(true);
     try {
       const expiresAt = calculateExpiryDate(delegationDuration);
-      onDelegate(selectedAssistant, assignment.type, delegationNotes, delegationDuration, expiresAt);
+      // Await the async onDelegate call
+      await onDelegate(selectedAssistant, assignment.type, delegationNotes, delegationDuration, expiresAt);
       setShowConfirmation(false);
       onOpenChange(false);
+      // Reset form state
+      setSelectedAssistant('');
+      setDelegationNotes('');
+      setDelegationDuration('until_completed');
+      setCustomExpiryDate('');
     } catch (error) {
       logError('Failed to delegate correspondence', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
@@ -870,7 +876,7 @@ export const DelegateModal = ({
                   </div>
                 </div>
                 
-                {delegationNotes && (
+              {delegationNotes && (
                   <div className="p-3 bg-muted/50 rounded-lg border border-border">
                     <p className="text-xs font-medium text-muted-foreground mb-1">Instructions:</p>
                     <p className="text-sm text-foreground">{delegationNotes}</p>
