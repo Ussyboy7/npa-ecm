@@ -379,7 +379,7 @@ const CorrespondenceDetailContent = () => {
         const [corrResponse, minutesResponse, delegationResponse] = await Promise.all([
           apiFetch<any>(`/correspondence/items/${id}/`),
           apiFetch<any>(`/correspondence/minutes/?correspondence=${id}`),
-          apiFetch<any[]>(`/correspondence/correspondence-delegations/?correspondence=${id}&status=active`).catch(() => []),
+          apiFetch<any>(`/correspondence/correspondence-delegations/?correspondence=${id}&status=active`).catch(() => [] as any[]),
         ]);
         if (!ignore) {
           setRemoteCorrespondence(mapApiCorrespondence(corrResponse));
@@ -390,7 +390,7 @@ const CorrespondenceDetailContent = () => {
           setMinutes(minutesData.map(mapApiMinute));
           
           // Set active delegation from backend
-          const delegations = Array.isArray(delegationResponse) 
+          const delegations: any[] = Array.isArray(delegationResponse) 
             ? delegationResponse 
             : (delegationResponse?.results || []);
           const activeDel = delegations.find((d: any) => d.status === 'active');
@@ -595,7 +595,8 @@ const CorrespondenceDetailContent = () => {
       const newDelegation: Delegation = {
         id: response.id,
         correspondenceId: correspondence.id,
-        executiveId: activeUser.id,
+        principalId: activeUser.id,
+        executiveId: activeUser.id, // Legacy field
         assistantId,
         assistantType,
         delegationNotes: notes,

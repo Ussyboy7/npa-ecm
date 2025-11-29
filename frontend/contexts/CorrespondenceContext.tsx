@@ -248,7 +248,8 @@ const mapApiMinute = (item: any): Minute => {
 const mapApiDelegation = (item: any): Delegation => ({
   id: String(item.id),
   correspondenceId: item.correspondence ? String(item.correspondence) : '',
-  executiveId: normalizeId(item.principal ?? item.principal_id) ?? '',
+  principalId: normalizeId(item.principal ?? item.principal_id) ?? '',
+  executiveId: normalizeId(item.principal ?? item.principal_id) ?? '', // Legacy
   assistantId: normalizeId(item.assistant ?? item.assistant_id) ?? '',
   assistantType: (item.assistant_type ?? 'PA').toUpperCase() === 'TA' ? 'TA' : 'PA',
   delegationNotes: item.notes ?? '',

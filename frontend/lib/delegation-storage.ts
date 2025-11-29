@@ -4,10 +4,11 @@ import { logError } from '@/lib/client-logger';
 export type Delegation = {
   id: string;
   correspondenceId: string;
-  executiveId: string;
-  assistantId: string;
-  assistantType: 'TA' | 'PA';
-  delegationNotes: string;
+  executiveId?: string; // Legacy, use principalId instead
+  principalId: string | number; // The principal (executive) who delegates
+  assistantId: string | number;
+  assistantType?: 'TA' | 'PA';
+  delegationNotes?: string;
   delegatedAt: string;
   status: 'active' | 'completed' | 'revoked';
   completedAt?: string;

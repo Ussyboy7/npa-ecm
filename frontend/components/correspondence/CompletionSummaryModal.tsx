@@ -93,11 +93,11 @@ export const CompletionSummaryModal = ({
     }
 
     // Add correspondence creator if not already included
-    if (correspondence.createdBy && !participantMap.has(correspondence.createdBy)) {
-      const user = users.find((u) => u.id === correspondence.createdBy);
+    if (correspondence.createdById && !participantMap.has(correspondence.createdById)) {
+      const user = users.find((u) => u.id === correspondence.createdById);
       if (user) {
-        participantMap.set(correspondence.createdBy, {
-          id: correspondence.createdBy,
+        participantMap.set(correspondence.createdById, {
+          id: correspondence.createdById,
           name: user.name,
           role: user.gradeLevel || 'Staff',
           department: user.department
@@ -106,7 +106,7 @@ export const CompletionSummaryModal = ({
     }
 
     return Array.from(participantMap.values());
-  }, [minutes, users, correspondence.currentApproverId, correspondence.createdBy]);
+  }, [minutes, users, correspondence.currentApproverId, correspondence.createdById]);
 
   // Auto-select all stakeholders by default
   const [selectedStakeholders, setSelectedStakeholders] = useState<string[]>([]);
@@ -400,7 +400,7 @@ export const CompletionSummaryModal = ({
                   <div class="minute-item">
                     <div class="minute-header">${user?.name || 'Unknown'} — ${m.gradeLevel}</div>
                     <div class="minute-text">"${m.minuteText}"</div>
-                    <div class="minute-date">${new Date(m.createdAt).toLocaleString('en-GB')}</div>
+                    <div class="minute-date">${new Date(m.timestamp).toLocaleString('en-GB')}</div>
                   </div>
                 `;
               }).join('') : '<p style="color: #666; font-style: italic;">No minutes recorded.</p>'}
