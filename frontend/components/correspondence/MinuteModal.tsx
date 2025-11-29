@@ -813,10 +813,14 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       }
       
       const correspondenceUpdatePayload: any = {
-        current_approver_id: forwardTo,
         status: 'in-progress',
         direction: finalDirection,
       };
+      // Only set current_approver_id if a specific user was selected
+      // When routing to an office, the backend determines the correct recipient
+      if (forwardTo) {
+        correspondenceUpdatePayload.current_approver_id = forwardTo;
+      }
       // Always update the office to the recipient's office (or explicitly selected office)
       // Note: Backend also handles this automatically, but we update here for immediate UI feedback
       const finalOfficeId = recipientOfficeId || targetOfficeId;

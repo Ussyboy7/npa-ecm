@@ -189,6 +189,12 @@ const mapApiMinute = (item: any): Minute => {
     actedBySecretary: item.acted_by_secretary ?? false,
     actedByAssistant: item.acted_by_assistant ?? false,
     assistantType: item.assistant_type ?? undefined,
+    performedById: normalizeId(item.performed_by ?? item.performed_by_id),
+    performedByName:
+      item.performed_by_name ??
+      (typeof item.performed_by === 'object' && item.performed_by
+        ? `${item.performed_by.first_name ?? ''} ${item.performed_by.last_name ?? ''}`.trim() || item.performed_by.username
+        : undefined),
     readAt: item.read_at ?? undefined,
     mentions: Array.isArray(item.mentions) ? item.mentions : [],
     signature: item.signature_payload ?? undefined,

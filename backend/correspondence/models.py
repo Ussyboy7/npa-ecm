@@ -248,6 +248,14 @@ class Minute(UUIDModel, TimeStampedModel):
     acted_by_secretary = models.BooleanField(default=False)
     acted_by_assistant = models.BooleanField(default=False)
     assistant_type = models.CharField(max_length=5, choices=AssistantType.choices, blank=True)
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="minutes_performed",
+        help_text="Actual user who performed this action (for delegation audit trail)",
+    )
     read_at = models.DateTimeField(null=True, blank=True)
     mentions = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name="mentioned_in_minutes")
     signature_payload = models.JSONField(blank=True, null=True)

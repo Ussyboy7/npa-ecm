@@ -11,9 +11,10 @@ interface MinuteDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   authorName?: string;
+  showDelegationInfo?: boolean; // Only show "Performed by" to the principal
 }
 
-export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName }: MinuteDetailModalProps) => {
+export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, showDelegationInfo = false }: MinuteDetailModalProps) => {
   if (!minute) return null;
 
   const getActionColor = (action: string) => {
@@ -52,6 +53,18 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName }: Mi
                   <Calendar className="h-4 w-4" />
                   {format(new Date(minute.timestamp), 'PPp')}
                 </div>
+                {/* Only show delegation info to the principal (owner of the minute) */}
+                {showDelegationInfo && minute.actedByAssistant && minute.performedByName && (
+                  <div className="flex items-center gap-2 text-sm text-primary/80 bg-primary/5 px-2 py-1 rounded">
+                    <User className="h-4 w-4" />
+                    <span>Performed by <span className="font-medium">{minute.performedByName}</span></span>
+                    {minute.assistantType && (
+                      <Badge variant="outline" className="text-xs">
+                        {minute.assistantType}
+                      </Badge>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex flex-col gap-2 items-end">
                 <Badge variant="outline" className={getActionColor(minute.actionType)}>

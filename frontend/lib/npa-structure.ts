@@ -180,6 +180,8 @@ export type Minute = {
   actedBySecretary?: boolean;
   actedByAssistant?: boolean;
   assistantType?: 'TA' | 'PA';
+  performedById?: string;  // Who actually performed this action (for delegation audit)
+  performedByName?: string;
   readAt?: string;
   mentions?: string[];
   signature?: MinuteSignaturePayload;

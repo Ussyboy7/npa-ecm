@@ -114,6 +114,10 @@ class MinuteSerializer(serializers.ModelSerializer):
         required=False,
     )
     to_user_name = serializers.SerializerMethodField()
+    
+    # Delegation audit trail - who actually performed the action
+    performed_by = UserSerializer(read_only=True)
+    performed_by_name = serializers.SerializerMethodField()
 
     can_be_edited = serializers.SerializerMethodField()
     can_be_recalled = serializers.SerializerMethodField()
@@ -148,6 +152,8 @@ class MinuteSerializer(serializers.ModelSerializer):
             "acted_by_secretary",
             "acted_by_assistant",
             "assistant_type",
+            "performed_by",
+            "performed_by_name",
             "read_at",
             "mentions",
             "signature_payload",
@@ -239,6 +245,12 @@ class MinuteSerializer(serializers.ModelSerializer):
         """Get the recipient user's name."""
         if obj.to_user:
             return obj.to_user.get_full_name() or obj.to_user.username
+        return None
+    
+    def get_performed_by_name(self, obj):
+        """Get the name of who actually performed this action (for delegation audit)."""
+        if obj.performed_by:
+            return obj.performed_by.get_full_name() or obj.performed_by.username
         return None
     
     branch_originator_name = serializers.SerializerMethodField()
@@ -493,6 +505,17 @@ class CorrespondenceDelegationSerializer(serializers.ModelSerializer):
             "delegated_at", "completed_at", "revoked_at",
             "created_at", "updated_at", "is_active",
         ]
+        # Disable automatic unique constraint validation - we handle this in the viewset
+        # by revoking existing active delegations before creating new ones
+        extra_kwargs = {
+            "notes": {"required": False, "allow_blank": True},
+        }
+    
+    def get_validators(self):
+        """Remove default unique constraint validators - handled in viewset."""
+        # Return empty list - we handle uniqueness in the viewset by revoking
+        # existing active delegations before creating new ones
+        return []
     
     def get_correspondence(self, obj):
         """Return basic correspondence info."""
@@ -500,7 +523,6 @@ class CorrespondenceDelegationSerializer(serializers.ModelSerializer):
             "id": str(obj.correspondence.id),
             "reference_number": obj.correspondence.reference_number,
             "subject": obj.correspondence.subject,
-            "correspondence_type": obj.correspondence.correspondence_type,
             "status": obj.correspondence.status,
             "priority": obj.correspondence.priority,
         }

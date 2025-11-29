@@ -209,6 +209,13 @@ const CorrespondenceDetailContent = () => {
   } = useOrganization();
   const [remoteCorrespondence, setRemoteCorrespondence] = useState<Correspondence | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [backendDelegation, setBackendDelegation] = useState<{
+    id: string;
+    assistantId: string | number;
+    principalId: string | number;
+    status: string;
+    delegatedAt: string;
+  } | null>(null);
   const searchParams = useSearchParams();
   const statusParam = searchParams?.get('status');
   const initialStatus = statusParam ?? cachedCorrespondence?.status;
@@ -369,9 +376,10 @@ const CorrespondenceDetailContent = () => {
     const hydrateFromApi = async () => {
       setDetailLoading(true);
       try {
-        const [corrResponse, minutesResponse] = await Promise.all([
+        const [corrResponse, minutesResponse, delegationResponse] = await Promise.all([
           apiFetch<any>(`/correspondence/items/${id}/`),
           apiFetch<any>(`/correspondence/minutes/?correspondence=${id}`),
+          apiFetch<any[]>(`/correspondence/correspondence-delegations/?correspondence=${id}&status=active`).catch(() => []),
         ]);
         if (!ignore) {
           setRemoteCorrespondence(mapApiCorrespondence(corrResponse));
@@ -380,6 +388,23 @@ const CorrespondenceDetailContent = () => {
             ? minutesResponse 
             : (minutesResponse?.results || []);
           setMinutes(minutesData.map(mapApiMinute));
+          
+          // Set active delegation from backend
+          const delegations = Array.isArray(delegationResponse) 
+            ? delegationResponse 
+            : (delegationResponse?.results || []);
+          const activeDel = delegations.find((d: any) => d.status === 'active');
+          if (activeDel) {
+            setBackendDelegation({
+              id: activeDel.id,
+              assistantId: activeDel.assistant?.id || activeDel.assistant_id,
+              principalId: activeDel.principal?.id || activeDel.principal_id,
+              status: activeDel.status,
+              delegatedAt: activeDel.delegated_at || activeDel.delegatedAt,
+            });
+          } else {
+            setBackendDelegation(null);
+          }
         }
       } catch (error) {
         logWarn('Failed to refresh correspondence detail', error);
@@ -545,6 +570,7 @@ const CorrespondenceDetailContent = () => {
     // Create per-correspondence delegation via new backend API
     const payload = {
       correspondence_id: correspondence.id,
+      principal_id: activeUser.id,
       assistant_id: assistantId,
       notes: notes || '',
       expires_at: expiresAt || null,
@@ -583,7 +609,7 @@ const CorrespondenceDetailContent = () => {
       await refreshOrganizationData();
       await syncFromApi();
       
-      const assistantName = users.find(u => u.id === assistantId)?.name || assistantType;
+      const assistantName = organizationUsers.find(u => String(u.id) === String(assistantId))?.name || assistantType;
       toast.success(`Successfully delegated to ${assistantName}`, {
         description: notes 
           ? `Instructions sent: "${notes.substring(0, 50)}${notes.length > 50 ? '...' : ''}"` 
@@ -692,8 +718,21 @@ const CorrespondenceDetailContent = () => {
   const department = correspondence.departmentId
     ? departments.find((entry) => entry.id === correspondence.departmentId) ?? null
     : null;
-  const isCurrentUserTurn = correspondence.currentApproverId === activeUser.id;
-  const activeDelegation = getDelegationByCorrespondence(correspondence.id);
+  // Use backend delegation if available, fallback to localStorage
+  const localDelegation = getDelegationByCorrespondence(correspondence.id);
+  const activeDelegation = backendDelegation || localDelegation;
+  
+  // User can act if they are the current approver OR if they are the active delegatee
+  // For delegatees: they can only act if the correspondence is STILL with the principal
+  // (Once routed to someone else, the delegatee can no longer act on it)
+  const isDelegateeAndPrincipalTurn = 
+    activeDelegation && 
+    String(activeDelegation.assistantId) === String(activeUser.id) && 
+    activeDelegation.status === 'active' &&
+    String(correspondence.currentApproverId) === String(activeDelegation.principalId);
+  
+  const isCurrentUserTurn = 
+    correspondence.currentApproverId === activeUser.id || isDelegateeAndPrincipalTurn;
 
   // Check if last minute was recalled and routing was reverted
   const lastMinute = minutes[minutes.length - 1];
@@ -1803,6 +1842,13 @@ const CorrespondenceDetailContent = () => {
                                       {minuteItem.toOfficeName && (
                                         <span className="ml-1">• {minuteItem.toOfficeName}</span>
                                       )}
+                                      {/* Only show "via [assistant]" to the principal (whose name is on the minute) */}
+                                      {minuteItem.actedByAssistant && minuteItem.performedByName && 
+                                       String(minuteItem.userId) === String(activeUser.id) && (
+                                        <span className="ml-1 text-primary/70" title={`Action performed by ${minuteItem.performedByName}`}>
+                                          • via {minuteItem.performedByName}
+                                        </span>
+                                      )}
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -2218,51 +2264,65 @@ const CorrespondenceDetailContent = () => {
                         <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                           <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-1">
                             <UserIcon className="h-4 w-4" />
-                            <span className="text-xs font-medium">Active Delegation</span>
+                            <span className="text-xs font-medium">
+                              {String(activeUser.id) === String(activeDelegation.principalId) 
+                                ? 'Active Delegation' 
+                                : 'Acting on Behalf'}
+                            </span>
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Delegated to {users.find(u => u.id === activeDelegation.assistantId)?.name || 'Assistant'}
-                            {activeDelegation.delegatedAt && (
-                              <> on {new Date(activeDelegation.delegatedAt).toLocaleDateString()}</>
+                            {String(activeUser.id) === String(activeDelegation.principalId) ? (
+                              <>
+                                Delegated to {organizationUsers.find(u => String(u.id) === String(activeDelegation.assistantId))?.name || 'Assistant'}
+                                {activeDelegation.delegatedAt && (
+                                  <> on {new Date(activeDelegation.delegatedAt).toLocaleDateString()}</>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                Acting on behalf of {organizationUsers.find(u => String(u.id) === String(activeDelegation.principalId))?.name || 'Principal'}
+                              </>
                             )}
                           </p>
                         </div>
-                        {/* Recall Button */}
-                        <Button
-                          variant="outline"
-                          className="w-full justify-start text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
-                          onClick={async () => {
-                            if (activeDelegation.id) {
-                              try {
-                                // Call backend API to revoke delegation
-                                await apiFetch(`/correspondence/correspondence-delegations/${activeDelegation.id}/revoke/`, {
-                                  method: 'POST',
-                                });
-                                
-                                // Also update localStorage
-                                revokeDelegation(activeDelegation.id);
-                                
-                                toast.success('Delegation recalled', {
-                                  description: 'The assistant has been notified. You can now take action on this correspondence directly.'
-                                });
-                                
-                                // Refresh data
-                                await syncFromApi();
-                              } catch (error) {
-                                console.error('Failed to recall delegation:', error);
-                                // Still try to revoke locally
-                                revokeDelegation(activeDelegation.id);
-                                toast.success('Delegation recalled locally', {
-                                  description: 'You can now take action on this correspondence directly.'
-                                });
-                                window.location.reload();
+                        {/* Recall Button - Only show to principal */}
+                        {String(activeUser.id) === String(activeDelegation.principalId) && (
+                          <Button
+                            variant="outline"
+                            className="w-full justify-start text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                            onClick={async () => {
+                              if (activeDelegation.id) {
+                                try {
+                                  // Call backend API to revoke delegation
+                                  await apiFetch(`/correspondence/correspondence-delegations/${activeDelegation.id}/revoke/`, {
+                                    method: 'POST',
+                                  });
+                                  
+                                  // Also update localStorage
+                                  revokeDelegation(activeDelegation.id);
+                                  
+                                  toast.success('Delegation recalled', {
+                                    description: 'The assistant has been notified. You can now take action on this correspondence directly.'
+                                  });
+                                  
+                                  // Refresh data
+                                  await syncFromApi();
+                                } catch (error) {
+                                  console.error('Failed to recall delegation:', error);
+                                  // Still try to revoke locally
+                                  revokeDelegation(activeDelegation.id);
+                                  toast.success('Delegation recalled locally', {
+                                    description: 'You can now take action on this correspondence directly.'
+                                  });
+                                  window.location.reload();
+                                }
                               }
-                            }
-                          }}
-                        >
-                          <RotateCcwIcon className="h-4 w-4 mr-2" />
-                          Recall Delegation
-                        </Button>
+                            }}
+                          >
+                            <RotateCcwIcon className="h-4 w-4 mr-2" />
+                            Recall Delegation
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <Button
@@ -2320,6 +2380,7 @@ const CorrespondenceDetailContent = () => {
             open={showMinuteDetail}
             onOpenChange={setShowMinuteDetail}
             authorName={lookupUser(selectedMinute.userId)?.name ?? selectedMinute.userName}
+            showDelegationInfo={String(selectedMinute.userId) === String(activeUser.id)}
           />
           <EditMinuteModal
             minute={selectedMinute}

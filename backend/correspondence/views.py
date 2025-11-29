@@ -1581,11 +1581,45 @@ class MinuteViewSet(viewsets.ModelViewSet):
         return (None, False)
 
     def perform_create(self, serializer):
+        # Import early to use throughout the function
+        from correspondence.models import ParallelRoutingGroup, Minute as MinuteModel, CorrespondenceDelegation
+        
         correspondence = serializer.validated_data["correspondence"]
         if correspondence.status == Correspondence.Status.COMPLETED:
             raise ValidationError({"detail": "Completed correspondence cannot be updated."})
         current_office = correspondence.current_office
-        minute = serializer.save(user=self.request.user, from_office=current_office)
+        
+        # Check if user is acting as a delegatee (assistant acting on behalf of principal)
+        active_delegation = CorrespondenceDelegation.objects.filter(
+            correspondence=correspondence,
+            assistant=self.request.user,
+            status=CorrespondenceDelegation.Status.ACTIVE
+        ).select_related('principal').first()
+        
+        if active_delegation:
+            # User is acting as delegatee - record action under principal's name
+            # but track who actually performed it for audit
+            principal = active_delegation.principal
+            minute = serializer.save(
+                user=principal,  # Shows as ED's action
+                from_office=current_office,
+                performed_by=self.request.user,  # Audit trail - who actually did it
+                acted_by_assistant=True,
+                assistant_type='PA',  # Default to PA for delegated actions
+            )
+            logger.info(
+                f"Delegation action: {self.request.user.get_full_name()} performed minute "
+                f"on behalf of {principal.get_full_name()} for correspondence {correspondence.reference_number}"
+            )
+            # Debug: Log routing info
+            print(
+                f"[DELEGATION DEBUG] Minute created - to_office: {minute.to_office}, to_office_id: {minute.to_office_id}, "
+                f"to_user: {minute.to_user}, action_type: {minute.action_type}"
+            )
+        else:
+            # Normal action - user acting as themselves
+            minute = serializer.save(user=self.request.user, from_office=current_office)
+        
         correspondence = minute.correspondence
         
         # Check if this is a response to a consultation request
@@ -1623,9 +1657,12 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 # Skip normal routing logic for consultation responses
                 return
         
+        # Initialize parallel group tracking variables
+        parallel_group_completed = False
+        original_sender = None
+        
         # Check if user is routing within a parallel branch
         # If so, inherit branch_originator and parallel_group_id for tracking
-        from correspondence.models import ParallelRoutingGroup, Minute as MinuteModel
         parallel_minutes_to_user = MinuteModel.objects.filter(
             correspondence=correspondence,
             is_parallel_branch=True,
@@ -1789,9 +1826,16 @@ class MinuteViewSet(viewsets.ModelViewSet):
             if approver_updated:
                 update_fields.append("current_approver")
             correspondence.save(update_fields=update_fields)
-            logger.info(
-                f"Updated correspondence {correspondence.id} - current_office: {correspondence.current_office_id}, "
+            print(
+                f"[ROUTING SUCCESS] Updated correspondence {correspondence.id} - current_office: {correspondence.current_office_id}, "
                 f"current_approver: {correspondence.current_approver_id}"
+            )
+        else:
+            # Debug: Log why routing didn't happen
+            print(
+                f"[ROUTING DEBUG] No routing update - office_updated: {office_updated}, approver_updated: {approver_updated}, "
+                f"recipient_user: {recipient_user}, minute.to_office: {minute.to_office}, "
+                f"is_completing_parallel_branch: {is_completing_parallel_branch}"
             )
         
         # Create audit log
@@ -2367,17 +2411,21 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
         correspondence = serializer.validated_data.get("correspondence")
         notes = serializer.validated_data.get("notes", "")
         
-        # Check if there's already an active delegation for this correspondence
-        existing = CorrespondenceDelegation.objects.filter(
+        # Revoke any existing active delegations for this correspondence by this principal
+        existing_delegations = CorrespondenceDelegation.objects.filter(
             correspondence=correspondence,
             principal=principal,
             status=CorrespondenceDelegation.Status.ACTIVE
-        ).first()
-        
-        if existing:
-            raise ValidationError({
-                "detail": "You already have an active delegation for this correspondence."
-            })
+        )
+        if existing_delegations.exists():
+            existing_delegations.update(
+                status=CorrespondenceDelegation.Status.REVOKED,
+                revoked_at=timezone.now()
+            )
+            logger.info(
+                f"Revoked {existing_delegations.count()} existing delegation(s) "
+                f"for {correspondence.reference_number}"
+            )
         
         # Find the general delegation assignment (if exists)
         delegation = Delegation.objects.filter(
