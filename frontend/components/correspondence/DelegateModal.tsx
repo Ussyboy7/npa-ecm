@@ -886,12 +886,12 @@ export const DelegateModal = ({
               </div>
             </div>
             
-            {delegationNotes && (
+              {delegationNotes && (
               <div className="p-3 bg-muted/50 rounded-lg border border-border">
                 <p className="text-xs font-medium text-muted-foreground mb-1">Instructions:</p>
                 <p className="text-sm text-foreground">{delegationNotes}</p>
               </div>
-            )}
+              )}
 
             {/* Duration info */}
             <div className="flex items-center gap-2 p-2 bg-muted/30 rounded-lg">

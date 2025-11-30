@@ -45,6 +45,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
@@ -56,8 +58,8 @@ export function AppSidebar() {
   const { state, toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const { currentUser, hydrated } = useCurrentUser();
-  const { officeMemberships } = useOrganization();
-  const { counts } = useSidebarCounts();
+  const { officeMemberships, assistantAssignments } = useOrganization();
+  const { counts, loading: countsLoading } = useSidebarCounts();
 
   const permissions = useUserPermissions(currentUser ?? undefined);
 
@@ -73,6 +75,14 @@ export function AppSidebar() {
   const myInboxCount = counts.myInbox;
   const outboxCount = counts.outbox;
   const delegatedCount = counts.delegated;
+
+  // Check if user has assistant assignments (can receive delegations)
+  const hasAssistantAssignments = useMemo(() => {
+    if (!currentUser) return false;
+    return assistantAssignments.some(
+      (assignment) => String(assignment.assistantId) === String(currentUser.id)
+    );
+  }, [assistantAssignments, currentUser?.id]);
 
   const hasCorrespondenceAccess =
     permissions.canViewCorrespondenceRegistry ||
@@ -104,11 +114,11 @@ export function AppSidebar() {
   }
 
    return (
-     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-       <SidebarHeader>
-         <div className="flex items-center justify-between w-full">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="relative h-8 w-8 overflow-hidden rounded-lg shadow-sm ring-1 ring-primary/30 bg-white">
+     <Sidebar collapsible="icon" className="border-r border-sidebar-border overflow-hidden">
+       <SidebarHeader className="px-3 py-2">
+         <div className="flex items-center justify-between w-full min-w-0">
+          <Link href="/" className="flex items-center gap-2 min-w-0">
+            <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-lg shadow-sm ring-1 ring-primary/30 bg-white">
               <Image
                 src={NPA_LOGO_URL}
                 alt={`${NPA_BRAND_NAME} crest`}
@@ -119,7 +129,7 @@ export function AppSidebar() {
               />
             </div>
              {!isCollapsed && (
-              <span className="text-base font-semibold tracking-tight text-foreground">
+              <span className="text-sm font-semibold tracking-tight text-foreground truncate">
                 {NPA_BRAND_NAME.split(' ')[0]} ECM
               </span>
              )}
@@ -139,19 +149,37 @@ export function AppSidebar() {
            </Button>
          </div>
        </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="overflow-x-hidden">
         {/* Standard workspace */}
         <SidebarGroup>
           <SidebarGroupLabel>My Workspace</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
-                  <Link href="/dashboard">
-                    <LayoutDashboard className="h-4 w-4" />
-                    {!isCollapsed && <span>Dashboard</span>}
-                  </Link>
-                </SidebarMenuButton>
+                {isCollapsed ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                          <Link href="/dashboard">
+                            <LayoutDashboard className="h-4 w-4" />
+                            <span className="sr-only">Dashboard</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Dashboard</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <SidebarMenuButton asChild isActive={isActive('/dashboard')}>
+                    <Link href="/dashboard">
+                      <LayoutDashboard className="h-4 w-4" />
+                      <span>Dashboard</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
@@ -164,102 +192,244 @@ export function AppSidebar() {
             <SidebarMenu>
               {hasCorrespondenceAccess && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/correspondence/inbox')}>
-                    <Link href="/correspondence/inbox" className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-4 w-4" />
-                        {!isCollapsed && <span>Office Inbox</span>}
-                      </div>
-                      {!isCollapsed && (
-                        <Badge
-                          variant={officeInboxCount > 0 ? 'destructive' : 'secondary'}
-                          className="ml-auto"
-                        >
-                          {officeInboxCount}
-                        </Badge>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/correspondence/inbox')}>
+                            <Link href="/correspondence/inbox" className="relative">
+                              <Mail className="h-4 w-4" />
+                              {officeInboxCount > 0 && (
+                                <Badge
+                                  variant="destructive"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                                >
+                                  {officeInboxCount > 99 ? '99+' : officeInboxCount}
+                                </Badge>
+                              )}
+                              <span className="sr-only">Office Inbox</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Office Inbox{officeInboxCount > 0 && ` (${officeInboxCount})`}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/correspondence/inbox')}>
+                      <Link href="/correspondence/inbox" className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <Mail className="h-4 w-4" />
+                          <span>Office Inbox</span>
+                        </div>
+                        {countsLoading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : officeInboxCount > 0 ? (
+                          <Badge variant="destructive" className="ml-auto shrink-0">
+                            {officeInboxCount}
+                          </Badge>
+                        ) : null}
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
                 </SidebarMenuItem>
               )}
 
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/inbox')}>
-                  <Link href="/inbox" className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Inbox className="h-4 w-4" />
-                      {!isCollapsed && <span>My Inbox</span>}
-                    </div>
-                    {!isCollapsed && myInboxCount > 0 && (
-                      <Badge
-                        variant="default"
-                        className="ml-auto"
-                      >
-                        {myInboxCount}
-                      </Badge>
-                    )}
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-
-              {delegatedCount > 0 && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/inbox/delegated')}>
-                    <Link href="/inbox/delegated" className="flex items-center justify-between gap-2">
+                {isCollapsed ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive('/inbox')}>
+                          <Link href="/inbox" className="relative">
+                            <Inbox className="h-4 w-4" />
+                            {myInboxCount > 0 && (
+                              <Badge
+                                variant="default"
+                                className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                              >
+                                {myInboxCount > 99 ? '99+' : myInboxCount}
+                              </Badge>
+                            )}
+                            <span className="sr-only">My Inbox</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>My Inbox{myInboxCount > 0 && ` (${myInboxCount})`}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <SidebarMenuButton asChild isActive={isActive('/inbox')}>
+                    <Link href="/inbox" className="flex items-center justify-between w-full">
                       <div className="flex items-center gap-2">
-                        <Users2 className="h-4 w-4" />
-                        {!isCollapsed && <span>Delegated to Me</span>}
+                        <Inbox className="h-4 w-4" />
+                        <span>My Inbox</span>
                       </div>
-                      {!isCollapsed && (
-                        <Badge
-                          variant="secondary"
-                          className="ml-auto bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                        >
-                          {delegatedCount}
+                      {countsLoading ? (
+                        <Skeleton className="h-5 w-8" />
+                      ) : myInboxCount > 0 ? (
+                        <Badge variant="default" className="ml-auto shrink-0">
+                          {myInboxCount}
                         </Badge>
-                      )}
+                      ) : null}
                     </Link>
                   </SidebarMenuButton>
+                )}
+              </SidebarMenuItem>
+
+              {(delegatedCount > 0 || hasAssistantAssignments) && (
+                <SidebarMenuItem>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/inbox/delegated')}>
+                            <Link href="/inbox/delegated" className="relative">
+                              <Users2 className="h-4 w-4" />
+                              {delegatedCount > 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                >
+                                  {delegatedCount > 99 ? '99+' : delegatedCount}
+                                </Badge>
+                              )}
+                              <span className="sr-only">Delegated to Me</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Delegated to Me{delegatedCount > 0 && ` (${delegatedCount})`}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/inbox/delegated')}>
+                      <Link href="/inbox/delegated" className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <Users2 className="h-4 w-4" />
+                          <span>Delegated to Me</span>
+                        </div>
+                        {countsLoading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : delegatedCount > 0 ? (
+                          <Badge
+                            variant="secondary"
+                            className="ml-auto shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                          >
+                            {delegatedCount}
+                          </Badge>
+                        ) : null}
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
                 </SidebarMenuItem>
               )}
 
               {permissions.canRegisterCorrespondence && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
-                    <Link href="/correspondence/register">
-                      <FilePlus className="h-4 w-4" />
-                      {!isCollapsed && <span>Register Correspondence</span>}
-                    </Link>
-                  </SidebarMenuButton>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
+                            <Link href="/correspondence/register">
+                              <FilePlus className="h-4 w-4" />
+                              <span className="sr-only">Register Correspondence</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Register Correspondence</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
+                      <Link href="/correspondence/register">
+                        <FilePlus className="h-4 w-4" />
+                        <span>Register Correspondence</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
                 </SidebarMenuItem>
               )}
 
               {shouldShowRecordsArchive && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/correspondence/records')}>
-                    <Link href="/correspondence/records" className="flex items-center gap-2">
-                      <Archive className="h-4 w-4" />
-                      {!isCollapsed && <span>Records & Archive</span>}
-                    </Link>
-                  </SidebarMenuButton>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/correspondence/records')}>
+                            <Link href="/correspondence/records">
+                              <Archive className="h-4 w-4" />
+                              <span className="sr-only">Records & Archive</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Records & Archive</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/correspondence/records')}>
+                      <Link href="/correspondence/records" className="flex items-center gap-2">
+                        <Archive className="h-4 w-4" />
+                        <span>Records & Archive</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
                 </SidebarMenuItem>
               )}
 
               {shouldShowOutbox && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/correspondence/outbox')}>
-                    <Link href="/correspondence/outbox" className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Send className="h-4 w-4" />
-                        {!isCollapsed && <span>Outbox</span>}
-                      </div>
-                      {!isCollapsed && outboxCount > 0 && (
-                        <Badge variant="secondary" className="ml-auto">
-                          {outboxCount}
-                        </Badge>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/correspondence/outbox')}>
+                            <Link href="/correspondence/outbox" className="relative">
+                              <Send className="h-4 w-4" />
+                              {outboxCount > 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                                >
+                                  {outboxCount > 99 ? '99+' : outboxCount}
+                                </Badge>
+                              )}
+                              <span className="sr-only">Outbox</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Outbox{outboxCount > 0 && ` (${outboxCount})`}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/correspondence/outbox')}>
+                      <Link href="/correspondence/outbox" className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <Send className="h-4 w-4" />
+                          <span>Outbox</span>
+                        </div>
+                        {countsLoading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : outboxCount > 0 ? (
+                          <Badge variant="secondary" className="ml-auto shrink-0">
+                            {outboxCount}
+                          </Badge>
+                        ) : null}
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
                 </SidebarMenuItem>
               )}
             </SidebarMenu>
@@ -272,22 +442,58 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive('/documents')}>
-                  <Link href="/documents">
-                    <FileText className="h-4 w-4" />
-                    {!isCollapsed && <span>My Documents</span>}
-                  </Link>
-                </SidebarMenuButton>
+                {isCollapsed ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive('/documents')}>
+                          <Link href="/documents">
+                            <FileText className="h-4 w-4" />
+                            <span className="sr-only">My Documents</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>My Documents</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <SidebarMenuButton asChild isActive={isActive('/documents')}>
+                    <Link href="/documents">
+                      <FileText className="h-4 w-4" />
+                      <span>My Documents</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
               </SidebarMenuItem>
 
               {permissions.canAccessDocumentManagement && (
                 <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isActive('/dms')}>
-                    <Link href="/dms">
-                      <FolderKanban className="h-4 w-4" />
-                      {!isCollapsed && <span>Document Management</span>}
-                    </Link>
-                  </SidebarMenuButton>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/dms')}>
+                            <Link href="/dms">
+                              <FolderKanban className="h-4 w-4" />
+                              <span className="sr-only">Document Management</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Document Management</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/dms')}>
+                      <Link href="/dms">
+                        <FolderKanban className="h-4 w-4" />
+                        <span>Document Management</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
                 </SidebarMenuItem>
               )}
             </SidebarMenu>

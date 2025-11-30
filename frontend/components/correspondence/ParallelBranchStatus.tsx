@@ -47,6 +47,15 @@ export const ParallelBranchStatus = ({
   }
 
   const aggregatedBranches = Array.from(branchMap.values()).map((entry) => entry.latest);
+  
+  // Don't show if no meaningful data (no valid recipient names)
+  const hasValidRecipients = aggregatedBranches.some(
+    (b) => b.toUserName || b.toOfficeName
+  );
+  
+  if (!hasValidRecipients && !parallelGroup.isComplete) {
+    return null;
+  }
 
   // If complete, show minimal success state
   if (parallelGroup.isComplete) {

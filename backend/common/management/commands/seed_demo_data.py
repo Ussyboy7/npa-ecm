@@ -778,33 +778,160 @@ class Command(BaseCommand):
         return {"primary": correspondence}
 
     def _ensure_workflows(self, users: dict[str, User], correspondence_items):
-        template, _ = WorkflowTemplate.objects.update_or_create(
-            slug="ecm-rollout-approval",
+        """
+        Create workflow templates following NPA organizational hierarchy:
+        
+        📊 DIRECTORATE (4)
+           └─ 🏢 ED/MD Office (4)
+           └─ 📂 DIVISION (28)
+                └─ 👔 GM Office (28)
+                └─ 📄 DEPARTMENT (57)
+                     └─ 👤 AGM Office (57)
+                     └─ 👥 Officers & Staff
+        """
+        from organization.models import Directorate
+        
+        md_user = users.get("md") or users.get("user-md")
+        
+        # Define workflow templates following NPA hierarchy
+        WORKFLOW_TEMPLATES = [
+            {
+                "slug": "upward-approval-full",
+                "name": "Standard Upward Approval (Full Chain)",
+                "description": "Full approval chain from Officer up to MD. Use for high-priority items requiring MD attention.",
+                "steps": [
+                    {"order": 1, "title": "AGM Review", "required_role": "Assistant General Manager", "required_grade_level": "MSS2"},
+                    {"order": 2, "title": "GM Approval", "required_role": "General Manager", "required_grade_level": "MSS1"},
+                    {"order": 3, "title": "ED Approval", "required_role": "Executive Director", "required_grade_level": "EDCS"},
+                    {"order": 4, "title": "MD Final Approval", "required_role": "Managing Director", "required_grade_level": "MDCS"},
+                ],
+            },
+            {
+                "slug": "departmental-approval",
+                "name": "Departmental Approval",
+                "description": "Standard approval within a division. Stops at GM level.",
+                "steps": [
+                    {"order": 1, "title": "AGM Review", "required_role": "Assistant General Manager", "required_grade_level": "MSS2"},
+                    {"order": 2, "title": "GM Approval", "required_role": "General Manager", "required_grade_level": "MSS1"},
+                ],
+            },
+            {
+                "slug": "directorate-approval",
+                "name": "Directorate Approval",
+                "description": "Approval within a directorate. From GM to ED level.",
+                "steps": [
+                    {"order": 1, "title": "GM Review", "required_role": "General Manager", "required_grade_level": "MSS1"},
+                    {"order": 2, "title": "ED Approval", "required_role": "Executive Director", "required_grade_level": "EDCS"},
+                ],
+            },
+            {
+                "slug": "executive-approval",
+                "name": "Executive Approval",
+                "description": "High-level approval from ED to MD.",
+                "steps": [
+                    {"order": 1, "title": "ED Review", "required_role": "Executive Director", "required_grade_level": "EDCS"},
+                    {"order": 2, "title": "MD Approval", "required_role": "Managing Director", "required_grade_level": "MDCS"},
+                ],
+            },
+            {
+                "slug": "downward-assignment",
+                "name": "Downward Assignment (Full Chain)",
+                "description": "Assignment flow from MD down to AGM level.",
+                "steps": [
+                    {"order": 1, "title": "MD Assignment", "required_role": "Managing Director", "required_grade_level": "MDCS"},
+                    {"order": 2, "title": "ED Assignment", "required_role": "Executive Director", "required_grade_level": "EDCS"},
+                    {"order": 3, "title": "GM Assignment", "required_role": "General Manager", "required_grade_level": "MSS1"},
+                    {"order": 4, "title": "AGM Treatment", "required_role": "Assistant General Manager", "required_grade_level": "MSS2"},
+                ],
+            },
+            {
+                "slug": "parallel-review",
+                "name": "Parallel Review (Multi-Division)",
+                "description": "Send to multiple GMs simultaneously for input before consolidation.",
+                "steps": [
+                    {"order": 1, "title": "Parallel GM Review", "required_role": "General Manager", "required_grade_level": "MSS1", "requires_all_assistants": True},
+                    {"order": 2, "title": "ED Consolidation", "required_role": "Executive Director", "required_grade_level": "EDCS"},
+                ],
+            },
+            {
+                "slug": "for-information-only",
+                "name": "For Information Only (FYI)",
+                "description": "Distribute information without requiring action. Recipients acknowledge receipt.",
+                "steps": [
+                    {"order": 1, "title": "Acknowledge Receipt", "required_role": "", "required_grade_level": ""},
+                ],
+            },
+            {
+                "slug": "urgent-md-action",
+                "name": "Urgent MD Action",
+                "description": "Direct to MD for immediate attention. Bypasses intermediate levels.",
+                "steps": [
+                    {"order": 1, "title": "MD Review & Action", "required_role": "Managing Director", "required_grade_level": "MDCS"},
+                ],
+            },
+            {
+                "slug": "md-directorate-approval",
+                "name": "MD Directorate Approval (AGM → GM → MD)",
+                "description": "For divisions under MD Directorate (ICT, Legal, Audit, etc.). Skips ED level since GM reports directly to MD.",
+                "steps": [
+                    {"order": 1, "title": "AGM Review", "required_role": "Assistant General Manager", "required_grade_level": "MSS2"},
+                    {"order": 2, "title": "GM Approval", "required_role": "General Manager", "required_grade_level": "MSS1"},
+                    {"order": 3, "title": "MD Approval", "required_role": "Managing Director", "required_grade_level": "MDCS"},
+                ],
+            },
+            {
+                "slug": "md-directorate-assignment",
+                "name": "MD Directorate Assignment (MD → GM → AGM)",
+                "description": "Downward assignment for MD Directorate. MD assigns directly to GM.",
+                "steps": [
+                    {"order": 1, "title": "MD Assignment", "required_role": "Managing Director", "required_grade_level": "MDCS"},
+                    {"order": 2, "title": "GM Assignment", "required_role": "General Manager", "required_grade_level": "MSS1"},
+                    {"order": 3, "title": "AGM Treatment", "required_role": "Assistant General Manager", "required_grade_level": "MSS2"},
+                ],
+            },
+        ]
+        
+        # Create or update each workflow template
+        for wf_data in WORKFLOW_TEMPLATES:
+            template, created = WorkflowTemplate.objects.update_or_create(
+                slug=wf_data["slug"],
             defaults={
-                "name": "ECM Rollout Approval",
-                "description": "Approval flow for ECM rollout updates",
+                    "name": wf_data["name"],
+                    "description": wf_data["description"],
                 "applies_to": WorkflowTemplate.AppliesTo.CORRESPONDENCE,
-                "created_by": users.get("md") or users.get("user-md"),
+                    "is_active": True,
+                    "created_by": md_user,
             },
         )
 
-        step1, _ = WorkflowStep.objects.update_or_create(
+            # Create or update steps
+            for step_data in wf_data["steps"]:
+                WorkflowStep.objects.update_or_create(
             template=template,
-            order=1,
+                    order=step_data["order"],
             defaults={
-                "title": "Review by Managing Director",
-                "required_role": "Managing Director",
-            },
-        )
-
+                        "title": step_data["title"],
+                        "required_role": step_data.get("required_role", ""),
+                        "required_grade_level": step_data.get("required_grade_level", ""),
+                        "requires_all_assistants": step_data.get("requires_all_assistants", False),
+                    },
+                )
+            
+            action = "Created" if created else "Updated"
+            self.stdout.write(f"  {action}: {wf_data['name']} ({len(wf_data['steps'])} steps)")
+        
+        # Create a sample approval task using MD Directorate workflow
+        md_template = WorkflowTemplate.objects.filter(slug="md-directorate-approval").first()
+        if md_template and correspondence_items.get("primary"):
+            step1 = md_template.steps.first()
         task, _ = ApprovalTask.objects.update_or_create(
-            template=template,
+                template=md_template,
             step=step1,
             correspondence=correspondence_items["primary"],
-            assignee=users.get("md") or users.get("user-md"),
+                assignee=md_user,
             defaults={
                 "status": ApprovalTask.Status.IN_PROGRESS,
-                "remarks": "Awaiting update from ICT division",
+                    "remarks": "Sample task for demonstration",
             },
         )
 
@@ -813,11 +940,11 @@ class Command(BaseCommand):
             action=TaskAction.Action.ASSIGNED,
             defaults={
                 "actor": users.get("gmict") or users.get("user-gm-ict"),
-                "notes": "Task created and assigned to MD",
+                    "notes": "Task created and assigned",
             },
         )
 
-        self.stdout.write(self.style.SUCCESS("Workflow template and tasks ensured."))
+        self.stdout.write(self.style.SUCCESS(f"Workflow templates ensured: {len(WORKFLOW_TEMPLATES)} templates"))
 
     def _ensure_support_content(self, users: dict[str, User]):
         HelpGuide.objects.update_or_create(

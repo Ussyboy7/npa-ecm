@@ -77,6 +77,7 @@ import { CompletionSummaryModal } from '@/components/correspondence/CompletionSu
 import { DelegateModal } from '@/components/correspondence/DelegateModal';
 import { PrintPreviewModal } from '@/components/correspondence/PrintPreviewModal';
 import { DocumentPreviewModal } from '@/components/correspondence/DocumentPreviewModal';
+import { WorkflowProgressIndicator } from '@/components/correspondence/WorkflowProgressIndicator';
 import { downloadAsPDF, downloadAsWord } from '@/lib/document-generator';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import mammoth from 'mammoth';
@@ -92,6 +93,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -204,6 +206,8 @@ const CorrespondenceDetailContent = () => {
     divisions,
     departments,
     users: organizationUsers,
+    offices,
+    officeMemberships,
     assistantAssignments,
     refreshOrganizationData,
   } = useOrganization();
@@ -247,6 +251,7 @@ const CorrespondenceDetailContent = () => {
   const [dragActive, setDragActive] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [parallelRoutingGroups, setParallelRoutingGroups] = useState<ParallelRoutingGroup[]>([]);
+  const [mobileActiveTab, setMobileActiveTab] = useState<'document' | 'thread' | 'actions'>('thread');
 
   useEffect(() => {
     const linkedIds = correspondence?.linkedDocumentIds ?? [];
@@ -926,21 +931,52 @@ const CorrespondenceDetailContent = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col h-full min-h-0 overflow-hidden">
-        <div className="border-b border-border bg-background px-6 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+      <div className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden">
+        <div className="border-b border-border bg-background px-3 md:px-6 py-2 md:py-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
               <Button
                 variant="ghost"
                 size="icon"
+                className="flex-shrink-0"
                 onClick={() => router.push('/correspondence/inbox')}
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">{correspondence.referenceNumber}</h1>
-                <p className="text-sm text-muted-foreground">{correspondence.subject}</p>
-                <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-base md:text-xl font-bold text-foreground truncate">{correspondence.referenceNumber}</h1>
+                  {/* Priority badge - always visible */}
+                  <Badge
+                    variant={
+                      correspondence.priority === 'urgent'
+                        ? 'destructive'
+                        : correspondence.priority === 'high'
+                        ? 'default'
+                        : 'secondary'
+                    }
+                    className="flex-shrink-0"
+                  >
+                    {correspondence.priority.toUpperCase()}
+                  </Badge>
+                  {/* Direction badge - hidden on mobile */}
+                  <Badge variant="outline" className="gap-1 hidden sm:flex flex-shrink-0">
+                    {correspondence.direction === 'downward' ? (
+                      <>
+                        <ArrowDown className="h-3 w-3 text-info" />
+                        <span className="hidden md:inline">Downward</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowUp className="h-3 w-3 text-success" />
+                        <span className="hidden md:inline">Upward</span>
+                      </>
+                    )}
+                  </Badge>
+                </div>
+                <p className="text-xs md:text-sm text-muted-foreground truncate">{correspondence.subject}</p>
+                {/* Office info - hidden on mobile */}
+                <div className="mt-1 hidden md:flex flex-wrap gap-3 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Building2 className="h-3.5 w-3.5" />
                     Owning: {correspondence.owningOfficeName ?? 'Not set'}
@@ -952,31 +988,8 @@ const CorrespondenceDetailContent = () => {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={
-                  correspondence.priority === 'urgent'
-                    ? 'destructive'
-                    : correspondence.priority === 'high'
-                    ? 'default'
-                    : 'secondary'
-                }
-              >
-                {correspondence.priority.toUpperCase()}
-              </Badge>
-              <Badge variant="outline" className="gap-1">
-                {correspondence.direction === 'downward' ? (
-                  <>
-                    <ArrowDown className="h-3 w-3 text-info" />
-                    Downward
-                  </>
-                ) : (
-                  <>
-                    <ArrowUp className="h-3 w-3 text-success" />
-                    Upward
-                  </>
-                )}
-              </Badge>
+            {/* Desktop action buttons */}
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
               <Button
                 variant="outline"
                 size="icon"
@@ -1060,10 +1073,50 @@ const CorrespondenceDetailContent = () => {
                 ]}
               />
             </div>
+            {/* Mobile action menu */}
+            <div className="md:hidden flex items-center gap-1 flex-shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setShowDocumentPreview(true)}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview Document
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowPrintPreview(true)}>
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print Preview
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (correspondence && minutes) {
+                        const firstAttachment = correspondence.attachments?.[0];
+                        const documentContentHtml = linkedDocuments[0]?.versions?.[0]?.contentHtml;
+                        downloadAsPDF({
+                          correspondence,
+                          minutes,
+                          documentContentHtml,
+                          attachmentUrl: firstAttachment?.fileUrl,
+                          attachmentFileName: firstAttachment?.fileName,
+                        });
+                        toast.success('Downloading as PDF...');
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
 
-        <div className="border-b border-border bg-background/70 px-6 py-2">
+        {/* Help guide - hidden on mobile */}
+        <div className="border-b border-border bg-background/70 px-6 py-2 hidden md:block">
           <HelpGuideCard
             title="Correspondence Workspace"
             description="Review the document and routing history. Use the Actions panel to route, respond, or complete this item."
@@ -1076,13 +1129,48 @@ const CorrespondenceDetailContent = () => {
           />
         </div>
 
-        {/* Main content area: responsive 3-column layout (stacks on very small screens) */}
-        <div className="flex-1 flex flex-col md:flex-row min-h-0 h-full overflow-hidden">
-          {/* Original Document / Metadata column */}
-          <section
-            aria-label="Original document and metadata"
-            className="w-full md:w-[34%] lg:w-[30%] xl:w-[32%] border-r border-border bg-muted/30 flex flex-col min-h-0 h-full overflow-hidden"
-          >
+        {/* Mobile Tab Navigation */}
+        <div className="md:hidden border-b border-border bg-background px-2 py-1">
+          <div className="flex gap-1">
+            <Button
+              variant={mobileActiveTab === 'document' ? 'default' : 'ghost'}
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={() => setMobileActiveTab('document')}
+            >
+              <FileText className="h-3.5 w-3.5 mr-1" />
+              Document
+            </Button>
+            <Button
+              variant={mobileActiveTab === 'thread' ? 'default' : 'ghost'}
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={() => setMobileActiveTab('thread')}
+            >
+              <MessageSquare className="h-3.5 w-3.5 mr-1" />
+              Thread
+              {minutes.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                  {minutes.length}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant={mobileActiveTab === 'actions' ? 'default' : 'ghost'}
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={() => setMobileActiveTab('actions')}
+            >
+              <Send className="h-3.5 w-3.5 mr-1" />
+              Actions
+            </Button>
+          </div>
+        </div>
+
+        {/* 3-Panel Layout */}
+        <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+          {/* Left Panel - Document Viewer (28%) */}
+          <aside className="w-[28%] min-w-0 border-r border-border bg-muted/30 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-border flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
@@ -1092,14 +1180,14 @@ const CorrespondenceDetailContent = () => {
             <ScrollArea className="h-full">
               <div className="p-4 flex flex-col gap-4">
                 <Card>
-                  <CardContent className="p-4 space-y-3">
+                  <CardContent className="p-3 space-y-2">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-sm">
-                        <UserIcon className="h-4 w-4 text-muted-foreground" />
-                        <div className="flex-1">
-                          <p className="font-medium">{correspondence.senderName}</p>
+                        <UserIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{correspondence.senderName}</p>
                           {correspondence.senderOrganization && (
-                            <p className="text-xs text-muted-foreground">{correspondence.senderOrganization}</p>
+                            <p className="text-xs text-muted-foreground truncate">{correspondence.senderOrganization}</p>
                           )}
                         </div>
                       </div>
@@ -1737,38 +1825,20 @@ const CorrespondenceDetailContent = () => {
                 </div>
               </div>
             </ScrollArea>
-          </section>
+          </aside>
 
-          {/* Minute Thread / Parallel routing column */}
-          <section
-            aria-label="Minute thread and parallel routing status"
-            className="w-full md:flex-1 flex flex-col min-h-0 h-full overflow-hidden"
-          >
+          {/* Center Panel - Minute Thread (44%) */}
+          <main className="w-[44%] min-w-0 flex flex-col overflow-hidden border-x border-border">
             <div className="p-4 border-b border-border bg-background flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-secondary" />
                 Minute Thread
               </h3>
             </div>
-            <ScrollArea className="h-full">
-              <div className="p-4 space-y-4 max-w-3xl mx-auto">
-                {/* Parallel Routing Status - Compact banner */}
-                {visibleParallelGroups.length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {visibleParallelGroups.map((group, index) => {
-                      const groupBranches = minutes.filter(
-                        (m) => m.parallelGroupId === group.id && m.isParallelBranch
-                      );
-                      return (
-                        <ParallelBranchStatus
-                          key={`parallel-group-${String(group.id)}-${index}`}
-                          parallelGroup={group}
-                          branches={groupBranches}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
+            <ScrollArea className="flex-1">
+              <div className="p-4 space-y-4 overflow-x-hidden">
+                {/* Parallel Routing Status - Hidden for cleaner UI
+                    Individual minute cards show recipients; Workflow Progress shows current status */}
 
                 {minutes.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
@@ -1803,15 +1873,15 @@ const CorrespondenceDetailContent = () => {
                           />
                         )}
                         <Card
-                          className={`${minuteItem.userId === activeUser.id ? 'border-primary shadow-glow' : ''} ${minuteItem.isRecalled ? 'opacity-75 border-destructive/30' : ''} cursor-pointer hover:shadow-md transition-all`}
+                          className={`overflow-hidden ${minuteItem.userId === activeUser.id ? 'border-primary shadow-glow' : ''} ${minuteItem.isRecalled ? 'opacity-75 border-destructive/30' : ''} cursor-pointer hover:shadow-md transition-all`}
                           onClick={() => {
                             setSelectedMinute(minuteItem);
                             setShowMinuteDetail(true);
                           }}
                         >
-                          <CardContent className="p-4">
-                            <div className="flex gap-3">
-                              <Avatar className={`h-10 w-10 ${minuteItem.isRecalled ? 'ring-2 ring-destructive/50' : isDownward ? 'ring-2 ring-info' : 'ring-2 ring-success'}`}>
+                          <CardContent className="p-3">
+                            <div className="flex gap-2">
+                              <Avatar className={`h-9 w-9 flex-shrink-0 ${minuteItem.isRecalled ? 'ring-2 ring-destructive/50' : isDownward ? 'ring-2 ring-info' : 'ring-2 ring-success'}`}>
                                 <AvatarFallback className={`text-xs font-semibold ${minuteItem.isRecalled ? 'bg-destructive/10 text-destructive' : ''}`}>
                                   {minuteItem.isRecalled ? (
                                     <X className="h-5 w-5" />
@@ -1838,94 +1908,67 @@ const CorrespondenceDetailContent = () => {
                                         </Badge>
                                       )}
                                     </div>
-                                    <p className="text-xs text-muted-foreground">
-                                      {systemRole} • {minuteItem.gradeLevel}
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {systemRole}
                                       {minuteItem.toOfficeName && (
-                                        <span className="ml-1">• {minuteItem.toOfficeName}</span>
+                                        <span className="ml-1">→ {minuteItem.toOfficeName}</span>
                                       )}
-                                      {/* Only show "via [assistant]" to the principal (whose name is on the minute) */}
+                                      {/* Only show "via [assistant]" to the principal */}
                                       {minuteItem.actedByAssistant && minuteItem.performedByName && 
                                        String(minuteItem.userId) === String(activeUser.id) && (
-                                        <span className="ml-1 text-primary/70" title={`Action performed by ${minuteItem.performedByName}`}>
-                                          • via {minuteItem.performedByName}
+                                        <span className="ml-1 text-primary/70">
+                                          (via {minuteItem.performedByName})
                                         </span>
                                       )}
                                     </p>
                                   </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {minuteItem.isParallelBranch && (
-                                      <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
-                                        <Users className="h-3 w-3 mr-1" />
-                                        Parallel
-                                      </Badge>
-                                    )}
-                                    <Badge variant="outline" className={`text-xs gap-1 ${minuteItem.isRecalled ? 'bg-destructive/10 text-destructive border-destructive/20' : ''}`}>
+                                  <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
+                                    {/* Action type badge */}
+                                    <Badge variant="outline" className={`text-[10px] h-5 gap-0.5 ${minuteItem.isRecalled ? 'bg-destructive/10 text-destructive border-destructive/20' : ''}`}>
                                       {ActionIcon && <ActionIcon className="h-3 w-3" />}
-                                      {minuteItem.actionType}
-                                      {minuteItem.isRecalled && ' (Recalled)'}
                                     </Badge>
-                                    {minuteItem.purpose && (
-                                      <Badge variant="outline" className="text-xs">
-                                        {minuteItem.purpose === 'information' ? 'Info' :
-                                         minuteItem.purpose === 'action' ? 'Action' :
-                                         minuteItem.purpose === 'comment' ? 'Comment' : 'Approval'}
-                                      </Badge>
-                                    )}
+                                    {/* Direction indicator */}
                                     <Badge
-                                      variant={isDownward ? 'default' : 'secondary'}
-                                      className={`text-xs gap-1 ${
+                                      variant="outline"
+                                      className={`text-[10px] h-5 gap-0.5 ${
                                         minuteItem.isRecalled 
                                           ? 'bg-destructive/10 text-destructive border-destructive/20'
                                           : isDownward 
-                                          ? 'bg-info/10 text-info' 
-                                          : 'bg-success/10 text-success'
+                                          ? 'bg-info/10 text-info border-info/20' 
+                                          : 'bg-success/10 text-success border-success/20'
                                       }`}
                                     >
-                                      {isDownward ? (
-                                        <>
-                                          <ArrowDown className="h-3 w-3" />
-                                          Down
-                                        </>
-                                      ) : (
-                                        <>
-                                          <ArrowUp className="h-3 w-3" />
-                                          Up
-                                        </>
-                                      )}
+                                      {isDownward ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
                                     </Badge>
-                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                    {/* Parallel indicator (only if parallel) */}
+                                    {minuteItem.isParallelBranch && (
+                                      <Badge variant="outline" className="text-[10px] h-5 bg-primary/10 text-primary border-primary/20">
+                                        <Users className="h-3 w-3" />
+                                      </Badge>
+                                    )}
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                   </div>
                                 </div>
                                 <p className={`text-sm mb-2 line-clamp-2 ${minuteItem.isRecalled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
                                   {minuteItem.minuteText}
                                 </p>
-                                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                   <span>{formatDateTime(minuteItem.timestamp)}</span>
+                                  <span className="text-muted-foreground/50">•</span>
                                   <span>Step {minuteItem.stepNumber}</span>
-                                  {minuteItem.recalledAt && (
-                                    <span className="text-destructive">
-                                      • Recalled {formatDateTime(minuteItem.recalledAt)}
-                                    </span>
+                                  {minuteItem.isRecalled && minuteItem.recalledAt && (
+                                    <>
+                                      <span className="text-muted-foreground/50">•</span>
+                                      <span className="text-destructive">Recalled</span>
+                                    </>
                                   )}
-                                  {minuteItem.recallReason && (
-                                    <span className="text-muted-foreground italic">
-                                      • Reason: {minuteItem.recallReason}
-                                    </span>
-                                  )}
-                                  {minuteItem.isEdited && (
-                                    <Badge variant="outline" className="text-xs text-warning">
-                                      Edited
-                                    </Badge>
-                                  )}
-                                  {minuteItem.actedBySecretary && (
-                                    <Badge variant="outline" className="text-xs">
-                                      Secretary
-                                    </Badge>
-                                  )}
-                                  {minuteItem.actedByAssistant && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {minuteItem.assistantType}
-                                    </Badge>
+                                  {(minuteItem.actedBySecretary || minuteItem.actedByAssistant) && (
+                                    <>
+                                      <span className="text-muted-foreground/50">•</span>
+                                      <Badge variant="outline" className="text-[10px] h-4 px-1">
+                                        {minuteItem.actedBySecretary ? 'Secretary' : minuteItem.assistantType}
+                                      </Badge>
+                                    </>
                                   )}
                                 </div>
                                 {minuteItem.signature && (
@@ -1984,7 +2027,9 @@ const CorrespondenceDetailContent = () => {
                                       Recalled
                                     </Badge>
                                   )}
-                                  {!minuteItem.isAdditional && !isCompleted && !minuteItem.isRecalled && (
+                                  {/* Add Note: Only show to minute author or current approver */}
+                                  {!minuteItem.isAdditional && !isCompleted && !minuteItem.isRecalled && 
+                                   (String(minuteItem.userId) === String(activeUser?.id) || isCurrentUserTurn) && (
                                     <Button
                                       variant="outline"
                                       size="sm"
@@ -2023,21 +2068,18 @@ const CorrespondenceDetailContent = () => {
                 )}
               </div>
             </ScrollArea>
-          </section>
+          </main>
 
-          {/* Actions / Routing chain column */}
-          <section
-            aria-label="Actions and routing chain"
-            className="w-full md:w-[28%] lg:w-[26%] xl:w-[25%] border-l border-border bg-background flex flex-col min-h-0 h-full overflow-hidden"
-          >
+          {/* Right Panel - Actions (28%) */}
+          <aside className="w-[28%] min-w-0 bg-background flex flex-col overflow-hidden">
             <div className="p-4 border-b border-border flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <Send className="h-4 w-4 text-accent" />
                 Actions
               </h3>
             </div>
-            <ScrollArea className="h-full">
-              <div className="p-4 space-y-4">
+            <ScrollArea className="h-full w-full">
+              <div className="p-4 space-y-4 overflow-x-hidden">
               {/* Current Status Card */}
               {(() => {
                 const daysPending = correspondence.receivedDate 
@@ -2113,6 +2155,18 @@ const CorrespondenceDetailContent = () => {
                   </Card>
                 );
               })()}
+
+              {/* Workflow Progress Indicator */}
+              {!isCompleted && minutes.length > 0 && (
+                <WorkflowProgressIndicator
+                  correspondence={correspondence}
+                  minutes={minutes}
+                  currentApprover={lookupUser(correspondence.currentApproverId)}
+                  users={organizationUsers}
+                  offices={offices}
+                  officeMemberships={officeMemberships}
+                />
+              )}
 
               {isCompleted ? (
                 <div className="space-y-3">
@@ -2344,10 +2398,9 @@ const CorrespondenceDetailContent = () => {
 
               </div>
             </ScrollArea>
-          </section>
+          </aside>
         </div>
       </div>
-
 
       <MinuteModal
         correspondence={correspondence}
@@ -2500,6 +2553,70 @@ const CorrespondenceDetailContent = () => {
         departmentId={correspondence.departmentId}
         subject={correspondence.subject}
       />
+
+      {/* Mobile Sticky Action Bar */}
+      {!isCompleted && isCurrentUserTurn && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur border-t border-border p-3 z-40 safe-area-inset-bottom">
+          <div className="flex gap-2 max-w-lg mx-auto">
+            {isForInformationOnly ? (
+              <div className="flex-1 p-2 bg-muted/50 border border-border rounded-lg text-center">
+                <span className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                  <Info className="h-3.5 w-3.5" />
+                  For Information Only
+                </span>
+              </div>
+            ) : (
+              <>
+                <Button
+                  className="flex-1 bg-gradient-primary hover:opacity-90"
+                  size="sm"
+                  onClick={() => {
+                    setMobileActiveTab('actions');
+                    setShowMinuteModal(true);
+                  }}
+                >
+                  <MessageSquare className="h-4 w-4 mr-1.5" />
+                  Minute
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setMobileActiveTab('actions');
+                    setShowTreatmentModal(true);
+                  }}
+                >
+                  <CheckCircle className="h-4 w-4 mr-1.5" />
+                  Treat
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => {
+                      setMobileActiveTab('actions');
+                      setShowCompletionModal(true);
+                    }}>
+                      <Archive className="h-4 w-4 mr-2" />
+                      Complete & Archive
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      setMobileActiveTab('actions');
+                      setShowDelegateModal(true);
+                    }}>
+                      <UserIcon className="h-4 w-4 mr-2" />
+                      Delegate
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };
