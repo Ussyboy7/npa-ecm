@@ -115,33 +115,44 @@ export function AppSidebar() {
 
    return (
      <Sidebar collapsible="icon" className="border-r border-sidebar-border overflow-hidden">
-       <SidebarHeader className="px-3 py-2">
-         <div className="flex items-center justify-between w-full min-w-0">
-          <Link href="/" className="flex items-center gap-2 min-w-0">
-            <div className="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-lg shadow-sm ring-1 ring-primary/30 bg-white">
+       <SidebarHeader className="px-2 py-3">
+         <div className={`flex items-center w-full min-w-0 ${isCollapsed ? 'flex-col gap-2' : 'justify-between'}`}>
+          <Link 
+            href="/" 
+            className="flex items-center gap-2.5 min-w-0 group"
+          >
+            <div className="relative h-9 w-9 flex-shrink-0 overflow-hidden rounded-lg shadow-md ring-1 ring-sidebar-primary/20 bg-white transition-transform group-hover:scale-105">
               <Image
                 src={NPA_LOGO_URL}
                 alt={`${NPA_BRAND_NAME} crest`}
                 fill
-                className="object-contain"
-                sizes="32px"
+                className="object-contain p-0.5"
+                sizes="36px"
                 priority
               />
             </div>
              {!isCollapsed && (
-              <span className="text-sm font-semibold tracking-tight text-foreground truncate">
-                {NPA_BRAND_NAME.split(' ')[0]} ECM
-              </span>
+              <div className="flex flex-col min-w-0">
+                <span className="text-sm font-bold tracking-tight text-sidebar-foreground truncate">
+                  NPA ECM
+                </span>
+                <span className="text-[10px] text-sidebar-foreground/60 truncate">
+                  Content Management
+                </span>
+              </div>
              )}
            </Link>
            <Button
              variant="ghost"
              size="icon"
              onClick={toggleSidebar}
-             className="h-7 w-7 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+             className={`text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground ${
+               isCollapsed ? 'h-6 w-6' : 'h-7 w-7'
+             }`}
+             title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
            >
              {isCollapsed ? (
-               <ChevronRight className="h-4 w-4" />
+               <ChevronRight className="h-3.5 w-3.5" />
              ) : (
                <ChevronLeft className="h-4 w-4" />
              )}

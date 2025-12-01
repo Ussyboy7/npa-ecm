@@ -83,6 +83,7 @@ import {
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch, hasTokens } from '@/lib/api-client';
+import { SignatureSettingsCard } from '@/components/settings/SignatureSettingsCard';
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -176,13 +177,19 @@ export default function SettingsPage() {
   
   // 2FA state
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [otpEnabled, setOtpEnabled] = useState(false);
   const [showSetup2FA, setShowSetup2FA] = useState(false);
+  const [twoFactorMethod, setTwoFactorMethod] = useState<'totp' | 'email_otp'>('totp');
   const [twoFactorSecret, setTwoFactorSecret] = useState('');
   const [twoFactorQRCode, setTwoFactorQRCode] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [showBackupCodes, setShowBackupCodes] = useState(false);
   const [isEnabling2FA, setIsEnabling2FA] = useState(false);
+  const [isLoading2FAStatus, setIsLoading2FAStatus] = useState(true);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
   
   // Notification preferences state
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferencesType | null>(null);
@@ -475,13 +482,91 @@ export default function SettingsPage() {
     }
   };
 
+  // Load 2FA status
+  useEffect(() => {
+    const load2FAStatus = async () => {
+      if (!hasTokens() || !currentUser) {
+        setIsLoading2FAStatus(false);
+        return;
+      }
+      
+      try {
+        const status = await apiFetch<{
+          require_2fa: boolean;
+          totp_enabled: boolean;
+          totp_confirmed: boolean;
+          preferred_method: 'email' | 'totp';
+          email: string;
+          has_email: boolean;
+          available_methods: string[];
+        }>('/accounts/2fa/status/');
+        
+        // Email OTP is considered "enabled" if user has email
+        setOtpEnabled(status.has_email);
+        setTotpEnabled(status.totp_enabled && status.totp_confirmed);
+        setTwoFactorEnabled(status.require_2fa && (status.has_email || status.totp_confirmed));
+      } catch (error) {
+        logError('Failed to load 2FA status', error);
+      } finally {
+        setIsLoading2FAStatus(false);
+      }
+    };
+    
+    void load2FAStatus();
+  }, [currentUser]);
+
+  // OTP countdown timer
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (otpCountdown > 0) {
+      timer = setTimeout(() => setOtpCountdown(prev => prev - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [otpCountdown]);
+
   // 2FA handlers
-  const handleSetup2FA = () => {
-    // Generate mock secret and QR code
-    const secret = 'JBSWY3DPEHPK3PXP'; // Mock secret
-    setTwoFactorSecret(secret);
-    setTwoFactorQRCode(`otpauth://totp/NPA-ECM:${profile.email}?secret=${secret}&issuer=NPA-ECM`);
-    setShowSetup2FA(true);
+  const handleSetup2FA = async (method: 'totp' | 'email_otp') => {
+    setTwoFactorMethod(method);
+    setVerificationCode('');
+    setOtpSent(false);
+    
+    if (method === 'totp') {
+      try {
+        setIsEnabling2FA(true);
+        const response = await apiFetch<{
+          secret: string;
+          provisioning_uri: string;
+          qr_code_data: string;
+        }>('/accounts/2fa/totp/setup/', { method: 'POST' });
+        
+        setTwoFactorSecret(response.secret);
+        setTwoFactorQRCode(response.qr_code_data);
+        setShowSetup2FA(true);
+      } catch (error) {
+        logError('Failed to setup TOTP', error);
+        toast.error('Failed to setup authenticator app. Please try again.');
+      } finally {
+        setIsEnabling2FA(false);
+      }
+    } else {
+      // Email OTP - just show the dialog
+      setShowSetup2FA(true);
+    }
+  };
+
+  const handleSendEmailOTP = async () => {
+    try {
+      setIsEnabling2FA(true);
+      await apiFetch('/accounts/2fa/email/request/', { method: 'POST' });
+      setOtpSent(true);
+      setOtpCountdown(60); // 60 second countdown
+      toast.success('OTP sent to your email');
+    } catch (error: any) {
+      logError('Failed to send OTP', error);
+      toast.error(error?.detail || error?.message || 'Failed to send OTP. Please try again.');
+    } finally {
+      setIsEnabling2FA(false);
+    }
   };
 
   const handleVerify2FA = async () => {
@@ -492,31 +577,64 @@ export default function SettingsPage() {
 
     setIsEnabling2FA(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const endpoint = twoFactorMethod === 'totp' 
+        ? '/accounts/2fa/totp/verify/' 
+        : '/accounts/2fa/email/verify/';
       
-      // Generate backup codes
-      const codes = generateBackupCodes();
-      setBackupCodes(codes);
-      setTwoFactorEnabled(true);
-      setShowSetup2FA(false);
-      setShowBackupCodes(true);
-      setVerificationCode('');
-      toast.success('Two-factor authentication enabled');
-    } catch (error) {
+      const response = await apiFetch<{
+        verified: boolean;
+        verification_token?: string;
+        message?: string;
+      }>(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ code: verificationCode }),
+      });
+      
+      if (response.verified) {
+        // Generate backup codes (client-side for display)
+        const codes = generateBackupCodes();
+        setBackupCodes(codes);
+        
+        if (twoFactorMethod === 'totp') {
+          setTotpEnabled(true);
+        }
+        setTwoFactorEnabled(true);
+        setShowSetup2FA(false);
+        setShowBackupCodes(true);
+        setVerificationCode('');
+        setOtpSent(false);
+        toast.success('Two-factor authentication enabled');
+      } else {
+        toast.error('Verification failed. Please try again.');
+      }
+    } catch (error: any) {
       logError('Failed to enable 2FA', error);
-      toast.error('Failed to verify code. Please try again.');
+      toast.error(error?.error || error?.detail || error?.message || 'Invalid code. Please try again.');
     } finally {
       setIsEnabling2FA(false);
     }
   };
 
-  const handleDisable2FA = async () => {
+  const handleDisable2FA = async (method: 'totp' | 'email_otp') => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setTwoFactorEnabled(false);
-      setBackupCodes([]);
-      toast.success('Two-factor authentication disabled');
+      if (method === 'totp') {
+        await apiFetch('/accounts/2fa/totp/disable/', { method: 'POST' });
+        setTotpEnabled(false);
+        setTwoFactorSecret('');
+        setTwoFactorQRCode('');
+        toast.success('Authenticator app disabled');
+      } else {
+        // For email OTP, we just mark it as disabled on the backend
+        // You may need to add a disable endpoint for email OTP
+        setOtpEnabled(false);
+        toast.success('Email OTP disabled');
+      }
+      
+      // Update overall 2FA status
+      if (!totpEnabled && !otpEnabled) {
+        setTwoFactorEnabled(false);
+        setBackupCodes([]);
+      }
     } catch (error) {
       logError('Failed to disable 2FA', error);
       toast.error('Failed to disable 2FA');
@@ -1338,61 +1456,141 @@ export default function SettingsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Smartphone className="h-5 w-5" />
+                  <Shield className="h-5 w-5" />
                   Two-Factor Authentication
                 </CardTitle>
                 <CardDescription>
-                  Add an extra layer of security to your account by requiring a verification code from your phone.
+                  Add an extra layer of security to your account. Choose between authenticator app or email verification.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {twoFactorEnabled ? (
-                      <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                        <ShieldCheck className="h-5 w-5 text-green-600" />
+                {isLoading2FAStatus ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-sm text-muted-foreground">Loading 2FA status...</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Overall Status */}
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        {twoFactorEnabled ? (
+                          <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                            <ShieldCheck className="h-5 w-5 text-green-600" />
+                          </div>
+                        ) : (
+                          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                            <Shield className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="font-medium">
+                            {twoFactorEnabled ? '2FA is enabled' : '2FA is not enabled'}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {twoFactorEnabled
+                              ? 'Your account is protected with two-factor authentication'
+                              : 'Enable at least one 2FA method to protect your account'}
+                          </p>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                        <Shield className="h-5 w-5 text-muted-foreground" />
+                      {twoFactorEnabled && (
+                        <Button variant="outline" size="sm" onClick={() => setShowBackupCodes(true)}>
+                          <Key className="h-4 w-4 mr-2" />
+                          Backup Codes
+                        </Button>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    {/* Authenticator App (TOTP) */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold flex items-center gap-2">
+                        <Smartphone className="h-4 w-4" />
+                        Authenticator App
+                      </h4>
+                      <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+                        <div className="flex items-center gap-3">
+                          {totpEnabled ? (
+                            <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                              <Check className="h-4 w-4 text-green-600" />
+                            </div>
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                              <QrCode className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-medium">
+                              {totpEnabled ? 'Authenticator enabled' : 'Not configured'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Use Google Authenticator, Authy, or similar apps
+                            </p>
+                          </div>
+                        </div>
+                        {totpEnabled ? (
+                          <Button variant="destructive" size="sm" onClick={() => handleDisable2FA('totp')}>
+                            Disable
+                          </Button>
+                        ) : (
+                          <Button size="sm" onClick={() => handleSetup2FA('totp')}>
+                            <QrCode className="h-4 w-4 mr-2" />
+                            Setup
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Email OTP */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold flex items-center gap-2">
+                        <Mail className="h-4 w-4" />
+                        Email Verification
+                      </h4>
+                      <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+                        <div className="flex items-center gap-3">
+                          {otpEnabled ? (
+                            <div className="h-8 w-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                              <Check className="h-4 w-4 text-green-600" />
+                            </div>
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                              <Mail className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-sm font-medium">
+                              {otpEnabled ? 'Email OTP enabled' : 'Not configured'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Receive verification codes via email ({profile.email || 'No email set'})
+                            </p>
+                          </div>
+                        </div>
+                        {otpEnabled ? (
+                          <Button variant="destructive" size="sm" onClick={() => handleDisable2FA('email_otp')}>
+                            Disable
+                          </Button>
+                        ) : (
+                          <Button size="sm" onClick={() => handleSetup2FA('email_otp')}>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Setup
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {twoFactorEnabled && (
+                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm">
+                        <p className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                          <Check className="h-4 w-4" />
+                          Two-factor authentication is active. You&apos;ll need to verify your identity for sensitive actions.
+                        </p>
                       </div>
                     )}
-                    <div>
-                      <p className="font-medium">
-                        {twoFactorEnabled ? '2FA is enabled' : '2FA is not enabled'}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {twoFactorEnabled
-                          ? 'Your account is protected with two-factor authentication'
-                          : 'Protect your account with authenticator app verification'}
-                      </p>
-                    </div>
-                  </div>
-                  {twoFactorEnabled ? (
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setShowBackupCodes(true)}>
-                        <Key className="h-4 w-4 mr-2" />
-                        Backup Codes
-                      </Button>
-                      <Button variant="destructive" size="sm" onClick={handleDisable2FA}>
-                        Disable
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button onClick={handleSetup2FA}>
-                      <Smartphone className="h-4 w-4 mr-2" />
-                      Enable 2FA
-                    </Button>
-                  )}
-                </div>
-
-                {twoFactorEnabled && (
-                  <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm">
-                    <p className="flex items-center gap-2 text-green-700 dark:text-green-300">
-                      <Check className="h-4 w-4" />
-                      Two-factor authentication is active. You&apos;ll need your authenticator app to sign in.
-                    </p>
-                  </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1471,248 +1669,9 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
-          {/* Signature Tab */}
+          {/* Signature Tab - Now using the new SignatureSettingsCard with live seal preview */}
           <TabsContent value="signature" className="space-y-4">
-            {/* Signature Upload Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Digital Signature</CardTitle>
-                <CardDescription>
-                  Upload and manage your digital signature. A signature is required for all approvals.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-start gap-4 p-4 border border-dashed rounded-lg bg-muted/30">
-                  <AlertCircle className="h-5 w-5 text-primary mt-0.5" />
-                  <div className="space-y-1 text-sm text-muted-foreground">
-                    <p>Supported formats: <strong>PNG, JPG, SVG</strong> • Max size: <strong>{MAX_SIGNATURE_SIZE_MB}MB</strong></p>
-                    <p>For best results, use a transparent PNG with your signature on a white background.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Upload Section */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                      <Label>Upload New Signature</Label>
-                      <div className="flex gap-2">
-                      <Input
-                        type="file"
-                        accept="image/png,image/jpeg,image/svg+xml"
-                        onChange={handleSignatureUpload}
-                        disabled={isUploading}
-                          className="flex-1"
-                      />
-                    </div>
-                  </div>
-
-                    {!signature && (
-                      <div className="p-8 border-2 border-dashed rounded-lg text-center text-muted-foreground">
-                        <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p className="text-sm">No signature uploaded</p>
-                        <p className="text-xs">Upload your signature to approve correspondence</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Preview Section */}
-                  {signature && (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium">Current Signature</p>
-                          <p className="text-xs text-muted-foreground">
-                            Uploaded {new Date(signature.uploadedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <Button 
-                          variant="destructive" 
-                          size="sm" 
-                          onClick={() => setShowDeleteSignatureDialog(true)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Remove
-                        </Button>
-                      </div>
-                      <div className="p-6 border rounded-lg bg-white flex items-center justify-center min-h-[120px]">
-                        <img
-                          src={signature.imageData}
-                          alt="Digital signature preview"
-                          className="max-h-24 object-contain"
-                        />
-                      </div>
-                      <div className="p-3 bg-muted/50 rounded-lg">
-                        <p className="text-xs text-muted-foreground">
-                          <strong>File:</strong> {signature.fileName || 'Unknown'}
-                        </p>
-                    </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Signature Templates Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Signature Templates</CardTitle>
-                <CardDescription>
-                  Configure how your signature appears in different workflow actions.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Tabs defaultValue="personal" className="space-y-4">
-                    <TabsList>
-                    <TabsTrigger value="personal">My Preferences</TabsTrigger>
-                      <TabsTrigger value="organization">Organization Templates</TabsTrigger>
-                    </TabsList>
-
-                  <TabsContent value="personal" className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Override organization defaults with your personal preferences for each action type.
-                        </p>
-                    
-                    <div className="grid gap-4 sm:grid-cols-2">
-                          {templateTypes.map((type) => {
-                        const templatesForType = signatureTemplates.filter(t => t.templateType === type);
-                        const orgDefault = templatesForType.find(t => t.defaultApply) ?? templatesForType[0];
-                            const selectedValue = signaturePreferences.templateOverrides?.[type] ?? '__organization__';
-                        
-                            return (
-                              <Card key={type} className="border-muted">
-                                <CardHeader className="pb-2">
-                              <CardTitle className="text-sm capitalize flex items-center gap-2">
-                                <FileText className="h-4 w-4" />
-                                {type}
-                              </CardTitle>
-                                </CardHeader>
-                            <CardContent>
-                                    <Select
-                                      value={selectedValue}
-                                      onValueChange={(value) => handleTemplateOverrideChange(type, value)}
-                                    >
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select template" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="__organization__">
-                                    Use organization default
-                                    {orgDefault && <span className="text-xs text-muted-foreground ml-2">({orgDefault.name})</span>}
-                                        </SelectItem>
-                                        {templatesForType.map(template => (
-                                          <SelectItem key={template.id} value={template.id}>
-                                      {template.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                </CardContent>
-                              </Card>
-                            );
-                          })}
-                        </div>
-
-                        <Separator />
-
-                        <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                            <Switch
-                              checked={signaturePreferences.autoApplyForMinutes ?? false}
-                              onCheckedChange={handleAutoApplyMinutesChange}
-                            />
-                        <span className="text-sm">Auto-apply signature to minutes</span>
-                          </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={handleResetPersonalPreferences} disabled={!hasPreferenceChanges}>
-                              Reset
-                            </Button>
-                        <Button size="sm" onClick={handleSavePersonalPreferences} disabled={!hasPreferenceChanges}>
-                              Save Preferences
-                            </Button>
-                        </div>
-                      </div>
-                    </TabsContent>
-
-                  <TabsContent value="organization" className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground">
-                        Organization-wide templates used as defaults for all users.
-                        </p>
-                      <Button variant="outline" size="sm" onClick={resetOrganizationTemplates}>
-                        <RefreshCcw className="h-4 w-4 mr-2" />
-                          Reset to Default
-                        </Button>
-                      </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        {signatureTemplates.map(template => {
-                          const isEditing = editingTemplateId === template.id;
-                          const draft = isEditing ? templateDraft : template;
-                        
-                          return (
-                            <Card key={template.id} className="border-muted">
-                            <CardHeader className="pb-2">
-                                <div className="flex items-center justify-between">
-                                  {isEditing ? (
-                                    <Input
-                                      value={draft?.name ?? ''}
-                                      onChange={(e) => updateTemplateDraft('name', e.target.value)}
-                                    className="h-8 text-sm font-semibold"
-                                    />
-                                  ) : (
-                                    <CardTitle className="text-sm">{template.name}</CardTitle>
-                                  )}
-                                <Badge variant="outline" className="text-xs capitalize">{template.templateType}</Badge>
-                                </div>
-                              </CardHeader>
-                            <CardContent className="space-y-3">
-                                  {isEditing ? (
-                                    <Textarea
-                                      value={draft?.format ?? ''}
-                                      onChange={(e) => updateTemplateDraft('format', e.target.value)}
-                                      className="text-xs font-mono"
-                                      rows={4}
-                                    />
-                                  ) : (
-                                <div className="p-2 bg-muted/50 rounded text-xs font-mono whitespace-pre-wrap">
-                                        {template.format}
-                                    </div>
-                                  )}
-                              
-                              <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <Switch
-                                        checked={draft?.defaultApply ?? false}
-                                        onCheckedChange={(checked) => updateTemplateDraft('defaultApply', checked)}
-                                        disabled={!isEditing}
-                                      />
-                                  <span className="text-xs text-muted-foreground">Default</span>
-                                </div>
-
-                                  {isEditing ? (
-                                  <div className="flex gap-1">
-                                    <Button size="sm" variant="ghost" onClick={cancelEditTemplate}>
-                                      <X className="h-4 w-4" />
-                                      </Button>
-                                    <Button size="sm" onClick={saveTemplateChanges}>
-                                      <Check className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  ) : (
-                                  <Button size="sm" variant="ghost" onClick={() => beginEditTemplate(template)}>
-                                    <Pencil className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-              </CardContent>
-            </Card>
+            <SignatureSettingsCard />
           </TabsContent>
         </Tabs>
         
@@ -1762,58 +1721,167 @@ export default function SettingsPage() {
         </AlertDialog>
 
         {/* 2FA Setup Dialog */}
-        <Dialog open={showSetup2FA} onOpenChange={setShowSetup2FA}>
+        <Dialog open={showSetup2FA} onOpenChange={(open) => {
+          setShowSetup2FA(open);
+          if (!open) {
+            setVerificationCode('');
+            setOtpSent(false);
+          }
+        }}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Set Up Two-Factor Authentication</DialogTitle>
-              <DialogDescription>
-                Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="flex justify-center p-4 bg-white rounded-lg">
-                <div className="w-48 h-48 bg-muted flex items-center justify-center rounded">
-                  <QrCode className="h-32 w-32 text-muted-foreground" />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label className="text-sm">Can&apos;t scan? Enter this code manually:</Label>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 p-2 bg-muted rounded text-sm font-mono">{twoFactorSecret}</code>
-                  <Button variant="outline" size="sm" onClick={() => {
-                    navigator.clipboard.writeText(twoFactorSecret);
-                    toast.success('Code copied');
-                  }}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Enter verification code from your app:</Label>
-                <Input
-                  type="text"
-                  placeholder="000000"
-                  maxLength={6}
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
-                  className="text-center text-2xl tracking-widest"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowSetup2FA(false)}>Cancel</Button>
-              <Button onClick={handleVerify2FA} disabled={verificationCode.length !== 6 || isEnabling2FA}>
-                {isEnabling2FA ? (
+              <DialogTitle className="flex items-center gap-2">
+                {twoFactorMethod === 'totp' ? (
                   <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Verifying...
+                    <Smartphone className="h-5 w-5" />
+                    Set Up Authenticator App
                   </>
                 ) : (
-                  'Verify & Enable'
+                  <>
+                    <Mail className="h-5 w-5" />
+                    Set Up Email Verification
+                  </>
                 )}
-              </Button>
+              </DialogTitle>
+              <DialogDescription>
+                {twoFactorMethod === 'totp'
+                  ? 'Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)'
+                  : `We'll send a verification code to ${profile.email}`}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {twoFactorMethod === 'totp' ? (
+                <>
+                  {/* TOTP Setup - QR Code */}
+                  <div className="flex justify-center p-4 bg-white rounded-lg">
+                    {twoFactorQRCode ? (
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=192x192&data=${encodeURIComponent(twoFactorQRCode)}`}
+                        alt="2FA QR Code"
+                        className="w-48 h-48"
+                      />
+                    ) : (
+                      <div className="w-48 h-48 bg-muted flex items-center justify-center rounded">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm">Can&apos;t scan? Enter this code manually:</Label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 p-2 bg-muted rounded text-sm font-mono break-all">{twoFactorSecret}</code>
+                      <Button variant="outline" size="sm" onClick={() => {
+                        navigator.clipboard.writeText(twoFactorSecret);
+                        toast.success('Code copied');
+                      }}>
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Enter verification code from your app:</Label>
+                    <Input
+                      type="text"
+                      placeholder="000000"
+                      maxLength={6}
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                      className="text-center text-2xl tracking-widest"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Email OTP Setup */}
+                  {!otpSent ? (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-muted/50 rounded-lg text-center">
+                        <Mail className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          Click the button below to receive a verification code at:
+                        </p>
+                        <p className="font-medium mt-1">{profile.email}</p>
+                      </div>
+                      <Button 
+                        className="w-full" 
+                        onClick={handleSendEmailOTP}
+                        disabled={isEnabling2FA}
+                      >
+                        {isEnabling2FA ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Send Verification Code
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg text-center">
+                        <Check className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                        <p className="text-sm text-green-700 dark:text-green-300">
+                          Verification code sent to {profile.email}
+                        </p>
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                          Code expires in 5 minutes
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Enter the 6-digit code from your email:</Label>
+                        <Input
+                          type="text"
+                          placeholder="000000"
+                          maxLength={6}
+                          value={verificationCode}
+                          onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                          className="text-center text-2xl tracking-widest"
+                        />
+                      </div>
+
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="w-full"
+                        onClick={handleSendEmailOTP}
+                        disabled={otpCountdown > 0 || isEnabling2FA}
+                      >
+                        {otpCountdown > 0 
+                          ? `Resend code in ${otpCountdown}s`
+                          : 'Resend Code'
+                        }
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowSetup2FA(false)}>Cancel</Button>
+              {(twoFactorMethod === 'totp' || otpSent) && (
+                <Button 
+                  onClick={handleVerify2FA} 
+                  disabled={verificationCode.length !== 6 || isEnabling2FA}
+                >
+                  {isEnabling2FA ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    'Verify & Enable'
+                  )}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>

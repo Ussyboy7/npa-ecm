@@ -944,444 +944,258 @@ export const ShareDocumentDialog = ({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="flex-shrink-0 px-2">
-          <DialogTitle>Share Document</DialogTitle>
-          <DialogDescription>
-            Grant access to users, divisions, or departments. Shared documents will appear in their My Documents view.
-          </DialogDescription>
-        </DialogHeader>
-
-        {document && (
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden px-2">
-            {/* Document Info Card */}
-            <div className="rounded-md border bg-muted/20 p-3 space-y-2 flex-shrink-0 mb-3">
-              <p className="text-sm font-semibold text-foreground">{document.title}</p>
-              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <Badge variant="outline" className="capitalize">
-                  {document.status}
-                </Badge>
-                <Badge variant="outline" className="capitalize">
-                  {document.documentType}
-                </Badge>
-                {document.referenceNumber && <span>Ref: {document.referenceNumber}</span>}
-              </div>
-              {(document.sensitivity === 'restricted' || document.sensitivity === 'confidential') && (
-                <Alert variant="destructive" className="mt-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    This document is {document.sensitivity}. Ensure recipients have appropriate clearance.
-                  </AlertDescription>
-                </Alert>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Compact Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/30">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <FileText className="h-4 w-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold truncate">Share Document</h2>
+              {document && (
+                <p className="text-xs text-muted-foreground truncate">{document.title}</p>
               )}
             </div>
+          </div>
+          {document && (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Badge variant="outline" className="text-[10px] capitalize h-5">
+                {document.status}
+              </Badge>
+              {(document.sensitivity === 'restricted' || document.sensitivity === 'confidential') && (
+                <Badge variant="destructive" className="text-[10px] h-5">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  {document.sensitivity}
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
+
+        {document && (
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
 
             {/* Review Step */}
             {showReviewStep ? (
-              <div className="flex-1 flex flex-col overflow-hidden space-y-4">
-                <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-3 border-b bg-muted/20">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowReviewStep(false)}
-                    className="h-8"
-                    aria-label="Go back to selection"
+                    className="h-7 px-2"
                   >
                     <ArrowLeft className="h-4 w-4 mr-1" />
                     Back
                   </Button>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-foreground">Review Share Settings</h3>
-                    <p className="text-sm text-muted-foreground">Please review your selections before sharing</p>
-                  </div>
+                  <Separator orientation="vertical" className="h-4" />
+                  <span className="text-sm font-medium">Review & Confirm</span>
                 </div>
 
-                <ScrollArea className="flex-1 border rounded-lg">
-                  <div className="p-4 space-y-4">
-                    {/* Access Level */}
-              <div className="space-y-2">
-                      <Label className="text-sm font-medium">Access Level</Label>
-                      <div className="p-3 border rounded-md bg-muted/30">
-                        <Badge variant="outline" className="capitalize">{accessLevel}</Badge>
-                      </div>
+                <div className="flex-1 overflow-auto p-5 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Access Level</p>
+                      <Badge variant="outline" className="capitalize">{accessLevel}</Badge>
                     </div>
-
-                    {/* Recipients Summary */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Recipients</Label>
-                      <div className="p-3 border rounded-md bg-muted/30 space-y-2">
-                        {shareToAll ? (
-                          <div className="flex items-center gap-2">
-                            <Globe className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm">All {activeUserCount} active users</span>
-                          </div>
-                        ) : (
-                          <>
-                            {selectionSummary.users > 0 && (
-                              <div className="flex items-center gap-2">
-                                <Users className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{selectionSummary.users} user(s)</span>
-                              </div>
-                            )}
-                            {selectionSummary.directorates > 0 && (
-                              <div className="flex items-center gap-2">
-                                <Building2 className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{selectionSummary.directorates} directorate(s)</span>
-                              </div>
-                            )}
-                            {selectionSummary.divisions > 0 && (
-                              <div className="flex items-center gap-2">
-                                <Building2 className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{selectionSummary.divisions} division(s)</span>
-                              </div>
-                            )}
-                            {selectionSummary.departments > 0 && (
-                              <div className="flex items-center gap-2">
-                                <Users2 className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{selectionSummary.departments} department(s)</span>
-                              </div>
-                            )}
-                            {selectionSummary.workspaces > 0 && (
-                              <div className="flex items-center gap-2">
-                                <FolderKanban className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{selectionSummary.workspaces} workspace(s)</span>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Recipients</p>
+                      <p className="text-sm font-medium">
+                        {shareToAll ? `All ${activeUserCount} users` : 
+                          `${selectionSummary.users + selectionSummary.directorates + selectionSummary.divisions + selectionSummary.departments + selectionSummary.workspaces} selected`}
+                      </p>
                     </div>
-
-                    {/* Note */}
-                    {note.trim() && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Message</Label>
-                        <div className="p-3 border rounded-md bg-muted/30">
-                          <p className="text-sm text-foreground whitespace-pre-wrap">{note}</p>
-                        </div>
-                      </div>
-                    )}
                   </div>
-                </ScrollArea>
+                  
+                  {!shareToAll && (
+                    <div className="flex flex-wrap gap-2">
+                      {selectionSummary.users > 0 && (
+                        <Badge variant="secondary" className="gap-1">
+                          <Users className="h-3 w-3" /> {selectionSummary.users} users
+                        </Badge>
+                      )}
+                      {selectionSummary.directorates > 0 && (
+                        <Badge variant="secondary" className="gap-1">
+                          <Building2 className="h-3 w-3" /> {selectionSummary.directorates} directorates
+                        </Badge>
+                      )}
+                      {selectionSummary.divisions > 0 && (
+                        <Badge variant="secondary" className="gap-1">
+                          <Building2 className="h-3 w-3" /> {selectionSummary.divisions} divisions
+                        </Badge>
+                      )}
+                      {selectionSummary.departments > 0 && (
+                        <Badge variant="secondary" className="gap-1">
+                          <Users2 className="h-3 w-3" /> {selectionSummary.departments} depts
+                        </Badge>
+                      )}
+                      {selectionSummary.workspaces > 0 && (
+                        <Badge variant="secondary" className="gap-1">
+                          <FolderKanban className="h-3 w-3" /> {selectionSummary.workspaces} workspaces
+                        </Badge>
+                      )}
+                    </div>
+                  )}
 
-                <DialogFooter className="flex-shrink-0 pt-3 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs px-3"
-                    onClick={() => setShowReviewStep(false)}
-                    aria-label="Go back"
-                  >
+                  {note.trim() && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Message</p>
+                      <p className="text-sm p-3 bg-muted/30 rounded-md">{note}</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 px-5 py-3 border-t bg-muted/20">
+                  <Button variant="outline" size="sm" onClick={() => setShowReviewStep(false)}>
                     Back
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8 text-xs px-3"
-                    onClick={handleConfirmShare}
-                    disabled={isSubmitting}
-                    aria-label="Confirm and share document"
-                  >
+                  <Button size="sm" onClick={handleConfirmShare} disabled={isSubmitting}>
                     {isSubmitting ? (
-                      <>
-                        <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                        Sharing…
-                      </>
+                      <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Sharing...</>
                     ) : (
-                      <>
-                        <CheckCircle2 className="h-3 w-3 mr-1.5" />
-                        Confirm & Share
-                      </>
+                      <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Share Now</>
                     )}
                   </Button>
-                </DialogFooter>
+                </div>
               </div>
             ) : (
               /* Main Form */
-              <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden space-y-3">
-              {/* Access Level Selection */}
-              <div className="space-y-2 flex-shrink-0">
-                <Label htmlFor="access-level">
-                  Access Level <span className="text-destructive">*</span>
-                </Label>
-                <Select value={accessLevel} onValueChange={(v) => setAccessLevel(v as PermissionAccess)}>
-                  <SelectTrigger id="access-level" aria-label="Select access level">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="read">
-                      <div>
-                        <div className="font-medium">Read Only</div>
-                        <div className="text-xs text-muted-foreground">View and download only</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="write">
-                      <div>
-                        <div className="font-medium">Read & Write</div>
-                        <div className="text-xs text-muted-foreground">Can edit and create versions</div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="admin">
-                      <div>
-                        <div className="font-medium">Full Admin</div>
-                        <div className="text-xs text-muted-foreground">Full control including permissions</div>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                {accessLevel !== 'read' && (
-                  <Alert className={accessLevel === 'admin' ? 'border-destructive/50 bg-destructive/10' : 'border-warning/50 bg-warning/10'}>
-                    <AlertTriangle className={`h-4 w-4 ${accessLevel === 'admin' ? 'text-destructive' : 'text-warning'}`} />
-                    <AlertDescription className={accessLevel === 'admin' ? 'text-destructive' : 'text-warning'}>
-                      {accessLevel === 'admin'
-                        ? 'Admin access grants full control. Use with caution.'
-                        : 'Write access allows editing. Ensure recipients are authorized.'}
-                    </AlertDescription>
-                  </Alert>
+              <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+              {/* Top Section - Access Level */}
+              <div className="px-5 py-3 border-b space-y-3 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <Label htmlFor="access-level" className="text-sm whitespace-nowrap">Access:</Label>
+                  <Select value={accessLevel} onValueChange={(v) => setAccessLevel(v as PermissionAccess)}>
+                    <SelectTrigger id="access-level" className="w-[140px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="read">Read Only</SelectItem>
+                      <SelectItem value="write">Read & Write</SelectItem>
+                      <SelectItem value="admin">Full Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {accessLevel !== 'read' && (
+                    <Badge variant={accessLevel === 'admin' ? 'destructive' : 'default'} className="text-[10px]">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      {accessLevel === 'admin' ? 'Full control' : 'Can edit'}
+                    </Badge>
+                  )}
+                </div>
+                
+                {/* Existing Permissions - Compact */}
+                {existingPermissions.length > 0 && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Current:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {existingPermissions.slice(0, 3).map((perm) => (
+                        <Badge key={perm.id} variant="outline" className="text-[10px] gap-1">
+                          {perm.access}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (perm.id) {
+                                setPermissionToDelete(perm.id);
+                                setShowDeletePermissionConfirm(true);
+                              }
+                            }}
+                            className="hover:text-destructive"
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        </Badge>
+                      ))}
+                      {existingPermissions.length > 3 && (
+                        <Badge variant="outline" className="text-[10px]">
+                          +{existingPermissions.length - 3} more
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {/* Existing Permissions Display */}
-              {isLoadingPermissions ? (
-                <div className="flex items-center justify-center py-4 flex-shrink-0">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                  <span className="ml-2 text-sm text-muted-foreground">Loading permissions...</span>
-                </div>
-              ) : existingPermissions.length > 0 && (
-                <div className="space-y-2 flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">Current Access ({existingPermissions.length})</Label>
-                  </div>
-                  <ScrollArea className="max-h-32 border rounded-md">
-                    <div className="space-y-2 p-2" role="list">
-                      {existingPermissions.map((perm) => {
-                        const isEditing = editingPermissionId === perm.id;
-                        const isDeleting = deletingPermissionId === perm.id;
-                        return (
-                          <div key={perm.id} className="flex items-center justify-between text-xs p-2 bg-background rounded border" role="listitem">
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              {isEditing ? (
-                <Select
-                                  value={perm.access}
-                                  onValueChange={async (v) => {
-                                    await handleUpdatePermission(perm.id!, v as PermissionAccess);
-                                    setEditingPermissionId(null);
-                                  }}
-                                  disabled={isDeleting}
-                                >
-                                  <SelectTrigger className="h-6 text-xs w-24">
-                                    <SelectValue />
-                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="read">Read</SelectItem>
-                                    <SelectItem value="write">Write</SelectItem>
-                                    <SelectItem value="admin">Admin</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                <Badge variant="outline" className="text-xs capitalize">
-                                  {perm.access}
-                                </Badge>
-                              )}
-                              <span className="text-muted-foreground truncate text-[10px]">
-                                {perm.userIds.length > 0 && `${perm.userIds.length} user(s)`}
-                                {perm.divisionIds.length > 0 && `${perm.divisionIds.length > 0 && perm.userIds.length > 0 ? ', ' : ''}${perm.divisionIds.length} div(s)`}
-                                {perm.departmentIds.length > 0 && `${(perm.userIds.length > 0 || perm.divisionIds.length > 0) ? ', ' : ''}${perm.departmentIds.length} dept(s)`}
-                                {perm.gradeLevels.length > 0 && `${(perm.userIds.length > 0 || perm.divisionIds.length > 0 || perm.departmentIds.length > 0) ? ', ' : ''}${perm.gradeLevels.length} grade(s)`}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6"
-                                onClick={() => setEditingPermissionId(isEditing ? null : perm.id || null)}
-                                disabled={isDeleting || isEditing}
-                                aria-label={`${isEditing ? 'Cancel editing' : 'Edit'} permission`}
-                              >
-                                {isEditing ? (
-                                  <X className="h-3 w-3" />
-                                ) : (
-                                  <Edit2 className="h-3 w-3" />
-                                )}
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  if (perm.id) {
-                                    setPermissionToDelete(perm.id);
-                                    setShowDeletePermissionConfirm(true);
-                                  }
-                                }}
-                                disabled={isDeleting || isEditing}
-                                aria-label="Delete permission"
-                              >
-                                {isDeleting ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Trash2 className="h-3 w-3" />
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
-                </div>
-              )}
-
               {/* Selection Tabs */}
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-                <TabsList className="grid w-full grid-cols-6 flex-shrink-0 mb-4">
-                  <TabsTrigger 
-                    value="all" 
-                    className="flex items-center gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-                  >
-                    <Globe className="h-4 w-4" />
-                    All
-                    {shareToAll && (
-                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                        {activeUserCount}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="directorate" className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Directorate
-                    {selectedDirectorateIds.size > 0 && (
-                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                        {selectedDirectorateIds.size}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="division" className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Division
-                    {selectedDivisionIds.size > 0 && (
-                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                        {selectedDivisionIds.size}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="department" className="flex items-center gap-2">
-                    <Users2 className="h-4 w-4" />
-                    Department
-                    {selectedDepartmentIds.size > 0 && (
-                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                        {selectedDepartmentIds.size}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="users" className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Users
-                    {selectedUserIds.size > 0 && (
-                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                        {selectedUserIds.size}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="workspaces" className="flex items-center gap-2">
-                    <FolderKanban className="h-4 w-4" />
-                    Workspaces
-                    {selectedWorkspaceIds.size > 0 && (
-                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                        {selectedWorkspaceIds.size}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="history" className="flex items-center gap-2">
-                    <History className="h-4 w-4" />
-                    History
-                    {shareHistory.length > 0 && (
-                      <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                        {shareHistory.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                </TabsList>
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+                <div className="px-5 py-2 border-b flex-shrink-0">
+                  <TabsList className="inline-flex h-8 bg-muted/50 p-0.5 rounded-md">
+                    <TabsTrigger value="all" className="px-3 h-7 text-xs rounded-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      <Globe className="h-3.5 w-3.5 mr-1.5" />
+                      All
+                      {shareToAll && <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{activeUserCount}</Badge>}
+                    </TabsTrigger>
+                    <TabsTrigger value="users" className="px-3 h-7 text-xs rounded-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      <Users className="h-3.5 w-3.5 mr-1.5" />
+                      Users
+                      {selectedUserIds.size > 0 && <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{selectedUserIds.size}</Badge>}
+                    </TabsTrigger>
+                    <TabsTrigger value="directorate" className="px-3 h-7 text-xs rounded-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                      Org
+                      {(selectedDirectorateIds.size + selectedDivisionIds.size + selectedDepartmentIds.size) > 0 && (
+                        <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">
+                          {selectedDirectorateIds.size + selectedDivisionIds.size + selectedDepartmentIds.size}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="workspaces" className="px-3 h-7 text-xs rounded-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      <FolderKanban className="h-3.5 w-3.5 mr-1.5" />
+                      WS
+                      {selectedWorkspaceIds.size > 0 && <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{selectedWorkspaceIds.size}</Badge>}
+                    </TabsTrigger>
+                    <TabsTrigger value="history" className="px-3 h-7 text-xs rounded-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      <History className="h-3.5 w-3.5 mr-1.5" />
+                      History
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
 
-                <TabsContent value="all" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex">
-                  <div className="space-y-4 flex-1">
-                    <div className="flex items-center space-x-2 p-4 border rounded-lg">
-                      <Checkbox
-                        id="share-to-all"
-                        checked={shareToAll}
-                        onCheckedChange={handleShareToAllClick}
-                        aria-label="Share to all users"
-                      />
-                      <Label htmlFor="share-to-all" className="flex-1 cursor-pointer">
-                        <div className="flex items-center gap-2">
-                          <Globe className="h-4 w-4" />
-                          <span className="font-medium">Share to all users</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Grant {accessLevel} access to all {activeUserCount} active users in the system
-                        </p>
-                      </Label>
+                <TabsContent value="all" className="flex-1 overflow-auto p-5 data-[state=active]:block">
+                  <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted/30 transition-colors cursor-pointer"
+                       onClick={() => handleShareToAllClick(!shareToAll)}>
+                    <Checkbox
+                      id="share-to-all"
+                      checked={shareToAll}
+                      onCheckedChange={handleShareToAllClick}
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-primary" />
+                        <span className="font-medium text-sm">Share to all users</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Grant {accessLevel} access to all {activeUserCount} active users
+                      </p>
                     </div>
-                    {shareToAll && (
-                      <Alert>
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription>
-                          This will share the document with all {activeUserCount} active users. Click "Share Document" to confirm.
-                        </AlertDescription>
-                      </Alert>
-                    )}
                   </div>
+                  {shareToAll && (
+                    <Alert className="mt-3">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription className="text-xs">
+                        This will share with all {activeUserCount} users.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </TabsContent>
 
-                <TabsContent value="directorate" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex">
-                  <div className="space-y-4 flex-1">
-                    <div className="flex items-center justify-between px-1 flex-shrink-0">
-                      <Label className="text-sm font-medium">
-                        Select Directorates ({selectedDirectorateIds.size} selected)
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        {selectedDirectorateIds.size > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedDirectorateIds(new Set())}
-                            className="text-xs h-7"
-                            aria-label="Clear all selections"
-                          >
-                            Clear ({selectedDirectorateIds.size})
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={toggleAllDirectorates}
-                          className="text-xs h-7"
-                          aria-label={selectedDirectorateIds.size === filteredDirectorates.length ? "Deselect all directorates" : `Select all ${filteredDirectorates.length} directorates`}
-                        >
-                          {selectedDirectorateIds.size === filteredDirectorates.length ? "Deselect All" : `Select All (${filteredDirectorates.length})`}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="relative flex-shrink-0">
-                      <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground z-10" />
+                {/* Organization Tab */}
+                <TabsContent value="directorate" className="flex-1 flex flex-col min-h-0 overflow-hidden data-[state=active]:flex">
+                  <div className="px-5 py-3 border-b flex-shrink-0">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         value={searchDirectorateQuery}
                         onChange={(e) => setSearchDirectorateQuery(e.target.value)}
                         placeholder="Search directorates..."
-                        className="pl-8"
-                        aria-label="Search directorates"
+                        className="pl-9 h-9"
                       />
                     </div>
-                    <ScrollArea className="flex-1 border rounded-md">
-                      <div className="space-y-2 p-3" role="list">
-                          {filteredDirectorates.length > 0 ? (
+                  </div>
+                  <div className="flex-1 overflow-auto p-4">
+                    <div className="space-y-2">
+                      {filteredDirectorates.length > 0 ? (
                           filteredDirectorates.map((dir) => {
                             const isSelected = selectedDirectorateIds.has(dir.id);
                             const divisionCount = divisionsByDirectorate.get(dir.id)?.length || 0;
@@ -1455,12 +1269,11 @@ export const ShareDocumentDialog = ({
                             )}
                           </div>
                         )}
-                      </div>
-                    </ScrollArea>
+                    </div>
                   </div>
                 </TabsContent>
 
-                <TabsContent value="division" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex">
+                <TabsContent value="division" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex hidden">
                   <div className="flex flex-col h-full space-y-3">
                     <div className="flex items-center justify-between px-1 flex-shrink-0">
                       <Label className="text-sm font-medium">
@@ -1732,106 +1545,74 @@ export const ShareDocumentDialog = ({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="users" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex">
-                  <div className="flex flex-col h-full space-y-3">
-                    <div className="flex items-center justify-between px-1 flex-shrink-0">
-                      <Label className="text-sm font-medium">
-                        Select Users ({selectedUserIds.size} selected)
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        {selectedUserIds.size > 0 && (
+                <TabsContent value="users" className="flex-1 flex flex-col min-h-0 overflow-hidden data-[state=active]:flex mt-0">
+                  {/* Search & Filters */}
+                  <div className="px-5 py-2 border-b flex-shrink-0 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        Users ({selectedUserIds.size}/{filteredUsers.length})
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleAllUsers}
+                        className="text-xs h-6"
+                      >
+                        {selectedUserIds.size === filteredUsers.length ? "Clear" : "Select All"}
+                      </Button>
+                    </div>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        placeholder="Search name, email, role..."
+                        className="pl-9 h-8 text-sm"
+                      />
+                    </div>
+                    {availableSystemRoles.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {availableSystemRoles.slice(0, 8).map((role) => {
+                          const isSelected = selectedSystemRoles.has(role);
+                          return (
+                            <Button
+                              key={role}
+                              type="button"
+                              variant={isSelected ? "default" : "outline"}
+                              size="sm"
+                              className="h-5 text-[10px] px-1.5"
+                              onClick={() => {
+                                const newSet = new Set(selectedSystemRoles);
+                                if (isSelected) {
+                                  newSet.delete(role);
+                                } else {
+                                  newSet.add(role);
+                                }
+                                setSelectedSystemRoles(newSet);
+                              }}
+                            >
+                              {role}
+                            </Button>
+                          );
+                        })}
+                        {selectedSystemRoles.size > 0 && (
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => setSelectedUserIds(new Set())}
-                            className="text-xs h-7"
-                            aria-label="Clear all selections"
+                            className="h-5 text-[10px] px-1.5"
+                            onClick={() => setSelectedSystemRoles(new Set())}
                           >
-                            Clear ({selectedUserIds.size})
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={toggleAllUsers}
-                          className="text-xs h-7"
-                          aria-label={selectedUserIds.size === filteredUsers.length ? "Deselect all users" : `Select all ${filteredUsers.length} users`}
-                        >
-                          {selectedUserIds.size === filteredUsers.length ? "Deselect All" : `Select All (${filteredUsers.length})`}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2 flex-shrink-0">
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground z-10" />
-                        <Input
-                          value={searchQuery}
-                          onChange={(event) => setSearchQuery(event.target.value)}
-                          placeholder="Search name, email, role..."
-                          className="pl-8 h-9"
-                          aria-label="Search users"
-                        />
-                        {searchQuery && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                            onClick={() => setSearchQuery("")}
-                            aria-label="Clear search"
-                          >
-                            <X className="h-3 w-3" />
+                            ✕
                           </Button>
                         )}
                       </div>
-                      {availableSystemRoles.length > 0 && (
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Filter by Role</Label>
-                          <div className="flex flex-wrap gap-1">
-                            {availableSystemRoles.map((role) => {
-                              const isSelected = selectedSystemRoles.has(role);
-                              return (
-                                <Button
-                                  key={role}
-                                  type="button"
-                                  variant={isSelected ? "default" : "outline"}
-                                  size="sm"
-                                  className="h-7 text-xs px-2"
-                                  onClick={() => {
-                                    const newSet = new Set(selectedSystemRoles);
-                                    if (isSelected) {
-                                      newSet.delete(role);
-                                    } else {
-                                      newSet.add(role);
-                                    }
-                                    setSelectedSystemRoles(newSet);
-                                  }}
-                                  aria-label={`${isSelected ? 'Remove' : 'Add'} ${role} filter`}
-                                >
-                                  {role}
-                                </Button>
-                              );
-                            })}
-                            {selectedSystemRoles.size > 0 && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 text-xs px-2"
-                                onClick={() => setSelectedSystemRoles(new Set())}
-                                aria-label="Clear role filters"
-                              >
-                                Clear
-                              </Button>
-                            )}
-                    </div>
-                        </div>
-                      )}
-                    </div>
-                    <ScrollArea className="flex-1 border rounded-md">
-                      <div className="space-y-2 p-3" role="list">
+                    )}
+                  </div>
+                  {/* User List */}
+                  <div className="flex-1 overflow-auto px-3 py-2">
+                    <div className="space-y-1.5" role="list">
                           {/* Recent Recipients */}
                           {recentRecipients.users.length > 0 && !searchQuery && (
                           <>
@@ -1981,52 +1762,38 @@ export const ShareDocumentDialog = ({
                           </div>
                         )}
                       </div>
-                    </ScrollArea>
                   </div>
                 </TabsContent>
 
-                <TabsContent value="workspaces" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex">
-                  <div className="flex flex-col h-full space-y-3">
-                    <div className="flex items-center justify-between px-1 flex-shrink-0">
-                      <Label className="text-sm font-medium">
+                <TabsContent value="workspaces" className="flex-1 flex flex-col min-h-0 overflow-hidden data-[state=active]:flex">
+                  {/* Search */}
+                  <div className="px-5 py-3 border-b flex-shrink-0 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
                         Select Workspaces ({selectedWorkspaceIds.size} selected)
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        {selectedWorkspaceIds.size > 0 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedWorkspaceIds(new Set())}
-                            className="text-xs h-7"
-                            aria-label="Clear all selections"
-                          >
-                            Clear ({selectedWorkspaceIds.size})
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={toggleAllWorkspaces}
-                          className="text-xs h-7"
-                          aria-label={selectedWorkspaceIds.size === filteredWorkspaces.length ? "Deselect all workspaces" : `Select all ${filteredWorkspaces.length} workspaces`}
-                        >
-                          {selectedWorkspaceIds.size === filteredWorkspaces.length ? "Deselect All" : `Select All (${filteredWorkspaces.length})`}
-                        </Button>
-                      </div>
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleAllWorkspaces}
+                        className="text-xs h-7"
+                      >
+                        {selectedWorkspaceIds.size === filteredWorkspaces.length ? "Deselect All" : `Select All (${filteredWorkspaces.length})`}
+                      </Button>
                     </div>
-                    <div className="relative flex-shrink-0">
-                      <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground z-10" />
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         value={searchWorkspaceQuery}
                         onChange={(e) => setSearchWorkspaceQuery(e.target.value)}
                         placeholder="Search workspaces..."
-                        className="pl-8 h-9"
-                        aria-label="Search workspaces"
+                        className="pl-9 h-9"
                       />
                     </div>
-                    <ScrollArea className="flex-1 border rounded-md">
+                  </div>
+                  {/* List */}
+                  <div className="flex-1 overflow-auto p-4">
                       <div className="space-y-2 p-3" role="list">
                         {isLoadingWorkspaces ? (
                           <div className="p-8 text-center text-sm text-muted-foreground">
@@ -2089,167 +1856,114 @@ export const ShareDocumentDialog = ({
                           </div>
                         )}
                       </div>
-                    </ScrollArea>
                   </div>
                 </TabsContent>
 
-                <TabsContent value="history" className="flex-1 flex flex-col min-h-0 data-[state=active]:flex">
-                  <ScrollArea className="flex-1">
-                    <div className="space-y-3 p-3">
+                <TabsContent value="history" className="flex-1 flex flex-col min-h-0 overflow-hidden data-[state=active]:flex">
+                  <div className="flex-1 overflow-auto p-4">
+                    <div className="space-y-3">
                       {isLoadingHistory ? (
-                        <div className="p-8 text-center text-sm text-muted-foreground">
+                        <div className="py-8 text-center text-muted-foreground">
                           <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin" />
-                          <p>Loading share history...</p>
+                          <p className="text-sm">Loading history...</p>
                         </div>
                       ) : shareHistory.length > 0 ? (
                         shareHistory.map((log) => (
-                          <div
-                            key={log.id}
-                            className="p-3 border rounded-lg space-y-2"
-                          >
+                          <div key={log.id} className="p-3 border rounded-lg space-y-1">
                             <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground">{log.description}</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {log.userName || log.userEmail || 'System'} • {new Date(log.timestamp).toLocaleString()}
-                                </p>
-                              </div>
-                              <Badge variant={log.success ? "default" : "destructive"} className="text-xs">
+                              <p className="text-sm font-medium flex-1">{log.description}</p>
+                              <Badge variant={log.success ? "secondary" : "destructive"} className="text-[10px]">
                                 {log.success ? "Success" : "Failed"}
                               </Badge>
                             </div>
-                            {log.metadata && Object.keys(log.metadata).length > 0 && (
-                              <div className="text-xs text-muted-foreground space-y-1">
-                                {log.metadata.user_count && (
-                                  <p>Users: {log.metadata.user_count}</p>
-                                )}
-                                {log.metadata.division_count && (
-                                  <p>Divisions: {log.metadata.division_count}</p>
-                                )}
-                                {log.metadata.department_count && (
-                                  <p>Departments: {log.metadata.department_count}</p>
-                                )}
-                                {log.metadata.access_level && (
-                                  <p>Access: {log.metadata.access_level}</p>
-                                )}
-                              </div>
-                            )}
+                            <p className="text-xs text-muted-foreground">
+                              {log.userName || log.userEmail || 'System'} • {new Date(log.timestamp).toLocaleString()}
+                            </p>
                           </div>
-                      ))
-                    ) : (
-                        <div className="p-8 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
-                          <History className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                          <p className="font-medium mb-1 text-foreground">No share history</p>
+                        ))
+                      ) : (
+                        <div className="py-8 text-center text-muted-foreground">
+                          <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm font-medium">No share history</p>
                           <p className="text-xs">This document hasn't been shared yet.</p>
                         </div>
                       )}
-              </div>
-                  </ScrollArea>
+                    </div>
+                  </div>
                 </TabsContent>
               </Tabs>
 
-              {/* Note Field */}
-              <div className="space-y-2 flex-shrink-0 border-t pt-3">
-                <Label htmlFor="share-note">
-                  Message <span className="text-muted-foreground text-xs">(optional)</span>
-                </Label>
-                <Textarea
-                  id="share-note"
-                  placeholder="Add context or instructions. Notifications will include this message."
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  rows={2}
-                  maxLength={MAX_NOTE_LENGTH}
-                  aria-label="Share message"
-                  aria-describedby="note-help"
-                />
-                <p id="note-help" className="text-xs text-muted-foreground">
-                  {note.length}/{MAX_NOTE_LENGTH} characters
-                </p>
-              </div>
-
-              {/* Progress Indicator */}
-              {shareProgress > 0 && shareProgress < 100 && (
-                <div className="space-y-2 flex-shrink-0">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Sharing...</span>
-                    <span className="text-muted-foreground">{Math.round(shareProgress)}%</span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary transition-all duration-300"
-                      style={{ width: `${shareProgress}%` }}
-                      role="progressbar"
-                      aria-valuenow={shareProgress}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
+              {/* Footer - Message & Actions */}
+              <div className="flex-shrink-0 border-t bg-muted/20">
+                {/* Message Input */}
+                <div className="px-5 py-3 border-b">
+                  <div className="flex items-start gap-3">
+                    <Textarea
+                      id="share-note"
+                      placeholder="Add a message (optional)..."
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                      rows={1}
+                      maxLength={MAX_NOTE_LENGTH}
+                      className="resize-none text-sm min-h-[36px]"
                     />
                   </div>
+                  {note.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1 text-right">{note.length}/{MAX_NOTE_LENGTH}</p>
+                  )}
                 </div>
-              )}
 
-              {/* Selection Summary */}
-              {totalSelected > 0 && (
-                <div className="space-y-1 flex-shrink-0 p-2 bg-muted/30 rounded-md border">
-                  <p className="text-xs font-medium text-foreground">
-                    {shareToAll
-                      ? `Will share with all ${activeUserCount} users`
-                      : `Selection Summary:`}
-                  </p>
-                  {!shareToAll && (
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      {selectionSummary.users > 0 && (
-                        <p>• {selectionSummary.users} user{selectionSummary.users !== 1 ? 's' : ''}</p>
-                      )}
-                      {selectionSummary.directorates > 0 && (
-                        <p>• {selectionSummary.directorates} directorate{selectionSummary.directorates !== 1 ? 's' : ''}</p>
-                      )}
-                      {selectionSummary.divisions > 0 && (
-                        <p>• {selectionSummary.divisions} division{selectionSummary.divisions !== 1 ? 's' : ''}</p>
-                      )}
-                      {selectionSummary.departments > 0 && (
-                        <p>• {selectionSummary.departments} department{selectionSummary.departments !== 1 ? 's' : ''}</p>
-                      )}
-                      {selectionSummary.workspaces > 0 && (
-                        <p>• {selectionSummary.workspaces} workspace{selectionSummary.workspaces !== 1 ? 's' : ''}</p>
-                      )}
+                {/* Progress Indicator */}
+                {shareProgress > 0 && shareProgress < 100 && (
+                  <div className="px-5 py-2 border-b">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{ width: `${shareProgress}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{Math.round(shareProgress)}%</span>
                     </div>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Access level: <span className="font-medium capitalize">{accessLevel}</span>
-                  </p>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="px-5 py-3 flex items-center justify-between">
+                  <div className="text-xs text-muted-foreground">
+                    {totalSelected > 0 ? (
+                      <span>
+                        {shareToAll ? `All ${activeUserCount} users` : `${totalSelected} selected`}
+                        {' • '}<span className="capitalize">{accessLevel}</span> access
+                      </span>
+                    ) : (
+                      <span>Select recipients above</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => onOpenChange(false)}
+                      disabled={isSubmitting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={isSubmitting || (!shareToAll && totalSelected === 0)}
+                    >
+                      {isSubmitting ? (
+                        <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Sharing...</>
+                      ) : (
+                        "Share"
+                      )}
+                    </Button>
+                  </div>
                 </div>
-              )}
-              
-              <DialogFooter className="flex-shrink-0 pt-3 border-t">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm"
-                  className="h-8 text-xs px-3"
-                  onClick={() => onOpenChange(false)}
-                  disabled={isSubmitting}
-                  aria-label="Cancel sharing"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="h-8 text-xs px-3"
-                  disabled={isSubmitting || (!shareToAll && totalSelected === 0)}
-                  aria-label="Share document"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
-                      Sharing…
-                    </>
-                  ) : (
-                    "Share Document"
-                  )}
-                </Button>
-              </DialogFooter>
+              </div>
             </form>
             )}
           </div>

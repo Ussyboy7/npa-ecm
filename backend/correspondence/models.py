@@ -383,6 +383,15 @@ class Minute(UUIDModel, TimeStampedModel):
         on_delete=models.SET_NULL,
         related_name="related_minutes",
     )
+    # Digital seal applied during executive approval
+    seal_applied = models.ForeignKey(
+        "accounts.DocumentSeal",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="minutes",
+        help_text="Digital seal applied when this minute was an executive approval",
+    )
 
     class Meta:
         ordering = ["timestamp"]

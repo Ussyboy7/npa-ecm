@@ -230,6 +230,18 @@ export type Minute = {
   toOfficeName?: string;
   toUserId?: string;
   toUserName?: string;
+  // Digital seal data (for executive approvals)
+  sealApplied?: string; // ID of the seal
+  sealData?: {
+    id: string;
+    serialNumber: string;
+    verificationUrl: string;
+    sealedBy: string;
+    officeName: string;
+    officeTitle: string;
+    sealedAt: string;
+    isValid: boolean;
+  };
 };
 
 export type ParallelRoutingGroup = {

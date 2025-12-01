@@ -78,6 +78,7 @@ import { DelegateModal } from '@/components/correspondence/DelegateModal';
 import { PrintPreviewModal } from '@/components/correspondence/PrintPreviewModal';
 import { DocumentPreviewModal } from '@/components/correspondence/DocumentPreviewModal';
 import { WorkflowProgressIndicator } from '@/components/correspondence/WorkflowProgressIndicator';
+import { SealBadge } from '@/components/seals/SealBadge';
 import { downloadAsPDF, downloadAsWord } from '@/lib/document-generator';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import mammoth from 'mammoth';
@@ -1975,6 +1976,14 @@ const CorrespondenceDetailContent = () => {
                                   <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                                     <ImageIcon className="h-3 w-3 text-primary" />
                                     <span>Signed {formatDateTime(minuteItem.signature.appliedAt)}</span>
+                                  </div>
+                                )}
+                                {minuteItem.sealData && (
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <SealBadge sealData={minuteItem.sealData} showDetails />
+                                    <span className="text-xs text-muted-foreground">
+                                      {minuteItem.sealData.serialNumber}
+                                    </span>
                                   </div>
                                 )}
                                 <div className="mt-2 flex items-center gap-2 flex-wrap">

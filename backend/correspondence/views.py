@@ -1862,6 +1862,51 @@ class MinuteViewSet(viewsets.ModelViewSet):
             },
         )
         
+        # Automatically apply digital seal for executive approvals
+        if minute.action_type == Minute.ActionType.APPROVE:
+            # Check if user is an executive (MD, ED) with an active signature
+            user_grade = self.request.user.grade_level
+            executive_grades = ['MDCS', 'EDCS']  # Managing Director, Executive Director
+            
+            if user_grade in executive_grades:
+                try:
+                    from accounts.models import ExecutiveSignature
+                    from accounts.services import SealGenerationService
+                    
+                    signature = ExecutiveSignature.objects.get(user=self.request.user, is_active=True)
+                    
+                    # Generate and apply the seal
+                    seal, seal_data = SealGenerationService.generate_seal(
+                        user=self.request.user,
+                        correspondence=correspondence,
+                    )
+                    
+                    # Store seal reference in minute
+                    minute.seal_applied = seal
+                    minute.save(update_fields=['seal_applied'])
+                    
+                    # Log the seal application
+                    AuditService.log_correspondence_activity(
+                        user=self.request.user,
+                        action=action_type,
+                        correspondence=correspondence,
+                        request=self.request,
+                        description=f"Applied digital seal {seal.serial_number} on approval",
+                        metadata={
+                            "seal_id": str(seal.id),
+                            "serial_number": seal.serial_number,
+                        },
+                    )
+                    
+                    print(f"[SEAL] Applied digital seal {seal.serial_number} for correspondence {correspondence.reference_number}")
+                    
+                except ExecutiveSignature.DoesNotExist:
+                    # User doesn't have an active signature - log but don't fail
+                    print(f"[SEAL] Executive {self.request.user.username} approved without digital signature")
+                except Exception as e:
+                    # Don't fail the approval if seal generation fails
+                    print(f"[SEAL ERROR] Failed to apply seal: {e}")
+        
         # Send notification to current approver if different from minute author
         # (Skip if parallel group just completed - notification already sent or will be sent separately)
         if not parallel_group_completed and correspondence.current_approver and correspondence.current_approver.id != self.request.user.id:

@@ -242,6 +242,18 @@ const mapApiMinute = (item: any): Minute => {
     minuteType: item.minute_type ?? 'routing',
     isAdditional: item.is_additional ?? false,
     relatesToMinuteId: normalizeId(item.relates_to_minute ?? item.relates_to_minute_id),
+    // Digital seal data (for executive approvals)
+    sealApplied: normalizeId(item.seal_applied ?? item.seal_applied_id),
+    sealData: item.seal_data ? {
+      id: String(item.seal_data.id),
+      serialNumber: item.seal_data.serial_number ?? '',
+      verificationUrl: item.seal_data.verification_url ?? '',
+      sealedBy: item.seal_data.sealed_by ?? '',
+      officeName: item.seal_data.office_name ?? '',
+      officeTitle: item.seal_data.office_title ?? '',
+      sealedAt: item.seal_data.sealed_at ?? '',
+      isValid: item.seal_data.is_valid ?? true,
+    } : undefined,
   };
 };
 

@@ -121,6 +121,7 @@ class MinuteSerializer(serializers.ModelSerializer):
 
     can_be_edited = serializers.SerializerMethodField()
     can_be_recalled = serializers.SerializerMethodField()
+    seal_data = serializers.SerializerMethodField()
     parent_minute_id = serializers.PrimaryKeyRelatedField(
         source="parent_minute",
         queryset=Minute.objects.all(),
@@ -203,6 +204,9 @@ class MinuteSerializer(serializers.ModelSerializer):
             "is_additional",
             "relates_to_minute",
             "relates_to_minute_id",
+            # Digital seal (for executive approvals)
+            "seal_applied",
+            "seal_data",
             "created_at",
             "updated_at",
         ]
@@ -231,6 +235,7 @@ class MinuteSerializer(serializers.ModelSerializer):
             "branch_originator",
             "consultation_from_branch",
             "consultation_to_branch",
+            "seal_applied",
         ]
 
     def get_can_be_edited(self, obj):
@@ -263,6 +268,22 @@ class MinuteSerializer(serializers.ModelSerializer):
         if obj.branch_originator:
             return obj.branch_originator.get_full_name() or obj.branch_originator.username
         return None
+
+    def get_seal_data(self, obj):
+        """Get digital seal data if this minute has an executive seal applied."""
+        if not obj.seal_applied:
+            return None
+        seal = obj.seal_applied
+        return {
+            "id": str(seal.id),
+            "serial_number": seal.serial_number,
+            "verification_url": seal.verification_url,
+            "sealed_by": seal.sealed_by.get_full_name() or seal.sealed_by.username,
+            "office_name": seal.office_name,
+            "office_title": seal.office_title,
+            "sealed_at": seal.sealed_at.isoformat() if seal.sealed_at else None,
+            "is_valid": seal.is_valid,
+        }
 
 
 class CorrespondenceSerializer(serializers.ModelSerializer):

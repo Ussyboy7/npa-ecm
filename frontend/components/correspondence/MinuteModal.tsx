@@ -76,6 +76,7 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
 import { apiFetch } from '@/lib/api-client';
+import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
 
 interface MinuteModalProps {
   correspondence: Correspondence;
@@ -107,6 +108,9 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
   const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [userSignature, setUserSignature] = useState<StoredSignature | null>(null);
+  // 2FA state for executive approvals
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [twoFAVerificationToken, setTwoFAVerificationToken] = useState<string | null>(null);
   const [applySignature, setApplySignature] = useState(false);
   const [applySignatureManuallySet, setApplySignatureManuallySet] = useState(false);
   const [signatureTemplates, setSignatureTemplates] = useState<SignatureTemplate[]>([]);
@@ -652,6 +656,26 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     if (!validateForm()) {
       return;
     }
+    
+    // Check if 2FA is required for executive approvals
+    const executiveGrades = ['MDCS', 'EDCS']; // Managing Director, Executive Director
+    const isExecutive = currentUser && executiveGrades.includes(currentUser.gradeLevel);
+    const requiresTwoFA = actionType === 'approve' && isExecutive && userSignature;
+    
+    if (requiresTwoFA && !twoFAVerificationToken) {
+      // Show 2FA modal for executive approvals
+      setShow2FAModal(true);
+      return;
+    }
+    
+    setShowConfirmation(true);
+  };
+
+  // Handler for successful 2FA verification
+  const handle2FAVerified = (token: string) => {
+    setTwoFAVerificationToken(token);
+    setShow2FAModal(false);
+    // Proceed to confirmation after 2FA
     setShowConfirmation(true);
   };
 
@@ -907,6 +931,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         }, 100);
       }, 200);
 
+      // Reset 2FA token after successful submission
+      setTwoFAVerificationToken(null);
+      
       toast.success('Minute added successfully', {
         description: forwardTo 
           ? `Forwarded to ${forwardUser?.name ?? 'selected user'}`
@@ -1887,6 +1914,16 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             content: minuteText,
             direction: isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection),
           }}
+        />
+
+        {/* 2FA Verification Modal for Executive Approvals */}
+        <TwoFactorVerificationModal
+          open={show2FAModal}
+          onOpenChange={setShow2FAModal}
+          onVerified={handle2FAVerified}
+          correspondenceId={correspondence.id}
+          title="Verify for Digital Seal"
+          description="As an executive, your approval will apply a digital seal. Please verify your identity."
         />
       </DialogContent>
     </Dialog>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Search, Shield, User as UserIcon } from "lucide-react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Search, Shield, User as UserIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -17,19 +17,34 @@ import {
   storeTokens,
 } from "@/lib/api-client";
 import { toast } from "sonner";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
 interface SimplifiedRoleSwitcherProps {
   onClose?: () => void;
 }
 
-export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps) => {
+const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProps) => {
   const { directorates, divisions, departments, users, refreshOrganizationData } = useOrganization();
   const { currentUser, hydrated, refresh: refreshCurrentUser, isImpersonating } = useCurrentUser();
+  
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [, startTransition] = useTransition();
+  const [isSwitching, setIsSwitching] = useState(false);
+  const mountedRef = useRef(true);
 
-  const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
+  // Defer heavy computations to prevent blocking
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const deferredUsers = useDeferredValue(users);
+
+  // Track if component is mounted to prevent state updates after unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const activeUsers = useMemo(() => deferredUsers.filter((user) => user.active), [deferredUsers]);
   const directorateMap = useMemo(
     () => new Map(directorates.map((dir) => [dir.id, dir])),
     [directorates]
@@ -72,9 +87,9 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
   const filteredUsers = useMemo(() => {
     let pool = activeUsers;
 
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
+    // Apply search filter using deferred value
+    if (deferredSearchQuery.trim()) {
+      const query = deferredSearchQuery.toLowerCase().trim();
       pool = pool.filter((user) => {
         const nameMatch = user.name?.toLowerCase().includes(query);
         const emailMatch = user.email?.toLowerCase().includes(query);
@@ -102,8 +117,48 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
     }
 
     return pool;
-  }, [activeUsers, searchQuery, directorateMap, divisionMap, departmentMap, getDirectorateNameForUser]);
+  }, [activeUsers, deferredSearchQuery, directorateMap, divisionMap, departmentMap, getDirectorateNameForUser]);
 
+  // Group users in a single pass for better performance
+  // NOTE: This must be before any early returns to comply with Rules of Hooks
+  const groupedUsers = useMemo(() => {
+    const groups = {
+      executive: [] as User[],
+      gm: [] as User[],
+      manager: [] as User[],
+      officer: [] as User[],
+      assistant: [] as User[],
+      admin: [] as User[],
+      other: [] as User[],
+    };
+
+    for (const user of filteredUsers) {
+      const grade = user.gradeLevel || "";
+      const role = user.systemRole || "";
+
+      if (["MDCS", "EDCS"].includes(grade) || ["Managing Director", "Executive Director"].includes(role)) {
+        groups.executive.push(user);
+      } else if (grade === "MSS1" || role === "General Manager") {
+        groups.gm.push(user);
+      } else if (["MSS2", "MSS3", "MSS4", "MSS5"].includes(grade) || 
+                 ["Assistant General Manager", "Manager", "Senior Manager", "Principal Manager"].includes(role)) {
+        groups.manager.push(user);
+      } else if (role === "Super Admin") {
+        groups.admin.push(user);
+      } else if (["Secretary", "Assistant", "Personal Assistant", "Secretariat"].includes(role)) {
+        groups.assistant.push(user);
+      } else if (["SSS1", "SSS2", "SSS3", "SSS4", "JSS1", "JSS2", "JSS3"].includes(grade) || 
+                 ["Officer", "Senior Officer", "Staff"].includes(role)) {
+        groups.officer.push(user);
+      } else {
+        groups.other.push(user);
+      }
+    }
+
+    return groups;
+  }, [filteredUsers]);
+
+  // Early returns AFTER all hooks
   if (!hydrated || !currentUser) {
     return null;
   }
@@ -119,28 +174,16 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
     );
   }
 
-  const executiveUsers = filteredUsers.filter((user) =>
-    ["MDCS", "EDCS"].includes(user.gradeLevel)
-  );
-  const gmUsers = filteredUsers.filter((user) => user.gradeLevel === "MSS1");
-  const managerUsers = filteredUsers.filter((user) =>
-    ["MSS2", "MSS3", "MSS4", "MSS5"].includes(user.gradeLevel)
-  );
-  const officerUsers = filteredUsers.filter(
-    (user) =>
-      ["SSS1", "SSS2", "SSS3", "SSS4", "JSS1", "JSS2", "JSS3"].includes(user.gradeLevel) &&
-      !["Secretary", "Assistant", "Super Admin"].includes(user.systemRole)
-  );
-  const secretaryUsers = filteredUsers.filter((user) => user.systemRole === "Secretary");
-  const assistantUsers = filteredUsers.filter((user) => user.systemRole === "Assistant");
-  const superAdmins = filteredUsers.filter((user) => user.systemRole === "Super Admin");
-
   const handleImpersonate = async (user: User) => {
+    if (isSwitching) return; // Prevent double-clicks
+    
     if (!impersonationEnabled || currentUser.systemRole !== "Super Admin") {
       toast.error("Impersonation is only available to Super Admins");
       return;
     }
 
+    setIsSwitching(true);
+    
     if (!isImpersonating) {
       storeOriginalTokens();
     }
@@ -149,13 +192,22 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
 
     try {
       await impersonateUser(identifier);
-      toast.success(`You are now impersonating ${user.name || user.username}`);
-      await refreshCurrentUser();
-      await refreshOrganizationData();
+      toast.success(`Switched to ${user.name || user.username}`);
+      
+      // Close modal first for better UX
       onClose?.();
+      
+      // Then refresh data in the background
+      startTransition(() => {
+        void refreshCurrentUser();
+        void refreshOrganizationData();
+      });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to impersonate user";
+      const message = error instanceof Error ? error.message : "Unable to switch user";
       toast.error(message);
+      if (mountedRef.current) {
+        setIsSwitching(false);
+      }
     }
   };
 
@@ -174,9 +226,15 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
       storeTokens(originalTokens.access, originalTokens.refresh, secondsRemaining);
       clearOriginalTokens();
       toast.success("Returned to your primary account");
-      await refreshCurrentUser();
-      await refreshOrganizationData();
+      
+      // Close modal first for better UX
       onClose?.();
+      
+      // Then refresh data in the background
+      startTransition(() => {
+        void refreshCurrentUser();
+        void refreshOrganizationData();
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to restore your session";
       toast.error(message);
@@ -187,12 +245,13 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
     if (userList.length === 0) return null;
 
     return (
-      <div className="mb-6">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+      <div className="mb-4">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center justify-between">
           {title}
+          <Badge variant="secondary" className="text-[10px]">{userList.length}</Badge>
         </h3>
-        <div className="space-y-2">
-          {userList.map((user) => {
+        <div className="space-y-1">
+          {userList.slice(0, 10).map((user) => {
             const divisionName = user.division ? divisionMap.get(user.division)?.name : undefined;
             const departmentName = user.department ? departmentMap.get(user.department)?.name : undefined;
             const directorateName = getDirectorateNameForUser(user);
@@ -201,11 +260,12 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
               <Button
                 key={user.id}
                 variant="ghost"
-                className="w-full justify-start h-auto py-3 px-4"
+                className="w-full justify-start h-auto py-2 px-3 overflow-hidden"
                 onClick={() => handleImpersonate(user)}
+                disabled={isSwitching}
               >
-                <div className="flex items-center gap-3 w-full">
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-medium text-sm shrink-0">
+                <div className="flex items-center gap-3 w-full min-w-0">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-medium text-xs flex-shrink-0">
                     {user.name
                       ?.split(' ')
                       .map(n => n[0])
@@ -213,29 +273,39 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
                       .toUpperCase()
                       .slice(0, 2) || 'U'}
                   </div>
-                  <div className="flex-1 text-left min-w-0">
-                    <div className="font-medium truncate">{user.name || user.username}</div>
-                    <div className="text-xs text-muted-foreground truncate">
+                  <div className="flex-1 text-left min-w-0 overflow-hidden">
+                    <div className="text-sm font-medium">{user.name || user.username}</div>
+                    <div className="text-xs text-muted-foreground">
                       {user.systemRole || user.gradeLevel}
                       {departmentName ? ` • ${departmentName}` : divisionName ? ` • ${divisionName}` : directorateName ? ` • ${directorateName}` : ''}
                     </div>
-                    {user.email && (
-                      <div className="text-xs text-muted-foreground/70 truncate mt-0.5">
-                        {user.email}
-                      </div>
-                    )}
                   </div>
                 </div>
               </Button>
             );
           })}
+          {userList.length > 10 && (
+            <p className="text-xs text-muted-foreground text-center py-1">
+              +{userList.length - 10} more (use search to find)
+            </p>
+          )}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {/* Loading Overlay */}
+      {isSwitching && (
+        <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <span className="text-sm">Switching...</span>
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -244,7 +314,8 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
           placeholder="Search by name, email, role..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
+          className="pl-9 h-9"
+          disabled={isSwitching}
         />
       </div>
 
@@ -253,8 +324,9 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
         <>
           <Button
             variant="outline"
-            className="w-full"
+            className="w-full h-9"
             onClick={handleReset}
+            disabled={isSwitching}
           >
             <UserIcon className="h-4 w-4 mr-2" />
             Return to Primary Account
@@ -264,13 +336,15 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
       )}
 
       {/* User List */}
-      <ScrollArea className="h-[500px] pr-4">
+      <div className="h-[500px] overflow-y-auto pr-4">
         <div className="space-y-6">
-          {renderUserGroup("Executive Leadership", executiveUsers)}
-          {renderUserGroup("General Managers", gmUsers)}
-          {renderUserGroup("AGMs & Managers", managerUsers)}
-          {renderUserGroup("Officers & Staff", officerUsers)}
-          {renderUserGroup("Special Roles", [...secretaryUsers, ...assistantUsers, ...superAdmins])}
+          {renderUserGroup("Executive Leadership", groupedUsers.executive)}
+          {renderUserGroup("General Managers", groupedUsers.gm)}
+          {renderUserGroup("AGMs & Managers", groupedUsers.manager)}
+          {renderUserGroup("Officers & Staff", groupedUsers.officer)}
+          {renderUserGroup("Assistants & Secretaries", groupedUsers.assistant)}
+          {renderUserGroup("System Admins", groupedUsers.admin)}
+          {renderUserGroup("Other Users", groupedUsers.other)}
           
           {filteredUsers.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
@@ -278,8 +352,10 @@ export const SimplifiedRoleSwitcher = ({ onClose }: SimplifiedRoleSwitcherProps)
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 };
 
+// Memoize to prevent unnecessary re-renders
+export const SimplifiedRoleSwitcher = memo(SimplifiedRoleSwitcherComponent);
