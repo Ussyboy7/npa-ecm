@@ -1154,7 +1154,7 @@ export const ShareDocumentDialog = ({
 
                 <TabsContent value="all" className="flex-1 overflow-auto p-5 data-[state=active]:block">
                   <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-muted/30 transition-colors cursor-pointer"
-                       onClick={() => handleShareToAllClick(!shareToAll)}>
+                       onClick={() => handleShareToAllClick()}>
                     <Checkbox
                       id="share-to-all"
                       checked={shareToAll}

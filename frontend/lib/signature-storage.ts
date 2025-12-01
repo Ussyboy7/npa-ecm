@@ -116,7 +116,7 @@ const getUserPrefKey = (userId: string) => `${USER_PREF_KEY_PREFIX}${userId}`;
  */
 export const fetchUserSignature = async (): Promise<StoredSignature | null> => {
   try {
-    const response = await apiFetch('/accounts/signature/');
+    const response = await apiFetch<BackendSignatureResponse>('/accounts/signature/');
     
     if (!response.has_signature) {
       return null;
@@ -132,7 +132,7 @@ export const fetchUserSignature = async (): Promise<StoredSignature | null> => {
       sealPrefix: response.seal_prefix,
       require2fa: response.require_2fa,
       isActive: response.is_active,
-      lastUsedAt: response.last_used_at,
+      lastUsedAt: response.last_used_at ?? undefined,
       timesUsed: response.times_used,
     };
   } catch (error) {
@@ -170,7 +170,7 @@ export const uploadUserSignature = async (
       formData.append('require_2fa', String(options.require2fa));
     }
     
-    const response = await apiFetch('/accounts/signature/', {
+    const response = await apiFetch<BackendSignatureResponse>('/accounts/signature/', {
       method: 'POST',
       body: formData,
       // Don't set Content-Type header - browser will set it with boundary for FormData
@@ -186,7 +186,7 @@ export const uploadUserSignature = async (
       sealPrefix: response.seal_prefix,
       require2fa: response.require_2fa,
       isActive: response.is_active,
-      lastUsedAt: response.last_used_at,
+      lastUsedAt: response.last_used_at ?? undefined,
       timesUsed: response.times_used,
     };
   } catch (error) {
@@ -215,7 +215,7 @@ export const updateSignatureSettings = async (
     if (settings.require2fa !== undefined) payload.require_2fa = settings.require2fa;
     if (settings.isActive !== undefined) payload.is_active = settings.isActive;
     
-    const response = await apiFetch('/accounts/signature/', {
+    const response = await apiFetch<BackendSignatureResponse>('/accounts/signature/', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -231,7 +231,7 @@ export const updateSignatureSettings = async (
       sealPrefix: response.seal_prefix,
       require2fa: response.require_2fa,
       isActive: response.is_active,
-      lastUsedAt: response.last_used_at,
+      lastUsedAt: response.last_used_at ?? undefined,
       timesUsed: response.times_used,
     };
   } catch (error) {

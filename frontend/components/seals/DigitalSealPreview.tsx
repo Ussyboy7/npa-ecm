@@ -385,7 +385,7 @@ export const DigitalSealPreview = ({
         style={{ 
           width: size, 
           height: size,
-          imageRendering: "high-quality"
+          imageRendering: "auto"
         }}
         className="rounded-full shadow-lg"
       />
