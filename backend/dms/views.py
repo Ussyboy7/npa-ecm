@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
+from datetime import datetime
 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db.models import Max, Q
+from django.utils import timezone
 from django.utils.text import slugify
 from common.upload_validators import validate_file_upload
 from django_filters.rest_framework import DjangoFilterBackend
@@ -45,6 +48,9 @@ from .serializers import (
     DocumentWorkspaceSerializer,
     FormDocumentSerializer,
 )
+from .services import OCRService, DocumentSummaryService
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentWorkspaceViewSet(viewsets.ModelViewSet):
@@ -90,23 +96,41 @@ class DocumentViewSet(viewsets.ModelViewSet):
         "sensitivity",
         "division",
         "department",
+        "author",  # Added author filter
     ]
     search_fields = ["title", "reference_number", "description", "tags"]
     ordering_fields = ["updated_at", "created_at", "title"]
     ordering = ["-updated_at"]
 
     def filter_queryset(self, queryset):
-        """Override to add full-text search in document versions."""
+        """Override to add full-text search in document versions and date range filtering."""
         # Get search query before calling super() which applies SearchFilter
         search_query = self.request.query_params.get("search", "").strip()
+        
+        # Get date range parameters
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
         
         # Call super to apply standard filters (SearchFilter, DjangoFilterBackend, etc.)
         queryset = super().filter_queryset(queryset)
         
+        # Apply date range filter
+        if date_from:
+            try:
+                from_date = datetime.strptime(date_from, "%Y-%m-%d").date()
+                queryset = queryset.filter(created_at__date__gte=from_date)
+            except ValueError:
+                pass  # Invalid date format, ignore
+        
+        if date_to:
+            try:
+                to_date = datetime.strptime(date_to, "%Y-%m-%d").date()
+                queryset = queryset.filter(created_at__date__lte=to_date)
+            except ValueError:
+                pass  # Invalid date format, ignore
+        
         # If there's a search query, also search in document version content
         if search_query:
-            from django.db.models import Q
-            
             # Add full-text search in document versions (content_text, ocr_text)
             # This extends the base search_fields (title, reference, description, tags)
             version_filter = Q(
@@ -205,6 +229,182 @@ class DocumentViewSet(viewsets.ModelViewSet):
         )
         instance.delete()
 
+    @action(detail=False, methods=["post"], url_path="bulk-archive")
+    def bulk_archive(self, request):
+        """Archive multiple documents at once."""
+        document_ids = request.data.get("document_ids", [])
+        
+        if not document_ids:
+            raise ValidationError({"document_ids": "Document IDs are required"})
+        
+        documents = Document.objects.filter(id__in=document_ids, is_deleted=False)
+        
+        # Check permissions - user must be author or have admin access
+        accessible_docs = []
+        for doc in documents:
+            if doc.author == request.user or request.user.is_superuser:
+                accessible_docs.append(doc)
+            else:
+                # Check if user has admin permission
+                has_admin = doc.permissions.filter(
+                    Q(users=request.user, access="admin") |
+                    Q(divisions=request.user.division_id, access="admin") |
+                    Q(departments=request.user.department_id, access="admin")
+                ).exists()
+                if has_admin:
+                    accessible_docs.append(doc)
+        
+        if not accessible_docs:
+            raise PermissionDenied("You don't have permission to archive any of the selected documents")
+        
+        # Archive documents
+        archived_count = 0
+        from audit.models import ActivityLog
+        
+        for doc in accessible_docs:
+            doc.status = Document.DocumentStatus.ARCHIVED
+            doc.save(update_fields=["status", "updated_at"])
+            archived_count += 1
+            
+            AuditService.log_document_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.DOCUMENT_UPDATED,
+                document=doc,
+                request=request,
+                description=f"Archived document: {doc.title}",
+                metadata={"bulk_operation": True, "new_status": "archived"},
+            )
+        
+        return Response({
+            "message": f"Successfully archived {archived_count} document(s)",
+            "archived_count": archived_count,
+            "skipped_count": len(document_ids) - archived_count,
+        })
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        """Soft delete multiple documents at once."""
+        document_ids = request.data.get("document_ids", [])
+        
+        if not document_ids:
+            raise ValidationError({"document_ids": "Document IDs are required"})
+        
+        documents = Document.objects.filter(id__in=document_ids, is_deleted=False)
+        
+        # Check permissions - user must be author or have admin access
+        accessible_docs = []
+        for doc in documents:
+            if doc.author == request.user or request.user.is_superuser:
+                accessible_docs.append(doc)
+            else:
+                # Check if user has admin permission
+                has_admin = doc.permissions.filter(
+                    Q(users=request.user, access="admin") |
+                    Q(divisions=request.user.division_id, access="admin") |
+                    Q(departments=request.user.department_id, access="admin")
+                ).exists()
+                if has_admin:
+                    accessible_docs.append(doc)
+        
+        if not accessible_docs:
+            raise PermissionDenied("You don't have permission to delete any of the selected documents")
+        
+        # Soft delete documents
+        deleted_count = 0
+        from audit.models import ActivityLog
+        
+        for doc in accessible_docs:
+            doc.is_deleted = True
+            doc.save(update_fields=["is_deleted", "updated_at"])
+            deleted_count += 1
+            
+            AuditService.log_document_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.DOCUMENT_DELETED,
+                document=doc,
+                request=request,
+                description=f"Deleted document: {doc.title}",
+                metadata={"bulk_operation": True, "soft_delete": True},
+            )
+        
+        return Response({
+            "message": f"Successfully deleted {deleted_count} document(s)",
+            "deleted_count": deleted_count,
+            "skipped_count": len(document_ids) - deleted_count,
+        })
+
+    @action(detail=False, methods=["post"], url_path="bulk-restore")
+    def bulk_restore(self, request):
+        """Restore multiple soft-deleted documents."""
+        document_ids = request.data.get("document_ids", [])
+        
+        if not document_ids:
+            raise ValidationError({"document_ids": "Document IDs are required"})
+        
+        documents = Document.all_objects.filter(id__in=document_ids, is_deleted=True)
+        
+        # Check permissions - user must be author or superuser
+        accessible_docs = []
+        for doc in documents:
+            if doc.author == request.user or request.user.is_superuser:
+                accessible_docs.append(doc)
+        
+        if not accessible_docs:
+            raise PermissionDenied("You don't have permission to restore any of the selected documents")
+        
+        # Restore documents
+        restored_count = 0
+        from audit.models import ActivityLog
+        
+        for doc in accessible_docs:
+            doc.is_deleted = False
+            doc.status = Document.DocumentStatus.DRAFT  # Reset to draft status
+            doc.save(update_fields=["is_deleted", "status", "updated_at"])
+            restored_count += 1
+            
+            AuditService.log_document_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.DOCUMENT_UPDATED,
+                document=doc,
+                request=request,
+                description=f"Restored document: {doc.title}",
+                metadata={"bulk_operation": True, "restored": True},
+            )
+        
+        return Response({
+            "message": f"Successfully restored {restored_count} document(s)",
+            "restored_count": restored_count,
+            "skipped_count": len(document_ids) - restored_count,
+        })
+
+    @action(detail=True, methods=["post"], url_path="generate-summary")
+    def generate_summary(self, request, pk=None):
+        """Generate AI summary for document."""
+        document = self.get_object()
+        
+        # Get latest version with content
+        latest_version = document.versions.order_by("-version_number").first()
+        if not latest_version:
+            raise ValidationError({"detail": "Document has no versions"})
+        
+        # Get content to summarize
+        content = latest_version.content_text or latest_version.ocr_text or ""
+        if not content.strip():
+            raise ValidationError({"detail": "Document has no text content to summarize"})
+        
+        try:
+            summary = DocumentSummaryService.generate_summary(content, document.title)
+            latest_version.summary = summary
+            latest_version.save(update_fields=["summary"])
+            
+            return Response({
+                "summary": summary,
+                "version_id": str(latest_version.id),
+            })
+        except Exception as e:
+            logger.error(f"Failed to generate summary: {e}")
+            raise ValidationError({"detail": f"Failed to generate summary: {str(e)}"})
+
 
 class DocumentVersionViewSet(viewsets.ModelViewSet):
     queryset = DocumentVersion.objects.select_related("document", "uploaded_by")
@@ -269,12 +469,19 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                 
                 # Update data with the new file URL
                 data['file_url'] = file_url
+                
+                # Run OCR if it's an image or PDF
+                if mime_type in ['image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'application/pdf']:
+                    try:
+                        file_full_path = os.path.join(media_root, saved_path)
+                        ocr_text = OCRService.extract_text(file_full_path, mime_type)
+                        if ocr_text:
+                            data['ocr_text'] = ocr_text
+                    except Exception as e:
+                        logger.warning(f"OCR extraction failed: {e}")
+                        
             except Exception as e:
-                # If decoding fails, log and raise an error
-                import logging
-                logger = logging.getLogger(__name__)
                 logger.error(f"Failed to process data URL for document version: {e}")
-                from rest_framework.exceptions import ValidationError
                 raise ValidationError({"file_url": f"Failed to process uploaded file: {str(e)}"})
         
         # Create serializer with modified data
@@ -295,6 +502,44 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
             uploaded_by=self.request.user,
             version_number=next_version,
         )
+
+    @action(detail=True, methods=["post"], url_path="run-ocr")
+    def run_ocr(self, request, pk=None):
+        """Run OCR on a specific version."""
+        version = self.get_object()
+        
+        if not version.file_url:
+            raise ValidationError({"detail": "Version has no file to process"})
+        
+        # Get file path
+        file_url = version.file_url
+        if file_url.startswith('/media/'):
+            file_path = os.path.join(settings.MEDIA_ROOT, file_url.replace('/media/', ''))
+        elif file_url.startswith('http'):
+            raise ValidationError({"detail": "Cannot process remote files for OCR"})
+        else:
+            file_path = os.path.join(settings.MEDIA_ROOT, file_url)
+        
+        if not os.path.exists(file_path):
+            raise ValidationError({"detail": "File not found on disk"})
+        
+        try:
+            ocr_text = OCRService.extract_text(file_path, version.file_type)
+            if ocr_text:
+                version.ocr_text = ocr_text
+                version.save(update_fields=["ocr_text"])
+                return Response({
+                    "ocr_text": ocr_text,
+                    "characters": len(ocr_text),
+                })
+            else:
+                return Response({
+                    "ocr_text": "",
+                    "message": "No text could be extracted from the document",
+                })
+        except Exception as e:
+            logger.error(f"OCR failed: {e}")
+            raise ValidationError({"detail": f"OCR processing failed: {str(e)}"})
 
 
 class DocumentPermissionViewSet(viewsets.ModelViewSet):
@@ -575,6 +820,7 @@ class DocumentDiscussionMessageViewSet(viewsets.ModelViewSet):
 
 
 class DocumentAccessLogViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
+    """ViewSet for document access logs - audit trail of document views/downloads."""
     queryset = DocumentAccessLog.objects.select_related("document", "user")
     serializer_class = DocumentAccessLogSerializer
     permission_classes = [IsAuthenticated]
@@ -588,6 +834,7 @@ class DocumentAccessLogViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, v
 
 
 class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
+    """ViewSet for tracking active document editing sessions."""
     queryset = DocumentEditorSession.objects.select_related("document", "user")
     serializer_class = DocumentEditorSessionSerializer
     permission_classes = [IsAuthenticated]
@@ -625,113 +872,30 @@ class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You can only modify your own editor sessions unless admin.")
         serializer.save()
 
-    def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+    @action(detail=False, methods=["get"], url_path="active")
+    def active_sessions(self, request):
+        """Get all active editing sessions for a document."""
+        document_id = request.query_params.get("document")
+        if not document_id:
+            raise ValidationError({"document": "Document ID is required"})
+        
+        sessions = DocumentEditorSession.objects.filter(
+            document_id=document_id,
+            is_active=True
+        ).select_related("user")
+        
+        serializer = self.get_serializer(sessions, many=True)
+        return Response(serializer.data)
 
-
-class DocumentAccessLogViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
-    queryset = DocumentAccessLog.objects.select_related("document", "user")
-    serializer_class = DocumentAccessLogSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["document", "action", "sensitivity"]
-    ordering_fields = ["timestamp"]
-    ordering = ["-timestamp"]
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-
-class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
-    queryset = DocumentEditorSession.objects.select_related("document", "user")
-    serializer_class = DocumentEditorSessionSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["document", "user", "is_active"]
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        document = serializer.validated_data["document"]
-        note = serializer.validated_data.get("note")
-        existing = DocumentEditorSession.objects.filter(document=document, user=request.user).first()
-        if existing:
-            existing.is_active = True
-            if note is not None:
-                existing.note = note
-            existing.save(update_fields=["is_active", "note", "updated_at"])
-            output = self.get_serializer(existing)
-            return Response(output.data, status=status.HTTP_200_OK)
-
-        instance = DocumentEditorSession.objects.create(
-            document=document,
-            user=request.user,
-            note=note or "",
-            is_active=True,
-        )
-        output = self.get_serializer(instance)
-        headers = self.get_success_headers(output.data)
-        return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def perform_update(self, serializer):
-        # Ensure ownership before adjustments
-        instance = serializer.instance
-        if instance.user != self.request.user and not self.request.user.is_staff:
-            raise PermissionDenied("You can only modify your own editor sessions unless admin.")
-        serializer.save()
-
-
-    def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
-
-
-class DocumentAccessLogViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
-    queryset = DocumentAccessLog.objects.select_related("document", "user")
-    serializer_class = DocumentAccessLogSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["document", "action", "sensitivity"]
-    ordering_fields = ["timestamp"]
-    ordering = ["-timestamp"]
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-
-class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
-    queryset = DocumentEditorSession.objects.select_related("document", "user")
-    serializer_class = DocumentEditorSessionSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["document", "user", "is_active"]
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        document = serializer.validated_data["document"]
-        note = serializer.validated_data.get("note")
-        existing = DocumentEditorSession.objects.filter(document=document, user=request.user).first()
-        if existing:
-            existing.is_active = True
-            if note is not None:
-                existing.note = note
-            existing.save(update_fields=["is_active", "note", "updated_at"])
-            output = self.get_serializer(existing)
-            return Response(output.data, status=status.HTTP_200_OK)
-
-        instance = DocumentEditorSession.objects.create(
-            document=document,
-            user=request.user,
-            note=note or "",
-            is_active=True,
-        )
-        output = self.get_serializer(instance)
-        headers = self.get_success_headers(output.data)
-        return Response(output.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def perform_update(self, serializer):
-        # Ensure ownership before adjustments
-        instance = serializer.instance
-        if instance.user != self.request.user and not self.request.user.is_staff:
-            raise PermissionDenied("You can only modify your own editor sessions unless admin.")
-        serializer.save()
+    @action(detail=True, methods=["post"], url_path="end")
+    def end_session(self, request, pk=None):
+        """End an editing session."""
+        session = self.get_object()
+        
+        if session.user != request.user and not request.user.is_staff:
+            raise PermissionDenied("You can only end your own sessions")
+        
+        session.is_active = False
+        session.save(update_fields=["is_active", "updated_at"])
+        
+        return Response({"message": "Session ended"})

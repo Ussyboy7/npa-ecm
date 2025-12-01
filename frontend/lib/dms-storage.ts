@@ -896,3 +896,285 @@ export const isSensitiveAccessAllowed = (document: DocumentRecord, user: User | 
   if (!user) return document.sensitivity === 'public';
   return userHasPermission(user, document);
 };
+
+// =============================================================================
+// BULK OPERATIONS API
+// =============================================================================
+
+export interface BulkOperationResult {
+  message: string;
+  archived_count?: number;
+  deleted_count?: number;
+  restored_count?: number;
+  skipped_count: number;
+}
+
+/**
+ * Archive multiple documents at once
+ */
+export const bulkArchiveDocuments = async (documentIds: string[]): Promise<BulkOperationResult> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  if (!documentIds.length) {
+    throw new Error('No documents selected');
+  }
+  
+  const response = await apiFetch<BulkOperationResult>('/dms/documents/bulk-archive/', {
+    method: 'POST',
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+  
+  return response;
+};
+
+/**
+ * Delete multiple documents at once (soft delete)
+ */
+export const bulkDeleteDocuments = async (documentIds: string[]): Promise<BulkOperationResult> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  if (!documentIds.length) {
+    throw new Error('No documents selected');
+  }
+  
+  const response = await apiFetch<BulkOperationResult>('/dms/documents/bulk-delete/', {
+    method: 'POST',
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+  
+  return response;
+};
+
+/**
+ * Restore multiple soft-deleted documents
+ */
+export const bulkRestoreDocuments = async (documentIds: string[]): Promise<BulkOperationResult> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  if (!documentIds.length) {
+    throw new Error('No documents selected');
+  }
+  
+  const response = await apiFetch<BulkOperationResult>('/dms/documents/bulk-restore/', {
+    method: 'POST',
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+  
+  return response;
+};
+
+// =============================================================================
+// EXTENDED QUERY PARAMETERS
+// =============================================================================
+
+export interface ExtendedDocumentQueryParams extends DocumentQueryParams {
+  authorId?: string;
+  dateFrom?: string;  // YYYY-MM-DD format
+  dateTo?: string;    // YYYY-MM-DD format
+}
+
+/**
+ * Build query string with extended parameters (author and date range)
+ */
+const buildExtendedDocumentQueryString = (params: ExtendedDocumentQueryParams) => {
+  const searchParams = new URLSearchParams();
+  if (params.page) searchParams.set('page', String(params.page));
+  if (params.pageSize) searchParams.set('page_size', String(params.pageSize));
+  if (params.search?.trim()) searchParams.set('search', params.search.trim());
+  if (params.status && params.status !== 'all') searchParams.set('status', params.status);
+  if (params.documentType && params.documentType !== 'all') searchParams.set('document_type', params.documentType);
+  if (params.divisionId && params.divisionId !== 'all') searchParams.set('division', params.divisionId);
+  if (params.departmentId && params.departmentId !== 'all') searchParams.set('department', params.departmentId);
+  if (params.ordering) searchParams.set('ordering', params.ordering);
+  // New extended parameters
+  if (params.authorId && params.authorId !== 'all') searchParams.set('author', params.authorId);
+  if (params.dateFrom) searchParams.set('date_from', params.dateFrom);
+  if (params.dateTo) searchParams.set('date_to', params.dateTo);
+  return searchParams.toString();
+};
+
+/**
+ * Query documents with extended filters (author, date range)
+ */
+export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams = {}): Promise<PaginatedDocuments> => {
+  if (!hasTokens()) {
+    console.warn('[DMS] No tokens available, returning empty results');
+    return { results: [], count: 0, next: null, previous: null };
+  }
+
+  const query = buildExtendedDocumentQueryString(params);
+  const url = query ? `/dms/documents/?${query}` : '/dms/documents/';
+  
+  try {
+    const payload = await Promise.race([
+      apiFetch<any>(url),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+      )
+    ]) as any;
+
+    const results = unwrapResults<any>(payload).map(mapDocument);
+    const count = typeof payload?.count === 'number' ? payload.count : results.length;
+    const next = typeof payload?.next === 'string' ? payload.next : null;
+    const previous = typeof payload?.previous === 'string' ? payload.previous : null;
+
+    return { results, count, next, previous };
+  } catch (error) {
+    console.error('[DMS] Error in queryDocumentsExtended:', error);
+    throw error;
+  }
+};
+
+// =============================================================================
+// OCR AND SUMMARY API
+// =============================================================================
+
+export interface OCRResult {
+  ocr_text: string;
+  characters: number;
+}
+
+export interface SummaryResult {
+  summary: string;
+  version_id: string;
+}
+
+/**
+ * Run OCR on a specific document version
+ */
+export const runOCROnVersion = async (versionId: string): Promise<OCRResult> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  const response = await apiFetch<OCRResult>(`/dms/versions/${versionId}/run-ocr/`, {
+    method: 'POST',
+  });
+  
+  return response;
+};
+
+/**
+ * Generate AI summary for a document
+ */
+export const generateDocumentSummary = async (documentId: string): Promise<SummaryResult> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+  
+  const response = await apiFetch<SummaryResult>(`/dms/documents/${documentId}/generate-summary/`, {
+    method: 'POST',
+  });
+  
+  return response;
+};
+
+// =============================================================================
+// REAL-TIME COLLABORATION (WebSocket)
+// =============================================================================
+
+export interface DocumentEditorWebSocket {
+  connect: () => void;
+  disconnect: () => void;
+  sendCursorPosition: (position: { line: number; column: number }, selection?: { start: number; end: number }) => void;
+  sendContentChange: (changes: any[], version?: number) => void;
+  sendTypingStart: () => void;
+  sendTypingStop: () => void;
+  requestSync: () => void;
+  onUserJoined: (callback: (data: { user_id: string; username: string }) => void) => void;
+  onUserLeft: (callback: (data: { user_id: string; username: string }) => void) => void;
+  onCursorUpdate: (callback: (data: { user_id: string; username: string; position: any; selection?: any }) => void) => void;
+  onContentUpdate: (callback: (data: { user_id: string; changes: any[]; version?: number }) => void) => void;
+  onTypingIndicator: (callback: (data: { user_id: string; username: string; is_typing: boolean }) => void) => void;
+  onActiveEditors: (callback: (editors: { user_id: string; username: string; since?: string }[]) => void) => void;
+  onSyncResponse: (callback: (state: any) => void) => void;
+}
+
+/**
+ * Create a WebSocket connection for real-time document collaboration
+ */
+export const createDocumentEditorWebSocket = (
+  documentId: string,
+  token: string
+): DocumentEditorWebSocket => {
+  let ws: WebSocket | null = null;
+  const callbacks: Record<string, ((data: any) => void)[]> = {};
+  
+  const emit = (event: string, data: any) => {
+    const handlers = callbacks[event] || [];
+    handlers.forEach(handler => handler(data));
+  };
+  
+  const on = (event: string, callback: (data: any) => void) => {
+    if (!callbacks[event]) callbacks[event] = [];
+    callbacks[event].push(callback);
+  };
+  
+  const send = (data: any) => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(data));
+    }
+  };
+  
+  return {
+    connect: () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = process.env.NEXT_PUBLIC_WS_URL || window.location.host.replace(':3002', ':8002');
+      const url = `${protocol}//${host}/ws/documents/${documentId}/edit/?token=${token}`;
+      
+      ws = new WebSocket(url);
+      
+      ws.onopen = () => {
+        console.log('[DMS WebSocket] Connected to document', documentId);
+      };
+      
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          emit(data.type, data);
+        } catch (e) {
+          console.error('[DMS WebSocket] Failed to parse message:', e);
+        }
+      };
+      
+      ws.onclose = () => {
+        console.log('[DMS WebSocket] Disconnected');
+      };
+      
+      ws.onerror = (error) => {
+        console.error('[DMS WebSocket] Error:', error);
+      };
+    },
+    
+    disconnect: () => {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    },
+    
+    sendCursorPosition: (position, selection) => {
+      send({ type: 'cursor_move', position, selection });
+    },
+    
+    sendContentChange: (changes, version) => {
+      send({ type: 'content_change', changes, version });
+    },
+    
+    sendTypingStart: () => {
+      send({ type: 'typing_start' });
+    },
+    
+    sendTypingStop: () => {
+      send({ type: 'typing_stop' });
+    },
+    
+    requestSync: () => {
+      send({ type: 'request_sync' });
+    },
+    
+    onUserJoined: (callback) => on('user_joined', callback),
+    onUserLeft: (callback) => on('user_left', callback),
+    onCursorUpdate: (callback) => on('cursor_update', callback),
+    onContentUpdate: (callback) => on('content_update', callback),
+    onTypingIndicator: (callback) => on('typing_indicator', callback),
+    onActiveEditors: (callback) => on('active_editors', callback),
+    onSyncResponse: (callback) => on('sync_response', callback),
+  };
+};

@@ -17,13 +17,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import {
-  queryDocuments,
+  queryDocumentsExtended,
   type DocumentRecord,
   type DocumentType,
   type DocumentStatus,
   fetchWorkspaces,
   getCachedWorkspaces,
   type DocumentWorkspace,
+  bulkArchiveDocuments,
+  bulkDeleteDocuments,
+  type ExtendedDocumentQueryParams,
 } from '@/lib/dms-storage';
 import {
   FileText,
@@ -270,13 +273,15 @@ const DocumentManagementPageContent = () => {
   const [pendingSignaturesByWorkflow, setPendingSignaturesByWorkflow] = useState<Map<string, number>>(new Map());
   const totalPages = Math.max(1, Math.ceil(totalCount / customPageSize));
   const loadDocuments = useCallback(async () => {
-    console.log('[DMS] Loading documents...', { page, customPageSize, searchQuery, statusFilter, typeFilter });
+    console.log('[DMS] Loading documents...', { page, customPageSize, searchQuery, statusFilter, typeFilter, authorFilter, dateRangeFilter });
     setLoading(true);
     setError(null);
     try {
       const ordering = sortOption.direction === 'desc' ? `-${sortOption.field}` : sortOption.field;
-      console.log('[DMS] Calling queryDocuments with:', { page, customPageSize, ordering });
-      const response = await queryDocuments({
+      console.log('[DMS] Calling queryDocumentsExtended with:', { page, customPageSize, ordering });
+      
+      // Build extended query params including author and date filters
+      const queryParams: ExtendedDocumentQueryParams = {
         page,
         pageSize: customPageSize,
         search: searchQuery.trim() || undefined,
@@ -285,7 +290,13 @@ const DocumentManagementPageContent = () => {
         divisionId: divisionFilter,
         departmentId: departmentFilter,
         ordering,
-      });
+        // New extended filters - now handled by backend
+        authorId: authorFilter !== 'all' ? authorFilter : undefined,
+        dateFrom: dateRangeFilter.start || undefined,
+        dateTo: dateRangeFilter.end || undefined,
+      };
+      
+      const response = await queryDocumentsExtended(queryParams);
       console.log('[DMS] Received response:', { count: response.count, resultsCount: response.results.length });
       setDocuments(response.results);
       setTotalCount(response.count);
@@ -301,7 +312,7 @@ const DocumentManagementPageContent = () => {
       console.log('[DMS] Finished loading documents');
       setLoading(false);
     }
-  }, [page, customPageSize, searchQuery, statusFilter, typeFilter, formStatusFilter, divisionFilter, departmentFilter, sortOption.field, sortOption.direction]);
+  }, [page, customPageSize, searchQuery, statusFilter, typeFilter, formStatusFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, sortOption.field, sortOption.direction]);
 
   const effectiveUser = useMemo(() => {
     if (currentUser) return currentUser;
@@ -314,11 +325,11 @@ const DocumentManagementPageContent = () => {
     return map;
   }, [workspaces]);
 
-  // Filter documents by form status, author, and date range
+  // Filter documents by form status only (author and date range now handled by backend)
   const filteredDocuments = useMemo(() => {
     let filtered = documents;
     
-    // Form status filter
+    // Form status filter (client-side for now - specific to form documents)
     if (typeFilter === 'form' && formStatusFilter !== 'all') {
       filtered = filtered.filter((doc) => {
         if (doc.documentType !== 'form') return false;
@@ -326,30 +337,11 @@ const DocumentManagementPageContent = () => {
       });
     }
     
-    // Author filter (client-side since backend doesn't support it yet)
-    if (authorFilter !== 'all') {
-      filtered = filtered.filter((doc) => doc.authorId === authorFilter);
-    }
-    
-    // Date range filter (client-side)
-    if (dateRangeFilter.start || dateRangeFilter.end) {
-      filtered = filtered.filter((doc) => {
-        const docDate = new Date(doc.createdAt);
-        if (dateRangeFilter.start) {
-          const startDate = new Date(dateRangeFilter.start);
-          if (docDate < startDate) return false;
-        }
-        if (dateRangeFilter.end) {
-          const endDate = new Date(dateRangeFilter.end);
-          endDate.setHours(23, 59, 59, 999); // Include entire end date
-          if (docDate > endDate) return false;
-        }
-        return true;
-      });
-    }
+    // Note: Author and date range filters are now handled by the backend API
+    // via queryDocumentsExtended() in loadDocuments()
     
     return filtered;
-  }, [documents, typeFilter, formStatusFilter, authorFilter, dateRangeFilter]);
+  }, [documents, typeFilter, formStatusFilter]);
 
   useEffect(() => {
     let ignore = false;
@@ -581,20 +573,55 @@ const DocumentManagementPageContent = () => {
   };
 
   const handleBulkArchive = async () => {
-    // TODO: Implement bulk archive API call
-    toast.info(`Archiving ${selectedDocuments.size} document(s)...`);
-    setSelectedDocuments(new Set());
+    if (selectedDocuments.size === 0) return;
+    
+    try {
+      const documentIds = Array.from(selectedDocuments);
+      toast.info(`Archiving ${documentIds.length} document(s)...`);
+      
+      const result = await bulkArchiveDocuments(documentIds);
+      
+      toast.success(result.message);
+      if (result.skipped_count > 0) {
+        toast.warning(`${result.skipped_count} document(s) could not be archived (permission denied)`);
+      }
+      
+      setSelectedDocuments(new Set());
+      void loadDocuments(); // Refresh the list
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to archive documents';
+      toast.error(message);
+      logError('Bulk archive failed', error);
+    }
   };
 
   const handleBulkDelete = async () => {
-    // TODO: Implement bulk delete API call
-    toast.info(`Deleting ${selectedDocuments.size} document(s)...`);
-    setSelectedDocuments(new Set());
+    if (selectedDocuments.size === 0) return;
+    
+    try {
+      const documentIds = Array.from(selectedDocuments);
+      toast.info(`Deleting ${documentIds.length} document(s)...`);
+      
+      const result = await bulkDeleteDocuments(documentIds);
+      
+      toast.success(result.message);
+      if (result.skipped_count > 0) {
+        toast.warning(`${result.skipped_count} document(s) could not be deleted (permission denied)`);
+      }
+      
+      setSelectedDocuments(new Set());
+      void loadDocuments(); // Refresh the list
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete documents';
+      toast.error(message);
+      logError('Bulk delete failed', error);
+    }
   };
 
   const handleBulkShare = () => {
-    // TODO: Implement bulk share
-    toast.info(`Sharing ${selectedDocuments.size} document(s)...`);
+    // For bulk share, we could open a dialog to share multiple documents
+    // For now, show a message suggesting to share individually
+    toast.info(`To share multiple documents, please share them individually for better control.`);
   };
 
   const handleGoToPage = () => {
