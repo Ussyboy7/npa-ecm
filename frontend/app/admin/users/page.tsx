@@ -22,8 +22,6 @@ import {
   Plus,
   Download,
   Loader2,
-  Calendar,
-  Filter,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
@@ -94,11 +92,6 @@ const UserManagementPageContent = () => {
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   
-  // Date range filters
-  const [dateJoinedFrom, setDateJoinedFrom] = useState<string>('');
-  const [dateJoinedTo, setDateJoinedTo] = useState<string>('');
-  const [lastLoginFrom, setLastLoginFrom] = useState<string>('');
-  const [lastLoginTo, setLastLoginTo] = useState<string>('');
   
   // Load recent searches
   const recentSearches = typeof window !== 'undefined' ? getRecentSearches('users') : [];
@@ -106,7 +99,7 @@ const UserManagementPageContent = () => {
   // Reset to page 1 when filters/search change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filters, dateJoinedFrom, dateJoinedTo, lastLoginFrom, lastLoginTo]);
+  }, [searchQuery, filters]);
   
   const loadUsers = useCallback(async () => {
     try {
@@ -140,12 +133,6 @@ const UserManagementPageContent = () => {
         }
       });
       
-      // Date filters
-      if (dateJoinedFrom) queryParams.date_joined_from = dateJoinedFrom;
-      if (dateJoinedTo) queryParams.date_joined_to = dateJoinedTo;
-      if (lastLoginFrom) queryParams.last_login_from = lastLoginFrom;
-      if (lastLoginTo) queryParams.last_login_to = lastLoginTo;
-      
       // Sorting
       if (sortState) {
         const ordering = sortState.direction === 'desc' ? `-${sortState.key}` : sortState.key;
@@ -161,7 +148,7 @@ const UserManagementPageContent = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, filters, sortState, dateJoinedFrom, dateJoinedTo, lastLoginFrom, lastLoginTo]);
+  }, [currentPage, pageSize, searchQuery, filters, sortState]);
   
   // Map API users to local User type (must be before useEffects that use it)
   const mappedUsers = useMemo(() => {
@@ -549,72 +536,6 @@ const UserManagementPageContent = () => {
           </Button>
         </div>
       )}
-
-      {/* Date Range Filters */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Date Range Filters
-            </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setDateJoinedFrom('');
-                setDateJoinedTo('');
-                setLastLoginFrom('');
-                setLastLoginTo('');
-              }}
-            >
-              Clear Dates
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Date Joined</label>
-              <div className="flex gap-2">
-                <Input
-                  type="date"
-                  value={dateJoinedFrom}
-                  onChange={(e) => setDateJoinedFrom(e.target.value)}
-                  placeholder="From"
-                  className="flex-1"
-                />
-                <Input
-                  type="date"
-                  value={dateJoinedTo}
-                  onChange={(e) => setDateJoinedTo(e.target.value)}
-                  placeholder="To"
-                  className="flex-1"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Last Login</label>
-              <div className="flex gap-2">
-                <Input
-                  type="date"
-                  value={lastLoginFrom}
-                  onChange={(e) => setLastLoginFrom(e.target.value)}
-                  placeholder="From"
-                  className="flex-1"
-                />
-                <Input
-                  type="date"
-                  value={lastLoginTo}
-                  onChange={(e) => setLastLoginTo(e.target.value)}
-                  placeholder="To"
-                  className="flex-1"
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
