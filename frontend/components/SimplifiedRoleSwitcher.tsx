@@ -875,14 +875,18 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
                   }
                 });
                 
-                return [...ordered, ...unordered].map(group => 
-                  renderUserGroup(group.title, group.key, group.users)
-                );
+                return [...ordered, ...unordered].map(group => (
+                  <div key={group.key}>
+                    {renderUserGroup(group.title, group.key, group.users)}
+                  </div>
+                ));
               }
               
-              return defaultOrder.map(group => 
-                renderUserGroup(group.title, group.key, group.users)
-              );
+              return defaultOrder.map(group => (
+                <div key={group.key}>
+                  {renderUserGroup(group.title, group.key, group.users)}
+                </div>
+              ));
             })()}
             
             {/* Empty States */}
