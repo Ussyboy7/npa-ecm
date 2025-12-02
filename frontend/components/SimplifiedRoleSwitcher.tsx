@@ -1,10 +1,12 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { Search, Shield, User as UserIcon, Loader2 } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Search, Shield, User as UserIcon, Loader2, ChevronDown, ChevronRight, Star, StarOff, X, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { User } from "@/lib/npa-structure";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -18,25 +20,51 @@ import {
 } from "@/lib/api-client";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { useDebounce } from "@/lib/use-debounce";
+import { highlightText } from "@/lib/search-highlight";
+import {
+  getRecentUsers,
+  addRecentUser,
+  getFavoriteUsers,
+  addFavoriteUser,
+  removeFavoriteUser,
+  isFavoriteUser,
+  getCollapsedGroups,
+  saveCollapsedGroups,
+} from "@/lib/role-switcher-storage";
+import { fetchUsers } from "@/lib/admin-api";
 
 interface SimplifiedRoleSwitcherProps {
   onClose?: () => void;
 }
 
+const USERS_PER_GROUP = 25;
+const BACKEND_SEARCH_THRESHOLD = 500;
+const DEBOUNCE_DELAY = 300;
+
 const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProps) => {
-  const { directorates, divisions, departments, users, refreshOrganizationData } = useOrganization();
+  const { directorates, divisions, departments, users, refreshOrganizationData, isSyncing } = useOrganization();
   const { currentUser, hydrated, refresh: refreshCurrentUser, isImpersonating } = useCurrentUser();
   
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const debouncedSearchQuery = useDebounce(searchQuery, DEBOUNCE_DELAY);
   const [, startTransition] = useTransition();
   const [isSwitching, setIsSwitching] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(getCollapsedGroups());
+  const [favorites, setFavorites] = useState<Set<string>>(new Set(getFavoriteUsers()));
+  const [recentUsers, setRecentUsers] = useState(getRecentUsers());
+  const [backendSearchResults, setBackendSearchResults] = useState<User[]>([]);
+  const [isSearchingBackend, setIsSearchingBackend] = useState(false);
+  
   const mountedRef = useRef(true);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const userListRef = useRef<HTMLDivElement>(null);
+  const userButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
-  // Defer heavy computations to prevent blocking
-  const deferredSearchQuery = useDeferredValue(searchQuery);
-  const deferredUsers = useDeferredValue(users);
-
-  // Track if component is mounted to prevent state updates after unmount
+  // Track if component is mounted
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -44,7 +72,63 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     };
   }, []);
 
-  const activeUsers = useMemo(() => deferredUsers.filter((user) => user.active), [deferredUsers]);
+  // Focus search input on mount
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, []);
+
+  // Save collapsed groups to localStorage
+  useEffect(() => {
+    saveCollapsedGroups(collapsedGroups);
+  }, [collapsedGroups]);
+
+  // Load favorites on mount
+  useEffect(() => {
+    setFavorites(new Set(getFavoriteUsers()));
+    setRecentUsers(getRecentUsers());
+  }, []);
+
+  // Backend search if user count exceeds threshold
+  useEffect(() => {
+    if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim()) {
+      performBackendSearch(debouncedSearchQuery);
+    } else {
+      setBackendSearchResults([]);
+      setIsSearchingBackend(false);
+    }
+  }, [debouncedSearchQuery, users.length]);
+
+  const performBackendSearch = async (query: string) => {
+    setIsSearchingBackend(true);
+    try {
+      const response = await fetchUsers({ search: query, page_size: 100, is_active: true });
+      // Map API users to local User type
+      const mappedUsers: User[] = response.results.map((apiUser) => ({
+        id: apiUser.id,
+        name: `${apiUser.first_name} ${apiUser.last_name}`.trim() || apiUser.username,
+        email: apiUser.email,
+        employeeId: apiUser.employee_id || '',
+        gradeLevel: apiUser.grade_level || '',
+        directorate: apiUser.directorate || undefined,
+        division: apiUser.division || undefined,
+        department: apiUser.department || undefined,
+        systemRole: apiUser.system_role_name || apiUser.system_role || '',
+        active: apiUser.is_active,
+        username: apiUser.username,
+        isSuperuser: apiUser.is_superuser,
+      }));
+      setBackendSearchResults(mappedUsers);
+    } catch (error) {
+      console.error('Backend search failed:', error);
+      setBackendSearchResults([]);
+    } finally {
+      setIsSearchingBackend(false);
+    }
+  };
+
+  const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
   const directorateMap = useMemo(
     () => new Map(directorates.map((dir) => [dir.id, dir])),
     [directorates]
@@ -84,12 +168,16 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     [departmentMap, directorateMap, divisionMap]
   );
 
+  // Use backend search results if available, otherwise filter locally
   const filteredUsers = useMemo(() => {
+    if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim() && backendSearchResults.length > 0) {
+      return backendSearchResults;
+    }
+
     let pool = activeUsers;
 
-    // Apply search filter using deferred value
-    if (deferredSearchQuery.trim()) {
-      const query = deferredSearchQuery.toLowerCase().trim();
+    if (debouncedSearchQuery.trim()) {
+      const query = debouncedSearchQuery.toLowerCase().trim();
       pool = pool.filter((user) => {
         const nameMatch = user.name?.toLowerCase().includes(query);
         const emailMatch = user.email?.toLowerCase().includes(query);
@@ -117,10 +205,21 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     }
 
     return pool;
-  }, [activeUsers, deferredSearchQuery, directorateMap, divisionMap, departmentMap, getDirectorateNameForUser]);
+  }, [activeUsers, debouncedSearchQuery, directorateMap, divisionMap, departmentMap, getDirectorateNameForUser, backendSearchResults, users.length]);
 
-  // Group users in a single pass for better performance
-  // NOTE: This must be before any early returns to comply with Rules of Hooks
+  // Get recent and favorite users
+  const recentUserObjects = useMemo(() => {
+    return recentUsers
+      .map(ru => activeUsers.find(u => u.id === ru.id))
+      .filter((u): u is User => u !== undefined)
+      .slice(0, 10);
+  }, [recentUsers, activeUsers]);
+
+  const favoriteUserObjects = useMemo(() => {
+    return activeUsers.filter(u => favorites.has(u.id));
+  }, [activeUsers, favorites]);
+
+  // Group users
   const groupedUsers = useMemo(() => {
     const groups = {
       executive: [] as User[],
@@ -160,22 +259,43 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
 
   // Early returns AFTER all hooks
   if (!hydrated || !currentUser) {
-    return null;
+    return (
+      <div className="flex items-center justify-center py-8" role="status" aria-label="Loading">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="sr-only">Loading user data...</span>
+      </div>
+    );
   }
 
   const impersonationEnabled = hasTokens() && (currentUser.systemRole === "Super Admin" || isImpersonating);
 
   if (!impersonationEnabled) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
+      <div className="text-center py-8 text-muted-foreground" role="alert">
+        <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" aria-hidden="true" />
         <p className="text-sm">Role switching is only available to Super Admins</p>
       </div>
     );
   }
 
-  const handleImpersonate = async (user: User) => {
-    if (isSwitching) return; // Prevent double-clicks
+  // Loading state
+  if (isSyncing || (users.length === 0 && !isSearchingBackend)) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12" role="status" aria-label="Loading users">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+        <p className="text-sm text-muted-foreground">Loading users...</p>
+        <span className="sr-only">Loading user list, please wait</span>
+      </div>
+    );
+  }
+
+  const handleImpersonateClick = (user: User) => {
+    setSelectedUser(user);
+    setConfirmDialogOpen(true);
+  };
+
+  const handleImpersonateConfirm = async () => {
+    if (!selectedUser || isSwitching) return;
     
     if (!impersonationEnabled || currentUser.systemRole !== "Super Admin") {
       toast.error("Impersonation is only available to Super Admins");
@@ -183,21 +303,32 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     }
 
     setIsSwitching(true);
+    setConfirmDialogOpen(false);
     
     if (!isImpersonating) {
       storeOriginalTokens();
     }
 
-    const identifier = user.username ?? user.id;
+    const identifier = selectedUser.username ?? selectedUser.id;
 
     try {
       await impersonateUser(identifier);
-      toast.success(`Switched to ${user.name || user.username}`);
       
-      // Close modal first for better UX
+      // Add to recent users
+      addRecentUser({
+        id: selectedUser.id,
+        name: selectedUser.name || selectedUser.username || 'Unknown',
+        username: selectedUser.username,
+        email: selectedUser.email,
+      });
+      setRecentUsers(getRecentUsers());
+      
+      toast.success(`Switched to ${selectedUser.name || selectedUser.username}`);
+      
+      // Close modal on success
       onClose?.();
       
-      // Then refresh data in the background
+      // Refresh data in background
       startTransition(() => {
         void refreshCurrentUser();
         void refreshOrganizationData();
@@ -208,6 +339,9 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       if (mountedRef.current) {
         setIsSwitching(false);
       }
+      // Keep modal open on error so user can retry
+    } finally {
+      setSelectedUser(null);
     }
   };
 
@@ -227,10 +361,8 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       clearOriginalTokens();
       toast.success("Returned to your primary account");
       
-      // Close modal first for better UX
       onClose?.();
       
-      // Then refresh data in the background
       startTransition(() => {
         void refreshCurrentUser();
         void refreshOrganizationData();
@@ -241,121 +373,362 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     }
   };
 
-  const renderUserGroup = (title: string, userList: User[]) => {
-    if (userList.length === 0) return null;
+  const toggleFavorite = (userId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (favorites.has(userId)) {
+      removeFavoriteUser(userId);
+      setFavorites(new Set(getFavoriteUsers()));
+    } else {
+      addFavoriteUser(userId);
+      setFavorites(new Set(getFavoriteUsers()));
+    }
+  };
+
+  const toggleGroupCollapse = (groupKey: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
+
+  const toggleGroupExpand = (groupKey: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  };
+
+  // Keyboard navigation - Escape to close
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      onClose?.();
+    }
+  };
+
+  const renderUserButton = (user: User, showFavorite: boolean = true) => {
+    const divisionName = user.division ? divisionMap.get(user.division)?.name : undefined;
+    const departmentName = user.department ? departmentMap.get(user.department)?.name : undefined;
+    const directorateName = getDirectorateNameForUser(user);
+    const isFav = favorites.has(user.id);
+    const userInfo = `${user.email || ''}${user.employeeId ? ` • ID: ${user.employeeId}` : ''}${user.gradeLevel ? ` • ${user.gradeLevel}` : ''}`;
 
     return (
-      <div className="mb-4">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center justify-between">
-          {title}
-          <Badge variant="secondary" className="text-[10px]">{userList.length}</Badge>
-        </h3>
-        <div className="space-y-1">
-          {userList.slice(0, 10).map((user) => {
-            const divisionName = user.division ? divisionMap.get(user.division)?.name : undefined;
-            const departmentName = user.department ? departmentMap.get(user.department)?.name : undefined;
-            const directorateName = getDirectorateNameForUser(user);
-
-            return (
-              <Button
-                key={user.id}
-                variant="ghost"
-                className="w-full justify-start h-auto py-2 px-3 overflow-hidden"
-                onClick={() => handleImpersonate(user)}
-                disabled={isSwitching}
-              >
-                <div className="flex items-center gap-3 w-full min-w-0">
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-medium text-xs flex-shrink-0">
-                    {user.name
-                      ?.split(' ')
-                      .map(n => n[0])
-                      .join('')
-                      .toUpperCase()
-                      .slice(0, 2) || 'U'}
+      <TooltipProvider key={user.id}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              ref={(el) => {
+                if (el) userButtonRefs.current.set(user.id, el);
+                else userButtonRefs.current.delete(user.id);
+              }}
+              variant="ghost"
+              className="w-full justify-start h-auto py-2 px-3 overflow-hidden group"
+              onClick={() => handleImpersonateClick(user)}
+              disabled={isSwitching}
+              aria-label={`Switch to ${user.name || user.username}`}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleImpersonateClick(user);
+                }
+              }}
+            >
+              <div className="flex items-center gap-3 w-full min-w-0">
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-medium text-xs flex-shrink-0">
+                  {user.name
+                    ?.split(' ')
+                    .map(n => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2) || 'U'}
+                </div>
+                <div className="flex-1 text-left min-w-0 overflow-hidden">
+                  <div className="text-sm font-medium">
+                    {debouncedSearchQuery.trim() ? highlightText(user.name || user.username || '', debouncedSearchQuery) : (user.name || user.username)}
                   </div>
-                  <div className="flex-1 text-left min-w-0 overflow-hidden">
-                    <div className="text-sm font-medium">{user.name || user.username}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {user.systemRole || user.gradeLevel}
-                      {departmentName ? ` • ${departmentName}` : divisionName ? ` • ${divisionName}` : directorateName ? ` • ${directorateName}` : ''}
-                    </div>
+                  <div className="text-xs text-muted-foreground">
+                    {debouncedSearchQuery.trim() && user.systemRole ? (
+                      highlightText(user.systemRole, debouncedSearchQuery)
+                    ) : (
+                      user.systemRole || user.gradeLevel
+                    )}
+                    {departmentName ? ` • ${departmentName}` : divisionName ? ` • ${divisionName}` : directorateName ? ` • ${directorateName}` : ''}
                   </div>
                 </div>
+                {showFavorite && (
+                  <button
+                    type="button"
+                    onClick={(e) => toggleFavorite(user.id, e)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                    aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                    tabIndex={-1}
+                  >
+                    {isFav ? (
+                      <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+                    ) : (
+                      <StarOff className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
+              </div>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="text-xs space-y-1">
+              <div className="font-medium">{user.name || user.username}</div>
+              {userInfo && <div className="text-muted-foreground">{userInfo}</div>}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
+  const renderUserGroup = (title: string, groupKey: string, userList: User[]) => {
+    if (userList.length === 0) return null;
+
+    const isCollapsed = collapsedGroups.has(groupKey);
+    const isExpanded = expandedGroups.has(groupKey);
+    const displayCount = isExpanded ? userList.length : USERS_PER_GROUP;
+    const hasMore = userList.length > USERS_PER_GROUP;
+
+    return (
+      <div className="mb-4" role="group" aria-labelledby={`group-${groupKey}`}>
+        <button
+          type="button"
+          onClick={() => toggleGroupCollapse(groupKey)}
+          className="w-full flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
+          aria-expanded={!isCollapsed}
+          aria-controls={`group-content-${groupKey}`}
+          id={`group-${groupKey}`}
+        >
+          <div className="flex items-center gap-2">
+            {isCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+            {title}
+          </div>
+          <Badge variant="secondary" className="text-[10px]">{userList.length}</Badge>
+        </button>
+        {!isCollapsed && (
+          <div id={`group-content-${groupKey}`} className="space-y-1" role="list">
+            {userList.slice(0, displayCount).map((user) => (
+              <div key={user.id} role="listitem">
+                {renderUserButton(user)}
+              </div>
+            ))}
+            {hasMore && !isExpanded && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => toggleGroupExpand(groupKey)}
+                aria-label={`Show all ${userList.length} users in ${title}`}
+              >
+                Show all {userList.length} users
               </Button>
-            );
-          })}
-          {userList.length > 10 && (
-            <p className="text-xs text-muted-foreground text-center py-1">
-              +{userList.length - 10} more (use search to find)
-            </p>
-          )}
-        </div>
+            )}
+            {isExpanded && hasMore && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => toggleGroupExpand(groupKey)}
+                aria-label={`Show first ${USERS_PER_GROUP} users in ${title}`}
+              >
+                Show less
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     );
   };
 
+  const hasResults = filteredUsers.length > 0 || recentUserObjects.length > 0 || favoriteUserObjects.length > 0;
+  const isSearching = debouncedSearchQuery.trim() !== '';
+
   return (
-    <div className="space-y-4 relative">
-      {/* Loading Overlay */}
-      {isSwitching && (
-        <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10 rounded-lg">
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="text-sm">Switching...</span>
+    <TooltipProvider>
+      <div className="space-y-4 relative" onKeyDown={handleKeyDown} tabIndex={-1}>
+        {/* Loading Overlay */}
+        {isSwitching && (
+          <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10 rounded-lg" role="status" aria-label="Switching user">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span className="text-sm">Switching...</span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="text"
-          placeholder="Search by name, email, role..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 h-9"
-          disabled={isSwitching}
-        />
-      </div>
-
-      {/* Reset to Primary Account */}
-      {isImpersonating && (
-        <>
-          <Button
-            variant="outline"
-            className="w-full h-9"
-            onClick={handleReset}
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search by name, email, role..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9"
             disabled={isSwitching}
-          >
-            <UserIcon className="h-4 w-4 mr-2" />
-            Return to Primary Account
-          </Button>
-          <Separator />
-        </>
-      )}
-
-      {/* User List */}
-      <div className="h-[500px] overflow-y-auto pr-4">
-        <div className="space-y-6">
-          {renderUserGroup("Executive Leadership", groupedUsers.executive)}
-          {renderUserGroup("General Managers", groupedUsers.gm)}
-          {renderUserGroup("AGMs & Managers", groupedUsers.manager)}
-          {renderUserGroup("Officers & Staff", groupedUsers.officer)}
-          {renderUserGroup("Assistants & Secretaries", groupedUsers.assistant)}
-          {renderUserGroup("System Admins", groupedUsers.admin)}
-          {renderUserGroup("Other Users", groupedUsers.other)}
-          
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <p className="text-sm">No users found</p>
+            aria-label="Search users"
+            aria-describedby="search-help"
+          />
+          {isSearchingBackend && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           )}
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded"
+              aria-label="Clear search"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+          <span id="search-help" className="sr-only">
+            Search users by name, email, role, employee ID, or organizational unit
+          </span>
+        </div>
+
+        {/* Search Results Count */}
+        {isSearching && filteredUsers.length > 0 && (
+          <div className="text-xs text-muted-foreground px-1">
+            Found {filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'}
+          </div>
+        )}
+
+        {/* Reset to Primary Account */}
+        {isImpersonating && (
+          <>
+            <Button
+              variant="outline"
+              className="w-full h-9"
+              onClick={handleReset}
+              disabled={isSwitching}
+              aria-label="Return to your primary account"
+            >
+              <UserIcon className="h-4 w-4 mr-2" aria-hidden="true" />
+              Return to Primary Account
+            </Button>
+            <Separator />
+          </>
+        )}
+
+        {/* User List */}
+        <div className="max-h-[60vh] overflow-y-auto pr-4" ref={userListRef} role="main" aria-label="User list">
+          <div className="space-y-6">
+            {/* Recent Users */}
+            {!isSearching && recentUserObjects.length > 0 && (
+              <div role="group" aria-labelledby="recent-users">
+                <h3 id="recent-users" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Recent
+                </h3>
+                <div className="space-y-1" role="list">
+                  {recentUserObjects.map((user) => (
+                    <div key={user.id} role="listitem">
+                      {renderUserButton(user, false)}
+                    </div>
+                  ))}
+                </div>
+                <Separator className="my-4" />
+              </div>
+            )}
+
+            {/* Favorite Users */}
+            {!isSearching && favoriteUserObjects.length > 0 && (
+              <div role="group" aria-labelledby="favorite-users">
+                <h3 id="favorite-users" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                  Favorites
+                </h3>
+                <div className="space-y-1" role="list">
+                  {favoriteUserObjects.map((user) => (
+                    <div key={user.id} role="listitem">
+                      {renderUserButton(user)}
+                    </div>
+                  ))}
+                </div>
+                <Separator className="my-4" />
+              </div>
+            )}
+
+            {/* Grouped Users */}
+            {renderUserGroup("Executive Leadership", "executive", groupedUsers.executive)}
+            {renderUserGroup("General Managers", "gm", groupedUsers.gm)}
+            {renderUserGroup("AGMs & Managers", "manager", groupedUsers.manager)}
+            {renderUserGroup("Officers & Staff", "officer", groupedUsers.officer)}
+            {renderUserGroup("Assistants & Secretaries", "assistant", groupedUsers.assistant)}
+            {renderUserGroup("System Admins", "admin", groupedUsers.admin)}
+            {renderUserGroup("Other Users", "other", groupedUsers.other)}
+            
+            {/* Empty States */}
+            {!hasResults && !isSyncing && (
+              <div className="text-center py-12 text-muted-foreground" role="status">
+                {isSearching ? (
+                  <>
+                    <Search className="h-12 w-12 mx-auto mb-4 opacity-50" aria-hidden="true" />
+                    <p className="text-sm font-medium mb-1">No users found</p>
+                    <p className="text-xs">Try a different search term or clear the search to see all users</p>
+                  </>
+                ) : (
+                  <>
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-50" aria-hidden="true" />
+                    <p className="text-sm font-medium mb-1">No users available</p>
+                    <p className="text-xs">No active users found in the system</p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent aria-describedby="confirm-description">
+          <DialogHeader>
+            <DialogTitle>Confirm Role Switch</DialogTitle>
+            <DialogDescription id="confirm-description">
+              You are about to switch to <strong>{selectedUser?.name || selectedUser?.username}</strong>. 
+              You will be able to return to your primary account at any time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleImpersonateConfirm} disabled={isSwitching}>
+              {isSwitching ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Switching...
+                </>
+              ) : (
+                'Switch Role'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </TooltipProvider>
   );
 };
 
-// Memoize to prevent unnecessary re-renders
 export const SimplifiedRoleSwitcher = memo(SimplifiedRoleSwitcherComponent);
