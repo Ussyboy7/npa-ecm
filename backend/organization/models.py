@@ -9,10 +9,10 @@ from common.models import TimeStampedModel, UUIDModel
 class Directorate(UUIDModel, TimeStampedModel):
     """Top-level organizational unit led by an Executive Director."""
 
-    name = models.CharField(max_length=255, unique=True)
-    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255, unique=True, db_index=True)
+    code = models.CharField(max_length=50, unique=True, db_index=True)
     description = models.TextField(blank=True)
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, db_index=True)
     executive_director = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -23,6 +23,11 @@ class Directorate(UUIDModel, TimeStampedModel):
 
     class Meta:
         ordering = ["name"]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["code"]),
+            models.Index(fields=["is_active"]),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -36,9 +41,9 @@ class Division(UUIDModel, TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="divisions",
     )
-    name = models.CharField(max_length=255)
-    code = models.CharField(max_length=50)
-    is_active = models.BooleanField(default=True)
+    name = models.CharField(max_length=255, db_index=True)
+    code = models.CharField(max_length=50, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
     general_manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -50,6 +55,18 @@ class Division(UUIDModel, TimeStampedModel):
     class Meta:
         unique_together = ("directorate", "name")
         ordering = ["directorate__name", "name"]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["code"]),
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["directorate", "is_active"]),
+        ]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["code"]),
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["directorate", "is_active"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.directorate.code})"
@@ -63,9 +80,9 @@ class Department(UUIDModel, TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="departments",
     )
-    name = models.CharField(max_length=255)
-    code = models.CharField(max_length=50)
-    is_active = models.BooleanField(default=True)
+    name = models.CharField(max_length=255, db_index=True)
+    code = models.CharField(max_length=50, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
     head_of_department = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -77,6 +94,12 @@ class Department(UUIDModel, TimeStampedModel):
     class Meta:
         unique_together = ("division", "name")
         ordering = ["division__name", "name"]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["code"]),
+            models.Index(fields=["is_active"]),
+            models.Index(fields=["division", "is_active"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.division.code})"
@@ -85,9 +108,9 @@ class Department(UUIDModel, TimeStampedModel):
 class Role(UUIDModel, TimeStampedModel):
     """System role that can be assigned to users."""
 
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True, db_index=True)
     description = models.TextField(blank=True)
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, db_index=True)
     permissions = models.JSONField(
         default=dict,
         blank=True,
@@ -96,6 +119,10 @@ class Role(UUIDModel, TimeStampedModel):
 
     class Meta:
         ordering = ["name"]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["is_active"]),
+        ]
 
     def __str__(self) -> str:
         return self.name

@@ -1,9 +1,27 @@
 import { logError, logInfo } from '@/lib/client-logger';
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from 'react';
 import type { User } from '@/lib/npa-structure';
 import { updateOrganizationCache } from '@/lib/npa-structure';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
+
+// Cache configuration
+const CACHE_KEY = 'org_data_cache';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+interface CachedData {
+  timestamp: number;
+  data: {
+    directorates: Directorate[];
+    divisions: Division[];
+    departments: Department[];
+    roles: Role[];
+    offices: Office[];
+    officeMemberships: OfficeMembership[];
+    users: User[];
+    assistantAssignments: AssistantAssignment[];
+  };
+}
 
 export interface Directorate {
   id: string;

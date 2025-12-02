@@ -2,13 +2,20 @@
 
 from datetime import timedelta
 
+from datetime import datetime, timedelta
+import csv
+import io
+
 from django.conf import settings
+from django.http import HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, generics, viewsets, status
+from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.pagination import PageNumberPagination
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -35,34 +42,443 @@ except ImportError:
     QRCODE_AVAILABLE = False
 
 
+class UserPagination(PageNumberPagination):
+    """Pagination for user list."""
+    page_size = 25
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class UserViewSet(viewsets.ModelViewSet):
     """CRUD endpoints for managing users within the demo environment."""
 
     queryset = User.objects.select_related("directorate", "division", "department", "system_role")
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = UserPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["is_active", "is_management", "grade_level", "system_role", "division", "department"]
     search_fields = ["username", "email", "first_name", "last_name", "employee_id"]
-    ordering_fields = ["username", "first_name", "last_name", "date_joined"]
+    ordering_fields = ["username", "first_name", "last_name", "date_joined", "last_login"]
     ordering = ["username"]
 
     def _ensure_super_admin(self):
         if not self.request.user.is_superuser:
             raise PermissionDenied("Only super administrators may modify user records.")
 
+    def filter_queryset(self, queryset):
+        """Override to add date range filtering."""
+        queryset = super().filter_queryset(queryset)
+        
+        # Date range filters
+        date_joined_from = self.request.query_params.get("date_joined_from")
+        date_joined_to = self.request.query_params.get("date_joined_to")
+        last_login_from = self.request.query_params.get("last_login_from")
+        last_login_to = self.request.query_params.get("last_login_to")
+        
+        if date_joined_from:
+            try:
+                from_date = datetime.strptime(date_joined_from, "%Y-%m-%d").date()
+                queryset = queryset.filter(date_joined__date__gte=from_date)
+            except ValueError:
+                pass
+        
+        if date_joined_to:
+            try:
+                to_date = datetime.strptime(date_joined_to, "%Y-%m-%d").date()
+                queryset = queryset.filter(date_joined__date__lte=to_date)
+            except ValueError:
+                pass
+        
+        if last_login_from:
+            try:
+                from_date = datetime.strptime(last_login_from, "%Y-%m-%d").date()
+                queryset = queryset.filter(last_login__date__gte=from_date)
+            except ValueError:
+                pass
+        
+        if last_login_to:
+            try:
+                to_date = datetime.strptime(last_login_to, "%Y-%m-%d").date()
+                queryset = queryset.filter(last_login__date__lte=to_date)
+            except ValueError:
+                pass
+        
+        return queryset
+
     def perform_update(self, serializer):
         self._ensure_super_admin()
+        old_instance = self.get_object()
         serializer.save()
+        
+        # Audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=self.request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            target_user=serializer.instance,
+            request=self.request,
+            description=f"Updated user: {serializer.instance.username}",
+            metadata={"changes": serializer.validated_data},
+        )
 
     def perform_destroy(self, instance):
         self._ensure_super_admin()
+        
+        # Audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=self.request.user,
+            action=ActivityLog.ActionType.USER_DELETED,
+            target_user=instance,
+            request=self.request,
+            description=f"Deleted user: {instance.username}",
+        )
+        
         super().perform_destroy(instance)
 
     def perform_create(self, serializer):
         self._ensure_super_admin()
-        serializer.save()
+        instance = serializer.save()
+        
+        # Audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=self.request.user,
+            action=ActivityLog.ActionType.USER_CREATED,
+            target_user=instance,
+            request=self.request,
+            description=f"Created user: {instance.username}",
+        )
+
+    @action(detail=False, methods=["post"], url_path="bulk-archive")
+    def bulk_archive(self, request):
+        """Archive (deactivate) multiple users at once."""
+        self._ensure_super_admin()
+        
+        user_ids = request.data.get("user_ids", [])
+        if not user_ids:
+            raise ValidationError({"user_ids": "User IDs are required"})
+        
+        users = User.objects.filter(id__in=user_ids, is_active=True)
+        updated_count = users.update(is_active=False)
+        
+        # Audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            target_user=None,
+            request=request,
+            description=f"Bulk archived {updated_count} user(s)",
+            metadata={"user_ids": user_ids, "count": updated_count},
+        )
+        
+        return Response({
+            "message": f"Successfully archived {updated_count} user(s)",
+            "archived_count": updated_count,
+        })
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        """Delete multiple users at once."""
+        self._ensure_super_admin()
+        
+        user_ids = request.data.get("user_ids", [])
+        if not user_ids:
+            raise ValidationError({"user_ids": "User IDs are required"})
+        
+        users = User.objects.filter(id__in=user_ids)
+        deleted_count = users.count()
+        
+        # Audit log before deletion
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_DELETED,
+            target_user=None,
+            request=request,
+            description=f"Bulk deleted {deleted_count} user(s)",
+            metadata={"user_ids": user_ids, "count": deleted_count},
+        )
+        
+        users.delete()
+        
+        return Response({
+            "message": f"Successfully deleted {deleted_count} user(s)",
+            "deleted_count": deleted_count,
+        })
+
+    @action(detail=False, methods=["post"], url_path="bulk-activate")
+    def bulk_activate(self, request):
+        """Activate multiple users at once."""
+        self._ensure_super_admin()
+        
+        user_ids = request.data.get("user_ids", [])
+        if not user_ids:
+            raise ValidationError({"user_ids": "User IDs are required"})
+        
+        users = User.objects.filter(id__in=user_ids, is_active=False)
+        updated_count = users.update(is_active=True)
+        
+        # Audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            target_user=None,
+            request=request,
+            description=f"Bulk activated {updated_count} user(s)",
+            metadata={"user_ids": user_ids, "count": updated_count},
+        )
+        
+        return Response({
+            "message": f"Successfully activated {updated_count} user(s)",
+            "activated_count": updated_count,
+        })
+
+    @action(detail=False, methods=["post"], url_path="bulk-deactivate")
+    def bulk_deactivate(self, request):
+        """Deactivate multiple users at once."""
+        self._ensure_super_admin()
+        
+        user_ids = request.data.get("user_ids", [])
+        if not user_ids:
+            raise ValidationError({"user_ids": "User IDs are required"})
+        
+        users = User.objects.filter(id__in=user_ids, is_active=True)
+        updated_count = users.update(is_active=False)
+        
+        # Audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_UPDATED,
+            target_user=None,
+            request=request,
+            description=f"Bulk deactivated {updated_count} user(s)",
+            metadata={"user_ids": user_ids, "count": updated_count},
+        )
+        
+        return Response({
+            "message": f"Successfully deactivated {updated_count} user(s)",
+            "deactivated_count": updated_count,
+        })
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export_users(self, request):
+        """Export users to CSV."""
+        self._ensure_super_admin()
+        
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Create CSV response
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="users_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+        
+        writer = csv.writer(response)
+        # Write header
+        writer.writerow([
+            'ID', 'Username', 'Email', 'First Name', 'Last Name',
+            'Employee ID', 'Grade Level', 'System Role', 
+            'Directorate', 'Division', 'Department',
+            'Is Active', 'Is Management', 'Is Superuser',
+            'Date Joined', 'Last Login', 'Last Activity'
+        ])
+        
+        # Write data
+        for user in queryset:
+            writer.writerow([
+                str(user.id),
+                user.username,
+                user.email,
+                user.first_name,
+                user.last_name,
+                user.employee_id,
+                user.grade_level,
+                user.system_role.name if user.system_role else '',
+                user.directorate.name if user.directorate else '',
+                user.division.name if user.division else '',
+                user.department.name if user.department else '',
+                'Yes' if user.is_active else 'No',
+                'Yes' if user.is_management else 'No',
+                'Yes' if user.is_superuser else 'No',
+                user.date_joined.strftime('%Y-%m-%d %H:%M:%S') if user.date_joined else '',
+                user.last_login.strftime('%Y-%m-%d %H:%M:%S') if user.last_login else '',
+                user.last_activity.strftime('%Y-%m-%d %H:%M:%S') if user.last_activity else '',
+            ])
+        
+        # Audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_EXPORTED,
+            target_user=None,
+            request=request,
+            description=f"Exported {queryset.count()} user(s) to CSV",
+        )
+        
+        return response
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_users(self, request):
+        """Import users from CSV."""
+        self._ensure_super_admin()
+        
+        csv_file = request.FILES.get('file')
+        if not csv_file:
+            raise ValidationError({"file": "CSV file is required"})
+        
+        if not csv_file.name.endswith('.csv'):
+            raise ValidationError({"file": "File must be a CSV"})
+        
+        # Read CSV
+        try:
+            decoded_file = csv_file.read().decode('utf-8')
+            io_string = io.StringIO(decoded_file)
+            reader = csv.DictReader(io_string)
+        except Exception as e:
+            raise ValidationError({"file": f"Error reading CSV: {str(e)}"})
+        
+        created_count = 0
+        updated_count = 0
+        errors = []
+        
+        from organization.models import Role, Directorate, Division, Department
+        
+        for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is 1)
+            try:
+                username = row.get('Username', '').strip()
+                email = row.get('Email', '').strip()
+                
+                if not username:
+                    errors.append(f"Row {row_num}: Username is required")
+                    continue
+                
+                # Get or create user
+                user, created = User.objects.get_or_create(
+                    username=username,
+                    defaults={
+                        'email': email,
+                        'first_name': row.get('First Name', '').strip(),
+                        'last_name': row.get('Last Name', '').strip(),
+                        'employee_id': row.get('Employee ID', '').strip(),
+                        'grade_level': row.get('Grade Level', '').strip(),
+                        'is_active': row.get('Is Active', 'Yes').strip().lower() in ['yes', 'true', '1'],
+                        'is_management': row.get('Is Management', 'No').strip().lower() in ['yes', 'true', '1'],
+                    }
+                )
+                
+                if not created:
+                    # Update existing user
+                    user.email = email
+                    user.first_name = row.get('First Name', '').strip()
+                    user.last_name = row.get('Last Name', '').strip()
+                    user.employee_id = row.get('Employee ID', '').strip()
+                    user.grade_level = row.get('Grade Level', '').strip()
+                    user.is_active = row.get('Is Active', 'Yes').strip().lower() in ['yes', 'true', '1']
+                    user.is_management = row.get('Is Management', 'No').strip().lower() in ['yes', 'true', '1']
+                
+                # Set role
+                role_name = row.get('System Role', '').strip()
+                if role_name:
+                    try:
+                        role = Role.objects.get(name=role_name)
+                        user.system_role = role
+                    except Role.DoesNotExist:
+                        errors.append(f"Row {row_num}: Role '{role_name}' not found")
+                
+                # Set directorate
+                directorate_name = row.get('Directorate', '').strip()
+                if directorate_name:
+                    try:
+                        directorate = Directorate.objects.get(name=directorate_name)
+                        user.directorate = directorate
+                    except Directorate.DoesNotExist:
+                        errors.append(f"Row {row_num}: Directorate '{directorate_name}' not found")
+                
+                # Set division
+                division_name = row.get('Division', '').strip()
+                if division_name:
+                    try:
+                        division = Division.objects.get(name=division_name)
+                        user.division = division
+                    except Division.DoesNotExist:
+                        errors.append(f"Row {row_num}: Division '{division_name}' not found")
+                
+                # Set department
+                department_name = row.get('Department', '').strip()
+                if department_name:
+                    try:
+                        department = Department.objects.get(name=department_name)
+                        user.department = department
+                    except Department.DoesNotExist:
+                        errors.append(f"Row {row_num}: Department '{department_name}' not found")
+                
+                # Set password if provided (for new users)
+                password = row.get('Password', '').strip()
+                if created and password:
+                    user.set_password(password)
+                elif created:
+                    # Set default password
+                    user.set_password('ChangeMe123!')
+                
+                user.save()
+                
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+                    
+            except Exception as e:
+                errors.append(f"Row {row_num}: {str(e)}")
+        
+        # Audit log
+        from audit.models import ActivityLog
+        AuditService.log_user_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.USER_IMPORTED,
+            target_user=None,
+            request=request,
+            description=f"Imported CSV: {created_count} created, {updated_count} updated, {len(errors)} errors",
+            metadata={
+                "created_count": created_count,
+                "updated_count": updated_count,
+                "error_count": len(errors),
+            },
+        )
+        
+        return Response({
+            "message": f"Import complete: {created_count} created, {updated_count} updated",
+            "created_count": created_count,
+            "updated_count": updated_count,
+            "errors": errors[:50],  # Limit to first 50 errors
+            "total_errors": len(errors),
+        })
+
+    @action(detail=False, methods=["get"], url_path="export-template")
+    def export_template(self, request):
+        """Download CSV template for user import."""
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="user_import_template.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Username', 'Email', 'First Name', 'Last Name',
+            'Employee ID', 'Grade Level', 'System Role',
+            'Directorate', 'Division', 'Department',
+            'Is Active', 'Is Management', 'Password'
+        ])
+        # Add example row
+        writer.writerow([
+            'jdoe', 'jdoe@npa.gov.ng', 'John', 'Doe',
+            'EMP001', 'MSS1', 'Staff Officer',
+            'Operations', 'Marine Operations', 'Port Operations',
+            'Yes', 'No', 'ChangeMe123!'
+        ])
+        
+        return response
 
 
 class CurrentUserView(APIView):

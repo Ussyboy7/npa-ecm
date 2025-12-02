@@ -2,6 +2,8 @@
 
 from django.http import HttpRequest, HttpResponse
 from django.core.exceptions import DisallowedHost
+from django.utils import timezone
+from django.db import transaction
 
 
 class InternalHostMiddleware:
@@ -37,6 +39,35 @@ class InternalHostMiddleware:
                         # Restore original host
                         if original_host:
                             request.META['HTTP_HOST'] = original_host
+
+        return self.get_response(request)
+
+
+class UserActivityMiddleware:
+    """
+    Middleware to track user activity.
+    Updates last_activity timestamp for authenticated users on each request.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        # Only track activity for authenticated users
+        if request.user.is_authenticated:
+            # Update last_activity asynchronously to avoid blocking
+            # Use update() to avoid triggering signals and save queries
+            try:
+                # Only update if more than 1 minute has passed since last update
+                # This reduces database writes
+                user = request.user
+                if not user.last_activity or (timezone.now() - user.last_activity).total_seconds() > 60:
+                    # Use update() for efficiency
+                    from accounts.models import User
+                    User.objects.filter(id=user.id).update(last_activity=timezone.now())
+            except Exception:
+                # Silently fail to avoid breaking requests
+                pass
 
         return self.get_response(request)
 

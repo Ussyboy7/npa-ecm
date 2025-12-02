@@ -122,6 +122,43 @@ class OfficeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["created_at", "updated_at"]
 
+    def validate_parent(self, value):
+        """Prevent circular references in office hierarchy."""
+        if value and self.instance:
+            # Check if setting this parent would create a cycle
+            current = value
+            visited = {self.instance.id}
+            while current:
+                if current.id in visited:
+                    raise serializers.ValidationError(
+                        "Setting this parent would create a circular reference in the office hierarchy."
+                    )
+                visited.add(current.id)
+                current = current.parent
+        return value
+
+    def validate(self, attrs):
+        """Validate organization hierarchy consistency."""
+        division = attrs.get("division") or (self.instance.division if self.instance else None)
+        department = attrs.get("department") or (self.instance.department if self.instance else None)
+        directorate = attrs.get("directorate") or (self.instance.directorate if self.instance else None)
+
+        # If department is set, division must match department's division
+        if department and division:
+            if department.division != division:
+                raise serializers.ValidationError(
+                    {"department": "Department must belong to the specified division."}
+                )
+
+        # If division is set, directorate must match division's directorate
+        if division and directorate:
+            if division.directorate != directorate:
+                raise serializers.ValidationError(
+                    {"division": "Division must belong to the specified directorate."}
+                )
+
+        return attrs
+
 
 class OfficeMembershipSerializer(serializers.ModelSerializer):
     office_name = serializers.CharField(source="office.name", read_only=True)

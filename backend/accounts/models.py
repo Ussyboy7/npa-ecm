@@ -46,9 +46,19 @@ class User(AbstractUser):
     )
     is_management = models.BooleanField(default=False)
     employee_id = models.CharField(max_length=50, blank=True)
+    last_activity = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time the user was active in the system",
+    )
 
     class Meta(AbstractUser.Meta):
         ordering = ["username"]
+        indexes = [
+            models.Index(fields=["last_activity"]),
+            models.Index(fields=["date_joined"]),
+            models.Index(fields=["last_login"]),
+        ]
 
     def __str__(self) -> str:
         return self.get_full_name() or self.username
