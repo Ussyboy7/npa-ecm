@@ -46,7 +46,7 @@ class UserPagination(PageNumberPagination):
     """Pagination for user list."""
     page_size = 25
     page_size_query_param = 'page_size'
-    max_page_size = 100
+    max_page_size = 1000  # Increased to allow fetching all users for role switcher
 
 
 class UserViewSet(viewsets.ModelViewSet):

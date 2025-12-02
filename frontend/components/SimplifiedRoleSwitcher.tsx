@@ -160,11 +160,13 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
         allUsers = [...allUsers, ...mappedUsers];
         
         // Check if there are more pages
-        hasMore = !!response.next && mappedUsers.length === 1000;
+        // If we got fewer than requested, we're on the last page
+        const requestedPageSize = 1000;
+        hasMore = !!response.next && mappedUsers.length >= requestedPageSize;
         page++;
         
-        // Safety limit - don't fetch more than 10 pages (10,000 users)
-        if (page > 10) break;
+        // Safety limit - don't fetch more than 20 pages (20,000 users)
+        if (page > 20) break;
       }
       
       setBackendSearchResults(allUsers);

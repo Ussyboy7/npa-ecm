@@ -508,7 +508,10 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         const hasNext = isPaginated && usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse 
           ? !!(usersResponse as { next?: unknown }).next 
           : false;
-        hasMore = hasNext && pageUsers.length === 1000;
+        // Check if we got a full page (either 1000 if max_page_size allows, or less if that's all that's left)
+        // If we got fewer than requested, we're on the last page
+        const requestedPageSize = 1000;
+        hasMore = hasNext && pageUsers.length >= requestedPageSize;
         page++;
         
         // Safety limit - don't fetch more than 10 pages (10,000 users)
