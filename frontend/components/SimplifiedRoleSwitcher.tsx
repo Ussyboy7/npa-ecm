@@ -423,74 +423,76 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     const userInfo = `${user.email || ''}${user.employeeId ? ` • ID: ${user.employeeId}` : ''}${user.gradeLevel ? ` • ${user.gradeLevel}` : ''}`;
 
     return (
-      <TooltipProvider key={user.id}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              ref={(el) => {
-                if (el) userButtonRefs.current.set(user.id, el);
-                else userButtonRefs.current.delete(user.id);
-              }}
-              variant="ghost"
-              className="w-full justify-start h-auto py-2 px-3 overflow-hidden group"
-              onClick={() => handleImpersonateClick(user)}
-              disabled={isSwitching}
-              aria-label={`Switch to ${user.name || user.username}`}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleImpersonateClick(user);
-                }
-              }}
-            >
-              <div className="flex items-center gap-3 w-full min-w-0">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-medium text-xs flex-shrink-0">
-                  {user.name
-                    ?.split(' ')
-                    .map(n => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2) || 'U'}
-                </div>
-                <div className="flex-1 text-left min-w-0 overflow-hidden">
-                  <div className="text-sm font-medium">
-                    {debouncedSearchQuery.trim() ? highlightText(user.name || user.username || '', debouncedSearchQuery) : (user.name || user.username)}
+      <div key={user.id} className="relative group">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                ref={(el) => {
+                  if (el) userButtonRefs.current.set(user.id, el);
+                  else userButtonRefs.current.delete(user.id);
+                }}
+                variant="ghost"
+                className="w-full justify-start h-auto py-2 px-3 overflow-hidden"
+                onClick={() => handleImpersonateClick(user)}
+                disabled={isSwitching}
+                aria-label={`Switch to ${user.name || user.username}`}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleImpersonateClick(user);
+                  }
+                }}
+              >
+                <div className="flex items-center gap-3 w-full min-w-0">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-medium text-xs flex-shrink-0">
+                    {user.name
+                      ?.split(' ')
+                      .map(n => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2) || 'U'}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {debouncedSearchQuery.trim() && user.systemRole ? (
-                      highlightText(user.systemRole, debouncedSearchQuery)
-                    ) : (
-                      user.systemRole || user.gradeLevel
-                    )}
-                    {departmentName ? ` • ${departmentName}` : divisionName ? ` • ${divisionName}` : directorateName ? ` • ${directorateName}` : ''}
+                  <div className="flex-1 text-left min-w-0 overflow-hidden">
+                    <div className="text-sm font-medium">
+                      {debouncedSearchQuery.trim() ? highlightText(user.name || user.username || '', debouncedSearchQuery) : (user.name || user.username)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {debouncedSearchQuery.trim() && user.systemRole ? (
+                        highlightText(user.systemRole, debouncedSearchQuery)
+                      ) : (
+                        user.systemRole || user.gradeLevel
+                      )}
+                      {departmentName ? ` • ${departmentName}` : divisionName ? ` • ${divisionName}` : directorateName ? ` • ${directorateName}` : ''}
+                    </div>
                   </div>
                 </div>
-                {showFavorite && (
-                  <button
-                    type="button"
-                    onClick={(e) => toggleFavorite(user.id, e)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
-                    aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
-                    tabIndex={-1}
-                  >
-                    {isFav ? (
-                      <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-                    ) : (
-                      <StarOff className="h-4 w-4" />
-                    )}
-                  </button>
-                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="text-xs space-y-1">
+                <div className="font-medium">{user.name || user.username}</div>
+                {userInfo && <div className="text-muted-foreground">{userInfo}</div>}
               </div>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <div className="text-xs space-y-1">
-              <div className="font-medium">{user.name || user.username}</div>
-              {userInfo && <div className="text-muted-foreground">{userInfo}</div>}
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+        {showFavorite && (
+          <button
+            type="button"
+            onClick={(e) => toggleFavorite(user.id, e)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded z-10"
+            aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+            tabIndex={0}
+          >
+            {isFav ? (
+              <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+            ) : (
+              <StarOff className="h-4 w-4" />
+            )}
+          </button>
+        )}
+      </div>
     );
   };
 
