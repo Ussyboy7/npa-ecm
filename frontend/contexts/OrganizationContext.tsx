@@ -503,7 +503,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         officesRaw,
         officeMembershipsRaw,
       ] = await Promise.all([
-        apiFetch('/accounts/users/'),
+        apiFetch('/accounts/users/?is_active=true&page_size=1000'),
         apiFetch('/organization/directorates/?ordering=name&page_size=500'),
         apiFetch('/organization/divisions/?ordering=name&page_size=500'),
         apiFetch('/organization/departments/?ordering=name&page_size=500'),
