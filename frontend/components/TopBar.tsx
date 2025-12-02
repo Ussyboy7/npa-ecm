@@ -4,11 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { LogOut, Shield, Bell, HelpCircle, UserCog, Clock, Calendar, Settings, User, Inbox } from "lucide-react";
+import { LogOut, Shield, Bell, HelpCircle, UserCog, Clock, Calendar, Settings, User, Inbox, AlertTriangle, X } from "lucide-react";
 import { NotificationBell } from "./notifications/NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
-import { hasTokens, logout } from "@/lib/api-client";
+import { hasTokens, logout, hasOriginalTokens, getOriginalTokens } from "@/lib/api-client";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -26,9 +26,10 @@ import { SimplifiedRoleSwitcher } from "./SimplifiedRoleSwitcher";
 export const TopBar = () => {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
-  const { currentUser, hydrated } = useCurrentUser();
+  const { currentUser, hydrated, isImpersonating } = useCurrentUser();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showImpersonationBanner, setShowImpersonationBanner] = useState(true);
 
   useEffect(() => {
     setAuthenticated(hasTokens());
@@ -107,9 +108,42 @@ export const TopBar = () => {
     });
   };
 
+  // Check if impersonating
+  const isCurrentlyImpersonating = isImpersonating || hasOriginalTokens();
+  const originalTokens = getOriginalTokens();
+  const tokenExpiresSoon = originalTokens?.expiresAt 
+    ? (originalTokens.expiresAt - Date.now()) < 5 * 60 * 1000 // Less than 5 minutes
+    : false;
+
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-sidebar-border bg-sidebar overflow-hidden">
-      <div className="flex h-12 items-center gap-2 md:gap-3 px-3 md:px-4">
+    <>
+      {/* Impersonation Banner */}
+      {isCurrentlyImpersonating && showImpersonationBanner && (
+        <div className="sticky top-0 z-50 w-full bg-amber-500 dark:bg-amber-600 border-b border-amber-600 dark:border-amber-700">
+          <div className="flex items-center justify-between px-4 py-2 text-sm">
+            <div className="flex items-center gap-2 text-amber-950 dark:text-amber-50">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span className="font-medium">
+                You are impersonating <strong>{currentUser?.name || currentUser?.username || 'another user'}</strong>
+                {tokenExpiresSoon && (
+                  <span className="ml-2 text-xs">(Original session expires soon)</span>
+                )}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowImpersonationBanner(false)}
+              className="h-6 w-6 p-0 text-amber-950 dark:text-amber-50 hover:bg-amber-600 dark:hover:bg-amber-700"
+              aria-label="Dismiss banner"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+      <header className={`sticky ${isCurrentlyImpersonating && showImpersonationBanner ? 'top-[41px]' : 'top-0'} z-40 w-full border-b border-sidebar-border bg-sidebar overflow-hidden`}>
+        <div className="flex h-12 items-center gap-2 md:gap-3 px-3 md:px-4">
         {/* Mobile Sidebar Toggle */}
         <SidebarTrigger className="md:hidden h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent" />
 
@@ -293,6 +327,7 @@ export const TopBar = () => {
           </div>
         </div>
       )}
-    </header>
+      </header>
+    </>
   );
 };

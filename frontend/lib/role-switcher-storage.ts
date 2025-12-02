@@ -130,3 +130,87 @@ export function saveCollapsedGroups(collapsed: Set<string>): void {
   }
 }
 
+/**
+ * Clear recent users
+ */
+export function clearRecentUsers(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(RECENT_USERS_KEY);
+  } catch {
+    // Ignore errors
+  }
+}
+
+const SEARCH_HISTORY_KEY = 'role_switcher_search_history';
+const MAX_SEARCH_HISTORY = 10;
+
+/**
+ * Get search history
+ */
+export function getSearchHistory(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(SEARCH_HISTORY_KEY);
+    if (!stored) return [];
+    return JSON.parse(stored) as string[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Add search to history
+ */
+export function addSearchHistory(query: string): void {
+  if (typeof window === 'undefined' || !query.trim()) return;
+  try {
+    const history = getSearchHistory();
+    const filtered = history.filter(q => q.toLowerCase() !== query.toLowerCase());
+    const updated = [query.trim(), ...filtered].slice(0, MAX_SEARCH_HISTORY);
+    localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
+  } catch {
+    // Ignore errors
+  }
+}
+
+/**
+ * Clear search history
+ */
+export function clearSearchHistory(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(SEARCH_HISTORY_KEY);
+  } catch {
+    // Ignore errors
+  }
+}
+
+const GROUP_ORDER_KEY = 'role_switcher_group_order';
+
+/**
+ * Get custom group order
+ */
+export function getGroupOrder(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(GROUP_ORDER_KEY);
+    if (!stored) return [];
+    return JSON.parse(stored) as string[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save custom group order
+ */
+export function saveGroupOrder(order: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(GROUP_ORDER_KEY, JSON.stringify(order));
+  } catch {
+    // Ignore errors
+  }
+}
+

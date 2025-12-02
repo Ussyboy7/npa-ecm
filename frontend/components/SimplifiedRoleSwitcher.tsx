@@ -17,6 +17,7 @@ import {
   clearOriginalTokens,
   getOriginalTokens,
   storeTokens,
+  hasOriginalTokens,
 } from "@/lib/api-client";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
@@ -25,12 +26,18 @@ import { highlightText } from "@/lib/search-highlight";
 import {
   getRecentUsers,
   addRecentUser,
+  clearRecentUsers,
   getFavoriteUsers,
   addFavoriteUser,
   removeFavoriteUser,
   isFavoriteUser,
   getCollapsedGroups,
   saveCollapsedGroups,
+  getSearchHistory,
+  addSearchHistory,
+  clearSearchHistory,
+  getGroupOrder,
+  saveGroupOrder,
 } from "@/lib/role-switcher-storage";
 import { fetchUsers } from "@/lib/admin-api";
 
@@ -58,6 +65,14 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   const [recentUsers, setRecentUsers] = useState(getRecentUsers());
   const [backendSearchResults, setBackendSearchResults] = useState<User[]>([]);
   const [isSearchingBackend, setIsSearchingBackend] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>(getSearchHistory());
+  const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
+  const [groupOrder, setGroupOrder] = useState<string[]>(getGroupOrder());
+  const [performanceMetrics, setPerformanceMetrics] = useState({
+    searchTime: 0,
+    filterTime: 0,
+    renderTime: 0,
+  });
   
   const mountedRef = useRef(true);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -84,11 +99,21 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     saveCollapsedGroups(collapsedGroups);
   }, [collapsedGroups]);
 
-  // Load favorites on mount
+  // Load favorites and search history on mount
   useEffect(() => {
     setFavorites(new Set(getFavoriteUsers()));
     setRecentUsers(getRecentUsers());
+    setSearchHistory(getSearchHistory());
+    setGroupOrder(getGroupOrder());
   }, []);
+
+  // Save search to history when search is performed
+  useEffect(() => {
+    if (debouncedSearchQuery.trim() && debouncedSearchQuery.length > 2) {
+      addSearchHistory(debouncedSearchQuery);
+      setSearchHistory(getSearchHistory());
+    }
+  }, [debouncedSearchQuery]);
 
   // Backend search if user count exceeds threshold
   useEffect(() => {
@@ -170,41 +195,50 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
 
   // Use backend search results if available, otherwise filter locally
   const filteredUsers = useMemo(() => {
+    const startTime = performance.now();
+    
+    let result: User[];
+    
     if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim() && backendSearchResults.length > 0) {
-      return backendSearchResults;
+      result = backendSearchResults;
+    } else {
+      let pool = activeUsers;
+
+      if (debouncedSearchQuery.trim()) {
+        const query = debouncedSearchQuery.toLowerCase().trim();
+        pool = pool.filter((user) => {
+          const nameMatch = user.name?.toLowerCase().includes(query);
+          const emailMatch = user.email?.toLowerCase().includes(query);
+          const systemRoleMatch = user.systemRole?.toLowerCase().includes(query);
+          const usernameMatch = user.username?.toLowerCase().includes(query);
+          const employeeIdMatch = user.employeeId?.toLowerCase().includes(query);
+          const gradeLevelMatch = user.gradeLevel?.toLowerCase().includes(query);
+          
+          const divisionName = user.division ? divisionMap.get(user.division)?.name?.toLowerCase() : '';
+          const departmentName = user.department ? departmentMap.get(user.department)?.name?.toLowerCase() : '';
+          const directorateName = getDirectorateNameForUser(user)?.toLowerCase() ?? '';
+          
+          return (
+            nameMatch ||
+            emailMatch ||
+            systemRoleMatch ||
+            usernameMatch ||
+            employeeIdMatch ||
+            gradeLevelMatch ||
+            divisionName?.includes(query) ||
+            departmentName?.includes(query) ||
+            directorateName?.includes(query)
+          );
+        });
+      }
+
+      result = pool;
     }
-
-    let pool = activeUsers;
-
-    if (debouncedSearchQuery.trim()) {
-      const query = debouncedSearchQuery.toLowerCase().trim();
-      pool = pool.filter((user) => {
-        const nameMatch = user.name?.toLowerCase().includes(query);
-        const emailMatch = user.email?.toLowerCase().includes(query);
-        const systemRoleMatch = user.systemRole?.toLowerCase().includes(query);
-        const usernameMatch = user.username?.toLowerCase().includes(query);
-        const employeeIdMatch = user.employeeId?.toLowerCase().includes(query);
-        const gradeLevelMatch = user.gradeLevel?.toLowerCase().includes(query);
-        
-        const divisionName = user.division ? divisionMap.get(user.division)?.name?.toLowerCase() : '';
-        const departmentName = user.department ? departmentMap.get(user.department)?.name?.toLowerCase() : '';
-        const directorateName = getDirectorateNameForUser(user)?.toLowerCase() ?? '';
-        
-        return (
-          nameMatch ||
-          emailMatch ||
-          systemRoleMatch ||
-          usernameMatch ||
-          employeeIdMatch ||
-          gradeLevelMatch ||
-          divisionName?.includes(query) ||
-          departmentName?.includes(query) ||
-          directorateName?.includes(query)
-        );
-      });
-    }
-
-    return pool;
+    
+    const filterTime = performance.now() - startTime;
+    setPerformanceMetrics(prev => ({ ...prev, filterTime }));
+    
+    return result;
   }, [activeUsers, debouncedSearchQuery, directorateMap, divisionMap, departmentMap, getDirectorateNameForUser, backendSearchResults, users.length]);
 
   // Get recent and favorite users
@@ -305,7 +339,9 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     setIsSwitching(true);
     setConfirmDialogOpen(false);
     
-    if (!isImpersonating) {
+    // Store original tokens before attempting switch
+    const hadOriginalTokens = hasOriginalTokens();
+    if (!isImpersonating && !hadOriginalTokens) {
       storeOriginalTokens();
     }
 
@@ -336,6 +372,22 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to switch user";
       toast.error(message);
+      
+      // Restore original tokens on error if we had them
+      if (hadOriginalTokens) {
+        const originalTokens = getOriginalTokens();
+        if (originalTokens?.access && originalTokens.refresh) {
+          try {
+            const secondsRemaining = originalTokens.expiresAt
+              ? Math.max(0, Math.floor((originalTokens.expiresAt - Date.now()) / 1000))
+              : undefined;
+            storeTokens(originalTokens.access, originalTokens.refresh, secondsRemaining);
+          } catch (restoreError) {
+            console.error('Failed to restore original tokens:', restoreError);
+          }
+        }
+      }
+      
       if (mountedRef.current) {
         setIsSwitching(false);
       }
@@ -351,6 +403,20 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     if (!originalTokens?.access || !originalTokens.refresh) {
       toast.info("You are already using your primary account");
       return;
+    }
+
+    // Check if token is expired or about to expire
+    if (originalTokens.expiresAt) {
+      const timeRemaining = originalTokens.expiresAt - Date.now();
+      if (timeRemaining <= 0) {
+        toast.error("Your original session has expired. Please log in again.");
+        clearOriginalTokens();
+        onClose?.();
+        return;
+      }
+      if (timeRemaining < 60 * 1000) { // Less than 1 minute
+        toast.warning("Your original session is about to expire. You may need to log in again soon.");
+      }
     }
 
     try {
@@ -371,6 +437,12 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       const message = error instanceof Error ? error.message : "Unable to restore your session";
       toast.error(message);
     }
+  };
+
+  const handleClearRecent = () => {
+    clearRecentUsers();
+    setRecentUsers([]);
+    toast.success("Recent users cleared");
   };
 
   const toggleFavorite = (userId: string, e: React.MouseEvent) => {
@@ -583,21 +655,45 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             type="text"
             placeholder="Search by name, email, role..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowSearchSuggestions(e.target.value.length > 0);
+            }}
+            onFocus={() => {
+              if (searchHistory.length > 0 || searchQuery.length > 0) {
+                setShowSearchSuggestions(true);
+              }
+            }}
+            onBlur={() => {
+              // Delay to allow clicking on suggestions
+              setTimeout(() => setShowSearchSuggestions(false), 200);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchQuery.trim()) {
+                addSearchHistory(searchQuery.trim());
+                setSearchHistory(getSearchHistory());
+                setShowSearchSuggestions(false);
+              }
+            }}
             className="pl-9 h-9"
             disabled={isSwitching}
             aria-label="Search users"
             aria-describedby="search-help"
+            aria-autocomplete="list"
+            aria-expanded={showSearchSuggestions}
           />
           {isSearchingBackend && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="absolute right-10 top-1/2 -translate-y-1/2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           )}
           {searchQuery && (
             <button
               type="button"
-              onClick={() => setSearchQuery('')}
+              onClick={() => {
+                setSearchQuery('');
+                setShowSearchSuggestions(false);
+              }}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded"
               aria-label="Clear search"
             >
@@ -607,12 +703,79 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
           <span id="search-help" className="sr-only">
             Search users by name, email, role, employee ID, or organizational unit
           </span>
+          
+          {/* Search Suggestions */}
+          {showSearchSuggestions && (searchHistory.length > 0 || searchQuery.trim().length > 0) && (
+            <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto">
+              {searchQuery.trim().length > 0 && (
+                <div className="p-2">
+                  <p className="text-xs text-muted-foreground px-2 py-1">Search suggestions</p>
+                  {searchHistory
+                    .filter(h => h.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .slice(0, 5)
+                    .map((historyItem, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className="w-full text-left px-2 py-1.5 hover:bg-muted rounded text-sm"
+                        onClick={() => {
+                          setSearchQuery(historyItem);
+                          setShowSearchSuggestions(false);
+                        }}
+                      >
+                        <Search className="h-3 w-3 inline mr-2 text-muted-foreground" />
+                        {historyItem}
+                      </button>
+                    ))}
+                </div>
+              )}
+              {searchHistory.length > 0 && searchQuery.trim().length === 0 && (
+                <div className="p-2">
+                  <div className="flex items-center justify-between px-2 py-1">
+                    <p className="text-xs text-muted-foreground">Recent searches</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearSearchHistory();
+                        setSearchHistory([]);
+                        setShowSearchSuggestions(false);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  {searchHistory.slice(0, 5).map((historyItem, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 hover:bg-muted rounded text-sm flex items-center gap-2"
+                      onClick={() => {
+                        setSearchQuery(historyItem);
+                        setShowSearchSuggestions(false);
+                      }}
+                    >
+                      <Search className="h-3 w-3 text-muted-foreground" />
+                      {historyItem}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Search Results Count */}
+        {/* Search Results Count & Performance */}
         {isSearching && filteredUsers.length > 0 && (
-          <div className="text-xs text-muted-foreground px-1">
-            Found {filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'}
+          <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+            <span>
+              Found {filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'}
+            </span>
+            {process.env.NODE_ENV === 'development' && performanceMetrics.filterTime > 0 && (
+              <span className="text-[10px]">
+                {performanceMetrics.filterTime.toFixed(2)}ms
+              </span>
+            )}
           </div>
         )}
 
@@ -639,9 +802,20 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             {/* Recent Users */}
             {!isSearching && recentUserObjects.length > 0 && (
               <div role="group" aria-labelledby="recent-users">
-                <h3 id="recent-users" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Recent
-                </h3>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 id="recent-users" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Recent
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearRecent}
+                    className="h-6 text-xs text-muted-foreground hover:text-foreground"
+                    aria-label="Clear recent users"
+                  >
+                    Clear
+                  </Button>
+                </div>
                 <div className="space-y-1" role="list">
                   {recentUserObjects.map((user) => (
                     <div key={user.id} role="listitem">
@@ -671,14 +845,45 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
               </div>
             )}
 
-            {/* Grouped Users */}
-            {renderUserGroup("Executive Leadership", "executive", groupedUsers.executive)}
-            {renderUserGroup("General Managers", "gm", groupedUsers.gm)}
-            {renderUserGroup("AGMs & Managers", "manager", groupedUsers.manager)}
-            {renderUserGroup("Officers & Staff", "officer", groupedUsers.officer)}
-            {renderUserGroup("Assistants & Secretaries", "assistant", groupedUsers.assistant)}
-            {renderUserGroup("System Admins", "admin", groupedUsers.admin)}
-            {renderUserGroup("Other Users", "other", groupedUsers.other)}
+            {/* Grouped Users - Use custom order if available */}
+            {(() => {
+              const defaultOrder = [
+                { key: "executive", title: "Executive Leadership", users: groupedUsers.executive },
+                { key: "gm", title: "General Managers", users: groupedUsers.gm },
+                { key: "manager", title: "AGMs & Managers", users: groupedUsers.manager },
+                { key: "officer", title: "Officers & Staff", users: groupedUsers.officer },
+                { key: "assistant", title: "Assistants & Secretaries", users: groupedUsers.assistant },
+                { key: "admin", title: "System Admins", users: groupedUsers.admin },
+                { key: "other", title: "Other Users", users: groupedUsers.other },
+              ];
+              
+              // Apply custom order if available
+              if (groupOrder.length > 0) {
+                const ordered: typeof defaultOrder = [];
+                const unordered: typeof defaultOrder = [];
+                
+                // Add groups in custom order
+                groupOrder.forEach(key => {
+                  const group = defaultOrder.find(g => g.key === key);
+                  if (group) ordered.push(group);
+                });
+                
+                // Add remaining groups not in custom order
+                defaultOrder.forEach(group => {
+                  if (!groupOrder.includes(group.key)) {
+                    unordered.push(group);
+                  }
+                });
+                
+                return [...ordered, ...unordered].map(group => 
+                  renderUserGroup(group.title, group.key, group.users)
+                );
+              }
+              
+              return defaultOrder.map(group => 
+                renderUserGroup(group.title, group.key, group.users)
+              );
+            })()}
             
             {/* Empty States */}
             {!hasResults && !isSyncing && (
