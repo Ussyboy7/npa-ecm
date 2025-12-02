@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState, useEffect } from "react";
+import { Suspense, useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
@@ -22,6 +22,8 @@ import {
   Plus,
   Download,
   Loader2,
+  Calendar,
+  Filter,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
@@ -30,6 +32,9 @@ import { getGradeLevelByCode, type User } from "@/lib/npa-structure";
 import { exportToCSV } from "@/lib/admin-export";
 import { toast } from "@/hooks/use-toast";
 import { getRecentSearches, addRecentSearch, getSearchSuggestions, clearRecentSearches } from "@/lib/admin-search-autocomplete";
+import { fetchUsers, type User as ApiUser, type UserQueryParams, formatDateForAPI } from "@/lib/admin-api";
+import { handleApiError } from "@/lib/admin-error-handler";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type FilterCategory = "role" | "grade" | "directorate" | "division" | "department" | "status";
 
@@ -49,8 +54,15 @@ type SortState = {
 const getGradeLabel = (code: string | undefined) => getGradeLevelByCode(code)?.name;
 
 const UserManagementPageContent = () => {
-  const { users, divisions, departments } = useOrganization();
+  const { divisions, departments } = useOrganization();
   const searchParams = useSearchParams();
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+  const [users, setUsers] = useState<ApiUser[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Load from URL params or localStorage
   const [searchQuery, setSearchQuery] = useState(() => {
@@ -82,20 +94,115 @@ const UserManagementPageContent = () => {
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   
+  // Date range filters
+  const [dateJoinedFrom, setDateJoinedFrom] = useState<string>('');
+  const [dateJoinedTo, setDateJoinedTo] = useState<string>('');
+  const [lastLoginFrom, setLastLoginFrom] = useState<string>('');
+  const [lastLoginTo, setLastLoginTo] = useState<string>('');
+  
   // Load recent searches
   const recentSearches = typeof window !== 'undefined' ? getRecentSearches('users') : [];
   
-  // Generate search suggestions
+  // Reset to page 1 when filters/search change
   useEffect(() => {
-    if (searchQuery.trim().length > 1) {
-      const suggestions = getSearchSuggestions(searchQuery, users, 5);
+    setCurrentPage(1);
+  }, [searchQuery, filters, dateJoinedFrom, dateJoinedTo, lastLoginFrom, lastLoginTo]);
+  
+  const loadUsers = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      // Build query params
+      const queryParams: UserQueryParams = {
+        page: currentPage,
+        page_size: pageSize,
+      };
+      
+      if (searchQuery.trim()) {
+        queryParams.search = searchQuery.trim();
+      }
+      
+      // Apply filters
+      filters.forEach(filter => {
+        switch (filter.key) {
+          case 'status':
+            queryParams.is_active = filter.value === 'active';
+            break;
+          case 'role':
+            queryParams.system_role = filter.value;
+            break;
+          case 'division':
+            queryParams.division = filter.value;
+            break;
+          case 'department':
+            queryParams.department = filter.value;
+            break;
+        }
+      });
+      
+      // Date filters
+      if (dateJoinedFrom) queryParams.date_joined_from = dateJoinedFrom;
+      if (dateJoinedTo) queryParams.date_joined_to = dateJoinedTo;
+      if (lastLoginFrom) queryParams.last_login_from = lastLoginFrom;
+      if (lastLoginTo) queryParams.last_login_to = lastLoginTo;
+      
+      // Sorting
+      if (sortState) {
+        const ordering = sortState.direction === 'desc' ? `-${sortState.key}` : sortState.key;
+        queryParams.ordering = ordering;
+      }
+      
+      const response = await fetchUsers(queryParams);
+      setUsers(response.results);
+      setTotalCount(response.count);
+      
+    } catch (error) {
+      handleApiError(error, 'User Management');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, pageSize, searchQuery, filters, sortState, dateJoinedFrom, dateJoinedTo, lastLoginFrom, lastLoginTo]);
+  
+  // Map API users to local User type (must be before useEffects that use it)
+  const mappedUsers = useMemo(() => {
+    return users.map((apiUser): User => ({
+      id: apiUser.id,
+      name: `${apiUser.first_name} ${apiUser.last_name}`.trim() || apiUser.username,
+      email: apiUser.email,
+      employeeId: apiUser.employee_id || '',
+      gradeLevel: apiUser.grade_level || '',
+      directorate: apiUser.directorate || undefined,
+      division: apiUser.division || undefined,
+      department: apiUser.department || undefined,
+      systemRole: apiUser.system_role_name || apiUser.system_role || '',
+      active: apiUser.is_active,
+      username: apiUser.username,
+      isSuperuser: apiUser.is_superuser,
+    }));
+  }, [users]);
+  
+  // Load users with pagination
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+  
+  // Generate search suggestions (using loaded users)
+  useEffect(() => {
+    if (searchQuery.trim().length > 1 && mappedUsers.length > 0) {
+      const suggestions = getSearchSuggestions(searchQuery, mappedUsers.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        systemRole: u.systemRole,
+        employeeId: u.employeeId,
+      })), 5);
       setSearchSuggestions(suggestions);
       setShowSearchSuggestions(suggestions.length > 0);
     } else {
       setShowSearchSuggestions(false);
       setSearchSuggestions([]);
     }
-  }, [searchQuery, users]);
+  }, [searchQuery, mappedUsers]);
   
   // Persist to localStorage and URL
   useEffect(() => {
@@ -120,72 +227,13 @@ const UserManagementPageContent = () => {
     setFilters((prev) => prev.filter((item) => item !== filter));
   };
 
-  const filterPredicate = (user: User) => {
-    if (filters.length === 0) return true;
-    return filters.every((filter) => {
-      switch (filter.key) {
-        case "role":
-          return user.systemRole === filter.value;
-        case "grade":
-          return user.gradeLevel === filter.value;
-        case "directorate":
-          return user.directorate === filter.value;
-        case "division":
-          return user.division === filter.value;
-        case "department":
-          return user.department === filter.value;
-        case "status":
-          return filter.value === (user.active ? "active" : "inactive");
-        default:
-          return true;
-      }
-    });
-  };
+  // Filtering is now done on the backend, but we keep this for reference
+  // The filters are applied in the loadUsers function via queryParams
 
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return users.filter(filterPredicate);
-    }
-    return users
-      .filter(filterPredicate)
-      .filter((user) =>
-      [user.name, user.email, user.systemRole, user.employeeId]
-        .filter(Boolean)
-        .some((field) => field!.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
-  }, [users, searchQuery, filters]);
-
-  const sortedUsers = useMemo(() => {
-    if (!sortState) return filteredUsers;
-
-    const accessor = (user: User): string => {
-      switch (sortState.key) {
-        case "name":
-          return user.name ?? "";
-        case "email":
-          return user.email ?? "";
-        case "role":
-          return user.systemRole ?? "";
-        case "grade":
-          return user.gradeLevel ?? "";
-        case "division":
-          return user.division ?? "";
-        case "department":
-          return user.department ?? "";
-        case "status":
-          return user.active ? "active" : "inactive";
-        default:
-          return "";
-      }
-    };
-
-    const collator = new Intl.Collator(undefined, { sensitivity: "base" });
-    const sorted = [...filteredUsers].sort((a, b) => collator.compare(accessor(a), accessor(b)));
-    if (sortState.direction === "desc") {
-      sorted.reverse();
-    }
-    return sorted;
-  }, [filteredUsers, sortState]);
+  // Calculate pagination info
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const startItem = (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalCount);
 
   const toggleSort = (key: SortKey) => {
     setSortState((prev) => {
@@ -205,6 +253,9 @@ const UserManagementPageContent = () => {
           localStorage.removeItem('admin_users_sort');
         }
       }
+      
+      // Reset to page 1 when sorting changes
+      setCurrentPage(1);
       
       return newState;
     });
@@ -241,7 +292,7 @@ const UserManagementPageContent = () => {
                   size="sm"
                   onClick={async () => {
                     // Bulk activate
-                    const selectedUsers = sortedUsers.filter(u => selectedUserIds.has(u.id));
+                    const selectedUsers = mappedUsers.filter(u => selectedUserIds.has(u.id));
                     try {
                       // Implementation would call API to bulk update
                       toast({
@@ -265,7 +316,7 @@ const UserManagementPageContent = () => {
                   size="sm"
                   onClick={async () => {
                     // Bulk deactivate
-                    const selectedUsers = sortedUsers.filter(u => selectedUserIds.has(u.id));
+                    const selectedUsers = mappedUsers.filter(u => selectedUserIds.has(u.id));
                     if (!confirm(`Deactivate ${selectedUsers.length} user(s)?`)) return;
                     try {
                       // Implementation would call API to bulk update
@@ -306,7 +357,7 @@ const UserManagementPageContent = () => {
                   { key: 'department' as keyof User, label: 'Department' },
                   { key: 'active' as keyof User, label: 'Status' },
                 ];
-                exportToCSV(sortedUsers, columns, { filename: `users-export-${new Date().toISOString().split('T')[0]}.csv` });
+                exportToCSV(mappedUsers, columns, { filename: `users-export-${new Date().toISOString().split('T')[0]}.csv` });
               }}
               aria-label="Export users to CSV"
             >
@@ -344,7 +395,7 @@ const UserManagementPageContent = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Users</p>
-                <p className="text-2xl font-bold">{users.length}</p>
+                <p className="text-2xl font-bold">{totalCount}</p>
               </div>
             </CardContent>
           </Card>
@@ -358,7 +409,7 @@ const UserManagementPageContent = () => {
                 <p className="text-sm text-muted-foreground">Management Level</p>
                 <p className="text-2xl font-bold">
                   {
-                    users.filter((user) =>
+                    mappedUsers.filter((user) =>
                       ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(user.gradeLevel)
                     ).length
                   }
@@ -377,7 +428,7 @@ const UserManagementPageContent = () => {
                 <p className="text-2xl font-bold">
                   {
                     Array.from(
-                      new Set(users.map((user) => user.division).filter(Boolean))
+                      new Set(mappedUsers.map((user) => user.division).filter(Boolean))
                     ).length
                   }
                 </p>
@@ -499,13 +550,79 @@ const UserManagementPageContent = () => {
         </div>
       )}
 
+      {/* Date Range Filters */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Date Range Filters
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDateJoinedFrom('');
+                setDateJoinedTo('');
+                setLastLoginFrom('');
+                setLastLoginTo('');
+              }}
+            >
+              Clear Dates
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Date Joined</label>
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  value={dateJoinedFrom}
+                  onChange={(e) => setDateJoinedFrom(e.target.value)}
+                  placeholder="From"
+                  className="flex-1"
+                />
+                <Input
+                  type="date"
+                  value={dateJoinedTo}
+                  onChange={(e) => setDateJoinedTo(e.target.value)}
+                  placeholder="To"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Last Login</label>
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  value={lastLoginFrom}
+                  onChange={(e) => setLastLoginFrom(e.target.value)}
+                  placeholder="From"
+                  className="flex-1"
+                />
+                <Input
+                  type="date"
+                  value={lastLoginTo}
+                  onChange={(e) => setLastLoginTo(e.target.value)}
+                  placeholder="To"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>User Directory</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {users.length === 0 ? (
-            <UserTableSkeleton rows={5} />
+          {loading && mappedUsers.length === 0 ? (
+            <UserTableSkeleton rows={pageSize} />
           ) : (
           <Table>
             <TableHeader>
@@ -513,10 +630,10 @@ const UserManagementPageContent = () => {
                 <TableHead className="w-12">
                   <input
                     type="checkbox"
-                    checked={selectedUserIds.size === sortedUsers.length && sortedUsers.length > 0}
+                    checked={selectedUserIds.size === mappedUsers.length && mappedUsers.length > 0}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setSelectedUserIds(new Set(sortedUsers.map(u => u.id)));
+                        setSelectedUserIds(new Set(mappedUsers.map(u => u.id)));
                       } else {
                         setSelectedUserIds(new Set());
                       }
@@ -606,7 +723,16 @@ const UserManagementPageContent = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedUsers.map((user) => {
+              {loading ? (
+                <UserTableSkeleton rows={pageSize} />
+              ) : mappedUsers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    No users found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                mappedUsers.map((user) => {
                 const grade = getGradeLabel(user.gradeLevel);
                 const division = user.division
                   ? divisions.find((div) => div.id === user.division)
@@ -730,12 +856,80 @@ const UserManagementPageContent = () => {
                     </TableCell>
                   </TableRow>
                 );
-              })}
+              }))}
             </TableBody>
           </Table>
           )}
           
-          {sortedUsers.length === 0 && users.length > 0 && (
+          {/* Pagination Controls */}
+          {totalCount > 0 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {startItem} to {endItem} of {totalCount} users
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1 || loading}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        disabled={loading}
+                        className="w-10"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages || loading}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="ml-2 px-2 py-1 text-sm border rounded"
+                  disabled={loading}
+                >
+                  <option value={25}>25 per page</option>
+                  <option value={50}>50 per page</option>
+                  <option value={100}>100 per page</option>
+                </select>
+              </div>
+            </div>
+          )}
+          
+          {mappedUsers.length === 0 && !loading && (
             <div className="p-16 text-center">
               <div className="flex flex-col items-center gap-4">
                 <div className="p-4 rounded-full bg-muted/50">
