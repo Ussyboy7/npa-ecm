@@ -17,7 +17,7 @@ from common.upload_validators import validate_file_upload
 from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError, PermissionDenied
 
 from audit.services import AuditService
 from notifications.models import Notification
@@ -108,6 +108,59 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     search_fields = ["reference_number", "subject", "summary", "tags"]
     ordering_fields = ["created_at", "updated_at", "received_date"]
     ordering = ["-created_at"]
+
+    def filter_queryset(self, queryset):
+        """Override to add date range filtering and enhanced search."""
+        # Get date range parameters
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        received_date_from = self.request.query_params.get("received_date_from")
+        received_date_to = self.request.query_params.get("received_date_to")
+        
+        # Call super to apply standard filters (SearchFilter, DjangoFilterBackend, etc.)
+        queryset = super().filter_queryset(queryset)
+        
+        # Apply created_at date range filter
+        if date_from:
+            try:
+                from_date = datetime.strptime(date_from, "%Y-%m-%d").date()
+                queryset = queryset.filter(created_at__date__gte=from_date)
+            except ValueError:
+                pass  # Invalid date format, ignore
+        
+        if date_to:
+            try:
+                to_date = datetime.strptime(date_to, "%Y-%m-%d").date()
+                queryset = queryset.filter(created_at__date__lte=to_date)
+            except ValueError:
+                pass  # Invalid date format, ignore
+        
+        # Apply received_date range filter
+        if received_date_from:
+            try:
+                from_date = datetime.strptime(received_date_from, "%Y-%m-%d").date()
+                queryset = queryset.filter(received_date__gte=from_date)
+            except ValueError:
+                pass
+        
+        if received_date_to:
+            try:
+                to_date = datetime.strptime(received_date_to, "%Y-%m-%d").date()
+                queryset = queryset.filter(received_date__lte=to_date)
+            except ValueError:
+                pass
+        
+        # Enhanced search: also search in minutes and attachments
+        search_query = self.request.query_params.get("search", "").strip()
+        if search_query:
+            # Search in minutes
+            minute_filter = Q(minutes__minute_text__icontains=search_query)
+            # Search in attachment file names
+            attachment_filter = Q(attachments__file_name__icontains=search_query)
+            # Combine with existing search results using OR
+            queryset = queryset.filter(minute_filter | attachment_filter).distinct()
+        
+        return queryset
 
     def get_queryset(self):
         qs = self.base_queryset
@@ -342,6 +395,212 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(correspondence)
         return Response(serializer.data)
 
+    @action(detail=False, methods=["post"], url_path="bulk-archive")
+    def bulk_archive(self, request):
+        """Archive multiple correspondence items at once."""
+        correspondence_ids = request.data.get("correspondence_ids", [])
+        
+        if not correspondence_ids:
+            raise ValidationError({"correspondence_ids": "Correspondence IDs are required"})
+        
+        correspondences = Correspondence.objects.filter(id__in=correspondence_ids, is_deleted=False)
+        
+        # Check permissions - user must be creator, current approver, or superuser
+        accessible_items = []
+        for corr in correspondences:
+            if corr.created_by == request.user or request.user.is_superuser:
+                accessible_items.append(corr)
+            elif corr.current_approver == request.user:
+                accessible_items.append(corr)
+            # Check if user is in owning/current office
+            elif corr.owning_office_id or corr.current_office_id:
+                office_ids = self._get_user_office_ids(request.user)
+                if (corr.owning_office_id in office_ids) or (corr.current_office_id in office_ids):
+                    accessible_items.append(corr)
+        
+        if not accessible_items:
+            raise PermissionDenied("You don't have permission to archive any of the selected items")
+        
+        # Archive correspondence
+        archived_count = 0
+        from audit.models import ActivityLog
+        
+        for corr in accessible_items:
+            corr.status = Correspondence.Status.ARCHIVED
+            corr.save(update_fields=["status", "updated_at"])
+            archived_count += 1
+            
+            AuditService.log_correspondence_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+                correspondence=corr,
+                request=request,
+                description=f"Archived correspondence: {corr.reference_number} - {corr.subject}",
+                metadata={"bulk_operation": True, "new_status": "archived"},
+            )
+        
+        return Response({
+            "message": f"Successfully archived {archived_count} correspondence item(s)",
+            "archived_count": archived_count,
+            "skipped_count": len(correspondence_ids) - archived_count,
+        })
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        """Soft delete multiple correspondence items at once."""
+        correspondence_ids = request.data.get("correspondence_ids", [])
+        
+        if not correspondence_ids:
+            raise ValidationError({"correspondence_ids": "Correspondence IDs are required"})
+        
+        correspondences = Correspondence.objects.filter(id__in=correspondence_ids, is_deleted=False)
+        
+        # Check permissions - user must be creator or superuser
+        accessible_items = []
+        for corr in correspondences:
+            if corr.created_by == request.user or request.user.is_superuser:
+                accessible_items.append(corr)
+        
+        if not accessible_items:
+            raise PermissionDenied("You don't have permission to delete any of the selected items")
+        
+        # Soft delete correspondence
+        deleted_count = 0
+        from audit.models import ActivityLog
+        
+        for corr in accessible_items:
+            corr.is_deleted = True
+            corr.save(update_fields=["is_deleted", "updated_at"])
+            deleted_count += 1
+            
+            AuditService.log_correspondence_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.CORRESPONDENCE_DELETED,
+                correspondence=corr,
+                request=request,
+                description=f"Deleted correspondence: {corr.reference_number} - {corr.subject}",
+                metadata={"bulk_operation": True, "soft_delete": True},
+            )
+        
+        return Response({
+            "message": f"Successfully deleted {deleted_count} correspondence item(s)",
+            "deleted_count": deleted_count,
+            "skipped_count": len(correspondence_ids) - deleted_count,
+        })
+
+    @action(detail=False, methods=["post"], url_path="bulk-reassign")
+    def bulk_reassign(self, request):
+        """Reassign multiple correspondence items to a target office/user."""
+        correspondence_ids = request.data.get("correspondence_ids", [])
+        target_office_id = request.data.get("target_office_id")
+        owning_office_id = request.data.get("owning_office_id")
+        target_user_id = request.data.get("target_user_id")
+        reason = (request.data.get("reason") or "").strip()
+        
+        if not correspondence_ids:
+            raise ValidationError({"correspondence_ids": "Correspondence IDs are required"})
+        
+        if not reason:
+            raise ValidationError({"reason": "Please provide a reason for the bulk reassignment."})
+        
+        correspondences = Correspondence.objects.filter(id__in=correspondence_ids, is_deleted=False)
+        
+        # Check permissions
+        accessible_items = []
+        for corr in correspondences:
+            if corr.created_by == request.user or request.user.is_superuser:
+                accessible_items.append(corr)
+            elif corr.current_approver == request.user:
+                accessible_items.append(corr)
+            # Check office membership
+            elif corr.owning_office_id or corr.current_office_id:
+                office_ids = self._get_user_office_ids(request.user)
+                if (corr.owning_office_id in office_ids) or (corr.current_office_id in office_ids):
+                    accessible_items.append(corr)
+        
+        if not accessible_items:
+            raise PermissionDenied("You don't have permission to reassign any of the selected items")
+        
+        # Reassign correspondence
+        reassigned_count = 0
+        from audit.models import ActivityLog
+        
+        target_office = None
+        if target_office_id:
+            target_office = self._get_office_or_400(target_office_id)
+        
+        owning_office = None
+        if owning_office_id:
+            owning_office = self._get_office_or_400(owning_office_id)
+        
+        target_user = None
+        if target_user_id:
+            target_user = self._get_user_or_400(target_user_id)
+        
+        for corr in accessible_items:
+            updates = set()
+            
+            if owning_office and corr.owning_office_id != owning_office.id:
+                corr.owning_office = owning_office
+                updates.add("owning_office")
+            
+            if target_office and corr.current_office_id != target_office.id:
+                corr.current_office = target_office
+                updates.add("current_office")
+            
+            if target_user_id == "":
+                if corr.current_approver_id is not None:
+                    corr.current_approver = None
+                    updates.add("current_approver")
+            elif target_user and corr.current_approver_id != target_user.id:
+                corr.current_approver = target_user
+                updates.add("current_approver")
+            
+            if updates:
+                if corr.status != Correspondence.Status.IN_PROGRESS:
+                    corr.status = Correspondence.Status.IN_PROGRESS
+                    updates.add("status")
+                
+                corr.save(update_fields=list(updates) + ["updated_at"])
+                reassigned_count += 1
+                
+                AuditService.log_correspondence_activity(
+                    user=request.user,
+                    action=ActivityLog.ActionType.CORRESPONDENCE_ROUTED,
+                    correspondence=corr,
+                    request=request,
+                    description=f"Bulk reassigned correspondence: {corr.reference_number}",
+                    metadata={
+                        "bulk_operation": True,
+                        "reason": reason,
+                        "target_office": str(target_office.id) if target_office else None,
+                        "owning_office": str(owning_office.id) if owning_office else None,
+                        "target_user": str(target_user.id) if target_user else None,
+                    },
+                )
+                
+                # Send notifications
+                if target_user:
+                    NotificationService.create_notification(
+                        recipient=target_user,
+                        title=f"Correspondence reassigned ({corr.reference_number})",
+                        message=f"{request.user.get_full_name() or request.user.username} reassigned this correspondence to you. Reason: {reason}",
+                        notification_type=Notification.NotificationType.CORRESPONDENCE,
+                        priority=Notification.Priority.NORMAL,
+                        sender=request.user,
+                        module="correspondence",
+                        related_object_type="correspondence",
+                        related_object_id=str(corr.id),
+                        action_url=f"/correspondence/{corr.id}",
+                        action_required=True,
+                    )
+        
+        return Response({
+            "message": f"Successfully reassigned {reassigned_count} correspondence item(s)",
+            "reassigned_count": reassigned_count,
+            "skipped_count": len(correspondence_ids) - reassigned_count,
+        })
+
     @action(detail=True, methods=["post"], url_path="completion-package")
     def regenerate_completion_package(self, request, pk=None):
         correspondence = self.get_object()
@@ -358,102 +617,106 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         """
         Get counts for sidebar badges.
         Returns counts for office inbox, my inbox, and outbox.
-        Optimized for performance - only returns counts, no data.
+        Optimized for performance using aggregation queries.
         """
-        user = request.user
-        
-        # Get user's office IDs
-        office_ids = self._get_user_office_ids(user)
-        
-        # === Office Inbox Count ===
+        from django.db.models import Count, Q, Exists, OuterRef
         from correspondence.models import Minute, CorrespondenceDistribution
         from organization.models import OfficeMembership, Office
         
+        user = request.user
+        
+        # Get user's office IDs (cached)
+        office_ids = self._get_user_office_ids(user)
+        
+        # === Office Inbox Count (Optimized) ===
         office_inbox_count = 0
         if office_ids or user.is_superuser:
-            # Get parallel routing correspondence IDs
-            parallel_correspondence_ids = Minute.objects.filter(
-                to_user=user,
-                is_parallel_branch=True,
-                correspondence__workflow_state='parallel'
-            ).values_list('correspondence_id', flat=True).distinct()
-            
-            # Get user's organizational units from their office memberships
-            user_offices = OfficeMembership.objects.filter(
-                user=user, is_active=True
-            ).select_related('office').values_list('office', flat=True)
-            
-            user_office_objs = Office.objects.filter(id__in=user_offices)
-            user_division_ids = set(user_office_objs.values_list('division_id', flat=True))
-            user_department_ids = set(user_office_objs.values_list('department_id', flat=True))
-            user_directorate_ids = set(user_office_objs.values_list('directorate_id', flat=True))
-            
-            # Also include user's direct division/department from profile
-            if hasattr(user, 'division_id') and user.division_id:
-                user_division_ids.add(user.division_id)
-            if hasattr(user, 'department_id') and user.department_id:
-                user_department_ids.add(user.department_id)
-            if hasattr(user, 'directorate_id') and user.directorate_id:
-                user_directorate_ids.add(user.directorate_id)
-            
-            # Remove None values
-            user_division_ids.discard(None)
-            user_department_ids.discard(None)
-            user_directorate_ids.discard(None)
-            
-            # Get correspondence IDs where user is a distribution recipient
-            distribution_filter = Q()
-            if user_division_ids:
-                distribution_filter |= Q(division_id__in=user_division_ids)
-            if user_department_ids:
-                distribution_filter |= Q(department_id__in=user_department_ids)
-            if user_directorate_ids:
-                distribution_filter |= Q(directorate_id__in=user_directorate_ids)
-            
-            distribution_correspondence_ids = []
-            if distribution_filter:
-                distribution_correspondence_ids = CorrespondenceDistribution.objects.filter(
-                    distribution_filter
-                ).values_list('correspondence_id', flat=True).distinct()
+            # Build optimized query with subqueries
+            base_filter = Q(is_deleted=False) & ~Q(status=Correspondence.Status.COMPLETED)
             
             if user.is_superuser and not office_ids:
-                office_inbox_queryset = self.base_queryset.filter(
-                    is_deleted=False
-                ).exclude(status=Correspondence.Status.COMPLETED)
+                office_inbox_count = Correspondence.objects.filter(base_filter).count()
             else:
-                office_inbox_queryset = self.base_queryset.filter(is_deleted=False).filter(
-                    Q(current_office_id__in=office_ids) | 
-                    Q(owning_office_id__in=office_ids) |
-                    Q(id__in=parallel_correspondence_ids) |
-                    Q(id__in=distribution_correspondence_ids)
-                ).exclude(status=Correspondence.Status.COMPLETED)
-            
-            office_inbox_count = office_inbox_queryset.count()
+                # Parallel routing subquery
+                parallel_subquery = Minute.objects.filter(
+                    to_user=user,
+                    is_parallel_branch=True,
+                    correspondence__workflow_state='parallel',
+                    correspondence_id=OuterRef('id')
+                )
+                
+                # Distribution subquery - get user's org units once
+                user_offices = OfficeMembership.objects.filter(
+                    user=user, is_active=True
+                ).select_related('office').values_list('office', flat=True)
+                
+                user_office_objs = Office.objects.filter(id__in=user_offices)
+                user_division_ids = list(user_office_objs.values_list('division_id', flat=True).distinct())
+                user_department_ids = list(user_office_objs.values_list('department_id', flat=True).distinct())
+                user_directorate_ids = list(user_office_objs.values_list('directorate_id', flat=True).distinct())
+                
+                # Add user's direct org units
+                if hasattr(user, 'division_id') and user.division_id:
+                    user_division_ids.append(user.division_id)
+                if hasattr(user, 'department_id') and user.department_id:
+                    user_department_ids.append(user.department_id)
+                if hasattr(user, 'directorate_id') and user.directorate_id:
+                    user_directorate_ids.append(user.directorate_id)
+                
+                # Remove None values
+                user_division_ids = [x for x in user_division_ids if x]
+                user_department_ids = [x for x in user_department_ids if x]
+                user_directorate_ids = [x for x in user_directorate_ids if x]
+                
+                # Distribution subquery
+                distribution_filter = Q()
+                if user_division_ids:
+                    distribution_filter |= Q(division_id__in=user_division_ids)
+                if user_department_ids:
+                    distribution_filter |= Q(department_id__in=user_department_ids)
+                if user_directorate_ids:
+                    distribution_filter |= Q(directorate_id__in=user_directorate_ids)
+                
+                distribution_subquery = None
+                if distribution_filter:
+                    distribution_subquery = CorrespondenceDistribution.objects.filter(
+                        distribution_filter,
+                        correspondence_id=OuterRef('id')
+                    )
+                
+                # Build main query with subqueries
+                office_filter = Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
+                if parallel_subquery:
+                    office_filter |= Exists(parallel_subquery)
+                if distribution_subquery:
+                    office_filter |= Exists(distribution_subquery)
+                
+                office_inbox_count = Correspondence.objects.filter(
+                    base_filter & office_filter
+                ).count()
         
-        # === My Inbox Count ===
-        # Items directly assigned to user + parallel routes
-        my_parallel_ids = Minute.objects.filter(
+        # === My Inbox Count (Optimized) ===
+        my_parallel_subquery = Minute.objects.filter(
             to_user=user,
             is_parallel_branch=True,
             correspondence__workflow_state__in=['parallel', 'waiting_merge'],
-            correspondence__status__in=['pending', 'in-progress']
-        ).values_list('correspondence_id', flat=True).distinct()
+            correspondence__status__in=['pending', 'in-progress'],
+            correspondence_id=OuterRef('id')
+        )
         
-        my_inbox_count = self.base_queryset.filter(is_deleted=False).filter(
-            Q(current_approver=user) | 
-            Q(id__in=my_parallel_ids)
+        my_inbox_count = Correspondence.objects.filter(
+            Q(is_deleted=False) &
+            (Q(current_approver=user) | Exists(my_parallel_subquery))
         ).exclude(status=Correspondence.Status.COMPLETED).count()
         
-        # === Outbox Count ===
-        # Items created by user that are still pending or in-progress
-        outbox_count = self.base_queryset.filter(
+        # === Outbox Count (Optimized) ===
+        outbox_count = Correspondence.objects.filter(
             is_deleted=False,
             created_by=user,
             status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
         ).count()
         
-        # === Delegated Count ===
-        # Items delegated TO the current user (as assistant)
+        # === Delegated Count (Optimized) ===
         delegated_count = CorrespondenceDelegation.objects.filter(
             assistant=user,
             status=CorrespondenceDelegation.Status.ACTIVE
