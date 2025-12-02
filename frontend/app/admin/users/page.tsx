@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
-import { UserTableSkeleton } from "@/components/admin/UserTableSkeleton";
+import { UserTableSkeleton, UserTableSkeletonRows } from "@/components/admin/UserTableSkeleton";
 import { getGradeLevelByCode, type User } from "@/lib/npa-structure";
 import { exportToCSV } from "@/lib/admin-export";
 import { toast } from "@/hooks/use-toast";
@@ -674,7 +674,7 @@ const UserManagementPageContent = () => {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <UserTableSkeleton rows={pageSize} />
+                <UserTableSkeletonRows rows={pageSize} />
               ) : mappedUsers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
