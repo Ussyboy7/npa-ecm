@@ -65,12 +65,7 @@ export default function AdminDashboardPage() {
       total: users.length,
       active: users.filter(u => u.active).length,
       inactive: users.filter(u => !u.active).length,
-      new_this_week: users.filter(u => {
-        const joinedDate = new Date(u.dateJoined || '');
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        return joinedDate > weekAgo;
-      }).length,
+      new_this_week: 0, // Will be calculated from API if needed
     },
     roles: {
       total: roles.length,
