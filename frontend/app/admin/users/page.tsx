@@ -98,16 +98,31 @@ const UserManagementPageContent = () => {
   
   // Reset to page 1 when filters/search change
   useEffect(() => {
-    setCurrentPage(1);
+    if (currentPage !== 1) {
+      setCurrentPage(1);
+    }
   }, [searchQuery, filters]);
   
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
       
+      // Ensure page is valid (DRF requires page >= 1)
+      const validPage = Math.max(1, currentPage);
+      if (validPage !== currentPage) {
+        setCurrentPage(validPage);
+        return; // Will retry with valid page on next render
+      }
+      
+      // Don't make API call if page is invalid
+      if (currentPage < 1) {
+        setCurrentPage(1);
+        return;
+      }
+      
       // Build query params
       const queryParams: UserQueryParams = {
-        page: currentPage,
+        page: validPage,
         page_size: pageSize,
       };
       
@@ -143,7 +158,21 @@ const UserManagementPageContent = () => {
       setUsers(response.results);
       setTotalCount(response.count);
       
-    } catch (error) {
+      // If current page exceeds total pages after filtering, reset to last valid page
+      const totalPages = Math.ceil(response.count / pageSize);
+      if (totalPages > 0 && validPage > totalPages) {
+        setCurrentPage(totalPages);
+      }
+      
+    } catch (error: any) {
+      // Handle "Invalid page" error specifically
+      if (error?.message?.includes('Invalid page') || error?.detail === 'Invalid page.') {
+        // Reset to page 1 if page is invalid
+        if (currentPage !== 1) {
+          setCurrentPage(1);
+          return; // Will retry with page 1
+        }
+      }
       handleApiError(error, 'User Management');
     } finally {
       setLoading(false);
