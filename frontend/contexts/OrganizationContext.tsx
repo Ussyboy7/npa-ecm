@@ -493,8 +493,36 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     logInfo('Refreshing organization data...');
     setIsSyncing(true);
     try {
+      // Fetch all users with pagination
+      let allUsers: any[] = [];
+      let page = 1;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const usersResponse = await apiFetch(`/accounts/users/?is_active=true&page_size=1000&page=${page}&ordering=username`);
+        const pageUsers = unwrapResults<any>(usersResponse);
+        allUsers = [...allUsers, ...pageUsers];
+        
+        // Check if there are more pages
+        const isPaginated = usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse;
+        const hasNext = isPaginated && usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse 
+          ? !!(usersResponse as { next?: unknown }).next 
+          : false;
+        hasMore = hasNext && pageUsers.length === 1000;
+        page++;
+        
+        // Safety limit - don't fetch more than 10 pages (10,000 users)
+        if (page > 10) break;
+      }
+      
+      logInfo('Users API response:', { totalFetched: allUsers.length, pages: page - 1 });
+      const apiUsers = dedupeUsers(allUsers.map(mapApiUserToUser));
+      const sortedUsers = sortByName(apiUsers);
+      logInfo('Mapped users:', { count: sortedUsers.length, sample: sortedUsers[0] });
+      setUsers(sortedUsers);
+
+      // Fetch other organization data
       const [
-        usersDataRaw,
         directoratesRaw,
         divisionsRaw,
         departmentsRaw,
@@ -503,7 +531,6 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         officesRaw,
         officeMembershipsRaw,
       ] = await Promise.all([
-        apiFetch('/accounts/users/?is_active=true&page_size=1000'),
         apiFetch('/organization/directorates/?ordering=name&page_size=500'),
         apiFetch('/organization/divisions/?ordering=name&page_size=500'),
         apiFetch('/organization/departments/?ordering=name&page_size=500'),
@@ -512,13 +539,6 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         apiFetch('/organization/offices/?ordering=name&page_size=500'),
         apiFetch('/organization/office-memberships/?ordering=office__name&page_size=500'),
       ]);
-
-      const unwrappedUsers = unwrapResults<any>(usersDataRaw);
-      logInfo('Users API response:', { raw: usersDataRaw, unwrapped: unwrappedUsers, count: unwrappedUsers.length });
-      const apiUsers = dedupeUsers(unwrappedUsers.map(mapApiUserToUser));
-      const sortedUsers = sortByName(apiUsers);
-      logInfo('Mapped users:', { count: sortedUsers.length, sample: sortedUsers[0] });
-      setUsers(sortedUsers);
 
       const apiDirectorates = unwrapResults<any>(directoratesRaw).map(mapApiDirectorate);
       const apiDivisions = unwrapResults<any>(divisionsRaw).map(mapApiDivision);

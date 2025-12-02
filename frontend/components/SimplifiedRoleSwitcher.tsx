@@ -128,23 +128,46 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   const performBackendSearch = async (query: string) => {
     setIsSearchingBackend(true);
     try {
-      const response = await fetchUsers({ search: query, page_size: 100, is_active: true });
-      // Map API users to local User type
-      const mappedUsers: User[] = response.results.map((apiUser) => ({
-        id: apiUser.id,
-        name: `${apiUser.first_name} ${apiUser.last_name}`.trim() || apiUser.username,
-        email: apiUser.email,
-        employeeId: apiUser.employee_id || '',
-        gradeLevel: apiUser.grade_level || '',
-        directorate: apiUser.directorate || undefined,
-        division: apiUser.division || undefined,
-        department: apiUser.department || undefined,
-        systemRole: apiUser.system_role_name || apiUser.system_role || '',
-        active: apiUser.is_active,
-        username: apiUser.username,
-        isSuperuser: apiUser.is_superuser,
-      }));
-      setBackendSearchResults(mappedUsers);
+      // Fetch all active users - get all pages if needed
+      let allUsers: User[] = [];
+      let page = 1;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const response = await fetchUsers({ 
+          search: query, 
+          page_size: 1000, 
+          page,
+          is_active: true 
+        });
+        
+        // Map API users to local User type
+        const mappedUsers: User[] = response.results.map((apiUser) => ({
+          id: apiUser.id,
+          name: `${apiUser.first_name} ${apiUser.last_name}`.trim() || apiUser.username,
+          email: apiUser.email,
+          employeeId: apiUser.employee_id || '',
+          gradeLevel: apiUser.grade_level || '',
+          directorate: apiUser.directorate || undefined,
+          division: apiUser.division || undefined,
+          department: apiUser.department || undefined,
+          systemRole: apiUser.system_role_name || apiUser.system_role || '',
+          active: apiUser.is_active,
+          username: apiUser.username,
+          isSuperuser: apiUser.is_superuser,
+        }));
+        
+        allUsers = [...allUsers, ...mappedUsers];
+        
+        // Check if there are more pages
+        hasMore = !!response.next && mappedUsers.length === 1000;
+        page++;
+        
+        // Safety limit - don't fetch more than 10 pages (10,000 users)
+        if (page > 10) break;
+      }
+      
+      setBackendSearchResults(allUsers);
     } catch (error) {
       console.error('Backend search failed:', error);
       setBackendSearchResults([]);
