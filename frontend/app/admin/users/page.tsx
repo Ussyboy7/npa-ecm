@@ -91,7 +91,12 @@ const UserManagementPageContent = () => {
   const [isBulkActionMode, setIsBulkActionMode] = useState(false);
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const [mounted, setMounted] = useState(false);
   
+  // Ensure client-side only rendering for localStorage-dependent UI
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Load recent searches
   const recentSearches = typeof window !== 'undefined' ? getRecentSearches('users') : [];
@@ -540,7 +545,7 @@ const UserManagementPageContent = () => {
         )}
       </div>
 
-      {filters.length > 0 && (
+      {mounted && filters.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {filters.map((filter) => (
             <Badge key={`${filter.key}-${filter.value}`} variant="outline" className="pl-3 pr-1 py-1 text-xs">
