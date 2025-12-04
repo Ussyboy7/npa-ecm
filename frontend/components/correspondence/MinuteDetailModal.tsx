@@ -3,8 +3,10 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
-import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon } from "lucide-react";
+import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon, Shield } from "lucide-react";
 import { Minute } from "@/lib/npa-structure";
+import { SealBadge } from '@/components/seals/SealBadge';
+import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
 
 interface MinuteDetailModalProps {
   minute: Minute | null;
@@ -16,6 +18,18 @@ interface MinuteDetailModalProps {
 
 export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, showDelegationInfo = false }: MinuteDetailModalProps) => {
   if (!minute) return null;
+
+  // Debug logging
+  if (open) {
+    console.log('[MinuteDetailModal] Minute data:', {
+      id: minute.id,
+      actionType: minute.actionType,
+      hasSealData: !!minute.sealData,
+      hasSignature: !!minute.signature,
+      sealData: minute.sealData,
+      signature: minute.signature,
+    });
+  }
 
   const getActionColor = (action: string) => {
     switch (action) {
@@ -244,7 +258,42 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 </>
               )}
 
-              {minute.signature && (
+              {/* Show seal for executive approvals (signature is embedded in seal) */}
+              {minute.sealData ? (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-emerald-600" />
+                      Digital Executive Seal
+                    </h4>
+                    {/* Seal Preview and Badge Side by Side */}
+                    <div className="flex items-start gap-4">
+                      {/* Seal Preview - Generate dynamically like in preview */}
+                      <div className="flex-shrink-0">
+                        <DigitalSealPreview
+                          officeName={minute.sealData.officeName}
+                          officeTitle={minute.sealData.officeTitle}
+                          serialNumber={minute.sealData.serialNumber}
+                          signatureImage={minute.sealData.signatureImageUrl}
+                          timestamp={minute.sealData.sealedAt}
+                          size={120}
+                          showQR={true}
+                          verificationBaseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+                        />
+                      </div>
+                      {/* Seal Badge and Info */}
+                      <div className="flex-1 space-y-2">
+                        <SealBadge sealData={minute.sealData} showDetails size="md" />
+                        <p className="text-xs text-muted-foreground">
+                          The digital signature is embedded within this seal.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : minute.signature ? (
+                /* Show signature only if there's no seal */
                 <>
                   <Separator />
                   <div className="space-y-3">
@@ -280,7 +329,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                     )}
                   </div>
                 </>
-              )}
+              ) : null}
             </div>
           </div>
         </ScrollArea>

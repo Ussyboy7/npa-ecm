@@ -30,9 +30,11 @@ export const TopBar = () => {
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showImpersonationBanner, setShowImpersonationBanner] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setAuthenticated(hasTokens());
+    setMounted(true);
   }, []);
 
   // Update time every minute
@@ -108,17 +110,17 @@ export const TopBar = () => {
     });
   };
 
-  // Check if impersonating
-  const isCurrentlyImpersonating = isImpersonating || hasOriginalTokens();
-  const originalTokens = getOriginalTokens();
+  // Check if impersonating - only after mount to avoid hydration mismatch
+  const isCurrentlyImpersonating = mounted && (isImpersonating || hasOriginalTokens());
+  const originalTokens = mounted ? getOriginalTokens() : null;
   const tokenExpiresSoon = originalTokens?.expiresAt 
     ? (originalTokens.expiresAt - Date.now()) < 5 * 60 * 1000 // Less than 5 minutes
     : false;
 
   return (
     <>
-      {/* Impersonation Banner */}
-      {isCurrentlyImpersonating && showImpersonationBanner && (
+      {/* Impersonation Banner - Only render after mount to prevent hydration mismatch */}
+      {mounted && isCurrentlyImpersonating && showImpersonationBanner && (
         <div className="sticky top-0 z-50 w-full bg-amber-500 dark:bg-amber-600 border-b border-amber-600 dark:border-amber-700">
           <div className="flex items-center justify-between px-4 py-2 text-sm">
             <div className="flex items-center gap-2 text-amber-950 dark:text-amber-50">
@@ -142,7 +144,7 @@ export const TopBar = () => {
           </div>
         </div>
       )}
-      <header className={`sticky ${isCurrentlyImpersonating && showImpersonationBanner ? 'top-[41px]' : 'top-0'} z-40 w-full border-b border-sidebar-border bg-sidebar overflow-hidden`}>
+      <header className={`sticky ${mounted && isCurrentlyImpersonating && showImpersonationBanner ? 'top-[41px]' : 'top-0'} z-40 w-full border-b border-sidebar-border bg-sidebar overflow-hidden`}>
         <div className="flex h-12 items-center gap-2 md:gap-3 px-3 md:px-4">
         {/* Mobile Sidebar Toggle */}
         <SidebarTrigger className="md:hidden h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent" />

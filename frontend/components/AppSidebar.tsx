@@ -443,6 +443,36 @@ export function AppSidebar() {
                   )}
                 </SidebarMenuItem>
               )}
+
+              {/* Executive Approvals */}
+              {hasCorrespondenceAccess && (
+                <SidebarMenuItem>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/approvals')}>
+                            <Link href="/approvals">
+                              <Shield className="h-4 w-4" />
+                              <span className="sr-only">Executive Approvals</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Executive Approvals</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/approvals')}>
+                      <Link href="/approvals">
+                        <Shield className="h-4 w-4" />
+                        <span>Executive Approvals</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

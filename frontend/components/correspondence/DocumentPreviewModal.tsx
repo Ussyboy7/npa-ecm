@@ -1,6 +1,7 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
+import { getStoredAccessToken } from '@/lib/api-client';
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -53,12 +54,42 @@ export const DocumentPreviewModal = ({
       setLoading(true);
       setError(null);
       
+      // Get authentication token
+      const token = getStoredAccessToken();
+      const headers: HeadersInit = {};
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      // Debug logging
+      console.log('[DocumentPreviewModal] Fetching attachment:', {
+        attachmentUrl,
+        attachmentFileName,
+        hasToken: !!token,
+        isPDF,
+        isWordDocx,
+      });
+      
       // Fetch the file with authentication
       fetch(attachmentUrl, {
         credentials: 'include',
+        headers,
       })
         .then(response => {
+          console.log('[DocumentPreviewModal] Fetch response:', {
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok,
+            url: attachmentUrl,
+          });
+          
           if (!response.ok) {
+            logError('DocumentPreviewModal: Fetch failed', {
+              status: response.status,
+              statusText: response.statusText,
+              url: attachmentUrl,
+            });
             throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
           }
           return response.blob();

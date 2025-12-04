@@ -668,27 +668,29 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 user_department_ids = [x for x in user_department_ids if x]
                 user_directorate_ids = [x for x in user_directorate_ids if x]
                 
-                # Distribution subquery
+                # Distribution subquery - build filter conditions first
+                has_distribution_filter = False
                 distribution_filter = Q()
                 if user_division_ids:
                     distribution_filter |= Q(division_id__in=user_division_ids)
+                    has_distribution_filter = True
                 if user_department_ids:
                     distribution_filter |= Q(department_id__in=user_department_ids)
+                    has_distribution_filter = True
                 if user_directorate_ids:
                     distribution_filter |= Q(directorate_id__in=user_directorate_ids)
+                    has_distribution_filter = True
                 
-                distribution_subquery = None
-                if distribution_filter:
+                # Build main query with subqueries
+                office_filter = Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
+                # Always include parallel_subquery (it's always defined)
+                office_filter |= Exists(parallel_subquery)
+                # Only add distribution subquery if we have filter conditions
+                if has_distribution_filter:
                     distribution_subquery = CorrespondenceDistribution.objects.filter(
                         distribution_filter,
                         correspondence_id=OuterRef('id')
                     )
-                
-                # Build main query with subqueries
-                office_filter = Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
-                if parallel_subquery:
-                    office_filter |= Exists(parallel_subquery)
-                if distribution_subquery:
                     office_filter |= Exists(distribution_subquery)
                 
                 office_inbox_count = Correspondence.objects.filter(
@@ -1357,6 +1359,105 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         }
         return response
 
+    @action(detail=True, methods=["post"], url_path="re-run-routing")
+    def re_run_routing(self, request, pk=None):
+        """
+        Re-run routing logic for a correspondence based on its latest minute.
+        Useful for fixing routing issues after code updates.
+        """
+        from correspondence.models import Minute as MinuteModel
+        
+        correspondence = self.get_object()
+        
+        if correspondence.status == Correspondence.Status.COMPLETED:
+            return Response(
+                {"detail": "Cannot re-run routing for completed correspondence."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get the latest minute with routing information
+        latest_minute = MinuteModel.objects.filter(
+            correspondence=correspondence,
+        ).exclude(
+            action_type=MinuteModel.ActionType.REJECT
+        ).order_by('-timestamp', '-step_number').first()
+        
+        if not latest_minute:
+            return Response(
+                {"detail": "No minutes found for this correspondence."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if minute has routing information
+        if not latest_minute.to_office and not latest_minute.to_user:
+            return Response(
+                {"detail": "Latest minute does not have routing information (to_office or to_user)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Re-run routing logic (similar to perform_create)
+        recipient_user = None
+        office_updated = False
+        approver_updated = False
+        
+        if latest_minute.to_office:
+            try:
+                # Use the MinuteViewSet's _find_office_recipient method
+                minute_viewset = MinuteViewSet()
+                minute_viewset.request = request
+                recipient_user, is_acting = minute_viewset._find_office_recipient(latest_minute.to_office, latest_minute.to_user)
+                if recipient_user:
+                    if correspondence.current_office_id != latest_minute.to_office_id:
+                        correspondence.current_office = latest_minute.to_office
+                        office_updated = True
+                    if correspondence.current_approver_id != recipient_user.id:
+                        correspondence.current_approver = recipient_user
+                        approver_updated = True
+            except Exception as e:
+                logger.exception(f"Error finding office recipient: {e}")
+                return Response(
+                    {"detail": f"Error finding office recipient: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        elif latest_minute.to_user:
+            # Get the user's primary office
+            from organization.models import OfficeMembership
+            user_office_membership = OfficeMembership.objects.filter(
+                user=latest_minute.to_user,
+                is_active=True,
+                is_primary=True
+            ).select_related('office').first()
+            
+            if user_office_membership:
+                recipient_user = latest_minute.to_user
+                if correspondence.current_office_id != user_office_membership.office_id:
+                    correspondence.current_office = user_office_membership.office
+                    office_updated = True
+                if correspondence.current_approver_id != recipient_user.id:
+                    correspondence.current_approver = recipient_user
+                    approver_updated = True
+        
+        # Save updates
+        if office_updated or approver_updated:
+            update_fields = ["updated_at"]
+            if office_updated:
+                update_fields.append("current_office")
+            if approver_updated:
+                update_fields.append("current_approver")
+            correspondence.save(update_fields=update_fields)
+            
+            return Response({
+                "detail": "Routing updated successfully.",
+                "current_office": correspondence.current_office.name if correspondence.current_office else None,
+                "current_approver": recipient_user.get_full_name() if recipient_user else None,
+            })
+        else:
+            return Response({
+                "detail": "No routing changes needed.",
+                "current_office": correspondence.current_office.name if correspondence.current_office else None,
+                "current_approver": correspondence.current_approver.get_full_name() if correspondence.current_approver else None,
+            })
+
     @action(detail=False, methods=["get"], url_path="records-archive")
     def records_archive(self, request):
         """
@@ -1697,6 +1798,62 @@ class CorrespondenceAttachmentViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["correspondence"]
     ordering_fields = ["created_at"]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def create(self, request, *args, **kwargs):
+        """Handle file upload for correspondence attachments."""
+        # Get the file from request
+        file = request.FILES.get('file')
+        if not file:
+            raise ValidationError({'file': 'No file provided'})
+        
+        # Get correspondence ID from request data or query params
+        correspondence_id = request.data.get('correspondence')
+        if not correspondence_id:
+            raise ValidationError({'correspondence': 'Correspondence ID is required'})
+        
+        try:
+            correspondence = Correspondence.objects.get(id=correspondence_id)
+        except Correspondence.DoesNotExist:
+            raise ValidationError({'correspondence': 'Correspondence not found'})
+        
+        # Validate the upload
+        if hasattr(file, 'seek'):
+            file.seek(0)
+        file_bytes = file.read()
+        validate_file_upload(
+            file_name=file.name,
+            mime_type=getattr(file, 'content_type', None),
+            file_bytes=file_bytes,
+        )
+        file_size = len(file_bytes)
+        if hasattr(file, 'seek'):
+            file.seek(0)
+        
+        # Generate file path
+        file_path = os.path.join('correspondence_attachments', str(correspondence.id), file.name)
+        
+        # Save file to storage
+        saved_path = default_storage.save(file_path, file)
+        
+        # Build relative URL for the file
+        media_url = settings.MEDIA_URL or '/media/'
+        if not media_url.startswith('/'):
+            media_url = f'/{media_url}'
+        file_url = f"{media_url.rstrip('/')}/{saved_path}"
+        
+        # Create attachment record
+        attachment = CorrespondenceAttachment.objects.create(
+            correspondence=correspondence,
+            file_name=file.name,
+            file_type=getattr(file, 'content_type', None) or 'application/octet-stream',
+            file_size=file_size,
+            file_url=file_url,
+        )
+        
+        # Serialize and return
+        serializer = self.get_serializer(attachment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
@@ -1727,7 +1884,7 @@ class CorrespondenceDocumentLinkViewSet(viewsets.ModelViewSet):
 
 
 class MinuteViewSet(viewsets.ModelViewSet):
-    queryset = Minute.objects.select_related("correspondence", "user")
+    queryset = Minute.objects.select_related("correspondence", "user", "seal_applied", "seal_applied__sealed_by", "seal_applied__signature_used")
     serializer_class = MinuteSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None
@@ -1842,6 +1999,22 @@ class MinuteViewSet(viewsets.ModelViewSet):
         
         # No one found in office
         return (None, False)
+
+    def create(self, request, *args, **kwargs):
+        """Override create to refresh minute after seal is applied."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        
+        # Refresh the minute from database to get the seal_applied relationship
+        minute = serializer.instance
+        if minute:
+            minute.refresh_from_db()
+            # Re-serialize with updated data including seal
+            serializer = self.get_serializer(minute)
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
         # Import early to use throughout the function
@@ -1988,9 +2161,10 @@ class MinuteViewSet(viewsets.ModelViewSet):
         # and (3) merge strategy is "independent" (branches work independently)
         if branch_originator_to_route_to and branch_originator_to_route_to.id != self.request.user.id:
             # Check if this is completing the branch (not routing further down)
-            # Route up if: approve action OR no to_office specified (completing at this level)
+            # Route up if: approve action without to_office OR no to_office specified (completing at this level)
+            # If APPROVE has a to_office, it's routing (not completing)
             is_completing_branch = (
-                minute.action_type == Minute.ActionType.APPROVE or
+                (minute.action_type == Minute.ActionType.APPROVE and not minute.to_office) or
                 (minute.action_type in [Minute.ActionType.MINUTE, Minute.ActionType.FORWARD] and not minute.to_office)
             )
             
@@ -2020,8 +2194,9 @@ class MinuteViewSet(viewsets.ModelViewSet):
                         f"Parallel branch completing - routing up to branch originator {branch_originator_to_route_to} "
                         f"at office {originator_office_membership.office.name} for review"
                     )
-        # For FORWARD and MINUTE actions, handle office routing (only if not completing parallel branch)
-        elif minute.action_type in (Minute.ActionType.FORWARD, Minute.ActionType.MINUTE):
+        # For FORWARD, MINUTE, and APPROVE actions, handle office routing (only if not completing parallel branch)
+        # APPROVE actions can also route to another office (e.g., MD approves and forwards to ED)
+        elif minute.action_type in (Minute.ActionType.FORWARD, Minute.ActionType.MINUTE, Minute.ActionType.APPROVE):
             if minute.to_office:
                 # Find appropriate recipient for the office
                 # If to_user is set, validate they're in the office and use them
@@ -2125,13 +2300,24 @@ class MinuteViewSet(viewsets.ModelViewSet):
             },
         )
         
-        # Automatically apply digital seal for executive approvals
-        if minute.action_type == Minute.ActionType.APPROVE:
+        # Automatically apply digital seal for executive actions (approvals and minutes)
+        # Executives' minutes are authoritative and should be sealed
+        if minute.action_type in [Minute.ActionType.APPROVE, Minute.ActionType.MINUTE]:
             # Check if user is an executive (MD, ED) with an active signature
             user_grade = self.request.user.grade_level
+            user_role_obj = getattr(self.request.user, 'system_role', None)
+            user_role = user_role_obj.name.upper() if user_role_obj and user_role_obj.name else ''
             executive_grades = ['MDCS', 'EDCS']  # Managing Director, Executive Director
+            executive_roles = ['MANAGING DIRECTOR', 'EXECUTIVE DIRECTOR', 'MD', 'ED']
             
-            if user_grade in executive_grades:
+            is_executive = (
+                user_grade in executive_grades or 
+                user_role in executive_roles or
+                'MANAGING DIRECTOR' in user_role or
+                'EXECUTIVE DIRECTOR' in user_role
+            )
+            
+            if is_executive:
                 try:
                     from accounts.models import ExecutiveSignature
                     from accounts.services import SealGenerationService
@@ -2203,6 +2389,43 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 action_required=True,
             )
 
+    @action(detail=True, methods=["get"], url_path="approval-pdf")
+    def approval_pdf(self, request, pk=None):
+        """
+        Generate and return a PDF document for an executive approval minute.
+        Includes correspondence details, all minutes, and the approval with seal.
+        """
+        from correspondence.services import ExecutiveApprovalPDFService
+        from django.http import HttpResponse
+        import traceback
+        
+        minute = self.get_object()
+        
+        # Only allow for APPROVE action types
+        if minute.action_type != Minute.ActionType.APPROVE:
+            return Response(
+                {"detail": "This endpoint is only available for approval minutes."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            pdf_bytes = ExecutiveApprovalPDFService.generate_approval_pdf(
+                minute=minute,
+                correspondence=minute.correspondence
+            )
+            
+            response = HttpResponse(pdf_bytes, content_type="application/pdf")
+            filename = f"approval-{minute.correspondence.reference_number or minute.correspondence.id}-{minute.id}.pdf"
+            response["Content-Disposition"] = f'inline; filename="{filename}"'
+            return response
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            logger.exception(f"Error generating approval PDF: {e}\n{error_trace}")
+            return Response(
+                {"detail": f"Failed to generate PDF: {str(e)}", "traceback": error_trace if settings.DEBUG else None},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     def update(self, request, *args, **kwargs):
         """Handle minute editing with validation."""
         minute = self.get_object()

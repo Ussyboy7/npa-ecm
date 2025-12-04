@@ -236,6 +236,8 @@ export type Minute = {
     id: string;
     serialNumber: string;
     verificationUrl: string;
+    sealImageUrl?: string;
+    signatureImageUrl?: string;
     sealedBy: string;
     officeName: string;
     officeTitle: string;

@@ -189,7 +189,14 @@ const Reports = () => {
   };
   const statusData = data?.statusDistribution ?? [];
   const priorityData = data?.priorityDistribution ?? [];
-  const divisionData = data?.divisionSummary ?? [];
+  // Filter out "unassigned" division from display as it represents correspondence without a division assignment
+  const divisionData = useMemo(() => {
+    const allDivisions = data?.divisionSummary ?? [];
+    return allDivisions.filter(div => 
+      div.name.toLowerCase() !== 'unassigned' && 
+      div.name.toLowerCase() !== 'unassigned division'
+    );
+  }, [data?.divisionSummary]);
   const trendData = data?.trend ?? [];
 
   const slaSummary = slaData?.summary ?? { total: 0, compliant: 0, breached: 0, atRisk: 0, complianceRate: 0 };
@@ -994,7 +1001,14 @@ const Reports = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Division Performance</CardTitle>
-                <CardDescription>Correspondence handling by division</CardDescription>
+                <CardDescription>
+                  Correspondence handling by division
+                  {data?.divisionSummary && data.divisionSummary.some(d => d.name.toLowerCase().includes('unassigned')) && (
+                    <span className="block text-xs text-muted-foreground mt-1">
+                      Note: Unassigned correspondence (without division assignment) is excluded from this view
+                    </span>
+                  )}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={400}>

@@ -50,6 +50,7 @@ import {
   X,
   ChevronDown,
   ChevronUp,
+  Shield,
 } from 'lucide-react';
 import { 
   getDivisionById,
@@ -64,7 +65,7 @@ import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
 import { DistributionSelector } from './DistributionSelector';
-import { loadUserSignature, ensureDefaultSignatureTemplates, loadUserSignaturePreferences, type StoredSignature, type SignatureTemplate, type UserSignaturePreferences } from '@/lib/signature-storage';
+import { loadUserSignature, fetchUserSignature, saveUserSignature, ensureDefaultSignatureTemplates, loadUserSignaturePreferences, type StoredSignature, type SignatureTemplate, type UserSignaturePreferences } from '@/lib/signature-storage';
 import {
   initializeTemplates,
   getTemplatesForUser,
@@ -77,6 +78,7 @@ import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
 import { apiFetch } from '@/lib/api-client';
 import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
+import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
 
 interface MinuteModalProps {
   correspondence: Correspondence;
@@ -287,10 +289,6 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     const selectedUser = activeUser ?? organizationUsers.find((user) => user.active) ?? null;
     if (!selectedUser) return;
     setCurrentUser(selectedUser);
-    const signature = loadUserSignature(selectedUser.id);
-    if (signature) {
-      setUserSignature(signature);
-    }
     refreshMinuteTemplates(selectedUser);
   }, [activeUser, organizationUsers, refreshMinuteTemplates]);
 
@@ -303,6 +301,10 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   
   // Other users (below MD) can choose direction
   const canChooseDirection = !isMD;
+
+  // Check if user is an executive (for seal preview)
+  const executiveGrades = ['MDCS', 'EDCS']; // Managing Director, Executive Director
+  const isExecutive = currentUser && executiveGrades.includes(currentUser.gradeLevel);
 
   useEffect(() => {
     if (isOpen) {
@@ -338,11 +340,35 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     }
   }, [isOpen, correspondence.id, initialDirection, refreshMinuteTemplates, currentUser]);
 
+  // Load signature from backend and localStorage
   useEffect(() => {
-    if (currentUser?.id) {
-      const signature = loadUserSignature(currentUser.id);
-      setUserSignature(signature);
+    if (!currentUser?.id) {
+      setUserSignature(null);
+      return;
     }
+    
+    const loadSignature = async () => {
+      // First try localStorage (faster)
+      let signature = loadUserSignature(currentUser.id);
+      
+      // If not in localStorage, try fetching from backend
+      if (!signature) {
+        try {
+          signature = await fetchUserSignature();
+          // Save to localStorage for next time
+          if (signature) {
+            saveUserSignature(currentUser.id, signature);
+          }
+        } catch (error) {
+          // Silently fail - signature just won't be available
+          logError('Failed to fetch signature from backend', error);
+        }
+      }
+      
+      setUserSignature(signature);
+    };
+    
+    loadSignature();
   }, [currentUser?.id]);
 
   useEffect(() => {
@@ -658,8 +684,6 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     }
     
     // Check if 2FA is required for executive approvals
-    const executiveGrades = ['MDCS', 'EDCS']; // Managing Director, Executive Director
-    const isExecutive = currentUser && executiveGrades.includes(currentUser.gradeLevel);
     const requiresTwoFA = actionType === 'approve' && isExecutive && userSignature;
     
     if (requiresTwoFA && !twoFAVerificationToken) {
@@ -1680,120 +1704,176 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             )}
           </div>
 
-          {/* Digital Signature */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label>Digital Signature</Label>
-              {actionType === 'approve' && (
+          {/* Digital Seal (for Executive Approvals) */}
+          {actionType === 'approve' && isExecutive && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-emerald-600" />
+                  Digital Executive Seal
+                </Label>
                 <Badge variant="destructive" className="text-[10px]">Required</Badge>
-              )}
-            </div>
-            <Card className="border-dashed">
-              <CardContent className="p-4 space-y-4">
-                {userSignature ? (
-                  <div className="space-y-3">
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <div className="flex-1 space-y-1 text-sm">
-                        <p className="font-medium text-foreground">Signature on File</p>
-                        <p className="text-xs text-muted-foreground">
-                          Uploaded {new Date(userSignature.uploadedAt).toLocaleString()} {userSignature.fileName ? `• ${userSignature.fileName}` : ''}
-                        </p>
-                      </div>
-                      <div className="p-3 border rounded-lg bg-background self-start">
-                        <img
-                          src={userSignature.imageData}
-                          alt="Digital signature preview"
-                          className="max-h-24 object-contain"
-                        />
+              </div>
+              {userSignature ? (
+                <Card>
+                  <CardContent className="p-4 bg-white">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <DigitalSealPreview
+                        officeName={userSignature.sealOfficeName || 'NIGERIAN PORTS AUTHORITY'}
+                        officeTitle={userSignature.sealOfficeTitle || `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`}
+                        serialPrefix={userSignature.sealPrefix || 'NPA'}
+                        signatureImage={userSignature.imageData}
+                        size={250}
+                        showQR={true}
+                      />
+                      <p className="text-xs text-muted-foreground text-center max-w-md">
+                        This digital seal will be automatically applied when you approve. Your signature is embedded in the seal.
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ImageIcon className="h-3 w-3" />
+                        <span>Signature on file • Uploaded {new Date(userSignature.uploadedAt).toLocaleDateString()}</span>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="border-dashed">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                      <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+                      <div>
+                        <p className="text-destructive font-medium">No signature on file.</p>
+                        <p>
+                          Please upload your signature in{' '}
+                          <Link href="/settings#signature" className="text-primary underline">
+                            Settings → Signature
+                          </Link>{' '}
+                          before approving correspondence.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
 
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Signature Template</Label>
-                      {relevantTemplates.length > 0 ? (
-                        <Select
-                          value={selectedTemplateId ?? undefined}
-                          onValueChange={(value) => setSelectedTemplateId(value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select template" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {relevantTemplates.map(template => (
-                              <SelectItem key={template.id} value={template.id}>
-                                <div className="flex flex-col text-xs">
-                                  <span className="font-medium text-foreground text-sm">{template.name}</span>
-                                  <span className="text-muted-foreground">{template.description}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <div className="p-3 border border-dashed rounded bg-muted/30 text-xs text-muted-foreground">
-                          No templates available for this action.
+          {/* Digital Signature (for non-executive or non-approve actions) */}
+          {!(actionType === 'approve' && isExecutive) && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label>Digital Signature</Label>
+                {actionType === 'approve' && (
+                  <Badge variant="destructive" className="text-[10px]">Required</Badge>
+                )}
+              </div>
+              <Card className="border-dashed">
+                <CardContent className="p-4 space-y-4">
+                  {userSignature ? (
+                    <div className="space-y-3">
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="flex-1 space-y-1 text-sm">
+                          <p className="font-medium text-foreground">Signature on File</p>
+                          <p className="text-xs text-muted-foreground">
+                            Uploaded {new Date(userSignature.uploadedAt).toLocaleString()} {userSignature.fileName ? `• ${userSignature.fileName}` : ''}
+                          </p>
+                        </div>
+                        <div className="p-3 border rounded-lg bg-background self-start">
+                          <img
+                            src={userSignature.imageData}
+                            alt="Digital signature preview"
+                            className="max-h-24 object-contain"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Signature Template</Label>
+                        {relevantTemplates.length > 0 ? (
+                          <Select
+                            value={selectedTemplateId ?? undefined}
+                            onValueChange={(value) => setSelectedTemplateId(value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select template" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {relevantTemplates.map(template => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  <div className="flex flex-col text-xs">
+                                    <span className="font-medium text-foreground text-sm">{template.name}</span>
+                                    <span className="text-muted-foreground">{template.description}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="p-3 border border-dashed rounded bg-muted/30 text-xs text-muted-foreground">
+                            No templates available for this action.
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedTemplate && applySignature && (
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Template Preview</Label>
+                          <div className="p-3 border border-dashed rounded bg-muted/20">
+                            <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">{selectedTemplate.name}</span>
+                              <Badge variant="outline" className="text-[10px] uppercase">{selectedTemplate.style}</Badge>
+                            </div>
+                            <p className="text-xs whitespace-pre-wrap font-mono text-muted-foreground">
+                              {templatePreview}
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
-
-                    {selectedTemplate && applySignature && (
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">Template Preview</Label>
-                        <div className="p-3 border border-dashed rounded bg-muted/20">
-                          <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground">{selectedTemplate.name}</span>
-                            <Badge variant="outline" className="text-[10px] uppercase">{selectedTemplate.style}</Badge>
-                          </div>
-                          <p className="text-xs whitespace-pre-wrap font-mono text-muted-foreground">
-                            {templatePreview}
-                          </p>
-                        </div>
+                  ) : (
+                    <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                      <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
+                      <div>
+                        <p className="text-destructive font-medium">No signature on file.</p>
+                        <p>
+                          Please upload your signature in{' '}
+                          <Link href="/settings#signature" className="text-primary underline">
+                            Settings → Signature
+                          </Link>{' '}
+                          before approving correspondence.
+                        </p>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3 text-sm text-muted-foreground">
-                    <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
-                    <div>
-                      <p className="text-destructive font-medium">No signature on file.</p>
-                      <p>
-                        Please upload your signature in{' '}
-                        <Link href="/settings#signature" className="text-primary underline">
-                          Settings → Signature
-                        </Link>{' '}
-                        before approving correspondence.
-                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4" />
+                      <span>
+                        {actionType === 'approve'
+                          ? 'A digital signature will be applied automatically for this approval.'
+                          : 'Apply your signature to this minute for acknowledgement.'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={applySignature && !!userSignature}
+                        onCheckedChange={(checked) => {
+                          if (actionType === 'approve') return;
+                          setApplySignatureManuallySet(true);
+                          setApplySignature(checked && !!userSignature);
+                        }}
+                        disabled={!userSignature || actionType === 'approve'}
+                      />
+                      <span className="text-xs">
+                        {actionType === 'approve' ? 'Required' : applySignature && userSignature ? 'Will be applied' : 'Not applied'}
+                      </span>
                     </div>
                   </div>
-                )}
-
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <ImageIcon className="h-4 w-4" />
-                    <span>
-                      {actionType === 'approve'
-                        ? 'A digital signature will be applied automatically for this approval.'
-                        : 'Apply your signature to this minute for acknowledgement.'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={applySignature && !!userSignature}
-                      onCheckedChange={(checked) => {
-                        if (actionType === 'approve') return;
-                        setApplySignatureManuallySet(true);
-                        setApplySignature(checked && !!userSignature);
-                      }}
-                      disabled={!userSignature || actionType === 'approve'}
-                    />
-                    <span className="text-xs">
-                      {actionType === 'approve' ? 'Required' : applySignature && userSignature ? 'Will be applied' : 'Not applied'}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Distribution (CC) - Only for Management Level */}
           {canDistribute && (

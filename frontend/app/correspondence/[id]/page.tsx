@@ -59,12 +59,13 @@ import {
   Plus,
   Clock,
   RotateCcw as RotateCcwIcon,
+  Shield,
 } from 'lucide-react';
 import type { Minute, DistributionRecipient, Correspondence, ParallelRoutingGroup } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
 import { getDelegationByCorrespondence, revokeDelegation, addDelegation, type Delegation } from '@/lib/delegation-storage';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, getStoredAccessToken } from '@/lib/api-client';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { EditMinuteModal } from '@/components/correspondence/EditMinuteModal';
 import { ParallelRouteModal } from '@/components/correspondence/ParallelRouteModal';
@@ -104,7 +105,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/api\/v1\/?$/, '');
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api')
+  .replace(/\/api\/v1\/?$/, '')
+  .replace(/\/api\/?$/, '');
 const buildDownloadUrl = (path?: string | null) => {
   if (!path) return undefined;
   if (path.startsWith('http')) {
@@ -152,7 +155,7 @@ const handleDownload = async (url: string, filename: string) => {
     
     // Ensure we have a full URL
     if (!fixedUrl.startsWith('http')) {
-      const baseUrl = API_BASE_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL || 'http://localhost:8002';
       fixedUrl = `${baseUrl}${fixedUrl.startsWith('/') ? fixedUrl : `/${fixedUrl}`}`;
     }
     
@@ -187,7 +190,7 @@ const handleDownload = async (url: string, filename: string) => {
     if (fallbackUrl.startsWith('http')) {
       window.open(fallbackUrl, '_blank');
     } else {
-      const baseUrl = API_BASE_URL || 'http://localhost:8000';
+      const baseUrl = API_BASE_URL || 'http://localhost:8002';
       window.open(`${baseUrl}${fallbackUrl.startsWith('/') ? fallbackUrl : `/${fallbackUrl}`}`, '_blank');
     }
   }
@@ -294,10 +297,26 @@ const CorrespondenceDetailContent = () => {
 
   // Load PDF or Word document as blob to avoid CORS/sandbox issues
   useEffect(() => {
+    // Only run if correspondence is loaded
+    if (!correspondence) {
+      console.log('[PDF Preview] No correspondence yet, skipping');
+      return;
+    }
+    
     const firstAttachment = correspondence?.attachments?.[0];
+    
+    console.log('[PDF Preview] useEffect triggered', {
+      hasCorrespondence: !!correspondence,
+      attachmentsCount: correspondence?.attachments?.length || 0,
+      firstAttachment,
+      attachmentFileUrl: firstAttachment?.fileUrl,
+    });
     let currentBlobUrl: string | null = null;
+    let abortController: AbortController | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     if (!firstAttachment?.fileUrl) {
+      console.log('[PDF Preview] No attachment fileUrl, clearing state');
       setPdfBlobUrl(null);
       setWordHtml(null);
       setDocumentPreviewLoading(false);
@@ -306,28 +325,119 @@ const CorrespondenceDetailContent = () => {
     }
 
     const fileName = firstAttachment.fileName || '';
+    // Allow previewing all PDF files, including completion packages
+
     const isPDF = firstAttachment.fileType === 'application/pdf';
     const isWordDocx = fileName.toLowerCase().endsWith('.docx');
+
+    console.log('[PDF Preview] Starting preview check:', {
+      hasAttachment: !!firstAttachment,
+      fileUrl: firstAttachment?.fileUrl,
+      fileType: firstAttachment?.fileType,
+      fileName,
+      isPDF,
+      isWordDocx,
+    });
 
     if (isPDF || isWordDocx) {
       setDocumentPreviewLoading(true);
       setDocumentPreviewError(null);
 
-      fetch(firstAttachment.fileUrl, {
+      // Build the proper download URL (handles relative paths and API prefixes)
+      const fileUrl = buildDownloadUrl(firstAttachment.fileUrl);
+      console.log('[PDF Preview] URL building:', {
+        originalUrl: firstAttachment.fileUrl,
+        builtUrl: fileUrl,
+        apiBaseUrl: (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api')
+          .replace(/\/api\/v1\/?$/, '')
+          .replace(/\/api\/?$/, ''),
+      });
+      
+      if (!fileUrl) {
+        console.error('[PDF Preview] buildDownloadUrl returned undefined for:', firstAttachment.fileUrl);
+        setDocumentPreviewError('Invalid file URL');
+        setDocumentPreviewLoading(false);
+        return;
+      }
+
+      // Get authentication token
+      const token = getStoredAccessToken();
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // Debug logging
+      console.log('[PDF Preview] Fetching file:', {
+        originalUrl: firstAttachment.fileUrl,
+        builtUrl: fileUrl,
+        hasToken: !!token,
+        fileName,
+      });
+
+      // Create abort controller for cleanup
+      abortController = new AbortController();
+      
+      // Set up timeout (30 seconds)
+      timeoutId = setTimeout(() => {
+        if (abortController) {
+          abortController.abort();
+          logError('File load timeout after 30 seconds:', { fileUrl, fileName });
+          setDocumentPreviewError('File load timeout. The file may be too large or the server is slow. Please try downloading the file.');
+          setDocumentPreviewLoading(false);
+        }
+      }, 30000);
+
+      fetch(fileUrl, {
         credentials: 'include',
+        headers,
+        signal: abortController.signal,
       })
         .then((response) => {
           if (!response.ok) {
+            // Handle 404 gracefully - file might not exist
+            if (response.status === 404) {
+              // Clear timeout on 404
+              if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+              }
+              
+              logWarn('File not found (404):', { fileUrl, fileName });
+              // Only show error for non-completion-package files
+              // Completion packages might not exist yet or may have been moved
+              if (!fileName.toLowerCase().includes('completion-package') && 
+                  !fileName.toLowerCase().includes('completion_package')) {
+                setDocumentPreviewError(`File "${fileName}" not found on server. It may have been deleted or moved.`);
+              } else {
+                // For completion packages, just log and don't show error
+                setDocumentPreviewError(null);
+              }
+              setDocumentPreviewLoading(false);
+              return null; // Return null to skip blob processing
+            }
             throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
           }
           return response.blob();
         })
         .then((blob) => {
+          // Skip if blob is null (404 case)
+          if (!blob) {
+            return;
+          }
+
+          // Clear timeout on success
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+
           if (isPDF) {
             const url = URL.createObjectURL(blob);
             currentBlobUrl = url;
             setPdfBlobUrl(url);
             setWordHtml(null);
+            // Clear loading state immediately - blob URL is ready, iframe will load in background
             setDocumentPreviewLoading(false);
           } else if (isWordDocx) {
             // Convert Word document to HTML using mammoth
@@ -347,7 +457,20 @@ const CorrespondenceDetailContent = () => {
           }
         })
         .catch((err) => {
+          // Clear timeout on error
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          
+          // Don't show error if request was aborted (cleanup or timeout)
+          if (err.name === 'AbortError') {
+            logWarn('File load aborted:', { fileUrl, fileName });
+            return;
+          }
+          
           logError('Error loading file', err);
+          // Set error message (404 errors are already handled above)
           setDocumentPreviewError(`Failed to load ${isPDF ? 'PDF' : 'Word document'} preview. Please try downloading the file.`);
           setDocumentPreviewLoading(false);
         });
@@ -366,6 +489,15 @@ const CorrespondenceDetailContent = () => {
 
     // Cleanup on unmount or when attachment changes
     return () => {
+      // Clear timeout
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      // Abort fetch if in progress
+      if (abortController) {
+        abortController.abort();
+      }
+      // Cleanup blob URL
       setPdfBlobUrl((prev) => {
         if (prev) {
           URL.revokeObjectURL(prev);
@@ -373,8 +505,28 @@ const CorrespondenceDetailContent = () => {
         return null;
       });
       setWordHtml(null);
+      // Ensure loading state is cleared
+      setDocumentPreviewLoading(false);
     };
-  }, [correspondence?.attachments?.[0]?.fileUrl, correspondence?.attachments?.[0]?.fileType, correspondence?.attachments?.[0]?.fileName]);
+  }, [
+    correspondence?.id, // Use ID instead of full object for stability
+    correspondence?.attachments?.[0]?.fileUrl,
+    correspondence?.attachments?.[0]?.fileType,
+    correspondence?.attachments?.[0]?.fileName
+  ]);
+
+  // Fallback timeout for iframe loading - clear loading state if iframe onLoad doesn't fire
+  useEffect(() => {
+    if (pdfBlobUrl && documentPreviewLoading) {
+      // Use a shorter timeout - blob URLs should load quickly
+      const fallbackTimeout = setTimeout(() => {
+        logWarn('PDF iframe load timeout - clearing loading state as fallback', { pdfBlobUrl });
+        setDocumentPreviewLoading(false);
+      }, 2000); // 2 second fallback after blob URL is set
+      
+      return () => clearTimeout(fallbackTimeout);
+    }
+  }, [pdfBlobUrl, documentPreviewLoading]);
 
   useEffect(() => {
     if (!id) return;
@@ -528,7 +680,18 @@ const CorrespondenceDetailContent = () => {
       const minutesData = Array.isArray(minutesResponse) 
         ? minutesResponse 
         : (minutesResponse?.results || []);
-      setMinutes(minutesData.map(mapApiMinute));
+      const mappedMinutes = minutesData.map(mapApiMinute);
+      
+      // Debug logging for seal data
+      console.log('[CorrespondenceDetail] Refreshed minutes:', mappedMinutes.map(m => ({
+        id: m.id,
+        actionType: m.actionType,
+        hasSealData: !!m.sealData,
+        hasSignature: !!m.signature,
+        sealData: m.sealData,
+      })));
+      
+      setMinutes(mappedMinutes);
     } catch (error) {
       logWarn('Failed to refresh minutes', error);
       // Fallback to context minutes if API fetch fails
@@ -1169,35 +1332,35 @@ const CorrespondenceDetailContent = () => {
         </div>
 
         {/* 3-Panel Layout */}
-        <div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0 overflow-hidden">
           {/* Left Panel - Document Viewer (28%) */}
-          <aside className="w-[28%] min-w-0 border-r border-border bg-muted/30 flex flex-col overflow-hidden">
+          <aside className="w-full md:w-[28%] min-w-0 max-w-full border-b md:border-b-0 md:border-r border-border bg-muted/30 flex flex-col overflow-hidden">
             <div className="p-4 border-b border-border flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
                 Original Document
               </h3>
             </div>
-            <ScrollArea className="h-full">
-              <div className="p-4 flex flex-col gap-4">
-                <Card>
-                  <CardContent className="p-3 space-y-2">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <UserIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{correspondence.senderName}</p>
+            <ScrollArea className="flex-1">
+              <div className="p-4 space-y-4 overflow-x-hidden min-w-0">
+                <Card className="overflow-hidden min-w-0">
+                  <CardContent className="p-3 md:p-4 space-y-2 overflow-hidden min-w-0">
+                    <div className="space-y-2 min-w-0">
+                      <div className="flex items-start gap-2 text-sm min-w-0">
+                        <UserIcon className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0 overflow-hidden break-words">
+                          <p className="font-medium break-words">{correspondence.senderName}</p>
                           {correspondence.senderOrganization && (
-                            <p className="text-xs text-muted-foreground truncate">{correspondence.senderOrganization}</p>
+                            <p className="text-xs text-muted-foreground break-words mt-1">{correspondence.senderOrganization}</p>
                           )}
                         </div>
                       </div>
                       {correspondence.senderEmail && (
-                        <div className="flex items-center gap-2 text-xs pl-6">
-                          <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                        <div className="flex items-center gap-2 text-xs pl-6 min-w-0">
+                          <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                           <a 
                             href={`mailto:${correspondence.senderEmail}`}
-                            className="text-muted-foreground hover:text-primary hover:underline truncate"
+                            className="text-muted-foreground hover:text-primary hover:underline truncate min-w-0 flex-1"
                             title={correspondence.senderEmail}
                           >
                             {correspondence.senderEmail}
@@ -1205,11 +1368,11 @@ const CorrespondenceDetailContent = () => {
                         </div>
                       )}
                       {correspondence.senderPhone && (
-                        <div className="flex items-center gap-2 text-xs pl-6">
-                          <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                        <div className="flex items-center gap-2 text-xs pl-6 min-w-0">
+                          <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                           <a 
                             href={`tel:${correspondence.senderPhone}`}
-                            className="text-muted-foreground hover:text-primary hover:underline"
+                            className="text-muted-foreground hover:text-primary hover:underline truncate min-w-0 flex-1"
                           >
                             {correspondence.senderPhone}
                           </a>
@@ -1217,34 +1380,34 @@ const CorrespondenceDetailContent = () => {
                       )}
                     </div>
                     <Separator />
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex-1">
-                        <span className="text-muted-foreground">
+                    <div className="flex items-start gap-2 text-sm min-w-0">
+                      <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0 overflow-hidden break-words">
+                        <div className="text-muted-foreground break-words">
                           Received: {formatDateShort(correspondence.receivedDate)}
-                        </span>
+                        </div>
                         {correspondence.receivedDate && (
-                          <span className="text-xs text-muted-foreground ml-2">
+                          <div className="text-xs text-muted-foreground break-words mt-1">
                             ({formatDateTime(correspondence.receivedDate)})
-                          </span>
+                          </div>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <div className="flex-1">
-                        <span className="text-muted-foreground">{division?.name || 'N/A'}</span>
+                    <div className="flex items-start gap-2 text-sm min-w-0">
+                      <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0 overflow-hidden break-words">
+                        <div className="text-muted-foreground break-words">{division?.name || 'N/A'}</div>
                         {department && (
-                          <span className="text-xs text-muted-foreground ml-2">• {department.name}</span>
+                          <div className="text-xs text-muted-foreground break-words mt-1">• {department.name}</div>
                         )}
                       </div>
                     </div>
                     {correspondence.referenceNumber && (
-                      <div className="flex items-center gap-2 text-xs pt-1 border-t border-border">
-                        <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-muted-foreground font-mono">
+                      <div className="flex items-start gap-2 text-xs pt-1 border-t border-border min-w-0">
+                        <Info className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div className="text-muted-foreground font-mono break-words min-w-0 flex-1 overflow-hidden">
                           Ref: {correspondence.referenceNumber}
-                        </span>
+                        </div>
                       </div>
                     )}
                     {correspondence.distribution && correspondence.distribution.length > 0 && (
@@ -1255,17 +1418,17 @@ const CorrespondenceDetailContent = () => {
                         </div>
                         <div className="space-y-1">
                           {correspondence.distribution.map((recipient, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-xs">
-                              <Badge variant="outline" className="text-xs">
+                            <div key={idx} className="flex items-center gap-2 text-xs min-w-0">
+                              <Badge variant="outline" className="text-xs flex-shrink-0">
                                 {recipient.type === 'directorate'
                                   ? 'Dir'
                                   : recipient.type === 'division'
                                   ? 'Div'
                                   : 'Dept'}
                               </Badge>
-                              <span className="text-muted-foreground">{resolveDistributionName(recipient)}</span>
+                              <span className="text-muted-foreground truncate min-w-0 flex-1">{resolveDistributionName(recipient)}</span>
                               {recipient.purpose && (
-                                <Badge variant="outline" className="text-xs ml-auto">
+                                <Badge variant="outline" className="text-xs ml-auto flex-shrink-0">
                                   {recipient.purpose === 'information'
                                     ? 'Info'
                                     : recipient.purpose === 'action'
@@ -1283,10 +1446,10 @@ const CorrespondenceDetailContent = () => {
 
                 {/* Document Preview Area - Simplified */}
                 <div
-                  className={`bg-white border border-border rounded-lg overflow-hidden shadow-sm flex flex-col ${
+                  className={`bg-white border border-border rounded-lg overflow-hidden shadow-sm flex flex-col min-w-0 ${
                     isPreviewFullscreen
                       ? 'fixed inset-4 z-50'
-                      : 'h-[calc(100vh-260px)]'
+                      : 'h-[300px] sm:h-[400px] md:h-[calc(100vh-260px)] min-h-[250px]'
                   }`}
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
@@ -1308,27 +1471,27 @@ const CorrespondenceDetailContent = () => {
                       const fileTypeLabel = firstAttachment ? getFileTypeLabel(firstAttachment.fileType, firstAttachment.fileName) : 'DMS Document';
                       
                       return (
-                        <div className="border-b border-border bg-muted/30 px-3 py-2 flex items-center justify-between gap-2 flex-shrink-0">
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className="border-b border-border bg-muted/30 px-3 md:px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 flex-shrink-0 min-w-0">
+                          <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
                             <FileIcon className="h-4 w-4 text-primary flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate" title={firstAttachment?.fileName || selectedVersion?.fileName || 'Document'}>
+                            <div className="flex-1 min-w-0 overflow-hidden break-words">
+                              <p className="text-sm font-medium break-words min-w-0" title={firstAttachment?.fileName || selectedVersion?.fileName || 'Document'}>
                                 {firstAttachment?.fileName || selectedVersion?.fileName || 'Document'}
                               </p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Badge variant="outline" className="text-xs">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap mt-1">
+                                <Badge variant="outline" className="text-xs flex-shrink-0">
                                   {fileTypeLabel}
                                 </Badge>
                                 {firstAttachment?.fileSize && (
-                                  <span>{formatFileSize(firstAttachment.fileSize)}</span>
+                                  <span className="flex-shrink-0">{formatFileSize(firstAttachment.fileSize)}</span>
                                 )}
                                 {selectedVersion && (
-                                  <span>• Version {selectedVersion.versionNumber}</span>
+                                  <span className="flex-shrink-0">• Version {selectedVersion.versionNumber}</span>
                                 )}
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             {firstAttachment?.fileUrl && (
                               <Button
                                 variant="ghost"
@@ -1336,7 +1499,10 @@ const CorrespondenceDetailContent = () => {
                                 className="h-7 w-7"
                                 onClick={() => {
                                   if (firstAttachment.fileUrl) {
-                                    window.open(firstAttachment.fileUrl, '_blank');
+                                    const url = buildDownloadUrl(firstAttachment.fileUrl);
+                                    if (url) {
+                                      window.open(url, '_blank');
+                                    }
                                   }
                                 }}
                                 aria-label="Download document"
@@ -1377,7 +1543,7 @@ const CorrespondenceDetailContent = () => {
                   })()}
                   
                   {/* Preview Content */}
-                  <div className="flex-1 overflow-hidden">
+                  <div className="flex-1 overflow-hidden min-h-0 min-w-0">
                     {(() => {
                       // Check for uploaded attachments first
                       const firstAttachment = correspondence.attachments && correspondence.attachments.length > 0 
@@ -1457,7 +1623,6 @@ const CorrespondenceDetailContent = () => {
                                 className="w-full h-full border-0"
                                 title={`PDF Preview: ${firstAttachment.fileName || 'Document'}`}
                                 aria-label={`PDF document preview: ${firstAttachment.fileName || 'Document'}`}
-                                onLoad={() => setDocumentPreviewLoading(false)}
                                 onError={() => {
                                   setDocumentPreviewError('Unable to display PDF in browser. Please download to view.');
                                   setDocumentPreviewLoading(false);
@@ -1465,14 +1630,37 @@ const CorrespondenceDetailContent = () => {
                               />
                             );
                           }
-                          // Show loading or error state
-                          if (documentPreviewLoading) {
-                            return null; // Loading handled by outer loading state
-                          }
+                          // Show error state if there's an error (including completion package message)
                           if (documentPreviewError) {
-                            return null; // Error handled by outer error state
+                            return (
+                              <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-muted/30">
+                                <p className="text-sm font-medium text-destructive mb-2">
+                                  {documentPreviewError}
+                                </p>
+                                <a
+                                  href={buildDownloadUrl(firstAttachment.fileUrl)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
+                                >
+                                  <Download className="h-4 w-4" />
+                                  Download File
+                                </a>
+                              </div>
+                            );
                           }
-                          // Fallback if blob URL not ready
+                          // Show loading state
+                          if (documentPreviewLoading) {
+                            return (
+                              <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-muted/30">
+                                <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
+                                <p className="text-sm font-medium text-muted-foreground">
+                                  Preparing PDF preview...
+                                </p>
+                              </div>
+                            );
+                          }
+                          // Fallback if blob URL not ready (shouldn't normally reach here)
                           return (
                             <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-muted/30">
                               <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
@@ -1482,10 +1670,11 @@ const CorrespondenceDetailContent = () => {
                             </div>
                           );
                         } else if (firstAttachment.fileType?.startsWith('image/')) {
+                          const imageUrl = buildDownloadUrl(firstAttachment.fileUrl);
                           return (
                             <div className="h-full flex items-center justify-center p-4 bg-muted/30" aria-label={`Image preview: ${firstAttachment.fileName}`}>
                               <img
-                                src={firstAttachment.fileUrl}
+                                src={imageUrl || firstAttachment.fileUrl}
                                 alt={firstAttachment.fileName || 'Document image'}
                                 className="max-w-full max-h-full object-contain"
                                 onLoad={() => setDocumentPreviewLoading(false)}
@@ -1530,7 +1719,10 @@ const CorrespondenceDetailContent = () => {
                                   size="sm"
                                   onClick={() => {
                                     if (firstAttachment.fileUrl) {
-                                      window.open(firstAttachment.fileUrl, '_blank');
+                                      const url = buildDownloadUrl(firstAttachment.fileUrl);
+                                      if (url) {
+                                        window.open(url, '_blank');
+                                      }
                                     }
                                   }}
                                 >
@@ -1569,7 +1761,10 @@ const CorrespondenceDetailContent = () => {
                                   size="sm"
                                   onClick={() => {
                                     if (firstAttachment.fileUrl) {
-                                      window.open(firstAttachment.fileUrl, '_blank');
+                                      const url = buildDownloadUrl(firstAttachment.fileUrl);
+                                      if (url) {
+                                        window.open(url, '_blank');
+                                      }
                                     }
                                   }}
                                 >
@@ -1755,7 +1950,10 @@ const CorrespondenceDetailContent = () => {
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (attachment.fileUrl) {
-                                        window.open(attachment.fileUrl, '_blank');
+                                        const url = buildDownloadUrl(attachment.fileUrl);
+                                        if (url) {
+                                          window.open(url, '_blank');
+                                        }
                                       }
                                     }}
                                     aria-label={`Download ${attachment.fileName}`}
@@ -1829,7 +2027,7 @@ const CorrespondenceDetailContent = () => {
           </aside>
 
           {/* Center Panel - Minute Thread (44%) */}
-          <main className="w-[44%] min-w-0 flex flex-col overflow-hidden border-x border-border">
+          <main className="w-full md:w-[44%] min-w-0 max-w-full flex flex-col overflow-hidden border-l md:border-x border-border">
             <div className="p-4 border-b border-border bg-background flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-secondary" />
@@ -1837,7 +2035,7 @@ const CorrespondenceDetailContent = () => {
               </h3>
             </div>
             <ScrollArea className="flex-1">
-              <div className="p-4 space-y-4 overflow-x-hidden">
+              <div className="p-4 space-y-4 overflow-x-hidden min-w-0">
                 {/* Parallel Routing Status - Hidden for cleaner UI
                     Individual minute cards show recipients; Workflow Progress shows current status */}
 
@@ -1880,8 +2078,8 @@ const CorrespondenceDetailContent = () => {
                             setShowMinuteDetail(true);
                           }}
                         >
-                          <CardContent className="p-3">
-                            <div className="flex gap-2">
+                          <CardContent className="p-3 md:p-4 overflow-hidden min-w-0">
+                            <div className="flex gap-2 min-w-0">
                               <Avatar className={`h-9 w-9 flex-shrink-0 ${minuteItem.isRecalled ? 'ring-2 ring-destructive/50' : isDownward ? 'ring-2 ring-info' : 'ring-2 ring-success'}`}>
                                 <AvatarFallback className={`text-xs font-semibold ${minuteItem.isRecalled ? 'bg-destructive/10 text-destructive' : ''}`}>
                                   {minuteItem.isRecalled ? (
@@ -1896,29 +2094,29 @@ const CorrespondenceDetailContent = () => {
                                   )}
                                 </AvatarFallback>
                               </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <p className={`font-semibold text-sm ${minuteItem.isRecalled ? 'line-through text-muted-foreground' : ''}`}>
+                              <div className="flex-1 min-w-0 overflow-hidden">
+                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 gap-2 min-w-0">
+                                  <div className="flex-1 min-w-0 overflow-hidden">
+                                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                                      <p className={`font-semibold text-sm truncate min-w-0 ${minuteItem.isRecalled ? 'line-through text-muted-foreground' : ''}`}>
                                         {displayName}
                                       </p>
                                       {minuteItem.isRecalled && (
-                                        <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20">
+                                        <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20 flex-shrink-0">
                                           Recalled
                                         </Badge>
                                       )}
                                     </div>
-                                    <p className="text-xs text-muted-foreground truncate">
+                                    <p className="text-xs text-muted-foreground break-words min-w-0 mt-1">
                                       {systemRole}
                                       {minuteItem.toOfficeName && (
-                                        <span className="ml-1">→ {minuteItem.toOfficeName}</span>
+                                        <span className="break-words"> → {minuteItem.toOfficeName}</span>
                                       )}
                                       {/* Only show "via [assistant]" to the principal */}
                                       {minuteItem.actedByAssistant && minuteItem.performedByName && 
                                        String(minuteItem.userId) === String(activeUser.id) && (
-                                        <span className="ml-1 text-primary/70">
-                                          (via {minuteItem.performedByName})
+                                        <span className="break-words text-primary/70">
+                                          {' '}(via {minuteItem.performedByName})
                                         </span>
                                       )}
                                     </p>
@@ -1950,13 +2148,13 @@ const CorrespondenceDetailContent = () => {
                                     <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                   </div>
                                 </div>
-                                <p className={`text-sm mb-2 line-clamp-2 ${minuteItem.isRecalled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                                <p className={`text-sm mb-2 line-clamp-3 break-words ${minuteItem.isRecalled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
                                   {minuteItem.minuteText}
                                 </p>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span>{formatDateTime(minuteItem.timestamp)}</span>
-                                  <span className="text-muted-foreground/50">•</span>
-                                  <span>Step {minuteItem.stepNumber}</span>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                                  <span className="truncate">{formatDateTime(minuteItem.timestamp)}</span>
+                                  <span className="text-muted-foreground/50 flex-shrink-0">•</span>
+                                  <span className="flex-shrink-0">Step {minuteItem.stepNumber}</span>
                                   {minuteItem.isRecalled && minuteItem.recalledAt && (
                                     <>
                                       <span className="text-muted-foreground/50">•</span>
@@ -1978,14 +2176,19 @@ const CorrespondenceDetailContent = () => {
                                     <span>Signed {formatDateTime(minuteItem.signature.appliedAt)}</span>
                                   </div>
                                 )}
-                                {minuteItem.sealData && (
+                                {minuteItem.sealData ? (
                                   <div className="mt-2 flex items-center gap-2">
                                     <SealBadge sealData={minuteItem.sealData} showDetails />
                                     <span className="text-xs text-muted-foreground">
                                       {minuteItem.sealData.serialNumber}
                                     </span>
                                   </div>
-                                )}
+                                ) : minuteItem.sealApplied ? (
+                                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                    <Shield className="h-3 w-3 text-emerald-600" />
+                                    <span>Seal applied (loading details...)</span>
+                                  </div>
+                                ) : null}
                                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                                   {minuteItem.canBeEdited && minuteItem.userId === activeUser?.id && (
                                     <>
@@ -2080,15 +2283,15 @@ const CorrespondenceDetailContent = () => {
           </main>
 
           {/* Right Panel - Actions (28%) */}
-          <aside className="w-[28%] min-w-0 bg-background flex flex-col overflow-hidden">
+          <aside className="w-full md:w-[28%] min-w-0 max-w-full border-t md:border-t-0 bg-background flex flex-col overflow-hidden">
             <div className="p-4 border-b border-border flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <Send className="h-4 w-4 text-accent" />
                 Actions
               </h3>
             </div>
-            <ScrollArea className="h-full w-full">
-              <div className="p-4 space-y-4 overflow-x-hidden">
+            <ScrollArea className="flex-1">
+              <div className="p-4 space-y-4 overflow-x-hidden min-w-0">
               {/* Current Status Card */}
               {(() => {
                 const daysPending = correspondence.receivedDate 
@@ -2109,8 +2312,8 @@ const CorrespondenceDetailContent = () => {
                 const slaBreach = daysPending >= 7;
                 
                 return (
-                  <Card className={`${slaBreach ? 'border-destructive/50 bg-destructive/5' : slaWarning ? 'border-warning/50 bg-warning/5' : ''}`}>
-                    <CardContent className="p-3">
+                  <Card className={`overflow-hidden ${slaBreach ? 'border-destructive/50 bg-destructive/5' : slaWarning ? 'border-warning/50 bg-warning/5' : ''}`}>
+                    <CardContent className="p-3 overflow-hidden min-w-0">
                       <div className="flex items-start gap-3">
                         <div className={`h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0 ${
                           isCompleted ? 'bg-success/20' : isCurrentUserTurn ? 'bg-primary animate-pulse' : 'bg-muted'
@@ -2524,9 +2727,11 @@ const CorrespondenceDetailContent = () => {
         }}
         documentContentHtml={linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1]?.contentHtml}
         attachmentUrl={
-          selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
-            ? correspondence.attachments[selectedAttachmentIndex].fileUrl
-            : correspondence.attachments?.[0]?.fileUrl
+          buildDownloadUrl(
+            selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
+              ? correspondence.attachments[selectedAttachmentIndex].fileUrl
+              : correspondence.attachments?.[0]?.fileUrl
+          )
         }
         attachmentFileName={
           selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
@@ -2541,7 +2746,7 @@ const CorrespondenceDetailContent = () => {
         isOpen={showPrintPreview}
         onClose={() => setShowPrintPreview(false)}
         documentContentHtml={linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1]?.contentHtml}
-        attachmentUrl={correspondence.attachments?.[0]?.fileUrl}
+        attachmentUrl={buildDownloadUrl(correspondence.attachments?.[0]?.fileUrl)}
         attachmentFileName={correspondence.attachments?.[0]?.fileName}
       />
 

@@ -27,6 +27,7 @@ interface SealData {
   officeTitle: string;
   sealedAt: string;
   isValid: boolean;
+  sealImageUrl?: string;
 }
 
 interface SealBadgeProps {
@@ -101,6 +102,17 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {/* Seal Image */}
+          {sealData.sealImageUrl && (
+            <div className="flex justify-center p-4 bg-white rounded-lg border border-emerald-200 dark:border-emerald-800">
+              <img
+                src={sealData.sealImageUrl}
+                alt={`Digital Seal ${sealData.serialNumber}`}
+                className="max-w-full h-auto max-h-64 object-contain"
+              />
+            </div>
+          )}
+          
           {/* Seal Info */}
           <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800">
             <div className="flex items-start justify-between">

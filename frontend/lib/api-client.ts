@@ -8,8 +8,8 @@ const ORIGINAL_ACCESS_TOKEN_KEY = "npa_ecm_original_access";
 const ORIGINAL_REFRESH_TOKEN_KEY = "npa_ecm_original_refresh";
 const ORIGINAL_ACCESS_EXP_KEY = "npa_ecm_original_access_exp";
 
-const getBaseUrl = () => {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+export const getBaseUrl = () => {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8002/api/v1";
   return base.endsWith("/") ? base.slice(0, -1) : base;
 };
 

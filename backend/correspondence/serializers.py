@@ -40,6 +40,46 @@ class CorrespondenceAttachmentSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+    
+    def to_representation(self, instance):
+        """Convert relative file URLs to absolute URLs when serializing."""
+        data = super().to_representation(instance)
+        if data.get('file_url') and not data['file_url'].startswith(('http://', 'https://', 'data:')):
+            # If it's a relative path, convert to absolute URL
+            from django.conf import settings
+            request = self.context.get('request')
+            file_url = data['file_url']
+            
+            # Ensure the path starts with /media/ (it should already, but handle edge cases)
+            if not file_url.startswith('/media/'):
+                # If it doesn't start with /media/, prepend MEDIA_URL
+                media_path = file_url.lstrip('/')
+                if not media_path.startswith('media/'):
+                    media_path = f"media/{media_path}"
+                file_url = f"{settings.MEDIA_URL.rstrip('/')}/{media_path}"
+            
+            if request:
+                try:
+                    # Build absolute URL manually to avoid request path prefix issues
+                    # request.build_absolute_uri might include /api/ prefix if request came through API
+                    scheme = getattr(request, 'scheme', 'http')
+                    host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8002'
+                    # Ensure file_url starts with /media/ (not /api/media/)
+                    if file_url.startswith('/api/media/'):
+                        file_url = file_url.replace('/api/media/', '/media/')
+                    # Build URL directly without using build_absolute_uri to avoid path prefix issues
+                    data['file_url'] = f"{scheme}://{host}{file_url}"
+                except Exception:
+                    # Fallback: use the request host directly
+                    scheme = getattr(request, 'scheme', 'http')
+                    host = request.get_host() if hasattr(request, 'get_host') else 'localhost:8002'
+                    if file_url.startswith('/api/media/'):
+                        file_url = file_url.replace('/api/media/', '/media/')
+                    data['file_url'] = f"{scheme}://{host}{file_url}"
+            elif hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
+                # Use MEDIA_BASE_URL from settings if available
+                data['file_url'] = f"{settings.MEDIA_BASE_URL.rstrip('/')}{file_url}"
+        return data
 
 
 class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
@@ -274,6 +314,28 @@ class MinuteSerializer(serializers.ModelSerializer):
         if not obj.seal_applied:
             return None
         seal = obj.seal_applied
+        request = self.context.get('request')
+        
+        # Get seal image URL (if generated and saved)
+        seal_image_url = None
+        if seal.seal_image:
+            if request:
+                seal_image_url = request.build_absolute_uri(seal.seal_image.url)
+            else:
+                from django.conf import settings
+                base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:8002')
+                seal_image_url = f"{base_url}{seal.seal_image.url}"
+        
+        # Get signature image URL from the signature used to create the seal
+        signature_image_url = None
+        if seal.signature_used and seal.signature_used.signature_image:
+            if request:
+                signature_image_url = request.build_absolute_uri(seal.signature_used.signature_image.url)
+            else:
+                from django.conf import settings
+                base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:8002')
+                signature_image_url = f"{base_url}{seal.signature_used.signature_image.url}"
+        
         return {
             "id": str(seal.id),
             "serial_number": seal.serial_number,
@@ -283,6 +345,8 @@ class MinuteSerializer(serializers.ModelSerializer):
             "office_title": seal.office_title,
             "sealed_at": seal.sealed_at.isoformat() if seal.sealed_at else None,
             "is_valid": seal.is_valid,
+            "seal_image_url": seal_image_url,
+            "signature_image_url": signature_image_url,
         }
 
 

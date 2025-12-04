@@ -34,7 +34,7 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 
 const getBaseUrl = () => {
   if (!isBrowser) return '';
-  const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1';
+  const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8002/api/v1';
   return base.endsWith('/') ? base.slice(0, -1) : base;
 };
 

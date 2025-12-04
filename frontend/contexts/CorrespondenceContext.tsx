@@ -253,6 +253,8 @@ const mapApiMinute = (item: any): Minute => {
       officeTitle: item.seal_data.office_title ?? '',
       sealedAt: item.seal_data.sealed_at ?? '',
       isValid: item.seal_data.is_valid ?? true,
+      sealImageUrl: item.seal_data.seal_image_url ?? undefined,
+      signatureImageUrl: item.seal_data.signature_image_url ?? undefined,
     } : undefined,
   };
 };

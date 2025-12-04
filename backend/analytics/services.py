@@ -47,6 +47,68 @@ class EnhancedDivisionMetric(DivisionMetric):
 
 class AnalyticsService:
     """Central place for computing analytics payloads consumed by the dashboards."""
+    
+    @staticmethod
+    def _get_division_for_correspondence(item: Correspondence) -> tuple[str | None, str, str]:
+        """
+        Determine the division for a correspondence item, considering:
+        - Direct division assignment
+        - Department assignment (get division from department)
+        - Office assignment (get division from office if available)
+        - Directorate-level offices (MD, ED) don't have divisions, so return None
+        
+        Returns: (division_id, division_name, full_name)
+        If truly unassigned or at directorate level, returns (None, "Unassigned", "Unassigned")
+        """
+        # 1. Check direct division assignment
+        if item.division_id:
+            return (
+                str(item.division_id),
+                item.division.code if hasattr(item.division, 'code') and item.division.code else item.division.name,
+                item.division.name
+            )
+        
+        # 2. Check department assignment - departments belong to divisions
+        if item.department_id and hasattr(item.department, 'division') and item.department.division_id:
+            division = item.department.division
+            return (
+                str(division.id),
+                division.code if hasattr(division, 'code') and division.code else division.name,
+                division.name
+            )
+        
+        # 3. Check owning_office assignment
+        if item.owning_office_id:
+            office = item.owning_office
+            # If office has a division, use it
+            if hasattr(office, 'division') and office.division_id:
+                division = office.division
+                return (
+                    str(division.id),
+                    division.code if hasattr(division, 'code') and division.code else division.name,
+                    division.name
+                )
+            # If office is at directorate level (MD, ED, or directorate office), it's not unassigned
+            # but it's also not a division - we'll skip it from division metrics
+            if hasattr(office, 'directorate') and office.directorate_id:
+                # This is directorate-level, not division-level
+                return (None, "Directorate Level", "Directorate Level")
+        
+        # 4. Check current_office as fallback
+        if item.current_office_id:
+            office = item.current_office
+            if hasattr(office, 'division') and office.division_id:
+                division = office.division
+                return (
+                    str(division.id),
+                    division.code if hasattr(division, 'code') and division.code else division.name,
+                    division.name
+                )
+            if hasattr(office, 'directorate') and office.directorate_id:
+                return (None, "Directorate Level", "Directorate Level")
+        
+        # 5. Truly unassigned
+        return (None, "Unassigned", "Unassigned")
 
     # Default SLA targets (will be overridden by database values if available)
     DEFAULT_SLA_TARGETS = {
@@ -439,7 +501,18 @@ class AnalyticsService:
             qs = qs.filter(received_date__gte=start_date)
         if division_id:
             qs = qs.filter(division_id=division_id)
-        return qs.select_related("division", "department", "current_approver").prefetch_related(
+        return qs.select_related(
+            "division", 
+            "department", 
+            "department__division",  # For getting division from department
+            "current_approver",
+            "owning_office",
+            "owning_office__division",  # For getting division from office
+            "owning_office__directorate",  # For detecting directorate-level
+            "current_office",
+            "current_office__division",
+            "current_office__directorate"
+        ).prefetch_related(
             Prefetch(
                 "minutes",
                 queryset=Minute.objects.order_by("timestamp").only(
@@ -718,11 +791,22 @@ class AnalyticsService:
             lambda: {"workload": 0, "completed": 0, "turnaround_sum": 0.0, "high_priority": 0, "backlog": 0}
         )
 
+        # Track division names for each key
+        division_names: dict[str, tuple[str, str]] = {}  # key -> (div_name, full_name)
+        
         for item in correspondences:
-            key = item.division_id or "unassigned"
-            division_name = item.division.code if getattr(item.division, "code", None) else getattr(item.division, "name", None) or "Unassigned"
-            full_name = getattr(item.division, "name", None) or "Unassigned"
+            div_id, div_name, full_name = cls._get_division_for_correspondence(item)
+            # Skip directorate-level items (they don't belong in division metrics)
+            if div_id is None and div_name == "Directorate Level":
+                continue
+            # Use "unassigned" as key for truly unassigned items
+            key = div_id or "unassigned"
             bucket = buckets[key]
+            
+            # Store division names for this key (will be the same for all items with same key)
+            if key not in division_names:
+                division_names[key] = (div_name, full_name)
+            
             bucket["workload"] += 1
             if item.priority in {Correspondence.Priority.HIGH, Correspondence.Priority.URGENT}:
                 bucket["high_priority"] += 1
@@ -733,13 +817,20 @@ class AnalyticsService:
             elif cls._turnaround_days(item, now) > 5:
                 bucket["backlog"] += 1
 
+        # Create metrics after processing all items
+        for key, bucket in buckets.items():
+            if bucket["workload"] == 0:
+                continue  # Skip empty buckets
+                
             average_turnaround = bucket["turnaround_sum"] / bucket["completed"] if bucket["completed"] else 0.0
             completion_rate = (bucket["completed"] / bucket["workload"]) * 100 if bucket["workload"] else 0.0
             efficiency = (completion_rate / (average_turnaround or 1)) * 10 if completion_rate else 0.0
 
+            div_name, full_name = division_names.get(key, ("Unassigned", "Unassigned"))
+            
             metrics[key] = DivisionMetric(
                 id=None if key == "unassigned" else key,
-                name=division_name,
+                name=div_name,
                 full_name=full_name,
                 workload=bucket["workload"],
                 completed=bucket["completed"],
@@ -1036,11 +1127,14 @@ class AnalyticsService:
             by_priority[priority]["total"] += 1
             
             # Track by division
-            div_id = str(item.division_id) if item.division_id else "unassigned"
-            div_name = getattr(item.division, "name", None) or "Unassigned"
-            if div_id not in by_division:
-                by_division[div_id] = {
-                    "id": div_id if div_id != "unassigned" else None,
+            div_id, div_name, _ = cls._get_division_for_correspondence(item)
+            # Skip directorate-level items from division SLA metrics
+            if div_id is None and div_name == "Directorate Level":
+                continue
+            div_id_str = str(div_id) if div_id else "unassigned"
+            if div_id_str not in by_division:
+                by_division[div_id_str] = {
+                    "id": div_id if div_id_str != "unassigned" else None,
                     "name": div_name,
                     "total": 0,
                     "compliant": 0,
@@ -1048,7 +1142,7 @@ class AnalyticsService:
                     "atRisk": 0,
                 }
             
-            div_bucket = by_division[div_id]
+            div_bucket = by_division[div_id_str]
             div_bucket["total"] += 1
             if item.status == Correspondence.Status.COMPLETED:
                 if days_open <= target:
@@ -1103,13 +1197,15 @@ class AnalyticsService:
         division_data: dict[str, dict[str, Any]] = {}
         
         for item in correspondences:
-            div_id = str(item.division_id) if item.division_id else "unassigned"
-            div_name = getattr(item.division, "code", None) or getattr(item.division, "name", None) or "Unassigned"
-            full_name = getattr(item.division, "name", None) or "Unassigned"
+            div_id, div_name, full_name = cls._get_division_for_correspondence(item)
+            # Skip directorate-level items (they don't belong in division metrics)
+            if div_id is None and div_name == "Directorate Level":
+                continue
+            div_id_str = str(div_id) if div_id else "unassigned"
             
-            if div_id not in division_data:
-                division_data[div_id] = {
-                    "id": div_id if div_id != "unassigned" else None,
+            if div_id_str not in division_data:
+                division_data[div_id_str] = {
+                    "id": div_id if div_id_str != "unassigned" else None,
                     "name": div_name,
                     "fullName": full_name,
                     "workload": 0,
@@ -1126,7 +1222,7 @@ class AnalyticsService:
                     "backlog": 0,
                 }
             
-            div = division_data[div_id]
+            div = division_data[div_id_str]
             div["workload"] += 1
             
             # Priority count
@@ -1296,8 +1392,12 @@ class AnalyticsService:
             
             # Bottleneck detection
             if item.status != Correspondence.Status.COMPLETED:
-                div_id = str(item.division_id) if item.division_id else "unassigned"
-                division_pending_days[div_id].append(cls._turnaround_days(item, now))
+                div_id, _, _ = cls._get_division_for_correspondence(item)
+                # Skip directorate-level items from bottleneck detection
+                if div_id is None:
+                    continue
+                div_id_str = str(div_id)
+                division_pending_days[div_id_str].append(cls._turnaround_days(item, now))
         
         # Calculate averages
         avg_handoffs = round(total_handoffs / len(correspondences), 2) if correspondences else 0.0

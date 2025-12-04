@@ -18,16 +18,18 @@ interface AssistantAssignmentModalProps {
 const AVAILABLE_PERMISSIONS = [
   { id: 'view', label: 'View Documents' },
   { id: 'draft', label: 'Draft Responses' },
-  { id: 'schedule', label: 'Manage Calendar' },
-  { id: 'coordinate', label: 'Coordinate Meetings' },
   { id: 'forward', label: 'Forward Documents' },
+  // Note: Calendar and meeting coordination features are not yet implemented in ECM
+  // These permissions are reserved for future functionality
+  // { id: 'schedule', label: 'Manage Calendar (Coming Soon)' },
+  // { id: 'coordinate', label: 'Coordinate Meetings (Coming Soon)' },
 ];
 
 const PERMISSION_PRESETS = [
   {
     name: 'Full Access',
-    description: 'All permissions',
-    permissions: ['view', 'draft', 'schedule', 'coordinate', 'forward'],
+    description: 'All available permissions',
+    permissions: ['view', 'draft', 'forward'],
   },
   {
     name: 'Read Only',
@@ -35,14 +37,14 @@ const PERMISSION_PRESETS = [
     permissions: ['view'],
   },
   {
-    name: 'Administrative',
-    description: 'Calendar and meeting coordination',
-    permissions: ['view', 'schedule', 'coordinate'],
-  },
-  {
     name: 'Document Management',
     description: 'View, draft, and forward documents',
     permissions: ['view', 'draft', 'forward'],
+  },
+  {
+    name: 'Draft Only',
+    description: 'View and draft responses',
+    permissions: ['view', 'draft'],
   },
 ];
 

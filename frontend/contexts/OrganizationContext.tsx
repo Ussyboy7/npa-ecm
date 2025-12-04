@@ -497,25 +497,37 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       let allUsers: any[] = [];
       let page = 1;
       let hasMore = true;
+      const requestedPageSize = 1000;
       
       while (hasMore) {
-        const usersResponse = await apiFetch(`/accounts/users/?is_active=true&page_size=1000&page=${page}&ordering=username`);
+        const usersResponse = await apiFetch(`/accounts/users/?is_active=true&page_size=${requestedPageSize}&page=${page}&ordering=username`);
         const pageUsers = unwrapResults<any>(usersResponse);
         allUsers = [...allUsers, ...pageUsers];
         
+        logInfo(`Fetched page ${page}:`, { 
+          usersOnPage: pageUsers.length, 
+          totalSoFar: allUsers.length,
+          hasNext: usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse 
+            ? !!(usersResponse as { next?: string | null }).next 
+            : false
+        });
+        
         // Check if there are more pages
-        const isPaginated = usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse;
-        const hasNext = isPaginated && usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse 
-          ? !!(usersResponse as { next?: unknown }).next 
-          : false;
-        // Check if we got a full page (either 1000 if max_page_size allows, or less if that's all that's left)
+        // A paginated response has 'next' and 'results' properties
+        const isPaginated = usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse && 'results' in usersResponse;
+        const nextUrl = isPaginated ? (usersResponse as { next?: string | null }).next : null;
+        const hasNext = !!nextUrl;
+        
         // If we got fewer than requested, we're on the last page
-        const requestedPageSize = 1000;
+        // Also check if next is null/empty
         hasMore = hasNext && pageUsers.length >= requestedPageSize;
         page++;
         
         // Safety limit - don't fetch more than 10 pages (10,000 users)
-        if (page > 10) break;
+        if (page > 10) {
+          logInfo('Reached safety limit of 10 pages');
+          break;
+        }
       }
       
       logInfo('Users API response:', { totalFetched: allUsers.length, pages: page - 1 });

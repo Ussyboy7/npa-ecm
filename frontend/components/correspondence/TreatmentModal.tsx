@@ -504,7 +504,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           formData.append('file', uploadedFile.file);
           formData.append('correspondence', correspondence.id);
           
-          await apiFetch(`/correspondence/items/${correspondence.id}/attachments/`, {
+          await apiFetch('/correspondence/attachments/', {
             method: 'POST',
             body: formData,
             headers: {}, // Let browser set Content-Type for FormData
@@ -542,22 +542,30 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
         }),
       });
 
-      await syncFromApi();
-
+      // Close modal and show success immediately
       if (draftId) {
         deleteDraft(draftId);
       }
 
       setShowConfirmation(false);
+      setIsSubmitting(false);
+      
+      toast.success('Response sent successfully', {
+        description: actingFor
+          ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
+          : `Sent to ${recipient?.name ?? 'selected user'}`,
+      });
+
+      // Close modal
       setTimeout(() => {
         onClose();
         setTimeout(() => resetForm(), 100);
       }, 200);
 
-      toast.success('Response sent successfully', {
-        description: actingFor
-          ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
-          : `Sent to ${recipient?.name ?? 'selected user'}`,
+      // Sync in background (non-blocking)
+      syncFromApi().catch((error) => {
+        logError('Background sync failed after treatment', error);
+        // Don't show error to user - sync will happen on next page load
       });
     } catch (error: any) {
       logError('Failed to process treatment', error);
@@ -600,8 +608,8 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
             Treat & Respond
@@ -619,25 +627,24 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 pr-4 -mr-4">
-          <div className="space-y-6 py-4">
+        <div className="space-y-6 mt-4">
             {/* Original Correspondence Card */}
             <Card className="bg-muted/50">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <FileText className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm mb-1 truncate">
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <p className="font-semibold text-sm mb-1 break-words">
                       Original: {correspondence.subject}
                     </p>
                     <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
-                      <span>Ref: {correspondence.referenceNumber}</span>
-                      <span>•</span>
-                      <span>From: {correspondence.senderName}</span>
+                      <span className="truncate">Ref: {correspondence.referenceNumber}</span>
+                      <span className="flex-shrink-0">•</span>
+                      <span className="truncate">From: {correspondence.senderName}</span>
                       {divisionEntity && (
                         <>
-                          <span>•</span>
-                          <span>{divisionEntity.name}</span>
+                          <span className="flex-shrink-0">•</span>
+                          <span className="truncate">{divisionEntity.name}</span>
                         </>
                       )}
                     </div>
@@ -647,6 +654,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                       correspondence.priority === 'urgent' ? 'destructive' :
                       correspondence.priority === 'high' ? 'default' : 'secondary'
                     }
+                    className="flex-shrink-0"
                   >
                     {correspondence.priority}
                   </Badge>
@@ -670,9 +678,9 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                     <Separator className="my-1" />
                     {behalfOfOptions.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{user.name}</span>
-                          <span className="text-xs text-muted-foreground">
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-medium truncate">{user.name}</span>
+                          <span className="text-xs text-muted-foreground truncate">
                             {user.systemRole} - {user.gradeLevel}
                           </span>
                         </div>
@@ -749,7 +757,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                         value={selectedTemplateId ?? 'none'}
                         onValueChange={(v) => setSelectedTemplateId(v === 'none' ? null : v)}
                       >
-                        <SelectTrigger className="w-[200px] h-8">
+                        <SelectTrigger className="w-full sm:w-[200px] h-8">
                           <SelectValue placeholder="Choose a template" />
                         </SelectTrigger>
                         <SelectContent>
@@ -788,7 +796,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                         value={newTemplateName}
                         onChange={(e) => setNewTemplateName(e.target.value)}
                         placeholder="Template name"
-                        className="h-8 w-[200px]"
+                        className="h-8 w-full sm:w-[200px]"
                       />
                       <Button
                         variant="secondary"
@@ -879,7 +887,7 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
               <CollapsibleContent className="pt-3 space-y-3">
                 {/* Upload Area */}
                 <div
-                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                  className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
                     isDragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
                   }`}
                   onDragOver={handleDragOver}
@@ -929,7 +937,7 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
                             <File className="h-5 w-5 text-muted-foreground" />
                           </div>
                         )}
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 overflow-hidden">
                           <p className="text-sm font-medium truncate">{file.name}</p>
                           <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
                         </div>
@@ -985,8 +993,8 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
               </div>
 
               {/* Recipients List */}
-              <ScrollArea className="h-[200px] border border-border rounded-lg">
-                <div className="p-2 space-y-1">
+              <ScrollArea className="h-[200px] sm:h-[250px] border border-border rounded-lg">
+                <div className="p-2 space-y-1 min-w-0">
                   {filteredForwardingOptions.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
                       No recipients found
@@ -1008,7 +1016,7 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
                         <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
                           <UserIcon className="h-4 w-4 text-muted-foreground" />
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0 overflow-hidden">
                           <p className="text-sm font-medium truncate">{user.name}</p>
                           <p className="text-xs text-muted-foreground truncate">
                             {user.systemRole} • {user.division || 'No division'}
@@ -1029,16 +1037,16 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
 
               {/* Selected Recipient Card */}
               {selectedRecipient && (
-                <Card className="border-primary/30 bg-primary/5">
+                <Card className="border-primary/30 bg-primary/5 overflow-hidden">
                   <CardContent className="p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <div className="flex items-center justify-between gap-2 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                           <UserIcon className="h-5 w-5 text-primary" />
                         </div>
-                        <div>
-                          <p className="text-sm font-medium">{selectedRecipient.name}</p>
-                          <p className="text-xs text-muted-foreground">
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <p className="text-sm font-medium truncate">{selectedRecipient.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">
                             {selectedRecipient.systemRole} • {purpose === 'action' ? 'For Action' :
                              purpose === 'approval' ? 'For Approval' :
                              purpose === 'comment' ? 'For Comment' : 'For Information'}
@@ -1048,7 +1056,7 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7"
+                        className="h-7 w-7 flex-shrink-0"
                         onClick={() => setForwardTo('')}
                       >
                         <X className="h-4 w-4" />
@@ -1134,10 +1142,9 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
                 </p>
               )}
             </div>
-          </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
+        <DialogFooter className="border-t pt-4 mt-4">
           <Button variant="outline" onClick={handleSaveDraft} disabled={isSubmitting}>
             <Save className="h-4 w-4 mr-2" />
             Save Draft

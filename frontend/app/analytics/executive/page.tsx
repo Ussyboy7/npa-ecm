@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -117,7 +117,14 @@ const ExecutiveAnalyticsPage = () => {
 
   // Enhanced SLA data
   const slaSummary = slaData?.summary ?? { total: 0, compliant: 0, breached: 0, atRisk: 0, complianceRate: 0 };
-  const slaByDivision = divisionPerf?.divisions ?? [];
+  // Filter out "unassigned" division from display as it represents correspondence without a division assignment
+  const slaByDivision = useMemo(() => {
+    const allDivisions = divisionPerf?.divisions ?? [];
+    return allDivisions.filter(div => 
+      div.name.toLowerCase() !== 'unassigned' && 
+      div.name.toLowerCase() !== 'unassigned division'
+    );
+  }, [divisionPerf?.divisions]);
   const bottlenecks = efficiencyData?.bottlenecks ?? [];
   const topPerformers = efficiencyData?.staffMetrics?.topPerformers ?? [];
 

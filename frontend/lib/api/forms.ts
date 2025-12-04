@@ -146,7 +146,7 @@ export async function deleteFormSubmission(id: string): Promise<void> {
  * Get PDF URL for a form submission
  */
 export function getFormSubmissionPdfUrl(submissionId: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
   return `${baseUrl}/api/v1${BASE_PATH}/submissions/${submissionId}/generate_pdf/`;
 }
 
@@ -235,7 +235,7 @@ export async function signForm(workflowId: string, data: {
   if (data.notes) formData.append("notes", data.notes);
 
   // Use fetch directly for FormData to avoid JSON serialization issues
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8002";
   const token = localStorage.getItem("access_token");
   
   const response = await fetch(`${baseUrl}/api/v1${BASE_PATH}/signature-workflows/${workflowId}/sign/`, {

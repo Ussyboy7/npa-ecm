@@ -101,14 +101,24 @@ const AssistantsManagement = () => {
     
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(exec =>
-        exec.name.toLowerCase().includes(query) ||
-        exec.systemRole.toLowerCase().includes(query)
-      );
+      result = result.filter(exec => {
+        // Search by executive name or role
+        if (exec.name.toLowerCase().includes(query) || exec.systemRole.toLowerCase().includes(query)) {
+          return true;
+        }
+        // Also search by assigned assistants' names
+        const execAssignments = assistantAssignments.filter(a => a.executiveId === exec.id);
+        return execAssignments.some(assignment => {
+          const assistant = users.find(u => u.id === assignment.assistantId);
+          return assistant?.name.toLowerCase().includes(query) || 
+                 assistant?.systemRole.toLowerCase().includes(query) ||
+                 assignment.specialization?.toLowerCase().includes(query);
+        });
+      });
     }
     
     return result;
-  }, [executives, searchQuery, isSuperAdmin, currentUser?.id]);
+  }, [executives, searchQuery, isSuperAdmin, currentUser?.id, assistantAssignments, users]);
 
   // All assignments (for table view)
   const filteredAssignments = useMemo(() => {
@@ -119,7 +129,7 @@ const AssistantsManagement = () => {
       result = result.filter(a => a.type === typeFilter);
     }
     
-    // Filter by search
+    // Filter by search - enhanced to search assistants more thoroughly
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(a => {
@@ -127,8 +137,13 @@ const AssistantsManagement = () => {
         const executive = users.find(u => u.id === a.executiveId);
         return (
           assistant?.name.toLowerCase().includes(query) ||
+          assistant?.email?.toLowerCase().includes(query) ||
+          assistant?.systemRole.toLowerCase().includes(query) ||
+          assistant?.gradeLevel.toLowerCase().includes(query) ||
           executive?.name.toLowerCase().includes(query) ||
-          a.specialization?.toLowerCase().includes(query)
+          executive?.systemRole.toLowerCase().includes(query) ||
+          a.specialization?.toLowerCase().includes(query) ||
+          a.permissions.some(p => p.toLowerCase().includes(query))
         );
       });
     }
