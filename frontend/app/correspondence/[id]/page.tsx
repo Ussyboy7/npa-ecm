@@ -683,7 +683,7 @@ const CorrespondenceDetailContent = () => {
       const mappedMinutes = minutesData.map(mapApiMinute);
       
       // Debug logging for seal data
-      console.log('[CorrespondenceDetail] Refreshed minutes:', mappedMinutes.map(m => ({
+      console.log('[CorrespondenceDetail] Refreshed minutes:', mappedMinutes.map((m: Minute) => ({
         id: m.id,
         actionType: m.actionType,
         hasSealData: !!m.sealData,
