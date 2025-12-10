@@ -1,3 +1,7 @@
+networks:
+  ecm_stag_network:
+    driver: bridge
+
 services:
   postgres_stag:
     image: postgres:16-alpine
@@ -13,6 +17,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
 
   redis_stag:
@@ -21,6 +27,8 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_stag_data:/data
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -43,6 +51,8 @@ services:
         condition: service_healthy
       redis_stag:
         condition: service_healthy
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
 
   celery_worker_stag:
@@ -60,6 +70,8 @@ services:
         condition: service_started
       redis_stag:
         condition: service_healthy
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
 
   celery_beat_stag:
@@ -77,6 +89,8 @@ services:
         condition: service_started
       redis_stag:
         condition: service_healthy
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
 
   frontend_stag:
@@ -93,6 +107,8 @@ services:
     depends_on:
       backend_stag:
         condition: service_started
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
 
   nginx_stag:
@@ -111,6 +127,8 @@ services:
         condition: service_started
       backend_stag:
         condition: service_started
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
 
   prometheus_stag:
@@ -119,6 +137,8 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_stag_data:/prometheus
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
 
   grafana_stag:
@@ -129,6 +149,8 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_stag_data:/var/lib/grafana
+    networks:
+      - ecm_stag_network
     restart: unless-stopped
 
 volumes:
