@@ -26,16 +26,28 @@ class UserSerializer(serializers.ModelSerializer):
     department_name = serializers.SerializerMethodField()
     
     def get_system_role_name(self, obj):
-        return obj.system_role.name if obj.system_role else ""
+        try:
+            return obj.system_role.name if obj.system_role else ""
+        except Exception:
+            return ""
     
     def get_directorate_name(self, obj):
-        return obj.directorate.name if obj.directorate else ""
+        try:
+            return obj.directorate.name if obj.directorate else ""
+        except Exception:
+            return ""
     
     def get_division_name(self, obj):
-        return obj.division.name if obj.division else ""
+        try:
+            return obj.division.name if obj.division else ""
+        except Exception:
+            return ""
     
     def get_department_name(self, obj):
-        return obj.department.name if obj.department else ""
+        try:
+            return obj.department.name if obj.department else ""
+        except Exception:
+            return ""
 
     class Meta:
         model = User

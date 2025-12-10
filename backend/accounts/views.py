@@ -511,14 +511,39 @@ class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
     def get_token(cls, user):
         token = super().get_token(user)
         token["username"] = user.username
-        token["system_role"] = user.system_role.name if user.system_role else ""
-        token["grade_level"] = getattr(user, "grade_level", "") or ""
+        try:
+            token["system_role"] = user.system_role.name if user.system_role else ""
+        except Exception:
+            token["system_role"] = ""
+        try:
+            token["grade_level"] = getattr(user, "grade_level", "") or ""
+        except Exception:
+            token["grade_level"] = ""
         return token
 
     def validate(self, attrs):
-        data = super().validate(attrs)
-        data["user"] = UserSerializer(self.user).data
-        return data
+        try:
+            data = super().validate(attrs)
+            # Safely serialize user data with error handling
+            try:
+                data["user"] = UserSerializer(self.user).data
+            except Exception as e:
+                # If serialization fails, provide minimal user data
+                data["user"] = {
+                    "id": str(self.user.id),
+                    "username": self.user.username,
+                    "email": self.user.email,
+                    "first_name": self.user.first_name or "",
+                    "last_name": self.user.last_name or "",
+                    "is_active": self.user.is_active,
+                }
+            return data
+        except Exception as e:
+            # Log the error for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Login error: {str(e)}", exc_info=True)
+            raise
 
 
 class AuthTokenObtainPairView(TokenObtainPairView):
@@ -535,18 +560,32 @@ class AuthTokenObtainPairView(TokenObtainPairView):
             except User.DoesNotExist:
                 pass
         
-        response = super().post(request, *args, **kwargs)
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception as e:
+            # Log the error for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Login authentication error: {str(e)}", exc_info=True)
+            # Re-raise to return proper error response
+            raise
         
         if response.status_code == 200 and user:
             # Login successful - create audit log
-            from audit.models import ActivityLog
-            AuditService.log_user_activity(
-                user=user,
-                action=ActivityLog.ActionType.USER_LOGIN,
-                target_user=None,
-                request=request,
-                description="User logged in successfully",
-            )
+            try:
+                from audit.models import ActivityLog
+                AuditService.log_user_activity(
+                    user=user,
+                    action=ActivityLog.ActionType.USER_LOGIN,
+                    target_user=None,
+                    request=request,
+                    description="User logged in successfully",
+                )
+            except Exception as e:
+                # Log audit error but don't fail the login
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to create audit log for login: {str(e)}", exc_info=True)
         
         return response
 
