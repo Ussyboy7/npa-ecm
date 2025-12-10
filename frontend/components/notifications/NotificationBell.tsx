@@ -26,7 +26,12 @@ export const NotificationBell = () => {
     onNotification: (notification) => {
       setNewNotifications((prev) => [notification, ...prev]);
       // Refresh count
-      getUnreadNotificationCount().then(setUnreadCount);
+      getUnreadNotificationCount()
+        .then(setUnreadCount)
+        .catch(() => {
+          // Silently handle errors - set count to 0 if fetch fails
+          setUnreadCount(0);
+        });
     },
     onUnreadCountChange: (count) => {
       setUnreadCount(count);
@@ -34,8 +39,13 @@ export const NotificationBell = () => {
   });
 
   const fetchUnreadCount = useCallback(async () => {
-    const count = await getUnreadNotificationCount();
-    setUnreadCount(count);
+    try {
+      const count = await getUnreadNotificationCount();
+      setUnreadCount(count);
+    } catch (error) {
+      // Silently handle errors - set count to 0 if fetch fails
+      setUnreadCount(0);
+    }
   }, []);
 
   usePolling(fetchUnreadCount, NOTIFICATION_POLL_INTERVAL_MS, {

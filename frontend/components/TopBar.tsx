@@ -168,12 +168,20 @@ export const TopBar = () => {
         <div className="hidden md:flex items-center gap-3 text-xs text-sidebar-foreground/70">
           <div className="flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
-            <span className="font-medium tabular-nums text-sidebar-foreground">{formatTime(currentTime)}</span>
+            {mounted ? (
+              <span className="font-medium tabular-nums text-sidebar-foreground">{formatTime(currentTime)}</span>
+            ) : (
+              <span className="font-medium tabular-nums text-sidebar-foreground">--:-- --</span>
+            )}
           </div>
           <div className="h-4 w-px bg-sidebar-border" />
           <div className="flex items-center gap-1.5">
             <Calendar className="h-3.5 w-3.5" />
-            <span>{formatDate(currentTime)}</span>
+            {mounted ? (
+              <span>{formatDate(currentTime)}</span>
+            ) : (
+              <span>--/--/----</span>
+            )}
           </div>
         </div>
 

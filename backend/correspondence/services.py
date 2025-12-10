@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import textwrap
 import uuid
 from io import BytesIO
@@ -586,6 +587,9 @@ class ExecutiveApprovalPDFService:
             bottomMargin=0.75*inch
         )
         
+        # Track temporary files to clean up after PDF build
+        temp_files_to_cleanup = []
+        
         # Create styles
         styles = getSampleStyleSheet()
         
@@ -951,8 +955,10 @@ class ExecutiveApprovalPDFService:
                                     '/usr/bin',        # System
                                 ]
                                 for bin_path in poppler_bin_paths:
-                                    if os.path.exists(os.path.join(bin_path, 'pdftoppm')):
+                                    pdftoppm_path = os.path.join(bin_path, 'pdftoppm')
+                                    if os.path.exists(pdftoppm_path) and os.access(pdftoppm_path, os.X_OK):
                                         poppler_path = bin_path
+                                        logger.info(f"Found poppler at: {poppler_path}")
                                         break
                                 
                                 if not poppler_available and not poppler_path:
@@ -966,18 +972,22 @@ class ExecutiveApprovalPDFService:
                                         full_path = default_storage.path(file_path)
                                         # Convert first page to image directly from file path
                                         # Use poppler_path if found
-                                        convert_kwargs = {'first_page': 1, 'last_page': 1, 'dpi': 150}
+                                        # Use very high DPI (600) for maximum clarity
+                                        convert_kwargs = {'first_page': 1, 'last_page': 1, 'dpi': 600}
                                         if poppler_path:
                                             convert_kwargs['poppler_path'] = poppler_path
                                         images = convert_from_path(full_path, **convert_kwargs)
                                         if images:
                                             img = images[0]
-                                            # Fit to page width
-                                            max_width = 5.5 * inch
-                                            if img.width > max_width:
-                                                ratio = max_width / img.width
+                                            # For maximum clarity, minimize resizing
+                                            # Only resize if image is extremely large (over 7.5 inches at 600 DPI = 4500 pixels)
+                                            # This preserves maximum detail
+                                            max_width_pixels = 7.5 * 600  # 7.5 inches at 600 DPI
+                                            if img.width > max_width_pixels:
+                                                ratio = max_width_pixels / img.width
                                                 new_height = img.height * ratio
-                                                img.thumbnail((max_width, new_height), Image.Resampling.LANCZOS)
+                                                # Use highest quality resampling (LANCZOS is best for downscaling)
+                                                img = img.resize((int(max_width_pixels), int(new_height)), Image.Resampling.LANCZOS)
                                             
                                             img_buffer = BytesIO()
                                             if img.mode in ('RGBA', 'LA', 'P'):
@@ -986,21 +996,53 @@ class ExecutiveApprovalPDFService:
                                                     img = img.convert('RGBA')
                                                 rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
                                                 img = rgb_img
-                                            img.save(img_buffer, format='PNG')
-                                            img_buffer.seek(0)
+                                            # Save to temporary file for ReportLabImage with maximum quality
+                                            import tempfile
+                                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img_file:
+                                                # Save PNG with no compression for maximum quality
+                                                img.save(tmp_img_file, format='PNG', optimize=False, compress_level=0)
+                                                tmp_img_path = tmp_img_file.name
+                                            
+                                            # Track temp file for cleanup after PDF build
+                                            temp_files_to_cleanup.append(tmp_img_path)
                                             
                                             from reportlab.platypus import Image as ReportLabImage
-                                            pdf_img = ImageReader(img_buffer)
+                                            # Convert pixel dimensions to points for ReportLab
+                                            # At 600 DPI: 1 pixel = 72/600 = 0.12 points
+                                            # Calculate available space: frame is ~492 x 672 points based on error
+                                            # Use slightly smaller to ensure it fits: 6.5 inches = 468 points width
+                                            max_width_pts = 6.5 * 72  # 6.5 inches = 468 points
+                                            max_height_pts = 8.5 * 72  # 8.5 inches = 612 points (leave room for other content)
+                                            
+                                            # Convert image dimensions from pixels to points
+                                            width_pts = img.width * (72.0 / 600.0)
+                                            height_pts = img.height * (72.0 / 600.0)
+                                            
+                                            # Scale down if image is too large to fit in frame
+                                            if width_pts > max_width_pts or height_pts > max_height_pts:
+                                                width_ratio = max_width_pts / width_pts
+                                                height_ratio = max_height_pts / height_pts
+                                                # Use built-in min function explicitly to avoid shadowing issues
+                                                import builtins
+                                                scale_ratio = builtins.min(width_ratio, height_ratio)
+                                                width_pts = width_pts * scale_ratio
+                                                height_pts = height_pts * scale_ratio
+                                            
+                                            # Use the scaled dimensions to fit within page frame
                                             pdf_image_elem = ReportLabImage(
-                                                pdf_img,
-                                                width=img.width,
-                                                height=img.height
+                                                tmp_img_path,
+                                                width=width_pts,
+                                                height=height_pts
                                             )
                                             story.append(pdf_image_elem)
                                             story.append(Paragraph("<i>First page of PDF document</i>", meta_style))
                                             pdf_embedded = True
                                     except Exception as e:
-                                        logger.warning(f"pdf2image convert_from_path (file system) failed: {e}", exc_info=True)
+                                        logger.warning(
+                                            f"pdf2image convert_from_path (file system) failed: {e}, "
+                                            f"poppler_path={poppler_path}, file={full_path}",
+                                            exc_info=True
+                                        )
                                         # Don't raise - continue to try temp file method below
                                 else:
                                     # Remote storage or BytesIO needed
@@ -1013,18 +1055,22 @@ class ExecutiveApprovalPDFService:
                                     try:
                                         # Convert first page to image
                                         # Use poppler_path if found
-                                        convert_kwargs = {'first_page': 1, 'last_page': 1, 'dpi': 150}
+                                        # Use very high DPI (600) for maximum clarity
+                                        convert_kwargs = {'first_page': 1, 'last_page': 1, 'dpi': 600}
                                         if poppler_path:
                                             convert_kwargs['poppler_path'] = poppler_path
                                         images = convert_from_path(tmp_path, **convert_kwargs)
                                         if images:
                                             img = images[0]
-                                            # Fit to page width
-                                            max_width = 5.5 * inch
-                                            if img.width > max_width:
-                                                ratio = max_width / img.width
+                                            # For maximum clarity, minimize resizing
+                                            # Only resize if image is extremely large (over 7.5 inches at 600 DPI = 4500 pixels)
+                                            # This preserves maximum detail
+                                            max_width_pixels = 7.5 * 600  # 7.5 inches at 600 DPI
+                                            if img.width > max_width_pixels:
+                                                ratio = max_width_pixels / img.width
                                                 new_height = img.height * ratio
-                                                img.thumbnail((max_width, new_height), Image.Resampling.LANCZOS)
+                                                # Use highest quality resampling (LANCZOS is best for downscaling)
+                                                img = img.resize((int(max_width_pixels), int(new_height)), Image.Resampling.LANCZOS)
                                             
                                             img_buffer = BytesIO()
                                             if img.mode in ('RGBA', 'LA', 'P'):
@@ -1033,26 +1079,58 @@ class ExecutiveApprovalPDFService:
                                                     img = img.convert('RGBA')
                                                 rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
                                                 img = rgb_img
-                                            img.save(img_buffer, format='PNG')
-                                            img_buffer.seek(0)
+                                            # Save to temporary file for ReportLabImage with maximum quality
+                                            import tempfile
+                                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img_file:
+                                                # Save PNG with no compression for maximum quality
+                                                img.save(tmp_img_file, format='PNG', optimize=False, compress_level=0)
+                                                tmp_img_path = tmp_img_file.name
+                                            
+                                            # Track temp file for cleanup after PDF build
+                                            temp_files_to_cleanup.append(tmp_img_path)
                                             
                                             from reportlab.platypus import Image as ReportLabImage
-                                            pdf_img = ImageReader(img_buffer)
+                                            # Convert pixel dimensions to points for ReportLab
+                                            # At 600 DPI: 1 pixel = 72/600 = 0.12 points
+                                            # Calculate available space: frame is ~492 x 672 points based on error
+                                            # Use slightly smaller to ensure it fits: 6.5 inches = 468 points width
+                                            max_width_pts = 6.5 * 72  # 6.5 inches = 468 points
+                                            max_height_pts = 8.5 * 72  # 8.5 inches = 612 points (leave room for other content)
+                                            
+                                            # Convert image dimensions from pixels to points
+                                            width_pts = img.width * (72.0 / 600.0)
+                                            height_pts = img.height * (72.0 / 600.0)
+                                            
+                                            # Scale down if image is too large to fit in frame
+                                            if width_pts > max_width_pts or height_pts > max_height_pts:
+                                                width_ratio = max_width_pts / width_pts
+                                                height_ratio = max_height_pts / height_pts
+                                                # Use built-in min function explicitly to avoid shadowing issues
+                                                import builtins
+                                                scale_ratio = builtins.min(width_ratio, height_ratio)
+                                                width_pts = width_pts * scale_ratio
+                                                height_pts = height_pts * scale_ratio
+                                            
+                                            # Use the scaled dimensions to fit within page frame
                                             pdf_image_elem = ReportLabImage(
-                                                pdf_img,
-                                                width=img.width,
-                                                height=img.height
+                                                tmp_img_path,
+                                                width=width_pts,
+                                                height=height_pts
                                             )
                                             story.append(pdf_image_elem)
                                             story.append(Paragraph("<i>First page of PDF document</i>", meta_style))
                                             pdf_embedded = True
                                     finally:
                                         if os.path.exists(tmp_path):
-                                            os.unlink(tmp_path)
+                                            temp_files_to_cleanup.append(tmp_path)
                             except ImportError:
                                 logger.warning("pdf2image not installed - poppler may be missing")
                             except Exception as e:
-                                logger.warning(f"pdf2image conversion failed: {e}", exc_info=True)
+                                logger.warning(
+                                    f"pdf2image conversion failed: {e}, "
+                                    f"poppler_path={poppler_path}, file_path={file_path}",
+                                    exc_info=True
+                                )
                             
                             # If poppler conversion failed, show metadata only
                             if not pdf_embedded:
@@ -1130,7 +1208,16 @@ class ExecutiveApprovalPDFService:
         ))
         
         # Build PDF
-        doc.build(story)
-        buffer.seek(0)
-        return buffer.getvalue()
+        try:
+            doc.build(story)
+            buffer.seek(0)
+            return buffer.getvalue()
+        finally:
+            # Clean up all temporary files after PDF is built
+            for temp_file in temp_files_to_cleanup:
+                try:
+                    if os.path.exists(temp_file):
+                        os.unlink(temp_file)
+                except Exception as e:
+                    logger.warning(f"Failed to clean up temp file {temp_file}: {e}")
 

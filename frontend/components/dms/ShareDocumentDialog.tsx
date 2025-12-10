@@ -33,7 +33,7 @@ import { shareDocument, apiFetch, hasTokens } from "@/lib/dms-storage";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Search, Users, Building2, Users2, Globe, AlertTriangle, Loader2, X, FileText, Trash2, Edit2, History, FolderKanban, CheckCircle2, ArrowLeft } from "lucide-react";
+import { Search, Users, Building2, Users2, Globe, AlertTriangle, Loader2, X, FileText, Trash2, Edit2, History, FolderKanban, CheckCircle2, ArrowLeft, Shield } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { getActivityLogsForObject, type ActivityLog } from "@/lib/audit-storage";
@@ -945,14 +945,20 @@ export const ShareDocumentDialog = ({
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Manage Access</DialogTitle>
+          <DialogDescription>
+            {document ? `Manage access permissions for ${document.title}` : 'Manage document access'}
+          </DialogDescription>
+        </DialogHeader>
         {/* Compact Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/30">
           <div className="flex items-center gap-3 min-w-0">
             <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-              <FileText className="h-4 w-4 text-primary" />
+              <Shield className="h-4 w-4 text-primary" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold truncate">Share Document</h2>
+              <h2 className="text-base font-semibold truncate">Manage Access</h2>
               {document && (
                 <p className="text-xs text-muted-foreground truncate">{document.title}</p>
               )}
@@ -1085,34 +1091,22 @@ export const ShareDocumentDialog = ({
                   )}
                 </div>
                 
-                {/* Existing Permissions - Compact */}
+                {/* Existing Permissions - Quick View */}
                 {existingPermissions.length > 0 && (
                   <div className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">Current:</span>
-                    <div className="flex flex-wrap gap-1">
-                      {existingPermissions.slice(0, 3).map((perm) => (
-                        <Badge key={perm.id} variant="outline" className="text-[10px] gap-1">
-                          {perm.access}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (perm.id) {
-                                setPermissionToDelete(perm.id);
-                                setShowDeletePermissionConfirm(true);
-                              }
-                            }}
-                            className="hover:text-destructive"
-                          >
-                            <X className="h-2.5 w-2.5" />
-                          </button>
-                        </Badge>
-                      ))}
-                      {existingPermissions.length > 3 && (
-                        <Badge variant="outline" className="text-[10px]">
-                          +{existingPermissions.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
+                    <span className="text-muted-foreground">Current permissions:</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {existingPermissions.length} {existingPermissions.length === 1 ? 'rule' : 'rules'}
+                    </Badge>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 text-[10px] px-1.5"
+                      onClick={() => setActiveTab('permissions')}
+                    >
+                      View all
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1144,6 +1138,13 @@ export const ShareDocumentDialog = ({
                       <FolderKanban className="h-3.5 w-3.5 mr-1.5" />
                       WS
                       {selectedWorkspaceIds.size > 0 && <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{selectedWorkspaceIds.size}</Badge>}
+                    </TabsTrigger>
+                    <TabsTrigger value="permissions" className="px-3 h-7 text-xs rounded-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                      <Shield className="h-3.5 w-3.5 mr-1.5" />
+                      Permissions
+                      {existingPermissions.length > 0 && (
+                        <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{existingPermissions.length}</Badge>
+                      )}
                     </TabsTrigger>
                     <TabsTrigger value="history" className="px-3 h-7 text-xs rounded-sm data-[state=active]:bg-background data-[state=active]:shadow-sm">
                       <History className="h-3.5 w-3.5 mr-1.5" />
@@ -1859,6 +1860,125 @@ export const ShareDocumentDialog = ({
                   </div>
                 </TabsContent>
 
+                <TabsContent value="permissions" className="flex-1 flex flex-col min-h-0 overflow-hidden data-[state=active]:flex">
+                  <div className="flex-1 overflow-auto p-4">
+                    {isLoadingPermissions ? (
+                      <div className="py-8 text-center text-muted-foreground">
+                        <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin" />
+                        <p className="text-sm">Loading permissions...</p>
+                      </div>
+                    ) : existingPermissions.length === 0 ? (
+                      <div className="py-8 text-center text-muted-foreground">
+                        <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm font-medium">No permissions set</p>
+                        <p className="text-xs mt-1">Use the other tabs to share this document and grant access.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {existingPermissions.map((perm) => {
+                          const permUsers = perm.userIds.map(id => {
+                            const user = shareableUsers.find(u => u.id === id);
+                            return user?.name || 'Unknown';
+                          }).filter(Boolean);
+                          const permDivisions = perm.divisionIds.map(id => {
+                            const div = divisions.find(d => d.id === id);
+                            return div?.name || 'Unknown';
+                          }).filter(Boolean);
+                          const permDepartments = perm.departmentIds.map(id => {
+                            const dept = departments.find(d => d.id === id);
+                            return dept?.name || 'Unknown';
+                          }).filter(Boolean);
+                          
+                          return (
+                            <div key={perm.id} className="p-4 border rounded-lg space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Badge variant="outline" className="capitalize">
+                                      {perm.access} access
+                                    </Badge>
+                                    {perm.createdAt && (
+                                      <span className="text-xs text-muted-foreground">
+                                        Created {new Date(perm.createdAt).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="grid gap-2 text-xs md:grid-cols-2">
+                                    {permUsers.length > 0 && (
+                                      <div>
+                                        <p className="font-medium text-foreground mb-1">Users ({permUsers.length})</p>
+                                        <p className="text-muted-foreground line-clamp-2">{permUsers.join(', ')}</p>
+                                      </div>
+                                    )}
+                                    {permDivisions.length > 0 && (
+                                      <div>
+                                        <p className="font-medium text-foreground mb-1">Divisions ({permDivisions.length})</p>
+                                        <p className="text-muted-foreground line-clamp-2">{permDivisions.join(', ')}</p>
+                                      </div>
+                                    )}
+                                    {permDepartments.length > 0 && (
+                                      <div>
+                                        <p className="font-medium text-foreground mb-1">Departments ({permDepartments.length})</p>
+                                        <p className="text-muted-foreground line-clamp-2">{permDepartments.join(', ')}</p>
+                                      </div>
+                                    )}
+                                    {perm.gradeLevels.length > 0 && (
+                                      <div>
+                                        <p className="font-medium text-foreground mb-1">Grade Levels ({perm.gradeLevels.length})</p>
+                                        <p className="text-muted-foreground">{perm.gradeLevels.join(', ')}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <Select
+                                    value={perm.access}
+                                    onValueChange={(value) => {
+                                      if (perm.id) {
+                                        void handleUpdatePermission(perm.id, value as PermissionAccess);
+                                      }
+                                    }}
+                                    disabled={editingPermissionId === perm.id}
+                                  >
+                                    <SelectTrigger className="w-[120px] h-7 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="read">Read Only</SelectItem>
+                                      <SelectItem value="write">Read & Write</SelectItem>
+                                      <SelectItem value="admin">Full Admin</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => {
+                                      if (perm.id) {
+                                        setPermissionToDelete(perm.id);
+                                        setShowDeletePermissionConfirm(true);
+                                      }
+                                    }}
+                                    disabled={deletingPermissionId === perm.id}
+                                    aria-label="Delete permission"
+                                  >
+                                    {deletingPermissionId === perm.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
                 <TabsContent value="history" className="flex-1 flex flex-col min-h-0 overflow-hidden data-[state=active]:flex">
                   <div className="flex-1 overflow-auto p-4">
                     <div className="space-y-3">
@@ -1958,7 +2078,10 @@ export const ShareDocumentDialog = ({
                       {isSubmitting ? (
                         <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Sharing...</>
                       ) : (
-                        "Share"
+                        <>
+                          <Users className="h-4 w-4 mr-1.5" />
+                          Share
+                        </>
                       )}
                     </Button>
                   </div>

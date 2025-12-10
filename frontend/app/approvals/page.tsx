@@ -15,12 +15,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Shield, Search, Calendar, FileText, QrCode, Filter } from "lucide-react";
+import { Shield, Search, Calendar, FileText, QrCode, Filter, ExternalLink, Eye, CheckCircle2, XCircle, TrendingUp } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { apiFetch, getBaseUrl, getStoredAccessToken } from "@/lib/api-client";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { SealBadge } from "@/components/seals/SealBadge";
+import { EmptyState } from "@/components/shared/EmptyState";
 
 interface ExecutiveApproval {
   id: string;
@@ -170,59 +171,55 @@ export default function ApprovalsPage() {
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Approvals</p>
-                  <p className="text-2xl font-bold">{approvals.length}</p>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: 'Total Approvals',
+              value: approvals.length,
+              icon: Shield,
+              bgClass: 'bg-primary/10',
+              iconClass: 'text-primary',
+            },
+            {
+              label: 'Valid Seals',
+              value: approvals.filter(a => a.isValid).length,
+              icon: CheckCircle2,
+              bgClass: 'bg-emerald-500/10',
+              iconClass: 'text-emerald-600 dark:text-emerald-500',
+            },
+            {
+              label: 'Invalid Seals',
+              value: approvals.filter(a => !a.isValid).length,
+              icon: XCircle,
+              bgClass: 'bg-destructive/10',
+              iconClass: 'text-destructive',
+            },
+            {
+              label: 'This Month',
+              value: approvals.filter(a => {
+                const date = new Date(a.sealedAt);
+                const now = new Date();
+                return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+              }).length,
+              icon: TrendingUp,
+              bgClass: 'bg-blue-500/10',
+              iconClass: 'text-blue-600 dark:text-blue-500',
+            },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label} className="shadow-soft hover:shadow-medium transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-lg ${bgClass}`}>
+                    <Icon className={`h-6 w-6 ${iconClass}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <p className="text-2xl font-bold">{value}</p>
+                  </div>
                 </div>
-                <Shield className="h-8 w-8 text-muted-foreground opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Valid Seals</p>
-                  <p className="text-2xl font-bold text-emerald-600">
-                    {approvals.filter(a => a.isValid).length}
-                  </p>
-                </div>
-                <Shield className="h-8 w-8 text-emerald-600 opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">This Month</p>
-                  <p className="text-2xl font-bold">
-                    {approvals.filter(a => {
-                      const date = new Date(a.sealedAt);
-                      const now = new Date();
-                      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-                    }).length}
-                  </p>
-                </div>
-                <Calendar className="h-8 w-8 text-muted-foreground opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Filtered Results</p>
-                  <p className="text-2xl font-bold">{filteredApprovals.length}</p>
-                </div>
-                <Filter className="h-8 w-8 text-muted-foreground opacity-50" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         {/* Filters Panel */}
@@ -315,62 +312,58 @@ export default function ApprovalsPage() {
                 <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
               </div>
             ) : filteredApprovals.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg font-medium mb-2">No executive approvals found</p>
-                <p className="text-sm">
-                  {activeFilterCount > 0 
+              <EmptyState
+                icon={Shield}
+                title="No executive approvals found"
+                description={
+                  activeFilterCount > 0 
                     ? "Try adjusting your filters to see more results."
-                    : "Executive approvals will appear here once they are created."}
-                </p>
-              </div>
+                    : "Executive approvals will appear here once they are created."
+                }
+              />
             ) : (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Correspondence</TableHead>
-                      <TableHead>Executive</TableHead>
-                      <TableHead>Office</TableHead>
-                      <TableHead>Sealed At</TableHead>
-                      <TableHead>Serial Number</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="w-[200px]">Correspondence</TableHead>
+                      <TableHead className="w-[180px]">Executive</TableHead>
+                      <TableHead className="w-[120px]">Serial Number</TableHead>
+                      <TableHead className="w-[150px]">Sealed At</TableHead>
+                      <TableHead className="w-[100px]">Status</TableHead>
+                      <TableHead className="w-[100px] text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredApprovals.map((approval) => (
                       <TableRow key={approval.id} className="hover:bg-muted/50">
                         <TableCell>
-                          <div>
-                            <div className="font-medium">{approval.correspondenceReference}</div>
-                            <div className="text-sm text-muted-foreground truncate max-w-xs">
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">{approval.correspondenceReference}</div>
+                            <div className="text-xs text-muted-foreground truncate">
                               {approval.correspondenceSubject}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div>
-                            <div className="font-medium">{approval.sealedBy}</div>
-                            <div className="text-xs text-muted-foreground">{approval.sealedByRole}</div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">{approval.sealedBy}</div>
+                            <div className="text-xs text-muted-foreground truncate">{approval.sealedByRole}</div>
+                            <div className="text-xs text-muted-foreground truncate">{approval.officeTitle}</div>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div>
-                            <div className="text-sm font-medium">{approval.officeTitle}</div>
-                            <div className="text-xs text-muted-foreground">{approval.officeName}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 text-sm">
-                            <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {format(new Date(approval.sealedAt), "PPp")}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <code className="text-xs font-mono bg-muted px-2 py-1 rounded">
+                          <code className="text-xs font-mono bg-muted px-2 py-1 rounded block truncate max-w-full">
                             {approval.serialNumber}
                           </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs">
+                            {format(new Date(approval.sealedAt), "MMM d, yyyy")}
+                            <div className="text-muted-foreground mt-0.5">
+                              {format(new Date(approval.sealedAt), "h:mm a")}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>
                           {approval.sealData && (
@@ -378,59 +371,42 @@ export default function ApprovalsPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center justify-end gap-2">
+                          <div className="flex items-center justify-end gap-1">
                             <Button
-                              variant="default"
-                              size="sm"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
                               onClick={async () => {
                                 try {
-                                  // Fetch PDF with authentication
-                                  const token = getStoredAccessToken();
-                                  if (!token) {
-                                    toast.error("Authentication required");
-                                    return;
-                                  }
-                                  
                                   const pdfUrl = `${getBaseUrl()}/correspondence/minutes/${approval.id}/approval-pdf/`;
-                                  const response = await fetch(pdfUrl, {
-                                    headers: {
-                                      'Authorization': `Bearer ${token}`,
-                                    },
-                                    credentials: 'include',
-                                  });
-                                  
-                                  if (!response.ok) {
-                                    throw new Error(`Failed to load PDF: ${response.status}`);
-                                  }
-                                  
-                                  // Create blob and open in new tab
-                                  const blob = await response.blob();
-                                  const blobUrl = URL.createObjectURL(blob);
+                                  const pdfBlob = await apiFetch<Blob>(pdfUrl, { responseType: 'blob' });
+                                  const blobUrl = URL.createObjectURL(pdfBlob);
                                   window.open(blobUrl, '_blank');
-                                  
-                                  // Clean up blob URL after a delay
-                                  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                                  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
                                 } catch (error) {
                                   console.error("Failed to load PDF:", error);
-                                  toast.error("Failed to load approval PDF");
+                                  toast.error(`Failed to load PDF: ${error instanceof Error ? error.message : String(error)}`);
                                 }
                               }}
+                              title="View Approval PDF"
                             >
-                              <FileText className="h-4 w-4 mr-1" />
-                              View PDF
+                              <FileText className="h-4 w-4" />
                             </Button>
                             <Button
-                              variant="outline"
-                              size="sm"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
                               onClick={() => router.push(`/correspondence/${approval.correspondenceId}`)}
+                              title="View Correspondence Details"
                             >
-                              Details
+                              <ExternalLink className="h-4 w-4" />
                             </Button>
                             <Button
-                              variant="outline"
-                              size="sm"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
                               onClick={() => window.open(approval.verificationUrl, '_blank')}
-                              title="Verify seal with QR code"
+                              title="Verify Seal with QR Code"
                             >
                               <QrCode className="h-4 w-4" />
                             </Button>

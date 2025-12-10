@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     DocumentAccessLogViewSet,
+    DocumentCollectionViewSet,
     DocumentCommentViewSet,
     DocumentDiscussionMessageViewSet,
     DocumentEditorSessionViewSet,
@@ -17,6 +18,7 @@ from .form_views import FormDocumentViewSet
 
 router = DefaultRouter()
 router.register(r"workspaces", DocumentWorkspaceViewSet, basename="document-workspace")
+router.register(r"collections", DocumentCollectionViewSet, basename="document-collection")
 router.register(r"documents", DocumentViewSet, basename="document")
 router.register(r"form-documents", FormDocumentViewSet, basename="form-document")
 router.register(r"versions", DocumentVersionViewSet, basename="document-version")

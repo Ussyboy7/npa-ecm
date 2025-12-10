@@ -30,6 +30,11 @@ import {
   FilePlus,
   ScrollText,
   TrendingUp,
+  Scan,
+  FileClock,
+  Search,
+  Webhook,
+  Database,
 } from "lucide-react";
 import {
   Sidebar,
@@ -496,6 +501,9 @@ export function AppSidebar() {
                       </TooltipTrigger>
                       <TooltipContent side="right">
                         <p>My Documents</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Documents you own or have access to
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -524,6 +532,9 @@ export function AppSidebar() {
                         </TooltipTrigger>
                         <TooltipContent side="right">
                           <p>Document Management</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Central workspace for all ECM documents
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -532,6 +543,103 @@ export function AppSidebar() {
                       <Link href="/dms">
                         <FolderKanban className="h-4 w-4" />
                         <span>Document Management</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
+                </SidebarMenuItem>
+              )}
+
+              {/* Advanced Search */}
+              <SidebarMenuItem>
+                {isCollapsed ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive('/search')}>
+                          <Link href="/search">
+                            <Search className="h-4 w-4" />
+                            <span className="sr-only">Advanced Search</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Advanced Search</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Full-text search with filters
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <SidebarMenuButton asChild isActive={isActive('/search')}>
+                    <Link href="/search">
+                      <Search className="h-4 w-4" />
+                      <span>Advanced Search</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
+              </SidebarMenuItem>
+
+              {/* Content Capture */}
+              {permissions.canAccessDocumentManagement && (
+                <SidebarMenuItem>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/capture')}>
+                            <Link href="/capture">
+                              <Scan className="h-4 w-4" />
+                              <span className="sr-only">Content Capture</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Content Capture</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            OCR, scanning, batch processing
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/capture')}>
+                      <Link href="/capture">
+                        <Scan className="h-4 w-4" />
+                        <span>Content Capture</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
+                </SidebarMenuItem>
+              )}
+
+              {/* Records Management */}
+              {permissions.canAccessDocumentManagement && (
+                <SidebarMenuItem>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/records')}>
+                            <Link href="/records">
+                              <FileClock className="h-4 w-4" />
+                              <span className="sr-only">Records Management</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Records Management</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Retention policies, legal holds
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/records')}>
+                      <Link href="/records">
+                        <FileClock className="h-4 w-4" />
+                        <span>Records Management</span>
                       </Link>
                     </SidebarMenuButton>
                   )}
@@ -685,6 +793,46 @@ export function AppSidebar() {
                 </SidebarGroupContent>
               </CollapsibleContent>
             </Collapsible>
+          </SidebarGroup>
+        )}
+
+        {/* Integration Hub */}
+        {permissions.canAccessAdministration && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Integration</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/integrations')}>
+                            <Link href="/integrations">
+                              <Webhook className="h-4 w-4" />
+                              <span className="sr-only">Integration Hub</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Integration Hub</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Webhooks, email, ERP connectors
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/integrations')}>
+                      <Link href="/integrations">
+                        <Webhook className="h-4 w-4" />
+                        <span>Integration Hub</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
           </SidebarGroup>
         )}
 

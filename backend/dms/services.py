@@ -19,11 +19,15 @@ class OCRService:
     # Supported file types for OCR
     SUPPORTED_IMAGE_TYPES = {'image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'image/bmp', 'image/gif'}
     SUPPORTED_PDF_TYPES = {'application/pdf'}
+    SUPPORTED_DOCX_TYPES = {
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/msword'  # Also support old .doc format if converted
+    }
     
     @classmethod
     def is_supported(cls, mime_type: str) -> bool:
         """Check if the file type is supported for OCR."""
-        return mime_type.lower() in cls.SUPPORTED_IMAGE_TYPES | cls.SUPPORTED_PDF_TYPES
+        return mime_type.lower() in cls.SUPPORTED_IMAGE_TYPES | cls.SUPPORTED_PDF_TYPES | cls.SUPPORTED_DOCX_TYPES
     
     @classmethod
     def extract_text(cls, file_path: str, mime_type: str) -> Optional[str]:
@@ -48,6 +52,8 @@ class OCRService:
                 return cls._extract_from_pdf(file_path)
             elif mime_type in cls.SUPPORTED_IMAGE_TYPES:
                 return cls._extract_from_image(file_path)
+            elif mime_type in cls.SUPPORTED_DOCX_TYPES:
+                return cls._extract_from_docx(file_path)
             else:
                 logger.info(f"OCR: Unsupported file type: {mime_type}")
                 return None
@@ -162,6 +168,51 @@ class OCRService:
             return None
         except (subprocess.TimeoutExpired, FileNotFoundError) as e:
             logger.warning(f"pdftotext fallback failed: {e}")
+            return None
+    
+    @classmethod
+    def _extract_from_docx(cls, file_path: str) -> Optional[str]:
+        """Extract text from a DOCX file using python-docx."""
+        try:
+            from docx import Document as DocxDocument
+            
+            # Open the DOCX file
+            doc = DocxDocument(file_path)
+            
+            # Extract text from all paragraphs
+            paragraphs = []
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    paragraphs.append(paragraph.text.strip())
+            
+            # Extract text from tables
+            table_texts = []
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            row_text.append(cell.text.strip())
+                    if row_text:
+                        table_texts.append(" | ".join(row_text))
+            
+            # Combine all text
+            full_text = "\n\n".join(paragraphs)
+            if table_texts:
+                full_text += "\n\n--- Tables ---\n\n" + "\n".join(table_texts)
+            
+            if full_text.strip():
+                logger.info(f"OCR: Extracted {len(full_text)} characters from DOCX")
+                return full_text.strip()
+            else:
+                logger.info("OCR: No text found in DOCX")
+                return None
+                
+        except ImportError:
+            logger.warning("OCR: python-docx not installed")
+            return None
+        except Exception as e:
+            logger.error(f"OCR DOCX extraction failed: {e}")
             return None
 
 

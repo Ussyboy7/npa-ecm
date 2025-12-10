@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
-export const DocumentCardSkeleton = () => {
+export const DocumentCardSkeleton = memo(() => {
   return (
     <Card className="p-4 border border-border rounded-lg">
       <div className="flex items-start gap-4">
@@ -27,5 +28,7 @@ export const DocumentCardSkeleton = () => {
       </div>
     </Card>
   );
-};
+});
+
+DocumentCardSkeleton.displayName = 'DocumentCardSkeleton';
 

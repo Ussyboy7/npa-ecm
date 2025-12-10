@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from 'react';
+import { Suspense, useRef, startTransition } from 'react';
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -18,6 +18,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from 'sonner';
 import {
   queryDocumentsExtended,
+  getDocumentStats,
   type DocumentRecord,
   type DocumentType,
   type DocumentStatus,
@@ -27,6 +28,7 @@ import {
   bulkArchiveDocuments,
   bulkDeleteDocuments,
   type ExtendedDocumentQueryParams,
+  type DocumentStats,
 } from '@/lib/dms-storage';
 import {
   FileText,
@@ -36,8 +38,11 @@ import {
   Calendar,
   Hash,
   User as UserIcon,
+  Building2,
   BarChart2,
   FilePlus,
+  Upload,
+  Sparkles,
   Loader2,
   Mail,
   FileCheck,
@@ -62,6 +67,8 @@ import {
 } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
+import { BulkUploadDialog } from '@/components/dms/BulkUploadDialog';
+import { SmartCreationWizard } from '@/components/dms/SmartCreationWizard';
 import { CreateFormDocumentDialog } from '@/components/dms/CreateFormDocumentDialog';
 import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentQuickPreviewModal } from '@/components/dms/DocumentQuickPreviewModal';
@@ -69,6 +76,11 @@ import { WorkspaceManagementDialog } from '@/components/dms/WorkspaceManagementD
 import { DocumentCardSkeleton } from '@/components/dms/DocumentCardSkeleton';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { usePagination } from '@/hooks/use-pagination';
+import { useTableSort } from '@/hooks/use-table-sort';
+import { PaginationControls } from '@/components/shared/PaginationControls';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { FilterPanel, FilterBadgeGroup } from '@/components/shared/FilterPanel';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Label } from '@/components/ui/label';
@@ -207,6 +219,12 @@ const SORT_OPTIONS: SortOption[] = [
   { field: 'title', direction: 'desc', label: 'Title (Z-A)' },
 ];
 
+// Convert to format expected by useTableSort
+const SORT_OPTIONS_FOR_HOOK = SORT_OPTIONS.map(opt => ({
+  value: opt.field,
+  label: opt.label,
+}));
+
 const DocumentManagementPageContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -224,13 +242,24 @@ const DocumentManagementPageContent = () => {
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(() => {
-    const urlPage = searchParams.get('page');
-    return urlPage ? parseInt(urlPage, 10) : 1;
-  });
-  const pageSize = 25;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Use pagination hook
+  const pagination = usePagination({
+    initialPage: (() => {
+      const urlPage = searchParams.get('page');
+      return urlPage ? parseInt(urlPage, 10) : 1;
+    })(),
+    initialPageSize: 25,
+    totalCount,
+  });
+  
+  // Use table sort hook
+  const tableSort = useTableSort<SortField>({
+    initialSort: { field: 'updated_at', direction: 'desc' },
+    sortOptions: SORT_OPTIONS_FOR_HOOK,
+  });
   const [searchQuery, setSearchQuery] = useState(() => getInitialFilter('search', ''));
   const [typeFilter, setTypeFilter] = useState<DocumentType | 'all'>(() => getInitialFilter('type', 'all') as DocumentType | 'all');
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | 'all'>(() => getInitialFilter('status', 'all') as DocumentStatus | 'all');
@@ -247,18 +276,21 @@ const DocumentManagementPageContent = () => {
     return { start: start || undefined, end: end || undefined };
   });
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [bulkUploadDialogOpen, setBulkUploadDialogOpen] = useState(false);
+  const [smartWizardOpen, setSmartWizardOpen] = useState(false);
   const [createFormDialogOpen, setCreateFormDialogOpen] = useState(false);
+  const [shouldReloadDocuments, setShouldReloadDocuments] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
   const [shareTarget, setShareTarget] = useState<DocumentRecord | null>(null);
   const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>(() => getCachedWorkspaces());
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set());
-  const [sortOption, setSortOption] = useState<SortOption>(SORT_OPTIONS[0]);
-  const [customPageSize, setCustomPageSize] = useState(pageSize);
-  const [goToPageInput, setGoToPageInput] = useState('');
   const [previewDocument, setPreviewDocument] = useState<DocumentRecord | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [workspaceManageOpen, setWorkspaceManageOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
   const [formTemplatesLoading, setFormTemplatesLoading] = useState(false);
   const [formTemplatesOpen, setFormTemplatesOpen] = useState(false);
@@ -271,19 +303,18 @@ const DocumentManagementPageContent = () => {
     return [];
   });
   const [pendingSignaturesByWorkflow, setPendingSignaturesByWorkflow] = useState<Map<string, number>>(new Map());
-  const totalPages = Math.max(1, Math.ceil(totalCount / customPageSize));
+  const [totalStats, setTotalStats] = useState<DocumentStats | null>(null);
+  
   const loadDocuments = useCallback(async () => {
-    console.log('[DMS] Loading documents...', { page, customPageSize, searchQuery, statusFilter, typeFilter, authorFilter, dateRangeFilter });
     setLoading(true);
     setError(null);
     try {
-      const ordering = sortOption.direction === 'desc' ? `-${sortOption.field}` : sortOption.field;
-      console.log('[DMS] Calling queryDocumentsExtended with:', { page, customPageSize, ordering });
+      const ordering = tableSort.sort.direction === 'desc' ? `-${tableSort.sort.field}` : tableSort.sort.field;
       
       // Build extended query params including author and date filters
       const queryParams: ExtendedDocumentQueryParams = {
-        page,
-        pageSize: customPageSize,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
         search: searchQuery.trim() || undefined,
         status: statusFilter,
         documentType: typeFilter,
@@ -297,11 +328,9 @@ const DocumentManagementPageContent = () => {
       };
       
       const response = await queryDocumentsExtended(queryParams);
-      console.log('[DMS] Received response:', { count: response.count, resultsCount: response.results.length });
       setDocuments(response.results);
       setTotalCount(response.count);
     } catch (err) {
-      console.error('[DMS] Error loading documents:', err);
       logError('Failed to load DMS documents', err);
       setDocuments([]);
       setTotalCount(0);
@@ -309,10 +338,9 @@ const DocumentManagementPageContent = () => {
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
-      console.log('[DMS] Finished loading documents');
       setLoading(false);
     }
-  }, [page, customPageSize, searchQuery, statusFilter, typeFilter, formStatusFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, sortOption.field, sortOption.direction]);
+  }, [pagination.page, pagination.pageSize, searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, tableSort.sort.field, tableSort.sort.direction]);
 
   const effectiveUser = useMemo(() => {
     if (currentUser) return currentUser;
@@ -369,7 +397,7 @@ const DocumentManagementPageContent = () => {
           setFormTemplates(templates);
         })
         .catch((error) => {
-          console.error('Failed to load form templates:', error);
+          logError('Failed to load form templates', error);
           toast.error('Failed to load form templates');
         })
         .finally(() => {
@@ -390,7 +418,7 @@ const DocumentManagementPageContent = () => {
     if (authorFilter !== 'all') params.set('author', authorFilter);
     if (dateRangeFilter.start) params.set('dateStart', dateRangeFilter.start);
     if (dateRangeFilter.end) params.set('dateEnd', dateRangeFilter.end);
-    if (page > 1) params.set('page', String(page));
+    if (pagination.page > 1) params.set('page', String(pagination.page));
     
     // Update URL without navigation
     const newUrl = params.toString() ? `/dms?${params.toString()}` : '/dms';
@@ -408,12 +436,12 @@ const DocumentManagementPageContent = () => {
       if (dateRangeFilter.start) localStorage.setItem('dms_filter_dateStart', dateRangeFilter.start);
       if (dateRangeFilter.end) localStorage.setItem('dms_filter_dateEnd', dateRangeFilter.end);
     }
-  }, [searchQuery, typeFilter, statusFilter, formStatusFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, page, router]);
+  }, [searchQuery, typeFilter, statusFilter, formStatusFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, pagination.page, router]);
 
   useEffect(() => {
-    setPage(1);
+    pagination.goToFirstPage();
     setSelectedDocuments(new Set());
-  }, [searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, sortOption]);
+  }, [searchQuery, statusFilter, typeFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter, tableSort.sort]);
 
   // Load pending signatures for current user
   useEffect(() => {
@@ -432,13 +460,28 @@ const DocumentManagementPageContent = () => {
         });
         setPendingSignaturesByWorkflow(workflowCounts);
       } catch (error) {
-        console.error('Failed to load pending signatures:', error);
+        logError('Failed to load pending signatures', error);
         // Don't show error toast as this is a background operation
       }
     };
 
     void loadPendingSignatures();
   }, [currentUser, documents]); // Reload when documents change to catch new workflows
+
+  // Reload documents after dialogs close (debounced to avoid conflicts)
+  useEffect(() => {
+    if (!shouldReloadDocuments) return;
+    
+    const timer = setTimeout(() => {
+      // Use startTransition to mark this as a non-urgent update
+      startTransition(() => {
+        void loadDocuments();
+        setShouldReloadDocuments(false);
+      });
+    }, 200); // Wait for dialog close animation to complete
+    
+    return () => clearTimeout(timer);
+  }, [shouldReloadDocuments, loadDocuments]);
 
   // Save recent searches
   useEffect(() => {
@@ -450,6 +493,23 @@ const DocumentManagementPageContent = () => {
       }
     }
   }, [searchQuery]);
+
+  // Close search dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+
+    if (searchOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [searchOpen]);
 
   const handleSearchSelect = (query: string) => {
     setSearchQuery(query);
@@ -466,9 +526,8 @@ const DocumentManagementPageContent = () => {
     const savedSort = localStorage.getItem('dms_sort_preference');
     if (savedSort) {
       try {
-        const parsed = JSON.parse(savedSort) as SortOption;
-        const found = SORT_OPTIONS.find(opt => opt.field === parsed.field && opt.direction === parsed.direction);
-        if (found) setSortOption(found);
+        const parsed = JSON.parse(savedSort) as { field: SortField; direction: SortDirection };
+        tableSort.setSort(parsed.field, parsed.direction);
       } catch (e) {
         // Ignore invalid saved preference
       }
@@ -477,8 +536,8 @@ const DocumentManagementPageContent = () => {
 
   // Save sort preference to localStorage
   useEffect(() => {
-    localStorage.setItem('dms_sort_preference', JSON.stringify(sortOption));
-  }, [sortOption]);
+    localStorage.setItem('dms_sort_preference', JSON.stringify(tableSort.sort));
+  }, [tableSort.sort]);
 
   useEffect(() => {
     let mounted = true;
@@ -487,7 +546,7 @@ const DocumentManagementPageContent = () => {
     const loadWithTimeout = async () => {
       timeoutId = setTimeout(() => {
         if (mounted) {
-          console.warn('[DMS] Document loading timeout after 30 seconds');
+          logError('Document loading timeout after 30 seconds', new Error('Timeout'));
           setError('Request is taking longer than expected. Please check your connection.');
           setLoading(false);
         }
@@ -544,6 +603,57 @@ const DocumentManagementPageContent = () => {
   const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
   const departmentLookup = useMemo(() => new Map(departments.map((department) => [department.id, department.name])), [departments]);
   const userLookup = useMemo(() => new Map(organizationUsers.map((user) => [user.id, user])), [organizationUsers]);
+  
+  // Calculate active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (typeFilter !== 'all') count++;
+    if (statusFilter !== 'all') count++;
+    if (formStatusFilter !== 'all') count++;
+    if (divisionFilter !== 'all') count++;
+    if (departmentFilter !== 'all') count++;
+    if (authorFilter !== 'all') count++;
+    if (dateRangeFilter.start || dateRangeFilter.end) count++;
+    return count;
+  }, [typeFilter, statusFilter, formStatusFilter, divisionFilter, departmentFilter, authorFilter, dateRangeFilter]);
+  
+  // Toggle functions for filters
+  const toggleType = (type: DocumentType | 'all') => {
+    setTypeFilter(type === typeFilter ? 'all' : type);
+  };
+  
+  const toggleStatus = (status: DocumentStatus | 'all') => {
+    setStatusFilter(status === statusFilter ? 'all' : status);
+  };
+  
+  const toggleFormStatus = (status: typeof formStatusFilter) => {
+    setFormStatusFilter(status === formStatusFilter ? 'all' : status);
+  };
+  
+  const clearAllFilters = () => {
+    setTypeFilter('all');
+    setStatusFilter('all');
+    setFormStatusFilter('all');
+    setDivisionFilter('all');
+    setDepartmentFilter('all');
+    setAuthorFilter('all');
+    setDateRangeFilter({});
+    setSearchQuery('');
+  };
+  
+  // Load total stats on mount
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const stats = await getDocumentStats();
+        setTotalStats(stats);
+      } catch (error) {
+        logError('Failed to load document stats', error);
+      }
+    };
+    void loadStats();
+  }, []);
+
   const pageStats = useMemo(
     () => ({
       draft: documents.filter((doc) => doc.status === 'draft').length,
@@ -624,13 +734,6 @@ const DocumentManagementPageContent = () => {
     toast.info(`To share multiple documents, please share them individually for better control.`);
   };
 
-  const handleGoToPage = () => {
-    const pageNum = parseInt(goToPageInput, 10);
-    if (pageNum >= 1 && pageNum <= totalPages) {
-      setPage(pageNum);
-      setGoToPageInput('');
-    }
-  };
 
   const renderDocumentList = (list: DocumentRecord[]) => {
     const allSelected = list.length > 0 && selectedDocuments.size === list.length;
@@ -683,6 +786,35 @@ const DocumentManagementPageContent = () => {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+          </div>
+        )}
+
+        {/* Select All checkbox - only show when there are documents */}
+        {list.length > 0 && (
+          <div className="flex items-center gap-2 p-2 border-b border-border/50">
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  setSelectedDocuments(new Set(list.map(doc => doc.id)));
+                } else {
+                  setSelectedDocuments(new Set());
+                }
+              }}
+              aria-label={allSelected ? 'Deselect all documents' : 'Select all documents'}
+            />
+            <Label 
+              className="text-sm font-medium cursor-pointer"
+              onClick={() => {
+                if (allSelected) {
+                  setSelectedDocuments(new Set());
+                } else {
+                  setSelectedDocuments(new Set(list.map(doc => doc.id)));
+                }
+              }}
+            >
+              {allSelected ? 'Deselect All' : 'Select All'} ({list.length})
+            </Label>
           </div>
         )}
         
@@ -847,7 +979,7 @@ const DocumentManagementPageContent = () => {
                           <span>{document.divisionId ? divisionLookup.get(document.divisionId) ?? 'Unknown division' : 'Unassigned'}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Filter className="h-3 w-3" />
+                          <Building2 className="h-3 w-3" />
                           <span>
                             {document.departmentId
                               ? departmentLookup.get(document.departmentId) ?? 'Unknown department'
@@ -907,354 +1039,492 @@ const DocumentManagementPageContent = () => {
   return (
     <ClientErrorBoundary>
       <DashboardLayout>
-        <div className="p-6 space-y-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-              <FileText className="h-8 w-8 text-primary" />
-              Document Management
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Central workspace for all ECM documents, templates, and collaboration.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <ContextualHelp
-              title="Navigating the DMS"
-              description="Search across workspaces, filter by status, document type, division, department, and sensitivity. Open a record to review version history and link it to correspondence."
-              steps={[
-                'Filter by status, type, or workspace to find the right file.',
-                'Create or upload from the actions panel to add new content.',
-                'Open a document to edit, comment, compare versions, and manage permissions.'
-              ]}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1"
-              onClick={() => setWorkspaceManageOpen(true)}
-              aria-label="Manage workspaces"
-            >
-              <Layers className="h-4 w-4" />
-              Workspaces
-            </Button>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                className="gap-1"
-                onClick={() => setUploadDialogOpen(true)}
-                disabled={!effectiveUser}
-                aria-label="Create new document"
-              >
-                <FilePlus className="h-4 w-4" />
-                New Document
-              </Button>
-              <div className="flex items-center gap-1">
-                <Popover open={formTemplatesOpen} onOpenChange={setFormTemplatesOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="gap-1 bg-gradient-primary"
-                      disabled={!effectiveUser}
-                      aria-label="Create new form from template"
-                    >
-                      <FileCheck className="h-4 w-4" />
-                      New Form
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80 p-0" align="end">
-                    <Command>
-                      <CommandInput placeholder="Search templates..." />
-                      <CommandList>
-                        <CommandEmpty>
-                          {formTemplatesLoading ? 'Loading templates...' : 'No templates found'}
-                        </CommandEmpty>
-                        <CommandGroup heading="Quick Create">
-                          <CommandItem
-                            onSelect={() => {
-                              setSelectedTemplateForForm(null);
-                              setFormTemplatesOpen(false);
-                              setCreateFormDialogOpen(true);
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <FileCheck className="h-4 w-4 mr-2" />
-                            Create from any template
-                          </CommandItem>
-                        </CommandGroup>
-                        {formTemplates.length > 0 && (
-                          <CommandGroup heading="Popular Templates">
-                            {formTemplates.slice(0, 8).map((template) => (
-                              <CommandItem
-                                key={template.id}
-                                onSelect={() => {
-                                  setSelectedTemplateForForm(template);
-                                  setFormTemplatesOpen(false);
-                                  setCreateFormDialogOpen(true);
-                                }}
-                                className="cursor-pointer"
-                              >
-                                <FileCheck className="h-4 w-4 mr-2" />
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{template.name}</span>
-                                  {template.description && (
-                                    <span className="text-xs text-muted-foreground line-clamp-1">
-                                      {template.description}
-                                    </span>
-                                  )}
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        )}
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+        <div className="container mx-auto p-6 space-y-6">
+          {/* Header Section */}
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div className="flex-1">
+                <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+                  <FileText className="h-8 w-8 text-primary" />
+                  Document Management
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  Central workspace for all ECM documents, templates, and collaboration.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <ContextualHelp
+                  title="Navigating the DMS"
+                  description="Search across workspaces, filter by status, document type, division, department, and sensitivity. Open a record to review version history and link it to correspondence."
+                  steps={[
+                    'Filter by status, type, or workspace to find the right file.',
+                    'Create or upload from the actions panel to add new content.',
+                    'Open a document to edit, comment, compare versions, and manage permissions.'
+                  ]}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => setWorkspaceManageOpen(true)}
+                  aria-label="Manage workspaces"
+                >
+                  <Layers className="h-4 w-4" />
+                  Workspaces
+                </Button>
               </div>
             </div>
-          </div>
-        </div>
 
-        <HelpGuideCard
-          title="Central Document Workspace"
-          description="Search across workspaces, filter by status, document type, division, department, and sensitivity. Open a record to review version history and link it to correspondence."
-          links={[
-            { label: "My Documents", href: "/documents" },
-            { label: "Help & Guides", href: "/help" },
-          ]}
-        />
+            {/* Quick Stats - Compact Horizontal Layout */}
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <BarChart2 className="h-4 w-4" />
+                    <span>
+                      {totalStats ? `Total: ${totalStats.total} documents` : 'Document statistics'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-primary" />
+                      <span className="text-sm font-medium text-primary">
+                        {totalStats ? totalStats.published : pageStats.published}
+                      </span>
+                      <span className="text-xs text-muted-foreground">Published</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-warning" />
+                      <span className="text-sm font-medium text-warning">
+                        {totalStats ? totalStats.draft : pageStats.draft}
+                      </span>
+                      <span className="text-xs text-muted-foreground">Drafts</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-secondary" />
+                      <span className="text-sm font-medium text-secondary">
+                        {totalStats ? totalStats.archived : pageStats.archived}
+                      </span>
+                      <span className="text-xs text-muted-foreground">Archived</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        <div className="grid gap-4 md:grid-cols-6">
-          <div className="md:col-span-2 relative">
-            <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-              <PopoverTrigger asChild>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            {/* Search, Filters, and Actions Bar */}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex-1 relative min-w-[200px]" ref={searchContainerRef}>
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground z-10" aria-hidden="true" />
                   <Input
-                    placeholder="Search by title, reference, tags, content..."
+                    placeholder="Search documents..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
-                      setSearchOpen(e.target.value.length > 0);
+                      setSearchOpen(recentSearches.length > 0 || e.target.value.trim().length > 0);
                     }}
-                    onFocus={() => setSearchOpen(true)}
+                    onFocus={() => {
+                      if (recentSearches.length > 0 || searchQuery.trim().length > 0) {
+                        setSearchOpen(true);
+                      }
+                    }}
                     className="pl-10"
                     aria-label="Search documents"
                   />
+                  {searchOpen && (recentSearches.length > 0 || (searchQuery.trim().length > 0 && documents.length > 0)) && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg z-50 max-h-[300px] overflow-auto">
+                      <Command>
+                        <CommandList>
+                          <CommandEmpty>No results found.</CommandEmpty>
+                          {recentSearches.length > 0 && !searchQuery.trim() && (
+                            <CommandGroup heading="Recent Searches">
+                              {recentSearches.map((search, idx) => (
+                                <CommandItem
+                                  key={idx}
+                                  onSelect={() => handleSearchSelect(search)}
+                                  className="cursor-pointer"
+                                >
+                                  <Search className="h-4 w-4 mr-2" />
+                                  {search}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                          {documents.length > 0 && searchQuery.trim() && (
+                            <CommandGroup heading="Quick Results">
+                              {documents.slice(0, 5).map((doc) => (
+                                <CommandItem
+                                  key={doc.id}
+                                  onSelect={() => {
+                                    handleSearchSelect(doc.title);
+                                    setSearchOpen(false);
+                                  }}
+                                  className="cursor-pointer"
+                                >
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  {doc.title}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          )}
+                        </CommandList>
+                      </Command>
+                    </div>
+                  )}
                 </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <Command>
-                  <CommandInput 
-                    placeholder="Search documents..." 
-                    value={searchQuery}
-                    onValueChange={setSearchQuery}
-                  />
-                  <CommandList>
-                    <CommandEmpty>No results found.</CommandEmpty>
-                    {recentSearches.length > 0 && (
-                      <CommandGroup heading="Recent Searches">
-                        {recentSearches.map((search, idx) => (
-                          <CommandItem
-                            key={idx}
-                            onSelect={() => handleSearchSelect(search)}
-                            className="cursor-pointer"
-                          >
-                            <Search className="h-4 w-4 mr-2" />
-                            {search}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )}
-                    {documents.length > 0 && searchQuery.trim() && (
-                      <CommandGroup heading="Quick Results">
-                        {documents.slice(0, 5).map((doc) => (
-                          <CommandItem
-                            key={doc.id}
-                            onSelect={() => {
-                              handleSearchSelect(doc.title);
-                              setSearchOpen(false);
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <FileText className="h-4 w-4 mr-2" />
-                            {doc.title}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <Select 
-            value={`${sortOption.field}_${sortOption.direction}`} 
-            onValueChange={(value) => {
-              const [field, direction] = value.split('_') as [SortField, SortDirection];
-              const found = SORT_OPTIONS.find(opt => opt.field === field && opt.direction === direction);
-              if (found) setSortOption(found);
-            }}
-          >
-            <SelectTrigger aria-label="Sort documents">
-              <ArrowUpDown className="h-4 w-4 mr-2" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((option) => (
-                <SelectItem key={`${option.field}_${option.direction}`} value={`${option.field}_${option.direction}`}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as DocumentType | 'all')}>
-            <SelectTrigger>
-              <SelectValue placeholder="Document type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {DOCUMENT_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {typeLabel(type)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as DocumentStatus | 'all')}>
-            <SelectTrigger>
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {STATUS_OPTIONS.map((status) => (
-                <SelectItem key={status} value={status} className="capitalize">
-                  {status}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {typeFilter === 'form' && (
-            <Select value={formStatusFilter} onValueChange={(value) => setFormStatusFilter(value as typeof formStatusFilter)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Form Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Form Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="awaiting_signatures">Awaiting Signatures</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Division" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Divisions</SelectItem>
-              {divisions.map((division) => (
-                <SelectItem key={division.id} value={division.id}>
-                  {division.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Department" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Departments</SelectItem>
-              {departments.map((department) => (
-                <SelectItem key={department.id} value={department.id}>
-                  {department.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
-        {/* Advanced Filters Row */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Author Filter */}
-          <Select value={authorFilter} onValueChange={setAuthorFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Author" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Authors</SelectItem>
-              {Array.from(new Set(documents.map(d => d.authorId)))
-                .map(authorId => {
-                  const author = organizationUsers.find(u => u.id === authorId);
-                  return author ? { id: authorId, name: author.name } : null;
-                })
-                .filter(Boolean)
-                .map((author) => (
-                  <SelectItem key={author!.id} value={author!.id}>
-                    {author!.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-          
-          {/* Date Range Filter */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2" aria-label="Date range filter">
-                <Calendar className="h-4 w-4" />
-                Date Range
-                {(dateRangeFilter.start || dateRangeFilter.end) && (
-                  <Badge variant="secondary" className="ml-1">
-                    {(dateRangeFilter.start && dateRangeFilter.end) ? '2' : '1'}
-                  </Badge>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80" align="start">
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="dateStart">From Date</Label>
-                  <Input
-                    id="dateStart"
-                    type="date"
-                    value={dateRangeFilter.start || ''}
-                    onChange={(e) => setDateRangeFilter(prev => ({ ...prev, start: e.target.value }))}
-                    aria-label="Filter by start date"
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="dateEnd">To Date</Label>
-                  <Input
-                    id="dateEnd"
-                    type="date"
-                    value={dateRangeFilter.end || ''}
-                    onChange={(e) => setDateRangeFilter(prev => ({ ...prev, end: e.target.value }))}
-                    aria-label="Filter by end date"
-                    className="mt-1"
-                  />
-                </div>
-                {(dateRangeFilter.start || dateRangeFilter.end) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDateRangeFilter({})}
-                    className="w-full"
-                    aria-label="Clear date filter"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Clear Date Filter
-                  </Button>
+                <Select 
+                  value={`${tableSort.sort.field}_${tableSort.sort.direction}`} 
+                  onValueChange={(value) => {
+                    const [field, direction] = value.split('_') as [SortField, SortDirection];
+                    tableSort.setSort(field, direction);
+                  }}
+                >
+                  <SelectTrigger aria-label="Sort documents" className="w-[180px]">
+                    <ArrowUpDown className="h-4 w-4 mr-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SORT_OPTIONS.map((option) => (
+                      <SelectItem key={`${option.field}_${option.direction}`} value={`${option.field}_${option.direction}`}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  aria-label="Toggle filters"
+                >
+                  <Filter className="h-4 w-4 mr-2" /> 
+                  Filters
+                  {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
+                </Button>
+                {effectiveUser && (
+                  <>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-1"
+                      onClick={() => setUploadDialogOpen(true)}
+                      disabled={!effectiveUser}
+                      aria-label="Create new document"
+                    >
+                      <FilePlus className="h-4 w-4" />
+                      New Document
+                    </Button>
+                    <DropdownMenu open={actionsDropdownOpen} onOpenChange={setActionsDropdownOpen}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1"
+                          disabled={!effectiveUser}
+                          aria-label="More creation options"
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setActionsDropdownOpen(false);
+                            requestAnimationFrame(() => {
+                              setBulkUploadDialogOpen(true);
+                            });
+                          }}
+                          disabled={!effectiveUser}
+                          aria-label="Bulk upload documents"
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          Bulk Upload
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setActionsDropdownOpen(false);
+                            requestAnimationFrame(() => {
+                              setSmartWizardOpen(true);
+                            });
+                          }}
+                          disabled={!effectiveUser}
+                          aria-label="Smart creation wizard"
+                        >
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Smart Create
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setActionsDropdownOpen(false);
+                            requestAnimationFrame(() => {
+                              setCreateFormDialogOpen(true);
+                              setSelectedTemplateForForm(null);
+                            });
+                          }}
+                          disabled={!effectiveUser}
+                          aria-label="Create new form from template"
+                        >
+                          <FileCheck className="h-4 w-4 mr-2" />
+                          New Form
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </>
                 )}
               </div>
-            </PopoverContent>
-          </Popover>
-        </div>
+            </div>
+          </div>
+
+        {/* Form Templates Popover - opens when New Form is clicked from dropdown */}
+        <Popover open={formTemplatesOpen} onOpenChange={setFormTemplatesOpen}>
+          <PopoverContent className="w-80 p-0" align="end">
+            <Command>
+              <CommandInput placeholder="Search templates..." />
+              <CommandList>
+                <CommandEmpty>
+                  {formTemplatesLoading ? 'Loading templates...' : 'No templates found'}
+                </CommandEmpty>
+                <CommandGroup heading="Quick Create">
+                  <CommandItem
+                    onSelect={() => {
+                      setSelectedTemplateForForm(null);
+                      setFormTemplatesOpen(false);
+                      setCreateFormDialogOpen(true);
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <FileCheck className="h-4 w-4 mr-2" />
+                    Create from any template
+                  </CommandItem>
+                </CommandGroup>
+                {formTemplates.length > 0 && (
+                  <CommandGroup heading="Popular Templates">
+                    {formTemplates.slice(0, 8).map((template) => (
+                      <CommandItem
+                        key={template.id}
+                        onSelect={() => {
+                          setSelectedTemplateForForm(template);
+                          setFormTemplatesOpen(false);
+                          setCreateFormDialogOpen(true);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <FileCheck className="h-4 w-4 mr-2" />
+                        <div className="flex flex-col">
+                          <span className="font-medium">{template.name}</span>
+                          {template.description && (
+                            <span className="text-xs text-muted-foreground line-clamp-1">
+                              {template.description}
+                            </span>
+                          )}
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+
+        {/* Filters Panel */}
+        {showFilters && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">Document Filters</CardTitle>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Document Type */}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Document Type</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {DOCUMENT_TYPES.map((type) => (
+                      <Badge
+                        key={type}
+                        variant={typeFilter === type ? 'default' : 'outline'}
+                        className="cursor-pointer capitalize text-xs"
+                        onClick={() => toggleType(type)}
+                      >
+                        {typeLabel(type)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Status</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {STATUS_OPTIONS.map((status) => (
+                      <Badge
+                        key={status}
+                        variant={statusFilter === status ? 'default' : 'outline'}
+                        className="cursor-pointer capitalize text-xs"
+                        onClick={() => toggleStatus(status)}
+                      >
+                        {status}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Form Status (only show when type is form) */}
+                {typeFilter === 'form' && (
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Form Status</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {(['draft', 'in_progress', 'awaiting_signatures', 'completed'] as const).map((status) => (
+                        <Badge
+                          key={status}
+                          variant={formStatusFilter === status ? 'default' : 'outline'}
+                          className="cursor-pointer capitalize text-xs"
+                          onClick={() => toggleFormStatus(status)}
+                        >
+                          {formStatusLabel(status)}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Division and Department */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Division</Label>
+                    <Select value={divisionFilter} onValueChange={setDivisionFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Divisions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Divisions</SelectItem>
+                        {divisions.map((division) => (
+                          <SelectItem key={division.id} value={division.id}>
+                            {division.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Department</Label>
+                    <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Departments" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Departments</SelectItem>
+                        {departments.map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Author and Date Range */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Author</Label>
+                    <Select value={authorFilter} onValueChange={setAuthorFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Authors" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Authors</SelectItem>
+                        {Array.from(new Set(documents.map(d => d.authorId)))
+                          .map(authorId => {
+                            const author = organizationUsers.find(u => u.id === authorId);
+                            return author ? { id: authorId, name: author.name } : null;
+                          })
+                          .filter(Boolean)
+                          .map((author) => (
+                            <SelectItem key={author!.id} value={author!.id}>
+                              {author!.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Date Range</Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full justify-start gap-2" aria-label="Date range filter">
+                          <Calendar className="h-4 w-4" />
+                          {dateRangeFilter.start || dateRangeFilter.end ? (
+                            <span className="text-xs">
+                              {dateRangeFilter.start && dateRangeFilter.end 
+                                ? `${new Date(dateRangeFilter.start).toLocaleDateString()} - ${new Date(dateRangeFilter.end).toLocaleDateString()}`
+                                : dateRangeFilter.start 
+                                ? `From ${new Date(dateRangeFilter.start).toLocaleDateString()}`
+                                : dateRangeFilter.end
+                                ? `Until ${new Date(dateRangeFilter.end).toLocaleDateString()}`
+                                : 'Select date range'
+                              }
+                            </span>
+                          ) : (
+                            <span>Select date range</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80" align="start">
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="dateStart">From Date</Label>
+                            <Input
+                              id="dateStart"
+                              type="date"
+                              value={dateRangeFilter.start || ''}
+                              onChange={(e) => setDateRangeFilter(prev => ({ ...prev, start: e.target.value }))}
+                              aria-label="Filter by start date"
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="dateEnd">To Date</Label>
+                            <Input
+                              id="dateEnd"
+                              type="date"
+                              value={dateRangeFilter.end || ''}
+                              onChange={(e) => setDateRangeFilter(prev => ({ ...prev, end: e.target.value }))}
+                              aria-label="Filter by end date"
+                              className="mt-1"
+                            />
+                          </div>
+                          {(dateRangeFilter.start || dateRangeFilter.end) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setDateRangeFilter({})}
+                              className="w-full"
+                              aria-label="Clear date filter"
+                            >
+                              <X className="h-4 w-4 mr-2" />
+                              Clear Date Filter
+                            </Button>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {error && (
           <Card>
@@ -1269,202 +1539,59 @@ const DocumentManagementPageContent = () => {
             ))}
           </div>
         ) : documents.length === 0 ? (
-          <Card>
-            <CardContent className="py-16 text-center">
-              <div className="flex flex-col items-center gap-4">
-                <div className="p-4 rounded-full bg-muted/50">
-                  <FileText className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-semibold text-foreground">No documents found</h3>
-                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                    {searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || divisionFilter !== 'all' || departmentFilter !== 'all' || authorFilter !== 'all' || dateRangeFilter.start || dateRangeFilter.end
-                      ? 'Try adjusting your search or filters to find what you\'re looking for. You can also clear filters to see all documents.'
-                      : 'Get started by creating your first document. You can upload files, create forms, or compose documents using the rich text editor.'}
-                  </p>
-                </div>
-                {effectiveUser && (
-                  <div className="flex items-center gap-3 mt-4">
-                    <Button
-                      onClick={() => setUploadDialogOpen(true)}
-                      aria-label="Create new document"
-                    >
-                      <FilePlus className="h-4 w-4 mr-2" />
-                      Create Document
-                    </Button>
-                    {(searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || divisionFilter !== 'all' || departmentFilter !== 'all' || authorFilter !== 'all' || dateRangeFilter.start || dateRangeFilter.end) && (
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setSearchQuery('');
-                          setTypeFilter('all');
-                          setStatusFilter('all');
-                          setDivisionFilter('all');
-                          setDepartmentFilter('all');
-                          setAuthorFilter('all');
-                          setDateRangeFilter({});
-                        }}
-                        aria-label="Clear all filters"
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Clear Filters
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {!effectiveUser && (
-                  <p className="text-xs text-muted-foreground mt-4">
-                    Please log in to create and manage documents.
-                  </p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={FileText}
+            title="No documents found"
+            description={
+              searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || divisionFilter !== 'all' || departmentFilter !== 'all' || authorFilter !== 'all' || dateRangeFilter.start || dateRangeFilter.end
+                ? 'Try adjusting your search or filters to find what you\'re looking for. You can also clear filters to see all documents.'
+                : 'Get started by creating your first document. You can upload files, create forms, or compose documents using the rich text editor.'
+            }
+            action={
+              effectiveUser
+                ? {
+                    label: 'Create Document',
+                    onClick: () => setUploadDialogOpen(true),
+                  }
+                : undefined
+            }
+          >
+            {(searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || divisionFilter !== 'all' || departmentFilter !== 'all' || authorFilter !== 'all' || dateRangeFilter.start || dateRangeFilter.end) && effectiveUser && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSearchQuery('');
+                  setTypeFilter('all');
+                  setStatusFilter('all');
+                  setDivisionFilter('all');
+                  setDepartmentFilter('all');
+                  setAuthorFilter('all');
+                  setDateRangeFilter({});
+                }}
+                aria-label="Clear all filters"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Clear Filters
+              </Button>
+            )}
+            {!effectiveUser && (
+              <p className="text-xs text-muted-foreground mt-4">
+                Please log in to create and manage documents.
+              </p>
+            )}
+          </EmptyState>
         ) : (
           renderDocumentList(filteredDocuments)
         )}
 
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">
-              Showing{' '}
-              {totalCount === 0
-                ? 0
-                : `${(page - 1) * customPageSize + 1}-${Math.min(totalCount, (page - 1) * customPageSize + documents.length)}`}{' '}
-              of {totalCount} documents
-            </p>
-            <div className="flex items-center gap-2">
-              <label htmlFor="page-size" className="text-sm text-muted-foreground">
-                Per page:
-              </label>
-              <Select value={String(customPageSize)} onValueChange={(value) => {
-                setCustomPageSize(Number(value));
-                setPage(1);
-              }}>
-                <SelectTrigger id="page-size" className="w-20 h-8" aria-label="Items per page">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              disabled={page === 1 || loading}
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            
-            {/* Page number buttons */}
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (page <= 3) {
-                  pageNum = i + 1;
-                } else if (page >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = page - 2 + i;
-                }
-                
-                if (pageNum > totalPages) return null;
-                
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={page === pageNum ? 'default' : 'outline'}
-                    size="sm"
-                    className="w-8 h-8 p-0"
-                    onClick={() => setPage(pageNum)}
-                    disabled={loading}
-                    aria-label={`Go to page ${pageNum}`}
-                    aria-current={page === pageNum ? 'page' : undefined}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-            </div>
-            
-            {/* Go to page input */}
-            {totalPages > 5 && (
-              <div className="flex items-center gap-1">
-                <Input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={goToPageInput}
-                  onChange={(e) => setGoToPageInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleGoToPage();
-                    }
-                  }}
-                  placeholder="Page"
-                  className="w-16 h-8 text-xs"
-                  aria-label="Go to page number"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8"
-                  onClick={handleGoToPage}
-                  disabled={loading}
-                  aria-label="Go to page"
-                >
-                  Go
-                </Button>
-              </div>
-            )}
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={page >= totalPages || loading}
-              aria-label="Next page"
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <BarChart2 className="h-4 w-4 text-primary" />
-              Quick Stats
-            </CardTitle>
-            <CardDescription>Snapshot of your accessible documents.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
-            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-              <p className="text-xs text-muted-foreground">Published</p>
-              <p className="text-2xl font-bold text-primary">{pageStats.published}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-warning/5 border border-warning/20">
-              <p className="text-xs text-muted-foreground">Drafts</p>
-              <p className="text-2xl font-bold text-warning">{pageStats.draft}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary/10 border border-secondary/20">
-              <p className="text-xs text-muted-foreground">Archived</p>
-              <p className="text-2xl font-bold text-secondary">{pageStats.archived}</p>
-            </div>
-          </CardContent>
-        </Card>
+        {totalCount > 0 && (
+          <PaginationControls
+            pagination={pagination}
+            showPageSizeSelector={true}
+            showGoToPage={true}
+            className="border-t border-border/60 pt-4"
+          />
+        )}
       </div>
 
       {effectiveUser && (
@@ -1474,23 +1601,66 @@ const DocumentManagementPageContent = () => {
             onOpenChange={(open) => {
               setCreateFormDialogOpen(open);
               if (!open) {
-                setSelectedTemplateForForm(null);
+                // Use setTimeout to avoid blocking
+                setTimeout(() => {
+                  setSelectedTemplateForForm(null);
+                }, 0);
               }
             }}
             onComplete={(documentId) => {
+              // Navigate immediately, don't reload here
               router.push(`/dms/${documentId}`);
-              void loadDocuments();
               setSelectedTemplateForForm(null);
             }}
             initialTemplate={selectedTemplateForForm}
           />
           <DocumentUploadDialog
             open={uploadDialogOpen}
-            onOpenChange={setUploadDialogOpen}
+            onOpenChange={(open) => {
+              startTransition(() => {
+                setUploadDialogOpen(open);
+                if (!open) {
+                  setShouldReloadDocuments(true);
+                }
+              });
+            }}
             mode="create"
             currentUser={effectiveUser}
             onComplete={() => {
-              void loadDocuments();
+              // Reload handled by shouldReloadDocuments flag
+            }}
+          />
+          <BulkUploadDialog
+            open={bulkUploadDialogOpen}
+            onOpenChange={(open) => {
+              setBulkUploadDialogOpen(open);
+              if (!open) {
+                // Use setTimeout to avoid blocking
+                setTimeout(() => {
+                  setShouldReloadDocuments(true);
+                }, 0);
+              }
+            }}
+            currentUser={effectiveUser}
+            onComplete={(documents) => {
+              // Toast messages are handled in the component
+            }}
+            defaultWorkspaceIds={[]}
+          />
+          <SmartCreationWizard
+            open={smartWizardOpen}
+            onOpenChange={(open) => {
+              setSmartWizardOpen(open);
+              if (!open) {
+                // Use setTimeout to avoid blocking
+                setTimeout(() => {
+                  setShouldReloadDocuments(true);
+                }, 0);
+              }
+            }}
+            currentUser={effectiveUser}
+            onComplete={(documents, collectionId) => {
+              // Toast messages are handled in the component
             }}
           />
         </>

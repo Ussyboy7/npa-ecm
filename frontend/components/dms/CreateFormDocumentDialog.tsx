@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useState, useEffect, startTransition } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { getFormTemplates } from "@/lib/api/forms";
 import { createFormDocument } from "@/lib/api/dms-forms";
 import { toast } from "sonner";
-import { FileText, Loader2 } from "lucide-react";
+import { FileText, Loader2, FileCheck } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { FormTemplate } from "@/lib/types/forms";
@@ -49,14 +50,24 @@ export function CreateFormDocumentDialog({
         setSelectedTemplateId(initialTemplate.id);
         setTitle(initialTemplate.name);
       }
-    } else {
-      // Reset when dialog closes
-      setSelectedTemplateId("");
-      setTitle("");
-      setDescription("");
-      setReferenceNumber("");
     }
+    // Don't reset state in useEffect - it causes blocking
+    // State will be reset when dialog opens next time if needed
   }, [open, initialTemplate]);
+  
+  // Reset state only when dialog closes, with a delay
+  useEffect(() => {
+    if (!open) {
+      // Reset state after dialog is fully closed
+      const timer = setTimeout(() => {
+        setSelectedTemplateId("");
+        setTitle("");
+        setDescription("");
+        setReferenceNumber("");
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [open]);
 
   const loadTemplates = async () => {
     try {
@@ -128,15 +139,27 @@ export function CreateFormDocumentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create Form Document</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <FileCheck className="h-5 w-5 text-primary" />
+            Create Form Document
+          </DialogTitle>
+          <DialogDescription>
+            Create a new form document from a template. Fill in the details below to get started.
+          </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="max-h-[60vh] pr-4">
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* Template Selection */}
             <div className="space-y-2">
-              <Label htmlFor="template">Form Template *</Label>
+              <Label htmlFor="template" className="text-sm font-medium">
+                Form Template <span className="text-destructive">*</span>
+              </Label>
               {loading ? (
-                <div className="text-sm text-muted-foreground">Loading templates...</div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading templates...
+                </div>
               ) : (
                 <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
                   <SelectTrigger>
@@ -159,88 +182,103 @@ export function CreateFormDocumentDialog({
                 </Select>
               )}
               {selectedTemplate && (
-                <p className="text-xs text-muted-foreground">
-                  {selectedTemplate.description || "No description"}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedTemplate.description || "No description available"}
                 </p>
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter form document title"
-              />
-            </div>
+            <Separator />
 
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={3}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+            {/* Document Details */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-foreground">Document Details</h3>
+              
               <div className="space-y-2">
-                <Label htmlFor="reference">Reference Number</Label>
+                <Label htmlFor="title" className="text-sm font-medium">
+                  Title <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Enter form document title"
+                  aria-required="true"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description" className="text-sm font-medium">Description</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Optional description"
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reference" className="text-sm font-medium">Reference Number</Label>
                 <Input
                   id="reference"
                   value={referenceNumber}
                   onChange={(e) => setReferenceNumber(e.target.value)}
-                  placeholder="Optional reference"
+                  placeholder="Optional reference (e.g. NPA/MOPS/2024/045)"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="division">Division</Label>
-                <Select 
-                  value={divisionId || "__none__"} 
-                  onValueChange={(v) => setDivisionId(v === "__none__" ? undefined : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select division" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {divisions
-                      .filter((d) => d.isActive)
-                      .map((division) => (
-                        <SelectItem key={division.id} value={division.id}>
-                          {division.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <Separator />
 
-              <div className="space-y-2">
-                <Label htmlFor="department">Department</Label>
-                <Select
-                  value={departmentId || "__none__"}
-                  onValueChange={(v) => setDepartmentId(v === "__none__" ? undefined : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {departments
-                      .filter((d) => d.isActive && (!divisionId || d.divisionId === divisionId))
-                      .map((department) => (
-                        <SelectItem key={department.id} value={department.id}>
-                          {department.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+            {/* Organization */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-foreground">Organization</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="division" className="text-sm font-medium">Division</Label>
+                  <Select 
+                    value={divisionId || "__none__"} 
+                    onValueChange={(v) => setDivisionId(v === "__none__" ? undefined : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {divisions
+                        .filter((d) => d.isActive)
+                        .map((division) => (
+                          <SelectItem key={division.id} value={division.id}>
+                            {division.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="department" className="text-sm font-medium">Department</Label>
+                  <Select
+                    value={departmentId || "__none__"}
+                    onValueChange={(v) => setDepartmentId(v === "__none__" ? undefined : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {departments
+                        .filter((d) => d.isActive && (!divisionId || d.divisionId === divisionId))
+                        .map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </div>

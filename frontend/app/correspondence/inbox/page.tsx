@@ -40,6 +40,8 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/shared/PaginationControls';
 
 const STORAGE_KEY = 'office-inbox-selection';
 
@@ -95,9 +97,14 @@ const CorrespondenceInbox = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('all');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [goToPageInput, setGoToPageInput] = useState('');
+  
+  // Use pagination hook
+  const [count, setCount] = useState(0);
+  const pagination = usePagination({
+    initialPage: 1,
+    initialPageSize: 25,
+    totalCount: count,
+  });
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['pending', 'in-progress']);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [assignedOnly, setAssignedOnly] = useState(false);
@@ -109,7 +116,6 @@ const CorrespondenceInbox = () => {
 
   const [inboxItems, setInboxItems] = useState<Correspondence[]>([]);
   const [summary, setSummary] = useState<InboxSummary>(DEFAULT_SUMMARY);
-  const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -240,8 +246,9 @@ const CorrespondenceInbox = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    setPage(1);
-  }, [selectedOfficeId, debouncedSearch, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo, pageSize]);
+    pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOfficeId, debouncedSearch, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {
     if (hydrated && currentUser && !hasCorrespondenceAccess) {
@@ -281,8 +288,8 @@ const CorrespondenceInbox = () => {
         if (dateTo) params.append('date_to', dateTo);
         params.append('sort_by', sortBy);
         params.append('sort_order', sortOrder);
-        params.append('page', String(page));
-        params.append('page_size', String(pageSize));
+        params.append('page', String(pagination.page));
+        params.append('page_size', String(pagination.pageSize));
 
         const response = await apiFetch<any>(`/correspondence/items/office-inbox/?${params.toString()}`);
         const results = Array.isArray(response.results) ? response.results : [];
@@ -305,17 +312,7 @@ const CorrespondenceInbox = () => {
     };
 
     void fetchInbox();
-  }, [hydrated, currentUser, hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, page, pageSize, userOfficeIds, isSuperuser, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
-
-  const pageCount = Math.max(1, Math.ceil(count / pageSize));
-
-  const handleGoToPage = () => {
-    const pageNum = parseInt(goToPageInput, 10);
-    if (pageNum >= 1 && pageNum <= pageCount) {
-      setPage(pageNum);
-      setGoToPageInput('');
-    }
-  };
+  }, [hydrated, currentUser, hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -602,46 +599,14 @@ const CorrespondenceInbox = () => {
         )}
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">Showing {count === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count, (page - 1) * pageSize + inboxItems.length)}`} of {count} items</p>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground">Per page:</label>
-              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-                <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1 || loading}><ChevronLeft className="h-4 w-4" />Previous</Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
-                let pageNum: number;
-                if (pageCount <= 5) pageNum = i + 1;
-                else if (page <= 3) pageNum = i + 1;
-                else if (page >= pageCount - 2) pageNum = pageCount - 4 + i;
-                else pageNum = page - 2 + i;
-                if (pageNum > pageCount) return null;
-                return (
-                  <Button key={pageNum} variant={page === pageNum ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pageNum)} disabled={loading}>{pageNum}</Button>
-                );
-              })}
-            </div>
-            {pageCount > 5 && (
-              <div className="flex items-center gap-1">
-                <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
-                <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
-          </div>
+        {count > 0 && (
+          <PaginationControls
+            pagination={pagination}
+            showPageSizeSelector={true}
+            showGoToPage={true}
+            className="border-t border-border/60 pt-4"
+          />
         )}
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
-          </div>
-        </div>
       </div>
     </DashboardLayout>
   );

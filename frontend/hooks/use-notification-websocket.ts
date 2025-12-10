@@ -131,7 +131,12 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
                 onNotification(data.notification as Notification);
               }
               // Refresh unread count
-              getUnreadNotificationCount().then(setUnreadCount);
+              getUnreadNotificationCount()
+                .then(setUnreadCount)
+                .catch(() => {
+                  // Silently handle errors - set count to 0 if fetch fails
+                  setUnreadCount(0);
+                });
               break;
 
             case 'unread_count':
@@ -247,7 +252,12 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
   // Load initial unread count
   useEffect(() => {
     if (currentUser) {
-      getUnreadNotificationCount().then(setUnreadCount);
+      getUnreadNotificationCount()
+        .then(setUnreadCount)
+        .catch(() => {
+          // Silently handle errors - set count to 0 if fetch fails
+          setUnreadCount(0);
+        });
     }
   }, [currentUser]);
 

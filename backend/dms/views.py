@@ -29,6 +29,7 @@ from notifications.services import NotificationService
 from .models import (
     Document,
     DocumentAccessLog,
+    DocumentCollection,
     DocumentComment,
     DocumentDiscussionMessage,
     DocumentEditorSession,
@@ -39,6 +40,7 @@ from .models import (
 )
 from .serializers import (
     DocumentAccessLogSerializer,
+    DocumentCollectionSerializer,
     DocumentCommentSerializer,
     DocumentDiscussionMessageSerializer,
     DocumentEditorSessionSerializer,
@@ -111,10 +113,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
         
-        # Call super to apply standard filters (SearchFilter, DjangoFilterBackend, etc.)
-        queryset = super().filter_queryset(queryset)
-        
-        # Apply date range filter
+        # Apply date range filter first (before search to reduce queryset size)
         if date_from:
             try:
                 from_date = datetime.strptime(date_from, "%Y-%m-%d").date()
@@ -129,18 +128,42 @@ class DocumentViewSet(viewsets.ModelViewSet):
             except ValueError:
                 pass  # Invalid date format, ignore
         
-        # If there's a search query, also search in document version content
+        # If there's a search query, search across all fields including version content
         if search_query:
-            # Add full-text search in document versions (content_text, ocr_text)
-            # This extends the base search_fields (title, reference, description, tags)
-            version_filter = Q(
-                versions__content_text__icontains=search_query
-            ) | Q(
-                versions__ocr_text__icontains=search_query
+            # Build comprehensive search filter that includes:
+            # - Base fields: title, reference_number, description, tags
+            # - Version content: content_text, ocr_text
+            base_search = (
+                Q(title__icontains=search_query) |
+                Q(reference_number__icontains=search_query) |
+                Q(description__icontains=search_query) |
+                Q(tags__icontains=search_query)
             )
             
-            # Combine with existing search results using OR
-            queryset = queryset.filter(version_filter).distinct()
+            # Version content search
+            version_search = (
+                Q(versions__content_text__icontains=search_query) |
+                Q(versions__ocr_text__icontains=search_query)
+            )
+            
+            # Combine base search and version search with OR
+            combined_search = base_search | version_search
+            
+            # Apply the combined search filter
+            queryset = queryset.filter(combined_search).distinct()
+            
+            # Still need to apply other filters (status, type, etc.) from DjangoFilterBackend
+            # Temporarily remove SearchFilter to avoid double-filtering
+            from rest_framework.filters import SearchFilter
+            original_backends = self.filter_backends
+            self.filter_backends = [b for b in original_backends if not isinstance(b, SearchFilter)]
+            try:
+                queryset = super().filter_queryset(queryset)
+            finally:
+                self.filter_backends = original_backends
+        else:
+            # No search query, just apply standard filters
+            queryset = super().filter_queryset(queryset)
         
         return queryset
 
@@ -502,6 +525,175 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
             uploaded_by=self.request.user,
             version_number=next_version,
         )
+
+    @action(detail=True, methods=["post"], url_path="replace")
+    def replace_version(self, request, pk=None):
+        """Replace an existing version with new file content."""
+        version = self.get_object()
+        
+        # Create a mutable copy of request data
+        data = dict(request.data)
+        
+        # Extract file data from request if it's a data URL
+        file_url = data.get('file_url', '')
+        file_name = data.get('file_name', version.file_name)
+        file_type = data.get('file_type', version.file_type)
+        
+        # If file_url is a data URL (base64), save it to disk
+        if file_url and file_url.startswith('data:'):
+            try:
+                # Parse data URL: data:type/subtype;base64,<data>
+                header, encoded = file_url.split(',', 1)
+                # Extract mime type if available
+                mime_type = header.split(';')[0].split(':')[1] if ':' in header else file_type
+                
+                # Decode base64 data
+                file_data = base64.b64decode(encoded)
+                safe_name = file_name or version.file_name
+                validate_file_upload(
+                    file_name=safe_name,
+                    mime_type=mime_type,
+                    file_bytes=file_data,
+                    field_name="file_url",
+                )
+                data["file_size"] = len(file_data)
+                if not data.get('file_type') and mime_type:
+                    data['file_type'] = mime_type
+                if not data.get('file_name'):
+                    data['file_name'] = safe_name
+
+                # Ensure media directory exists
+                media_root = settings.MEDIA_ROOT
+                document_id = str(version.document.id)
+                dms_dir = os.path.join(media_root, 'dms_versions', document_id)
+                os.makedirs(dms_dir, exist_ok=True)
+                
+                # Generate file path
+                safe_filename = (data['file_name'] or safe_name).replace(' ', '_').replace('/', '_')
+                file_path = os.path.join('dms_versions', document_id, safe_filename)
+                
+                # Save file to storage
+                saved_path = default_storage.save(file_path, ContentFile(file_data, name=safe_filename))
+                
+                # Build relative URL for the file
+                media_url = settings.MEDIA_URL or '/media/'
+                if not media_url.startswith('/'):
+                    media_url = f'/{media_url}'
+                file_url = f"{media_url.rstrip('/')}/{saved_path}"
+                
+                # Update data with the new file URL
+                data['file_url'] = file_url
+                
+                # Run OCR if it's an image or PDF
+                if mime_type in ['image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'application/pdf']:
+                    try:
+                        file_full_path = os.path.join(media_root, saved_path)
+                        ocr_text = OCRService.extract_text(file_full_path, mime_type)
+                        if ocr_text:
+                            data['ocr_text'] = ocr_text
+                    except Exception as e:
+                        logger.warning(f"OCR extraction failed: {e}")
+                        
+            except Exception as e:
+                logger.error(f"Failed to process data URL for version replacement: {e}")
+                raise ValidationError({"file_url": f"Failed to process uploaded file: {str(e)}"})
+        
+        # Update the version
+        serializer = self.get_serializer(version, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="replace")
+    def replace_version(self, request, pk=None):
+        """Replace an existing version with new file content."""
+        version = self.get_object()
+        
+        # Check permissions - only author or document owner can replace
+        if version.uploaded_by != request.user and version.document.author != request.user:
+            raise PermissionDenied("You can only replace versions you uploaded or documents you own")
+        
+        # Create a mutable copy of request data
+        data = dict(request.data)
+        
+        # Extract file data from request if it's a data URL
+        file_url = data.get('file_url', '')
+        file_name = data.get('file_name', version.file_name)
+        file_type = data.get('file_type', version.file_type)
+        
+        # If file_url is a data URL (base64), save it to disk
+        if file_url and file_url.startswith('data:'):
+            try:
+                # Parse data URL: data:type/subtype;base64,<data>
+                header, encoded = file_url.split(',', 1)
+                # Extract mime type if available
+                mime_type = header.split(';')[0].split(':')[1] if ':' in header else file_type
+                
+                # Decode base64 data
+                file_data = base64.b64decode(encoded)
+                safe_name = file_name or version.file_name
+                validate_file_upload(
+                    file_name=safe_name,
+                    mime_type=mime_type,
+                    file_bytes=file_data,
+                    field_name="file_url",
+                )
+                data["file_size"] = len(file_data)
+                if not data.get('file_type') and mime_type:
+                    data['file_type'] = mime_type
+                if not data.get('file_name'):
+                    data['file_name'] = safe_name
+
+                # Ensure media directory exists
+                media_root = settings.MEDIA_ROOT
+                document_id = str(version.document.id)
+                dms_dir = os.path.join(media_root, 'dms_versions', document_id)
+                os.makedirs(dms_dir, exist_ok=True)
+                
+                # Generate file path
+                safe_filename = (data['file_name'] or safe_name).replace(' ', '_').replace('/', '_')
+                file_path = os.path.join('dms_versions', document_id, safe_filename)
+                
+                # Save file to storage
+                saved_path = default_storage.save(file_path, ContentFile(file_data, name=safe_filename))
+                
+                # Build relative URL for the file
+                media_url = settings.MEDIA_URL or '/media/'
+                if not media_url.startswith('/'):
+                    media_url = f'/{media_url}'
+                file_url = f"{media_url.rstrip('/')}/{saved_path}"
+                
+                # Update data with the new file URL
+                data['file_url'] = file_url
+                
+                # Run OCR if it's an image or PDF
+                if mime_type in ['image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'application/pdf']:
+                    try:
+                        file_full_path = os.path.join(media_root, saved_path)
+                        ocr_text = OCRService.extract_text(file_full_path, mime_type)
+                        if ocr_text:
+                            data['ocr_text'] = ocr_text
+                    except Exception as e:
+                        logger.warning(f"OCR extraction failed: {e}")
+                        
+            except Exception as e:
+                logger.error(f"Failed to process data URL for version replacement: {e}")
+                raise ValidationError({"file_url": f"Failed to process uploaded file: {str(e)}"})
+        
+        # Update the version (preserve version_number, uploaded_by, uploaded_at)
+        serializer = self.get_serializer(version, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        # Don't update version_number, uploaded_by, or uploaded_at
+        update_fields = {k: v for k, v in serializer.validated_data.items() 
+                        if k not in ['version_number', 'uploaded_by', 'uploaded_at']}
+        for field, value in update_fields.items():
+            setattr(version, field, value)
+        version.save()
+        
+        # Return updated version
+        serializer = self.get_serializer(version)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="run-ocr")
     def run_ocr(self, request, pk=None):
@@ -899,3 +1091,86 @@ class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
         session.save(update_fields=["is_active", "updated_at"])
         
         return Response({"message": "Session ended"})
+
+
+class DocumentCollectionViewSet(viewsets.ModelViewSet):
+    queryset = DocumentCollection.objects.prefetch_related("documents", "members", "owner").filter(is_deleted=False)
+    serializer_class = DocumentCollectionSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["owner", "is_public"]
+    search_fields = ["name", "description"]
+    ordering_fields = ["created_at", "name"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        
+        # Show collections that are:
+        # 1. Public
+        # 2. Owned by user
+        # 3. User is a member
+        if user.is_superuser:
+            return qs
+        
+        return qs.filter(
+            Q(is_public=True) | Q(owner=user) | Q(members=user)
+        ).distinct()
+
+    def perform_create(self, serializer):
+        collection = serializer.save(owner=self.request.user)
+        # Add owner as member
+        collection.members.add(self.request.user)
+        
+        # Log activity
+        from audit.models import ActivityLog
+        AuditService.log_document_activity(
+            user=self.request.user,
+            action=ActivityLog.ActionType.DOCUMENT_CREATED,
+            document=None,
+            request=self.request,
+            description=f"Created collection: {collection.name}",
+        )
+
+    @action(detail=True, methods=["post"], url_path="add-documents")
+    def add_documents(self, request, pk=None):
+        """Add documents to collection."""
+        collection = self.get_object()
+        
+        # Check permissions
+        if collection.owner != request.user and request.user not in collection.members.all():
+            raise PermissionDenied("You don't have permission to modify this collection")
+        
+        document_ids = request.data.get("document_ids", [])
+        if not document_ids:
+            raise ValidationError({"document_ids": "At least one document ID is required"})
+        
+        documents = Document.objects.filter(id__in=document_ids)
+        collection.documents.add(*documents)
+        
+        return Response({
+            "message": f"Added {len(documents)} document(s) to collection",
+            "document_count": collection.documents.count(),
+        })
+
+    @action(detail=True, methods=["post"], url_path="remove-documents")
+    def remove_documents(self, request, pk=None):
+        """Remove documents from collection."""
+        collection = self.get_object()
+        
+        # Check permissions
+        if collection.owner != request.user and request.user not in collection.members.all():
+            raise PermissionDenied("You don't have permission to modify this collection")
+        
+        document_ids = request.data.get("document_ids", [])
+        if not document_ids:
+            raise ValidationError({"document_ids": "At least one document ID is required"})
+        
+        documents = Document.objects.filter(id__in=document_ids)
+        collection.documents.remove(*documents)
+        
+        return Response({
+            "message": f"Removed {len(documents)} document(s) from collection",
+            "document_count": collection.documents.count(),
+        })

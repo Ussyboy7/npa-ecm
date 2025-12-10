@@ -1,7 +1,7 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef, startTransition } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -55,7 +55,7 @@ import {
   type DocumentTemplate,
 } from '@/lib/template-storage';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
-import { AlertTriangle, Loader2, Save } from 'lucide-react';
+import { AlertTriangle, Loader2, Save, Upload as UploadIcon, FilePlus, FileText } from 'lucide-react';
 import { sanitizeRichText } from '@/lib/sanitize-html';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
@@ -347,46 +347,64 @@ export const DocumentUploadDialog = ({
       .replace(/\{\{date\.today\}\}/g, formattedDate);
   }, [currentUser, divisionId, departmentId, title, referenceNumber, activeDivisions, activeDepartments]);
 
-  const resetState = () => {
-    setTitle('');
-    setDescription('');
-    setDocumentType('memo');
-    setStatus(mode === 'create' ? 'draft' : document?.status ?? 'draft');
-    setDivisionId(currentUser.division);
-    setDepartmentId(currentUser.department);
-    setReferenceNumber('');
-    setTagsInput('');
-    setNotes('');
-    setFile(null);
-    setComposeMode(mode === 'create');
-    setEditorHtml('');
-    setEditorJson(null);
-    setTemplateApplied(false);
-    setTemplatePreviewId(null);
-    setSensitivity(document?.sensitivity ?? 'internal');
-    setSelectedWorkspaceIds([]);
-    setValidationErrors({});
-    setUploadProgress(0);
-    if (currentUser) {
-      const defaultTemplate = getDefaultTemplateForUser(currentUser);
-      setSelectedTemplateId(defaultTemplate ? defaultTemplate.id : null);
-    } else {
-      setSelectedTemplateId(null);
-    }
-    // Clear draft from localStorage
-    try {
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
-    } catch (err) {
-      // Ignore
-    }
-  };
+  const resetState = useCallback(() => {
+    // Use startTransition to batch all state updates
+    startTransition(() => {
+      setTitle('');
+      setDescription('');
+      setDocumentType('memo');
+      setStatus(mode === 'create' ? 'draft' : document?.status ?? 'draft');
+      setDivisionId(currentUser.division);
+      setDepartmentId(currentUser.department);
+      setReferenceNumber('');
+      setTagsInput('');
+      setNotes('');
+      setFile(null);
+      setComposeMode(mode === 'create');
+      setEditorHtml('');
+      setEditorJson(null);
+      setTemplateApplied(false);
+      setTemplatePreviewId(null);
+      setSensitivity(document?.sensitivity ?? 'internal');
+      setSelectedWorkspaceIds([]);
+      setValidationErrors({});
+      setUploadProgress(0);
+      if (currentUser) {
+        const defaultTemplate = getDefaultTemplateForUser(currentUser);
+        setSelectedTemplateId(defaultTemplate ? defaultTemplate.id : null);
+      } else {
+        setSelectedTemplateId(null);
+      }
+      // Clear draft from localStorage
+      try {
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch (err) {
+        // Ignore
+      }
+    });
+  }, [mode, document?.status, document?.sensitivity, currentUser]);
 
-  const handleClose = (nextOpen: boolean) => {
+  const handleClose = useCallback((nextOpen: boolean) => {
     if (!nextOpen) {
-      resetState();
+      // Close dialog immediately without blocking
+      onOpenChange(false);
+      // Reset state after dialog animation completes (use requestIdleCallback if available, else setTimeout)
+      const resetAfterClose = () => {
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          requestIdleCallback(() => {
+            resetState();
+          }, { timeout: 500 });
+        } else {
+          setTimeout(() => {
+            resetState();
+          }, 300);
+        }
+      };
+      resetAfterClose();
+    } else {
+      onOpenChange(nextOpen);
     }
-    onOpenChange(nextOpen);
-  };
+  }, [resetState, onOpenChange]);
 
   const handleFileSelect = useCallback((selectedFile: File | null) => {
     setFile(selectedFile);
@@ -474,15 +492,20 @@ export const DocumentUploadDialog = ({
         
         setUploadProgress(100);
 
-        onComplete(created);
-        toast.success('Document created successfully');
         // Clear draft after successful creation
         try {
           localStorage.removeItem(DRAFT_STORAGE_KEY);
         } catch (err) {
           // Ignore
         }
+        toast.success('Document created successfully');
         handleClose(false);
+        // Use startTransition to batch the onComplete callback
+        startTransition(() => {
+          setTimeout(() => {
+            onComplete(created);
+          }, 100);
+        });
         return;
       }
 
@@ -524,9 +547,14 @@ export const DocumentUploadDialog = ({
           notes: notes.trim() || undefined,
         });
 
-        onComplete(updated);
-        toast.success('New version added');
         handleClose(false);
+        // Use startTransition to batch the onComplete callback
+        startTransition(() => {
+          setTimeout(() => {
+            onComplete(updated);
+            toast.success('New version added');
+          }, 100);
+        });
       }
     } catch (error: unknown) {
       logError('Document upload error:', error);
@@ -558,7 +586,7 @@ export const DocumentUploadDialog = ({
       setIsSubmitting(false);
       setUploadProgress(0);
     }
-  }, [mode, validateForm, tagsInput, composeMode, editorHtml, editorJson, file, title, description, documentType, status, sensitivity, divisionId, departmentId, referenceNumber, currentUser, selectedWorkspaceIds, document, onComplete, handleClose]);
+  }, [mode, validateForm, tagsInput, composeMode, editorHtml, editorJson, file, title, description, documentType, status, sensitivity, divisionId, departmentId, referenceNumber, currentUser, selectedWorkspaceIds, document, onComplete]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -586,7 +614,8 @@ export const DocumentUploadDialog = ({
   const dialogDescription =
     mode === 'create'
       ? 'Create a new document with metadata and content or upload a file.'
-      : `Upload a new version for “${document?.title ?? 'Document'}”.`;
+      : `Upload a new version for "${document?.title ?? 'Document'}".`;
+  const DialogIcon = mode === 'create' ? FilePlus : UploadIcon;
 
   const templateTokens = useMemo(() => {
     if (!currentUser) return [];
@@ -652,18 +681,28 @@ export const DocumentUploadDialog = ({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-5xl w-full max-h-[85vh] overflow-hidden">
         <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <DialogIcon className="h-5 w-5 text-primary" />
+            {dialogTitle}
+          </DialogTitle>
           <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="max-h-[65vh] pr-4">
           <div className="space-y-6 pb-2">
           {mode === 'create' && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2 space-y-2">
-                <Label htmlFor="doc-title">
-                  Title <span className="text-destructive">*</span>
-                </Label>
+            <>
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Basic Information
+                </h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2 space-y-2">
+                    <Label htmlFor="doc-title" className="text-sm font-medium">
+                      Title <span className="text-destructive">*</span>
+                    </Label>
                 <Input
                   id="doc-title"
                   value={title}
@@ -928,14 +967,19 @@ export const DocumentUploadDialog = ({
                   </p>
                 </div>
               )}
-            </div>
+                </div>
+              </div>
+            </>
           )}
 
           <Separator />
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label className="font-medium">Content</Label>
+              <Label className="font-medium flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Content
+              </Label>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Switch
                   checked={composeMode}

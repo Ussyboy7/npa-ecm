@@ -176,6 +176,7 @@ class MinuteSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False,
     )
+    correspondence_details = serializers.SerializerMethodField()
 
     class Meta:
         model = Minute
@@ -247,6 +248,7 @@ class MinuteSerializer(serializers.ModelSerializer):
             # Digital seal (for executive approvals)
             "seal_applied",
             "seal_data",
+            "correspondence_details",
             "created_at",
             "updated_at",
         ]
@@ -308,6 +310,22 @@ class MinuteSerializer(serializers.ModelSerializer):
         if obj.branch_originator:
             return obj.branch_originator.get_full_name() or obj.branch_originator.username
         return None
+
+    def get_correspondence_details(self, obj):
+        """Get nested correspondence details for this minute."""
+        if not obj.correspondence:
+            return None
+        correspondence = obj.correspondence
+        return {
+            "id": str(correspondence.id),
+            "reference_number": correspondence.reference_number,
+            "subject": correspondence.subject,
+            "sender_name": correspondence.sender_name,
+            "sender_organization": correspondence.sender_organization,
+            "received_date": correspondence.received_date.isoformat() if correspondence.received_date else None,
+            "priority": correspondence.priority,
+            "status": correspondence.status,
+        }
 
     def get_seal_data(self, obj):
         """Get digital seal data if this minute has an executive seal applied."""

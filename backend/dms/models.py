@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.contrib.postgres.search import SearchVectorField
 from django.db import models
+from django.db.models import Q
 
 from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 
@@ -79,9 +81,16 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
     )
     tags = models.JSONField(default=list, blank=True)
     workspaces = models.ManyToManyField(DocumentWorkspace, blank=True, related_name="documents")
+    
+    # Full-text search vector (updated via signals or management command)
+    search_vector = SearchVectorField(null=True, editable=False)
 
     class Meta:
         ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["-updated_at"]),
+            # GIN index for full-text search (created via migration)
+        ]
 
     def __str__(self) -> str:
         return self.title
@@ -148,6 +157,38 @@ class DocumentPermission(UUIDModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.document.title} ({self.access})"
+
+
+class DocumentCollection(UUIDModel, TimeStampedModel, SoftDeleteModel):
+    """Collection of related documents for project-based workflows."""
+    
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="document_collections_owned",
+    )
+    documents = models.ManyToManyField(
+        Document,
+        blank=True,
+        related_name="collections",
+    )
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="document_collections",
+    )
+    is_public = models.BooleanField(default=False, help_text="If true, all users can view this collection")
+    
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Document Collection"
+        verbose_name_plural = "Document Collections"
+    
+    def __str__(self) -> str:
+        return self.name
 
 
 class DocumentComment(UUIDModel, TimeStampedModel):

@@ -22,6 +22,7 @@ import {
   Plus,
   Download,
   Loader2,
+  Pencil,
 } from "lucide-react";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { UserEditDialog } from "@/components/admin/UserEditDialog";
@@ -597,7 +598,7 @@ const UserManagementPageContent = () => {
                     className="h-4 w-4 rounded border-gray-300"
                   />
                 </TableHead>
-                <TableHead>
+                <TableHead className="w-[200px]">
                   <button
                     type="button"
                     className="flex items-center gap-1 text-left"
@@ -608,18 +609,7 @@ const UserManagementPageContent = () => {
                     {renderSortIcon("name")}
                   </button>
                 </TableHead>
-                <TableHead>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 text-left"
-                    onClick={() => toggleSort("email")}
-                    aria-label="Sort by email"
-                  >
-                    Email
-                    {renderSortIcon("email")}
-                  </button>
-                </TableHead>
-                <TableHead>
+                <TableHead className="w-[120px]">
                   <button
                     type="button"
                     className="flex items-center gap-1 text-left"
@@ -630,7 +620,7 @@ const UserManagementPageContent = () => {
                     {renderSortIcon("role")}
                   </button>
                 </TableHead>
-                <TableHead>
+                <TableHead className="w-[100px]">
                   <button
                     type="button"
                     className="flex items-center gap-1 text-left"
@@ -641,7 +631,7 @@ const UserManagementPageContent = () => {
                     {renderSortIcon("grade")}
                   </button>
                 </TableHead>
-                <TableHead>
+                <TableHead className="w-[150px]">
                   <button
                     type="button"
                     className="flex items-center gap-1 text-left"
@@ -652,18 +642,7 @@ const UserManagementPageContent = () => {
                     {renderSortIcon("division")}
                   </button>
                 </TableHead>
-                <TableHead>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 text-left"
-                    onClick={() => toggleSort("department")}
-                    aria-label="Sort by department"
-                  >
-                    Department
-                    {renderSortIcon("department")}
-                  </button>
-                </TableHead>
-                <TableHead>
+                <TableHead className="w-[100px]">
                   <button
                     type="button"
                     className="flex items-center gap-1 text-left"
@@ -674,7 +653,7 @@ const UserManagementPageContent = () => {
                     {renderSortIcon("status")}
                   </button>
                 </TableHead>
-                <TableHead className="w-[120px] text-right" aria-label="Actions">Actions</TableHead>
+                <TableHead className="w-[80px] text-right" aria-label="Actions">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -682,7 +661,7 @@ const UserManagementPageContent = () => {
                 <UserTableSkeletonRows rows={pageSize} />
               ) : mappedUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No users found
                   </TableCell>
                 </TableRow>
@@ -716,12 +695,13 @@ const UserManagementPageContent = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{user.name}</span>
-                        <span className="text-xs text-muted-foreground">ID: {user.employeeId}</span>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-medium text-sm truncate">{user.name}</span>
+                        {user.employeeId && (
+                          <span className="text-xs text-muted-foreground truncate">ID: {user.employeeId}</span>
+                        )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{user.email}</TableCell>
                     <TableCell>
                       <Badge
                         variant="secondary"
@@ -749,33 +729,15 @@ const UserManagementPageContent = () => {
                       {division ? (
                         <button
                           type="button"
-                          className="flex flex-col text-left hover:text-primary"
+                          className="flex flex-col text-left hover:text-primary min-w-0 w-full"
                           onClick={() =>
                             addFilter({ key: "division", value: division.id, display: `Division: ${division.name}` })
                           }
                         >
-                          <span>{division.name}</span>
-                          <span className="text-xs text-muted-foreground">{division.code}</span>
-                        </button>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {department ? (
-                        <button
-                          type="button"
-                          className="flex flex-col text-left hover:text-primary"
-                          onClick={() =>
-                            addFilter({
-                              key: "department",
-                              value: department.id,
-                              display: `Department: ${department.name}`,
-                            })
-                          }
-                        >
-                          <span>{department.name}</span>
-                          <span className="text-xs text-muted-foreground">{department.code}</span>
+                          <span className="text-sm break-words">{division.name}</span>
+                          {division.code && (
+                            <span className="text-xs text-muted-foreground break-words">{division.code}</span>
+                          )}
                         </button>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
@@ -797,17 +759,21 @@ const UserManagementPageContent = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setEditOpen(true);
-                        }}
-                        aria-label={`Edit user ${user.name}`}
-                      >
-                        Edit
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setEditOpen(true);
+                          }}
+                          aria-label={`Edit user ${user.name}`}
+                          title="Edit User"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );

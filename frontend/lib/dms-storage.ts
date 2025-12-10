@@ -97,6 +97,29 @@ export interface DocumentRecord {
   };
 }
 
+export interface DocumentCollection {
+  id: string;
+  name: string;
+  description?: string;
+  ownerId: string;
+  documentIds: string[];
+  documents?: DocumentRecord[];
+  documentCount?: number;
+  memberIds: string[];
+  members?: User[];
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateDocumentCollectionInput {
+  name: string;
+  description?: string;
+  documentIds?: string[];
+  memberIds?: string[];
+  isPublic?: boolean;
+}
+
 export interface DocumentWorkspace {
   id: string;
   name: string;
@@ -212,6 +235,25 @@ const mapDocument = (item: any): DocumentRecord => ({
   } : undefined,
 });
 
+const mapCollection = (item: any): DocumentCollection => ({
+  id: String(item.id),
+  name: item.name ?? 'Collection',
+  description: item.description ?? undefined,
+  ownerId: String(item.owner_id ?? (item.owner?.id ?? item.owner) ?? ''),
+  documentIds: (item.document_ids ?? (item.documents ? unwrapResults<any>(item.documents).map((d: any) => d.id ?? d) : [])).map(String),
+  documents: item.documents ? unwrapResults<any>(item.documents).map(mapDocument) : undefined,
+  documentCount: item.document_count ?? (item.documents ? unwrapResults<any>(item.documents).length : 0),
+  memberIds: Array.isArray(item.member_ids)
+    ? item.member_ids.map(String)
+    : Array.isArray(item.members)
+      ? item.members.map((member: any) => String(member.id ?? member))
+      : [],
+  members: item.members ? unwrapResults<any>(item.members) : undefined,
+  isPublic: item.is_public ?? false,
+  createdAt: item.created_at ?? '',
+  updatedAt: item.updated_at ?? '',
+});
+
 const mapWorkspace = (item: any): DocumentWorkspace => ({
   id: String(item.id),
   name: item.name ?? 'Workspace',
@@ -322,6 +364,117 @@ export const fetchWorkspaces = async (): Promise<DocumentWorkspace[]> => {
   const payload = await apiFetch<ApiPayload>('/dms/workspaces/');
   workspacesCache = unwrapResults<any>(payload).map(mapWorkspace);
   return workspacesCache;
+};
+
+// Document Collections API
+let collectionsCache: DocumentCollection[] = [];
+
+export const fetchCollections = async (): Promise<DocumentCollection[]> => {
+  if (!hasTokens()) {
+    collectionsCache = [];
+    return collectionsCache;
+  }
+
+  const payload = await apiFetch<ApiPayload>('/dms/collections/');
+  collectionsCache = unwrapResults<any>(payload).map(mapCollection);
+  return collectionsCache;
+};
+
+export const fetchCollectionById = async (id: string): Promise<DocumentCollection> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const data = await apiFetch<any>(`/dms/collections/${id}/`);
+  return mapCollection(data);
+};
+
+export const createCollection = async (input: CreateDocumentCollectionInput): Promise<DocumentCollection> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const payload: Record<string, unknown> = {
+    name: input.name,
+    description: input.description ?? '',
+    document_ids: input.documentIds ?? [],
+    member_ids: input.memberIds ?? [],
+    is_public: input.isPublic ?? false,
+  };
+
+  const data = await apiFetch<any>('/dms/collections/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  const collection = mapCollection(data);
+  collectionsCache = [...collectionsCache, collection];
+  return collection;
+};
+
+export const updateCollection = async (
+  id: string,
+  input: Partial<CreateDocumentCollectionInput>
+): Promise<DocumentCollection> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const payload: Record<string, unknown> = {};
+  if (input.name !== undefined) payload.name = input.name;
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.documentIds !== undefined) payload.document_ids = input.documentIds;
+  if (input.memberIds !== undefined) payload.member_ids = input.memberIds;
+  if (input.isPublic !== undefined) payload.is_public = input.isPublic;
+
+  const data = await apiFetch<any>(`/dms/collections/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  const collection = mapCollection(data);
+  collectionsCache = collectionsCache.map((c) => (c.id === id ? collection : c));
+  return collection;
+};
+
+export const deleteCollection = async (id: string): Promise<void> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  await apiFetch(`/dms/collections/${id}/`, {
+    method: 'DELETE',
+  });
+
+  collectionsCache = collectionsCache.filter((c) => c.id !== id);
+};
+
+export const addDocumentsToCollection = async (collectionId: string, documentIds: string[]): Promise<void> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  await apiFetch(`/dms/collections/${collectionId}/add-documents/`, {
+    method: 'POST',
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+
+  // Invalidate cache
+  collectionsCache = [];
+};
+
+export const removeDocumentsFromCollection = async (collectionId: string, documentIds: string[]): Promise<void> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  await apiFetch(`/dms/collections/${collectionId}/remove-documents/`, {
+    method: 'POST',
+    body: JSON.stringify({ document_ids: documentIds }),
+  });
+
+  // Invalidate cache
+  collectionsCache = [];
 };
 
 export interface CreateDocumentInput {
@@ -455,6 +608,33 @@ export const createDocumentVersion = async (
   }
 
   return fetchDocumentById(documentId);
+};
+
+export const replaceDocumentVersion = async (
+  versionId: string,
+  versionInput: CreateDocumentVersionInput,
+): Promise<DocumentRecord> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const versionPayload = buildVersionPayload('', versionInput);
+  // Remove document field for replacement
+  delete versionPayload.document;
+  
+  try {
+    await apiFetch(`/dms/versions/${versionId}/replace/`, {
+      method: 'POST',
+      body: JSON.stringify(versionPayload),
+    });
+  } catch (error) {
+    logError('Failed to replace document version', error);
+    throw new Error(`Failed to replace document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+
+  // Fetch the document to get updated version
+  const version = await apiFetch<any>(`/dms/versions/${versionId}/`);
+  return fetchDocumentById(version.document);
 };
 
 export const updateDocumentMetadata = async (
@@ -1022,6 +1202,39 @@ export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams
   } catch (error) {
     console.error('[DMS] Error in queryDocumentsExtended:', error);
     throw error;
+  }
+};
+
+export interface DocumentStats {
+  total: number;
+  draft: number;
+  published: number;
+  archived: number;
+}
+
+export const getDocumentStats = async (): Promise<DocumentStats> => {
+  if (!hasTokens()) {
+    return { total: 0, draft: 0, published: 0, archived: 0 };
+  }
+
+  try {
+    // Fetch all documents with minimal fields to get counts
+    const [allResponse, draftResponse, publishedResponse, archivedResponse] = await Promise.all([
+      apiFetch<any>('/dms/documents/?page_size=1'),
+      apiFetch<any>('/dms/documents/?status=draft&page_size=1'),
+      apiFetch<any>('/dms/documents/?status=published&page_size=1'),
+      apiFetch<any>('/dms/documents/?status=archived&page_size=1'),
+    ]);
+
+    return {
+      total: typeof allResponse?.count === 'number' ? allResponse.count : 0,
+      draft: typeof draftResponse?.count === 'number' ? draftResponse.count : 0,
+      published: typeof publishedResponse?.count === 'number' ? publishedResponse.count : 0,
+      archived: typeof archivedResponse?.count === 'number' ? archivedResponse.count : 0,
+    };
+  } catch (error) {
+    logError('Failed to fetch document stats', error);
+    return { total: 0, draft: 0, published: 0, archived: 0 };
   }
 };
 

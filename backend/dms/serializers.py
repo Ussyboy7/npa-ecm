@@ -10,6 +10,7 @@ from organization.models import Department, Division
 from .models import (
     Document,
     DocumentAccessLog,
+    DocumentCollection,
     DocumentComment,
     DocumentDiscussionMessage,
     DocumentEditorSession,
@@ -484,3 +485,50 @@ class FormDocumentSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "document", "template", "signature_workflow", "correspondence", "created_at", "updated_at"]
+
+
+class DocumentCollectionSerializer(serializers.ModelSerializer):
+    owner = UserSerializer(read_only=True)
+    owner_id = serializers.PrimaryKeyRelatedField(
+        source="owner",
+        queryset=DocumentCollection._meta.get_field("owner").remote_field.model.objects.all(),
+        write_only=True,
+        required=False,
+    )
+    document_ids = serializers.PrimaryKeyRelatedField(
+        source="documents",
+        many=True,
+        queryset=Document.objects.all(),
+        required=False,
+    )
+    member_ids = serializers.PrimaryKeyRelatedField(
+        source="members",
+        many=True,
+        queryset=DocumentCollection._meta.get_field("members").remote_field.model.objects.all(),
+        required=False,
+    )
+    documents = DocumentSerializer(many=True, read_only=True)
+    document_count = serializers.SerializerMethodField()
+
+    def get_document_count(self, obj):
+        return obj.documents.count()
+
+    class Meta:
+        model = DocumentCollection
+        fields = [
+            "id",
+            "name",
+            "description",
+            "owner",
+            "owner_id",
+            "document_ids",
+            "documents",
+            "document_count",
+            "member_ids",
+            "members",
+            "is_public",
+            "is_deleted",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "owner", "documents", "members", "created_at", "updated_at"]
