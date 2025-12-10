@@ -188,6 +188,9 @@ STATICFILES_DIRS: list[str] = []
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# Base URL for serving media files (used when request context is not available)
+# Should be set to the nginx/public URL in staging/production
+MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "")
 
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024

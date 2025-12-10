@@ -378,15 +378,15 @@ const CorrespondenceDetailContent = () => {
       // Create abort controller for cleanup
       abortController = new AbortController();
       
-      // Set up timeout (30 seconds)
+      // Set up timeout (60 seconds for large files)
       timeoutId = setTimeout(() => {
         if (abortController) {
           abortController.abort();
-          logError('File load timeout after 30 seconds:', { fileUrl, fileName });
+          logError('File load timeout after 60 seconds:', { fileUrl, fileName });
           setDocumentPreviewError('File load timeout. The file may be too large or the server is slow. Please try downloading the file.');
           setDocumentPreviewLoading(false);
         }
-      }, 30000);
+      }, 60000);
 
       fetch(fileUrl, {
         credentials: 'include',

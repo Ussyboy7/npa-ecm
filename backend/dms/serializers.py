@@ -64,7 +64,13 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
                     media_path = f"media/{media_path}"
                 file_url = f"{settings.MEDIA_URL.rstrip('/')}/{media_path}"
             
-            if request:
+            # Priority 1: Use MEDIA_BASE_URL if set (for staging/production)
+            if hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
+                # Ensure file_url starts with /media/ (not /api/media/)
+                if file_url.startswith('/api/media/'):
+                    file_url = file_url.replace('/api/media/', '/media/')
+                data['file_url'] = f"{settings.MEDIA_BASE_URL.rstrip('/')}{file_url}"
+            elif request:
                 try:
                     # Build absolute URL manually to avoid request path prefix issues
                     # request.build_absolute_uri might include /api/ prefix if request came through API
@@ -82,9 +88,6 @@ class DocumentVersionSerializer(serializers.ModelSerializer):
                     if file_url.startswith('/api/media/'):
                         file_url = file_url.replace('/api/media/', '/media/')
                     data['file_url'] = f"{scheme}://{host}{file_url}"
-            elif hasattr(settings, 'MEDIA_BASE_URL') and settings.MEDIA_BASE_URL:
-                # Use MEDIA_BASE_URL from settings if available
-                data['file_url'] = f"{settings.MEDIA_BASE_URL.rstrip('/')}{file_url}"
         return data
 
     class Meta:

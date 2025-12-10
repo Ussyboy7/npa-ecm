@@ -18,5 +18,7 @@ COPY . .
 
 RUN python manage.py collectstatic --noinput
 
-CMD ["gunicorn", "ecm_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
+# Use Daphne for ASGI support (WebSockets + HTTP)
+# Daphne can handle both HTTP and WebSocket connections
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "ecm_backend.asgi:application"]
 
