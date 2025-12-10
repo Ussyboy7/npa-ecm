@@ -472,11 +472,18 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         if not document:
             return None
         version = None
+        # Check prefetched cache first (avoids N+1 query)
         prefetched = getattr(document, "_prefetched_objects_cache", {}).get("versions")
-        if prefetched:
+        if prefetched and len(prefetched) > 0:
             version = prefetched[0]
+        # Fallback: check if versions were prefetched via completion_package__versions
         if version is None:
-            version = document.versions.order_by("-version_number").first()
+            prefetched_versions = getattr(obj, "_prefetched_objects_cache", {}).get("completion_package__versions")
+            if prefetched_versions and len(prefetched_versions) > 0:
+                version = prefetched_versions[0]
+        # Last resort: query database (should be rare if prefetch is working)
+        if version is None:
+            version = document.versions.only("id", "file_url", "uploaded_at").order_by("-version_number").first()
         file_url = version.file_url if version else ""
         return {
             "document_id": str(document.id),

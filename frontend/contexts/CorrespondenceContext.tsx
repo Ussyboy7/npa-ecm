@@ -369,10 +369,13 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     if (!hydrated || !currentUser || !hasTokens()) return;
 
     try {
+      // Use pagination to avoid loading all correspondence at once
+      // Load only first page (25 items) for initial sync
+      // Individual pages will load more as needed
       const [correspondenceRaw, minutesRaw, delegationsRaw] = await Promise.all([
-        apiFetch('/correspondence/items/'),
-        apiFetch('/correspondence/minutes/'),
-        apiFetch('/correspondence/delegations/'),
+        apiFetch('/correspondence/items/?page_size=25&page=1'),
+        apiFetch('/correspondence/minutes/?page_size=100'),
+        apiFetch('/correspondence/delegations/?page_size=100'),
       ]);
 
       const correspondenceList = unwrapResults<any>(correspondenceRaw).map(mapApiCorrespondence);

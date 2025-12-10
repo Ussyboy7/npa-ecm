@@ -642,13 +642,21 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         """
         Get counts for sidebar badges.
         Returns counts for office inbox, my inbox, and outbox.
+        Results are cached for 60 seconds to improve performance.
         Optimized for performance using aggregation queries.
         """
+        from django.core.cache import cache
         from django.db.models import Count, Q, Exists, OuterRef
         from correspondence.models import Minute, CorrespondenceDistribution
         from organization.models import OfficeMembership, Office
         
         user = request.user
+        
+        # Cache key based on user ID
+        cache_key = f"sidebar_counts_{user.id}"
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            return Response(cached_result)
         
         # Get user's office IDs (cached)
         office_ids = self._get_user_office_ids(user)
@@ -749,12 +757,19 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             status=CorrespondenceDelegation.Status.ACTIVE
         ).count()
         
-        return Response({
+        result = {
             "officeInbox": office_inbox_count,
             "myInbox": my_inbox_count,
             "outbox": outbox_count,
             "delegated": delegated_count,
-        })
+        }
+        
+        # Cache result for 60 seconds
+        from django.core.cache import cache
+        cache_key = f"sidebar_counts_{user.id}"
+        cache.set(cache_key, result, 60)
+        
+        return Response(result)
 
     @action(detail=False, methods=["get"], url_path="office-inbox")
     def office_inbox(self, request):

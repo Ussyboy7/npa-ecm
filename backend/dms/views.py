@@ -140,20 +140,38 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 Q(tags__icontains=search_query)
             )
             
-            # Version content search - use PostgreSQL full-text search if available
-            # Fallback to icontains for compatibility, but this should be optimized with GIN indexes
-            # TODO: Migrate to PostgreSQL full-text search with SearchVector for better performance
+            # Use PostgreSQL full-text search for base fields (much faster with GIN indexes)
+            from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+            
+            search_query_obj = SearchQuery(search_query, config="english")
+            
+            # Use search_vector field if available (fastest - uses GIN index)
+            if hasattr(queryset.model, '_meta') and 'search_vector' in [f.name for f in queryset.model._meta.get_fields()]:
+                queryset = queryset.filter(search_vector=search_query_obj)
+            else:
+                # Build SearchVector on the fly (still faster than icontains)
+                search_vector = (
+                    SearchVector("title", weight="A", config="english") +
+                    SearchVector("reference_number", weight="A", config="english") +
+                    SearchVector("description", weight="B", config="english") +
+                    SearchVector("tags", weight="C", config="english")
+                )
+                queryset = queryset.annotate(
+                    search=search_vector,
+                    rank=SearchRank(search_vector, search_query_obj)
+                ).filter(search=search_query_obj).order_by("-rank", "-updated_at")
+            
+            # Also search in version content (use icontains as fallback - slower but necessary)
+            # TODO: Add search_vector to DocumentVersion for better performance
             version_search = (
                 Q(versions__content_text__icontains=search_query) |
                 Q(versions__ocr_text__icontains=search_query)
             )
             
-            # Combine base search and version search with OR
-            combined_search = base_search | version_search
-            
-            # Apply the combined search filter
-            # Use distinct() to avoid duplicates from version joins
-            queryset = queryset.filter(combined_search).distinct()
+            # Combine: documents matching base search OR version content
+            queryset = queryset.filter(
+                Q(pk__in=queryset.values_list('pk', flat=True)) | version_search
+            ).distinct()
             
             # Still need to apply other filters (status, type, etc.) from DjangoFilterBackend
             # Temporarily remove SearchFilter to avoid double-filtering
