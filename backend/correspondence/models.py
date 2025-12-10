@@ -145,6 +145,15 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "-created_at"]),
+            models.Index(fields=["priority", "-created_at"]),
+            models.Index(fields=["current_office", "status", "-created_at"]),
+            models.Index(fields=["created_by", "-created_at"]),
+            models.Index(fields=["received_date"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["is_deleted", "-created_at"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.reference_number} - {self.subject}"

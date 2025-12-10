@@ -140,7 +140,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 Q(tags__icontains=search_query)
             )
             
-            # Version content search
+            # Version content search - use PostgreSQL full-text search if available
+            # Fallback to icontains for compatibility, but this should be optimized with GIN indexes
+            # TODO: Migrate to PostgreSQL full-text search with SearchVector for better performance
             version_search = (
                 Q(versions__content_text__icontains=search_query) |
                 Q(versions__ocr_text__icontains=search_query)
@@ -150,6 +152,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
             combined_search = base_search | version_search
             
             # Apply the combined search filter
+            # Use distinct() to avoid duplicates from version joins
             queryset = queryset.filter(combined_search).distinct()
             
             # Still need to apply other filters (status, type, etc.) from DjangoFilterBackend

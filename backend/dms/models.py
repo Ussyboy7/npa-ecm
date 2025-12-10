@@ -89,6 +89,11 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
         ordering = ["-updated_at"]
         indexes = [
             models.Index(fields=["-updated_at"]),
+            models.Index(fields=["status", "-updated_at"]),
+            models.Index(fields=["document_type", "-updated_at"]),
+            models.Index(fields=["author", "-updated_at"]),
+            models.Index(fields=["division", "status"]),
+            models.Index(fields=["created_at"]),
             # GIN index for full-text search (created via migration)
         ]
 
@@ -122,6 +127,11 @@ class DocumentVersion(UUIDModel, TimeStampedModel):
     class Meta:
         ordering = ["-uploaded_at"]
         unique_together = ("document", "version_number")
+        indexes = [
+            models.Index(fields=["document", "-uploaded_at"]),
+            # Note: Full-text search indexes on content_text and ocr_text should be added via migration
+            # using PostgreSQL GIN indexes for better performance
+        ]
 
     def __str__(self) -> str:
         return f"{self.document.title} v{self.version_number}"

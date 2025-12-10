@@ -10,7 +10,8 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from datetime import timedelta, datetime
 
-from django.db.models import Prefetch, Q
+from django.db.models import Prefetch, Q, Max
+from django.db import models
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from common.upload_validators import validate_file_upload
@@ -36,6 +37,7 @@ from .models import (
     CorrespondenceDistribution,
     CorrespondenceDocumentLink,
     Delegation,
+    Minute,
     Minute,
     ParallelRoutingGroup,
 )
@@ -74,20 +76,38 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         "completion_package",
     ).prefetch_related(
         "linked_documents",
-        "attachments",
+        # Limit attachments to avoid loading too much data
         Prefetch(
-        "distribution",
+            "attachments",
+            queryset=CorrespondenceAttachment.objects.only(
+                "id", "file_name", "file_type", "file_size", "file_url", "created_at"
+            ).order_by("-created_at")[:10],  # Limit to 10 most recent
+        ),
+        Prefetch(
+            "distribution",
             queryset=CorrespondenceDistribution.objects.select_related(
                 "directorate",
                 "division",
                 "department",
                 "added_by",
+            ).only(
+                "id", "recipient_type", "directorate", "division", "department", 
+                "added_by", "purpose", "created_at"
             ),
         ),
-        "minutes",
+        # Limit minutes to avoid loading too much data
+        Prefetch(
+            "minutes",
+            queryset=Minute.objects.select_related("user", "to_office").only(
+                "id", "correspondence", "user", "action_type", "content", 
+                "timestamp", "to_office", "created_at"
+            ).order_by("-timestamp")[:20],  # Limit to 20 most recent
+        ),
         Prefetch(
             "completion_package__versions",
-            queryset=DocumentVersion.objects.order_by("-version_number"),
+            queryset=DocumentVersion.objects.only(
+                "id", "document", "version_number", "file_url", "uploaded_at"
+            ).order_by("-version_number")[:1],  # Only latest version
         ),
     )
     serializer_class = CorrespondenceSerializer
@@ -189,8 +209,13 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         priority = validated_data.get("priority") or Correspondence.Priority.MEDIUM
 
         if not validated_data.get("reference_number"):
-            count = Correspondence.all_objects.count() + 1
-            reference_number = f"NPA/REG/{request.user.username.upper()}/{count:04d}"
+            # Use date-based counting instead of full table scan
+            # Count only today's records - much faster with index on created_at
+            today = timezone.now().date()
+            count = Correspondence.all_objects.filter(
+                created_at__date=today
+            ).count() + 1
+            reference_number = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{count:04d}"
         else:
             reference_number = validated_data["reference_number"]
 
