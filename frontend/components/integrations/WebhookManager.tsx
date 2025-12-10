@@ -47,10 +47,32 @@ export const WebhookManager = () => {
     try {
       setLoading(true);
       const data = await getWebhooks();
-      setWebhooks(data);
+      // Ensure data is an array - handle paginated responses or errors
+      if (Array.isArray(data)) {
+        setWebhooks(data);
+      } else if (data && typeof data === 'object') {
+        // Handle paginated response with 'results' key
+        if ('results' in data && Array.isArray((data as { results: unknown }).results)) {
+          setWebhooks((data as { results: WebhookType[] }).results);
+        } 
+        // Handle wrapped response with 'data' key
+        else if ('data' in data && Array.isArray((data as { data: unknown }).data)) {
+          setWebhooks((data as { data: WebhookType[] }).data);
+        } 
+        // Fallback to empty array if data format is unexpected
+        else {
+          logError('Unexpected webhooks data format', data);
+          setWebhooks([]);
+        }
+      } else {
+        // Fallback to empty array if data is not an array or object
+        logError('Unexpected webhooks data format', data);
+        setWebhooks([]);
+      }
     } catch (error) {
       logError('Failed to load webhooks', error);
       toast.error('Failed to load webhooks');
+      setWebhooks([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
