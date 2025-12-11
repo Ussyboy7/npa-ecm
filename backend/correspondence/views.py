@@ -76,12 +76,12 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         "completion_package",
     ).prefetch_related(
         "linked_documents",
-        # Limit attachments to avoid loading too much data
+        # Optimize attachments - use only() to limit fields loaded (no slicing in Prefetch)
         Prefetch(
             "attachments",
             queryset=CorrespondenceAttachment.objects.only(
-                "id", "file_name", "file_type", "file_size", "file_url", "created_at"
-            ).order_by("-created_at")[:10],  # Limit to 10 most recent
+                "id", "file_name", "file_type", "file_size", "file_url", "created_at", "correspondence_id"
+            ).order_by("-created_at"),
         ),
         Prefetch(
             "distribution",
@@ -92,22 +92,23 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 "added_by",
             ).only(
                 "id", "recipient_type", "directorate", "division", "department", 
-                "added_by", "purpose", "created_at"
+                "added_by", "purpose", "created_at", "correspondence_id"
             ),
         ),
-        # Limit minutes to avoid loading too much data
+        # Optimize minutes - use only() to limit fields loaded (no slicing in Prefetch)
         Prefetch(
             "minutes",
-            queryset=Minute.objects.select_related("user", "to_office").only(
-                "id", "correspondence", "user", "action_type", "content", 
-                "timestamp", "to_office", "created_at"
-            ).order_by("-timestamp")[:20],  # Limit to 20 most recent
+            queryset=Minute.objects.select_related("user", "to_office", "from_office").only(
+                "id", "correspondence", "user", "action_type", "content", "minute_text",
+                "timestamp", "to_office", "from_office", "created_at", "correspondence_id",
+                "to_user", "performed_by", "grade_level", "direction", "step_number"
+            ).order_by("-timestamp"),
         ),
         Prefetch(
             "completion_package__versions",
             queryset=DocumentVersion.objects.only(
-                "id", "document", "version_number", "file_url", "uploaded_at"
-            ).order_by("-version_number")[:1],  # Only latest version
+                "id", "document", "version_number", "file_url", "uploaded_at", "document_id"
+            ).order_by("-version_number"),
         ),
     )
     serializer_class = CorrespondenceSerializer
