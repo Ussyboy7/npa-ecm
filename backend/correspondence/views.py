@@ -76,12 +76,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         "completion_package",
     ).prefetch_related(
         "linked_documents",
-        # Optimize attachments - use only() to limit fields loaded (no slicing in Prefetch)
+        # Optimize attachments - use select_related and order_by
         Prefetch(
             "attachments",
-            queryset=CorrespondenceAttachment.objects.only(
-                "id", "file_name", "file_type", "file_size", "file_url", "created_at", "correspondence_id"
-            ).order_by("-created_at"),
+            queryset=CorrespondenceAttachment.objects.order_by("-created_at"),
         ),
         Prefetch(
             "distribution",
@@ -90,25 +88,18 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 "division",
                 "department",
                 "added_by",
-            ).only(
-                "id", "recipient_type", "directorate", "division", "department", 
-                "added_by", "purpose", "created_at", "correspondence_id"
             ),
         ),
-        # Optimize minutes - use only() to limit fields loaded (no slicing in Prefetch)
+        # Optimize minutes - use select_related for foreign keys
         Prefetch(
             "minutes",
-            queryset=Minute.objects.select_related("user", "to_office", "from_office").only(
-                "id", "correspondence", "user", "action_type", "content", "minute_text",
-                "timestamp", "to_office", "from_office", "created_at", "correspondence_id",
-                "to_user", "performed_by", "grade_level", "direction", "step_number"
+            queryset=Minute.objects.select_related(
+                "user", "to_office", "from_office", "to_user", "performed_by"
             ).order_by("-timestamp"),
         ),
         Prefetch(
             "completion_package__versions",
-            queryset=DocumentVersion.objects.only(
-                "id", "document", "version_number", "file_url", "uploaded_at", "document_id"
-            ).order_by("-version_number"),
+            queryset=DocumentVersion.objects.order_by("-version_number"),
         ),
     )
     serializer_class = CorrespondenceSerializer
