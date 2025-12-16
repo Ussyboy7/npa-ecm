@@ -35,7 +35,7 @@ import {
 } from '@/lib/dms-storage';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { formatFileSize } from '@/lib/file-utils';
-import { ArrowLeft, FileText, Download, Layers, Filter, User as UserIcon, Tag, Pencil, FilePlus, Clock, Eye, MessageSquare, Users, Plus, X, CheckCircle2, Circle, Activity, Shield, Loader2, FolderKanban, Share2 } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Layers, Filter, User as UserIcon, Tag, Pencil, FilePlus, Clock, Eye, MessageSquare, Users, Plus, X, CheckCircle2, Circle, Activity, Shield, Loader2, FolderKanban, Share2, AlertCircle } from 'lucide-react';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -56,7 +56,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiFetch } from '@/lib/api-client';
 import { Correspondence, Minute } from '@/lib/npa-structure';
 import { Link, AlertTriangle, Download as DownloadIcon, Filter as FilterIcon, Calendar as CalendarIcon, Calendar, ExternalLink, Scan } from 'lucide-react';
-import { OCRProcessor } from '@/components/capture/OCRProcessor';
+import { processOCR, getCaptureJob, getOCRResult, cancelCaptureJob, type CaptureJob } from '@/lib/capture-storage';
 
 const statusLabel = (status: DocumentRecord['status']) => {
   switch (status) {
@@ -123,6 +123,11 @@ const DocumentDetailPage = () => {
   const [accessLogFilter, setAccessLogFilter] = useState<'all' | 'view' | 'download' | 'attempted-download'>('all');
   const [accessLogDateFilter, setAccessLogDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [formDocumentId, setFormDocumentId] = useState<string | null>(null);
+  const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  // OCR state per version: versionId -> { isProcessing, currentJob, error }
+  const [versionOCRState, setVersionOCRState] = useState<Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>>({});
 
   const { currentUser } = useCurrentUser();
   const { users: organizationUsers, divisions, departments } = useOrganization();
@@ -181,8 +186,11 @@ const DocumentDetailPage = () => {
   }, [document?.id]);
 
   // Load document function - extracted for reuse
-  const loadDocument = useCallback(async () => {
-    if (!params?.id) return;
+  const loadDocument = useCallback(async (): Promise<DocumentRecord | null> => {
+    if (!params?.id) return null;
+    
+    setLoading(true);
+    setDocumentError(null);
     
     try {
       const doc = await fetchDocumentById(params.id);
@@ -207,6 +215,7 @@ const DocumentDetailPage = () => {
       });
       setHasUnsavedChanges(false);
       setMetadataErrors({});
+      setDocumentError(null);
       
       // If this is a form document, fetch the form document ID
       if (doc.documentType === 'form') {
@@ -236,8 +245,25 @@ const DocumentDetailPage = () => {
           logError('Failed to load form document', error);
         }
       }
-    } catch (error) {
-      logError('Failed to load document', error);
+      return doc;
+    } catch (error: any) {
+      // Check if it's a 404 (expected for missing documents) - don't log as error
+      const isNotFound = error?.status === 404 || error?.isNotFound || error?.message?.includes('No Document matches') || error?.message?.includes('not found');
+      
+      if (!isNotFound) {
+        // Only log unexpected errors
+        logError('Failed to load document', error);
+      } else {
+        // For expected 404s, just log as info (suppressed in production)
+        logInfo('Document not found:', params.id);
+      }
+      
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Document not found';
+      setDocumentError(errorMessage);
+      setDocument(null);
+      return null;
+    } finally {
+      setLoading(false);
     }
   }, [params?.id]);
 
@@ -250,11 +276,13 @@ const DocumentDetailPage = () => {
     const load = async () => {
       try {
         // Load document first
-        await loadDocument();
-        
-        // Get the document from state (it was set by loadDocument)
-        const doc = await fetchDocumentById(params.id);
+        const doc = await loadDocument();
         if (ignore) return;
+        
+        if (!doc) {
+          // Document not found or failed to load - skip loading related data
+          return;
+        }
 
         // Load collaboration data
         if (currentUser) {
@@ -599,6 +627,7 @@ const DocumentDetailPage = () => {
       setHasUnsavedChanges(false);
       setMetadataErrors({});
       setShowSaveConfirmation(false);
+      setMetadataDialogOpen(false);
       
       // Show notification if status changed
       if (oldStatus !== updated.status) {
@@ -643,6 +672,106 @@ const DocumentDetailPage = () => {
   const handleQuickVersionUpload = () => {
     if (!document || !uploadUser) return;
     setUploadDialogOpen(true);
+  };
+
+  // OCR handlers
+  const handleVersionOCR = async (versionId: string) => {
+    if (!document) return;
+
+    // Initialize OCR state for this version
+    setVersionOCRState(prev => ({
+      ...prev,
+      [versionId]: { isProcessing: true, currentJob: null, error: null }
+    }));
+
+    try {
+      const job = await processOCR(document.id, {
+        language: 'eng',
+        extract_metadata: true,
+      });
+
+      setVersionOCRState(prev => ({
+        ...prev,
+        [versionId]: { isProcessing: true, currentJob: job, error: null }
+      }));
+
+      // If job is already completed, handle immediately
+      if (job.status === 'completed') {
+        setVersionOCRState(prev => ({
+          ...prev,
+          [versionId]: { isProcessing: false, currentJob: job, error: null }
+        }));
+        toast.success('OCR processing completed');
+        await loadDocument();
+      } else {
+        toast.info('OCR processing started');
+        // Start polling for status updates
+        pollOCRJobStatus(versionId, job.id);
+      }
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Failed to start OCR processing';
+      setVersionOCRState(prev => ({
+        ...prev,
+        [versionId]: { isProcessing: false, currentJob: null, error: errorMsg }
+      }));
+      toast.error(errorMsg);
+      logError('Failed to process OCR', err);
+    }
+  };
+
+  const pollOCRJobStatus = async (versionId: string, jobId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const updatedJob = await getCaptureJob(jobId);
+        
+        setVersionOCRState(prev => ({
+          ...prev,
+          [versionId]: { 
+            isProcessing: updatedJob.status !== 'completed' && updatedJob.status !== 'failed' && updatedJob.status !== 'cancelled',
+            currentJob: updatedJob,
+            error: updatedJob.status === 'failed' ? (updatedJob.error_message || 'OCR processing failed') : null
+          }
+        }));
+
+        if (updatedJob.status === 'completed') {
+          clearInterval(pollInterval);
+          toast.success('OCR processing completed');
+          await loadDocument();
+        } else if (updatedJob.status === 'failed' || updatedJob.status === 'cancelled') {
+          clearInterval(pollInterval);
+          if (updatedJob.status === 'failed') {
+            toast.error('OCR processing failed');
+          }
+        }
+      } catch (err) {
+        logError('Failed to poll OCR job status', err);
+        clearInterval(pollInterval);
+        setVersionOCRState(prev => ({
+          ...prev,
+          [versionId]: { isProcessing: false, currentJob: null, error: 'Failed to check OCR status' }
+        }));
+      }
+    }, 2000);
+
+    // Cleanup after 5 minutes
+    setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+  };
+
+  const handleCancelOCR = async (versionId: string) => {
+    const state = versionOCRState[versionId];
+    if (!state?.currentJob) return;
+
+    try {
+      await cancelCaptureJob(state.currentJob.id);
+      setVersionOCRState(prev => ({
+        ...prev,
+        [versionId]: { isProcessing: false, currentJob: null, error: null }
+      }));
+      toast.info('OCR processing cancelled');
+    } catch (err) {
+      logError('Failed to cancel OCR job', err);
+      toast.error('Failed to cancel OCR processing');
+    }
   };
 
   // Workspace management
@@ -697,7 +826,7 @@ const DocumentDetailPage = () => {
     return user.name.substring(0, 2).toUpperCase();
   };
 
-  if (!document) {
+  if (loading) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6">
@@ -705,6 +834,30 @@ const DocumentDetailPage = () => {
             <CardContent className="py-12 text-center text-muted-foreground">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
               <p>Loading document...</p>
+            </CardContent>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (documentError || !document) {
+    return (
+      <DashboardLayout>
+        <div className="container mx-auto p-6">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">Document Not Found</h2>
+              <p className="text-muted-foreground mb-6">
+                {documentError || 'The document you are looking for does not exist or you do not have permission to view it.'}
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => router.push('/dms')} variant="default">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Documents
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -799,46 +952,59 @@ const DocumentDetailPage = () => {
             </div>
           </div>
 
-          <div className="container mx-auto p-6 space-y-6">
-
-          {/* Main Content Grid */}
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Left Column - Main Details */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Document Metadata */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <FileText className="h-4 w-4 text-primary" />
-                        Document Details
-                      </CardTitle>
-                      <CardDescription>Edit metadata and classification</CardDescription>
-                    </div>
-                    {hasUnsavedChanges && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={handleMetadataSave}
-                        disabled={savingMetadata}
-                      >
-                        {savingMetadata ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="h-4 w-4 mr-2" />
-                            Save Changes
-                          </>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
+          <div className="container mx-auto px-6 py-6">
+            {/* Main Content Grid */}
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* Left Column - Main Details */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Document Metadata Section */}
+                <Card className="border-border/50">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base font-semibold flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-primary" />
+                          Document Information
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                          {document?.referenceNumber && `Ref: ${document.referenceNumber}`}
+                        </CardDescription>
+                      </div>
+                      <Dialog open={metadataDialogOpen} onOpenChange={(open) => {
+                        setMetadataDialogOpen(open);
+                        // Reset draft to current document state when opening
+                        if (open && document) {
+                          setMetadataDraft({
+                            title: document.title,
+                            description: document.description ?? '',
+                            referenceNumber: document.referenceNumber ?? '',
+                            divisionId: document.divisionId,
+                            departmentId: document.departmentId,
+                            tags: document.tags.join(', '),
+                            sensitivity: document.sensitivity,
+                            status: document.status,
+                          });
+                          setHasUnsavedChanges(false);
+                          setMetadataErrors({});
+                        }
+                      }}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </Button>
+                        </DialogTrigger>
+                      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-primary" />
+                            Edit Document Metadata
+                          </DialogTitle>
+                          <DialogDescription>
+                            Update document details, classification, and metadata
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-6 py-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="doc-title">
@@ -1040,139 +1206,222 @@ const DocumentDetailPage = () => {
                 </p>
               </div>
               
-              <div className="flex items-center justify-between pt-2 border-t">
-                {hasUnsavedChanges && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <AlertTriangle className="h-4 w-4 text-warning" />
-                    <span>You have unsaved changes</span>
+                          <div className="flex items-center justify-between pt-2 border-t">
+                            {hasUnsavedChanges && (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <AlertTriangle className="h-4 w-4 text-warning" />
+                                <span>You have unsaved changes</span>
+                              </div>
+                            )}
+                            <div className="flex gap-2 ml-auto">
+                              {hasUnsavedChanges && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    if (document) {
+                                      setMetadataDraft({
+                                        title: document.title,
+                                        description: document.description ?? '',
+                                        referenceNumber: document.referenceNumber ?? '',
+                                        divisionId: document.divisionId,
+                                        departmentId: document.departmentId,
+                                        tags: document.tags.join(', '),
+                                        sensitivity: document.sensitivity,
+                                        status: document.status,
+                                      });
+                                      setHasUnsavedChanges(false);
+                                      setMetadataErrors({});
+                                      toast.info('Changes discarded');
+                                    }
+                                  }}
+                                  aria-label="Discard changes"
+                                >
+                                  Discard
+                                </Button>
+                              )}
+                              <Button 
+                                onClick={async () => {
+                                  await handleMetadataSave();
+                                }}
+                                disabled={!hasUnsavedChanges || savingMetadata}
+                                aria-label="Save document changes"
+                              >
+                                {savingMetadata ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Saving...
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                                    Save Changes
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
-                )}
-                <div className="flex gap-2 ml-auto">
-                  {hasUnsavedChanges && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (document) {
-                          setMetadataDraft({
-                            title: document.title,
-                            description: document.description ?? '',
-                            referenceNumber: document.referenceNumber ?? '',
-                            divisionId: document.divisionId,
-                            departmentId: document.departmentId,
-                            tags: document.tags.join(', '),
-                            sensitivity: document.sensitivity,
-                            status: document.status,
-                          });
-                          setHasUnsavedChanges(false);
-                          setMetadataErrors({});
-                          toast.info('Changes discarded');
-                        }
-                      }}
-                      aria-label="Discard changes"
-                    >
-                      Discard
-                    </Button>
-                  )}
-                  <Button 
-                    onClick={handleMetadataSave}
-                    disabled={!hasUnsavedChanges}
-                    aria-label="Save document changes"
-                  >
-                  Save Changes
-                </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+                  </CardHeader>
+                  
+                  <CardContent>
+                    <div className="grid gap-6 md:grid-cols-2">
+                      <div className="space-y-4">
+                        <div>
+                          <Label className="text-xs font-medium text-muted-foreground mb-2 block">Status</Label>
+                          <Badge variant={statusVariant(document?.status || 'draft')}>
+                            {statusLabel(document?.status || 'draft')}
+                          </Badge>
+                        </div>
+                        <div>
+                          <Label className="text-xs font-medium text-muted-foreground mb-2 block">Sensitivity</Label>
+                          <Badge 
+                            variant={document?.sensitivity === 'restricted' ? 'destructive' : 'outline'} 
+                            className="capitalize"
+                          >
+                            {document?.sensitivity || 'internal'}
+                          </Badge>
+                        </div>
+                        {document?.divisionId && (
+                          <div>
+                            <Label className="text-xs font-medium text-muted-foreground mb-2 block">Division</Label>
+                            <p className="text-sm">{divisionLookup.get(document.divisionId) || 'Unknown'}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-4">
+                        {document?.departmentId && (
+                          <div>
+                            <Label className="text-xs font-medium text-muted-foreground mb-2 block">Department</Label>
+                            <p className="text-sm">{departmentLookup.get(document.departmentId) || 'Unknown'}</p>
+                          </div>
+                        )}
+                        {document?.tags && document.tags.length > 0 && (
+                          <div>
+                            <Label className="text-xs font-medium text-muted-foreground mb-2 block">Tags</Label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {document.tags.map((tag) => (
+                                <Badge key={tag} variant="secondary" className="text-xs">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {document?.description && (
+                      <div className="mt-6 pt-6 border-t">
+                        <Label className="text-xs font-medium text-muted-foreground mb-2 block">Description</Label>
+                        <p className="text-sm leading-relaxed text-muted-foreground">{document.description}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Shield className="h-4 w-4 text-primary" />
-                      Access & Permissions
-                    </CardTitle>
-                    <CardDescription>Track who currently has visibility into this record.</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)}>
-                    Manage Access
-                  </Button>
-                </CardHeader>
-            <CardContent className="space-y-3">
-              {permissionSummaries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No explicit share rules exist yet. Use the Share button to grant targeted access.
-                </p>
-              ) : (
-                permissionSummaries.map((entry) => (
-                  <div key={entry.key} className="rounded-lg border border-border/70 p-4 space-y-3">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                {/* Access & Permissions Section */}
+                <Card className="border-border/50">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium capitalize">{entry.access} access</p>
-                        <p className="text-xs text-muted-foreground">
-                          {entry.createdAt ? `Updated ${formatDateTime(entry.createdAt)}` : 'Inherited rule'}
+                        <CardTitle className="text-base font-semibold flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-primary" />
+                          Access & Permissions
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                          Track who currently has visibility into this record
+                        </CardDescription>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)}>
+                        Manage
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {permissionSummaries.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">
+                          No explicit share rules exist yet. Use the Share button to grant targeted access.
                         </p>
-                      </div>
-                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span>{entry.userNames.length} users</span>
-                        <span>• {entry.divisionNames.length} divisions</span>
-                        <span>• {entry.departmentNames.length} departments</span>
-                      </div>
+                      ) : (
+                        permissionSummaries.map((entry) => (
+                          <div key={entry.key} className="rounded-lg border border-border/50 p-4 space-y-3 bg-muted/30">
+                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-sm font-medium capitalize">{entry.access} access</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {entry.createdAt ? `Updated ${formatDateTime(entry.createdAt)}` : 'Inherited rule'}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                <span>{entry.userNames.length} users</span>
+                                <span>• {entry.divisionNames.length} divisions</span>
+                                <span>• {entry.departmentNames.length} departments</span>
+                              </div>
+                            </div>
+                            <div className="grid gap-3 text-xs text-muted-foreground md:grid-cols-2 pt-2 border-t border-border/50">
+                              <div>
+                                <p className="font-medium text-foreground text-xs mb-1">Users</p>
+                                <p>{entry.userNames.length ? entry.userNames.join(', ') : '—'}</p>
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground text-xs mb-1">Divisions</p>
+                                <p>{entry.divisionNames.length ? entry.divisionNames.join(', ') : '—'}</p>
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground text-xs mb-1">Departments</p>
+                                <p>{entry.departmentNames.length ? entry.departmentNames.join(', ') : '—'}</p>
+                              </div>
+                              <div>
+                                <p className="font-medium text-foreground text-xs mb-1">Grade Levels</p>
+                                <p>{entry.gradeLevels.length ? entry.gradeLevels.join(', ') : '—'}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
-                    <div className="grid gap-3 text-xs text-muted-foreground md:grid-cols-2">
-                      <div>
-                        <p className="font-medium text-foreground text-xs mb-1">Users</p>
-                        <p>{entry.userNames.length ? entry.userNames.join(', ') : '—'}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground text-xs mb-1">Divisions</p>
-                        <p>{entry.divisionNames.length ? entry.divisionNames.join(', ') : '—'}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground text-xs mb-1">Departments</p>
-                        <p>{entry.departmentNames.length ? entry.departmentNames.join(', ') : '—'}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground text-xs mb-1">Grade Levels</p>
-                        <p>{entry.gradeLevels.length ? entry.gradeLevels.join(', ') : '—'}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              {/* Versions */}
-              <Card>
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Layers className="h-4 w-4 text-primary" />
-                      Versions
-                    </CardTitle>
-                    <CardDescription>All uploaded versions of this document.</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={handleQuickVersionUpload} disabled={!uploadUser}>
-                    <FilePlus className="h-4 w-4 mr-2" />
-                    Upload Version
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {versions.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Layers className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p className="text-sm font-medium mb-1">No versions uploaded</p>
-                      <p className="text-xs">Upload the first version to get started.</p>
+                {/* Versions Section */}
+                <Card className="border-border/50">
+                  <CardHeader className="pb-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base font-semibold flex items-center gap-2">
+                          <Layers className="h-4 w-4 text-primary" />
+                          Versions
+                        </CardTitle>
+                        <CardDescription className="mt-1">
+                          All uploaded versions of this document
+                        </CardDescription>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={handleQuickVersionUpload} disabled={!uploadUser}>
+                        <FilePlus className="h-4 w-4 mr-2" />
+                        Upload Version
+                      </Button>
                     </div>
-                  ) : (
-                    versions.map((version, index) => {
-                      const uploader = userLookup.get(version.uploadedBy);
-                      const isLatest = index === 0;
-                      const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
-                      
-                      return (
-                        <div key={version.id} className={`p-3 border rounded-lg ${isLatest ? 'border-primary/50 bg-primary/5' : 'border-border'}`}>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {versions.length === 0 ? (
+                        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
+                          <Layers className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                          <p className="text-sm font-medium mb-1">No versions uploaded</p>
+                          <p className="text-xs">Upload the first version to get started.</p>
+                        </div>
+                      ) : (
+                        versions.map((version, index) => {
+                          const uploader = userLookup.get(version.uploadedBy);
+                          const isLatest = index === 0;
+                          const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
+                          
+                          return (
+                            <div key={version.id} className={`p-4 border rounded-lg transition-colors hover:bg-muted/50 ${isLatest ? 'border-primary/40 bg-primary/5' : 'border-border'}`}>
                           <div className="flex flex-col gap-3">
                             {/* Header Row */}
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -1218,6 +1467,38 @@ const DocumentDetailPage = () => {
                                   >
                                     <Download className="h-4 w-4" />
                                   </Button>
+                                )}
+                                {/* OCR button - show for image/PDF files */}
+                                {version.fileUrl && version.fileUrl.trim() !== '' && 
+                                 (version.fileType?.startsWith('image/') || version.fileType === 'application/pdf') && (
+                                  (() => {
+                                    const ocrState = versionOCRState[version.id];
+                                    const isProcessing = ocrState?.isProcessing || false;
+                                    const hasOCRText = version.ocrText && version.ocrText.trim() !== '';
+                                    
+                                    return (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        onClick={() => {
+                                          if (isProcessing) {
+                                            handleCancelOCR(version.id);
+                                          } else {
+                                            handleVersionOCR(version.id);
+                                          }
+                                        }}
+                                        title={isProcessing ? "Cancel OCR processing" : hasOCRText ? "Re-process OCR" : "Process OCR"}
+                                        disabled={isProcessing && ocrState?.currentJob?.status === 'processing'}
+                                      >
+                                        {isProcessing ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Scan className="h-4 w-4" />
+                                        )}
+                                      </Button>
+                                    );
+                                  })()
                                 )}
                                 {/* Replace version button - only show if user can edit */}
                                 {uploadUser && (uploadUser.id === version.uploadedBy || uploadUser.id === document.authorId) && (
@@ -1282,55 +1563,69 @@ const DocumentDetailPage = () => {
                               </div>
                             )}
                             
-                            {/* OCR Text - Collapsed by default */}
-                            {version.ocrText && (
-                              <details className="text-xs">
-                                <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                                  <span className="font-semibold">OCR Text</span> (click to expand)
-                                </summary>
-                                <div className="mt-2 p-2 border border-border bg-muted/60 rounded-md text-muted-foreground">
-                                  {version.ocrText}
-                                </div>
-                              </details>
-                            )}
+                            {/* OCR Status and Text */}
+                            {(() => {
+                              const ocrState = versionOCRState[version.id];
+                              const isProcessing = ocrState?.isProcessing || false;
+                              const hasOCRText = version.ocrText && version.ocrText.trim() !== '';
+                              
+                              return (
+                                <>
+                                  {(isProcessing || hasOCRText) && (
+                                    <div className="flex items-center gap-2 text-xs">
+                                      {isProcessing && (
+                                        <Badge variant="secondary" className="flex items-center gap-1">
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                          Processing OCR...
+                                        </Badge>
+                                      )}
+                                      {hasOCRText && !isProcessing && (
+                                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                          OCR Available
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  )}
+                                  {version.ocrText && (
+                                    <details className="text-xs">
+                                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                                        <span className="font-semibold">OCR Text</span> (click to expand)
+                                      </summary>
+                                      <div className="mt-2 p-2 border border-border bg-muted/60 rounded-md text-muted-foreground">
+                                        {version.ocrText}
+                                      </div>
+                                    </details>
+                                  )}
+                                </>
+                              );
+                            })()}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })
-                  )}
+                        );
+                      })
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
 
             {/* Right Column - Collaboration & Activity */}
             <div className="space-y-6">
-              {/* Document Processing */}
-              {document && (
-                <OCRProcessor 
-                  documentId={document.id} 
-                  onOCRComplete={async (result) => {
-                    // Wait a moment for database to commit, then reload document
-                    setTimeout(async () => {
-                      await loadDocument();
-                      toast.success('OCR completed! Text extracted successfully. Document refreshed.');
-                    }, 1000);
-                  }}
-                />
-              )}
-
               {/* Collaboration Section */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
+              <Card className="border-border/50">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
                     <Users className="h-4 w-4 text-primary" />
                     Collaboration
                   </CardTitle>
-                  <CardDescription>Active editors and workspace organization</CardDescription>
+                  <CardDescription className="mt-1">
+                    Active editors and workspace organization
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent>
                   {/* Active Editors */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <Label className="text-xs font-medium text-muted-foreground">Active Editors</Label>
                       {activeEditorSessions.length > 0 && (
                         <Badge variant="secondary" className="text-xs">
@@ -1339,8 +1634,8 @@ const DocumentDetailPage = () => {
                       )}
                     </div>
                     {activeEditorSessions.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-4 text-center border rounded-md bg-muted/30">
-                        <Users className="h-6 w-6 text-muted-foreground mb-1" />
+                      <div className="flex flex-col items-center justify-center py-6 text-center border border-dashed rounded-lg">
+                        <Users className="h-6 w-6 text-muted-foreground mb-2 opacity-50" />
                         <p className="text-xs text-muted-foreground">No active editors</p>
                       </div>
                     ) : (
@@ -1355,9 +1650,9 @@ const DocumentDetailPage = () => {
                           return (
                             <div
                               key={session.id}
-                              className="flex items-center gap-2 p-2 border rounded-md hover:bg-muted/50 transition-colors"
+                              className="flex items-center gap-2.5 p-2.5 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors"
                             >
-                              <Avatar className="h-6 w-6 flex-shrink-0">
+                              <Avatar className="h-7 w-7 flex-shrink-0">
                                 <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
                                   {getUserInitials(session.userId)}
                                 </AvatarFallback>
@@ -1384,7 +1679,7 @@ const DocumentDetailPage = () => {
 
                   {/* Workspaces */}
                   <div className="pt-4 border-t">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-3">
                       <Label className="text-xs font-medium text-muted-foreground">Workspaces</Label>
                       <Dialog open={workspaceManageOpen} onOpenChange={setWorkspaceManageOpen}>
                         <DialogTrigger asChild>
@@ -1465,11 +1760,11 @@ const DocumentDetailPage = () => {
                           </div>
                         </DialogContent>
                       </Dialog>
-                    </div>
-                    {documentWorkspaces.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-3 text-center border rounded-md bg-muted/30">
-                        <FolderKanban className="h-5 w-5 text-muted-foreground mb-1" />
-                        <p className="text-xs text-muted-foreground">No workspaces assigned</p>
+                  </div>
+                  {documentWorkspaces.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6 text-center border border-dashed rounded-lg">
+                      <FolderKanban className="h-6 w-6 text-muted-foreground mb-2 opacity-50" />
+                      <p className="text-xs text-muted-foreground">No workspaces assigned</p>
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">
@@ -1492,21 +1787,24 @@ const DocumentDetailPage = () => {
                   </div>
                 </CardContent>
               </Card>
-              {/* Collections */}
-              <Card>
-                <CardHeader>
+
+              {/* Collections Section */}
+              <Card className="border-border/50">
+                <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="flex items-center gap-2 text-base">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2">
                         <FolderKanban className="h-4 w-4 text-primary" />
                         Collections
                       </CardTitle>
-                      <CardDescription>Group this document with related documents for projects.</CardDescription>
+                      <CardDescription className="mt-1">
+                        Group this document with related documents for projects
+                      </CardDescription>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs gap-1"
+                      className="text-xs gap-1"
                       onClick={() => setCollectionManageOpen(true)}
                     >
                       <Plus className="h-3 w-3" />
@@ -1516,20 +1814,15 @@ const DocumentDetailPage = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {collections.length > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {collections.length} {collections.length === 1 ? 'collection' : 'collections'} assigned
-                      </Badge>
-                    )}
                     {collections.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-6 text-center border rounded-md bg-muted/30">
-                        <FolderKanban className="h-8 w-8 text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground">No collections assigned</p>
-                        <p className="text-xs text-muted-foreground mt-1">Add this document to collections for project organization</p>
+                      <div className="flex flex-col items-center justify-center py-8 text-center border border-dashed rounded-lg">
+                        <FolderKanban className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
+                        <p className="text-sm text-muted-foreground mb-1">No collections assigned</p>
+                        <p className="text-xs text-muted-foreground mb-3">Add this document to collections for project organization</p>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="mt-3 gap-1"
+                          className="gap-1"
                           onClick={() => setCollectionManageOpen(true)}
                         >
                           <Plus className="h-3 w-3" />
@@ -1542,7 +1835,7 @@ const DocumentDetailPage = () => {
                           <Badge
                             key={collection.id}
                             variant="outline"
-                            className="gap-1.5 text-xs py-1 px-2"
+                            className="gap-1.5 text-xs py-1.5 px-2.5"
                           >
                             <FolderKanban className="h-3 w-3" />
                             {collection.name}
@@ -1559,110 +1852,113 @@ const DocumentDetailPage = () => {
                 </CardContent>
               </Card>
 
-
-            {/* Comments */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <MessageSquare className="h-4 w-4 text-primary" />
-                  Comments
-                </CardTitle>
-                <CardDescription>Discuss, annotate, and collaborate on this document.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
+              {/* Comments Section */}
+              <Card className="border-border/50">
+                <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {comments.length > 0 && (
-                        <Badge variant="outline" className="text-xs">
-                          {comments.filter((c) => !c.resolved).length} unresolved
-                        </Badge>
-                      )}
-                      {comments.length > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {comments.length} total
-                        </Badge>
-                      )}
+                    <div>
+                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-primary" />
+                        Comments
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        Discuss, annotate, and collaborate on this document
+                      </CardDescription>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs gap-1"
+                      className="text-xs gap-1"
                       onClick={() => setCommentsDialogOpen(true)}
                     >
                       <MessageSquare className="h-3 w-3" />
-                      {comments.length > 0 ? `${comments.length} Comments` : 'Add Comment'}
+                      {comments.length > 0 ? `${comments.length}` : 'Add'}
                     </Button>
                   </div>
-                  {comments.length > 0 ? (
-                    <div className="space-y-2">
-                      {comments.slice(0, 3).map((comment) => {
-                        const author = userLookup.get(comment.authorId);
-                        return (
-                          <div key={comment.id} className="flex items-start gap-2 p-2 border rounded-md hover:bg-muted/50 transition-colors">
-                            <Avatar className="h-6 w-6 flex-shrink-0">
-                              <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                {getUserInitials(comment.authorId)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0 space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium">{author?.name ?? 'Unknown'}</span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  {formatDateTime(comment.createdAt)}
-                                </span>
-                                {comment.resolved ? (
-                                  <Badge variant="secondary" className="h-4 text-[10px] gap-1">
-                                    <CheckCircle2 className="h-2.5 w-2.5" />
-                                    Resolved
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="h-4 text-[10px] gap-1">
-                                    <Circle className="h-2.5 w-2.5" />
-                                    Open
-                                  </Badge>
-                                )}
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {comments.length > 0 && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" className="text-xs">
+                          {comments.filter((c) => !c.resolved).length} unresolved
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {comments.length} total
+                        </Badge>
+                      </div>
+                    )}
+                    {comments.length > 0 ? (
+                      <div className="space-y-2">
+                        {comments.slice(0, 3).map((comment) => {
+                          const author = userLookup.get(comment.authorId);
+                          return (
+                            <div key={comment.id} className="flex items-start gap-2.5 p-2.5 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors">
+                              <Avatar className="h-7 w-7 flex-shrink-0">
+                                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
+                                  {getUserInitials(comment.authorId)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-medium">{author?.name ?? 'Unknown'}</span>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {formatDateTime(comment.createdAt)}
+                                  </span>
+                                  {comment.resolved ? (
+                                    <Badge variant="secondary" className="h-4 text-[10px] gap-1">
+                                      <CheckCircle2 className="h-2.5 w-2.5" />
+                                      Resolved
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="h-4 text-[10px] gap-1">
+                                      <Circle className="h-2.5 w-2.5" />
+                                      Open
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                  {comment.content}
+                                </p>
                               </div>
-                              <p className="text-xs text-muted-foreground line-clamp-2">
-                                {comment.content}
-                              </p>
                             </div>
-                          </div>
-                        );
-                      })}
-                      {comments.length > 3 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs w-full"
-                          onClick={() => setCommentsDialogOpen(true)}
-                        >
-                          View all {comments.length} comments
-                        </Button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-6 text-center border rounded-md bg-muted/30">
-                      <MessageSquare className="h-8 w-8 text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">No comments yet</p>
-                      <p className="text-xs text-muted-foreground mt-1">Start the conversation</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                          );
+                        })}
+                        {comments.length > 3 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-xs w-full"
+                            onClick={() => setCommentsDialogOpen(true)}
+                          >
+                            View all {comments.length} comments
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-8 text-center border border-dashed rounded-lg">
+                        <MessageSquare className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
+                        <p className="text-sm text-muted-foreground mb-1">No comments yet</p>
+                        <p className="text-xs text-muted-foreground">Start the conversation</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-          {/* Access Activity */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Activity className="h-4 w-4 text-primary" />
-                    Access Activity
-                  </CardTitle>
-                  <CardDescription>Recent views and download attempts.</CardDescription>
-                </div>
+              {/* Access Activity Section */}
+              <Card className="border-border/50">
+                <CardHeader className="pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-primary" />
+                        Access Activity
+                      </CardTitle>
+                      <CardDescription className="mt-1">
+                        Recent views and download attempts
+                      </CardDescription>
+                    </div>
                 {accessLogs.length > 0 && (
                   <Button
                     variant="outline"
@@ -1697,17 +1993,10 @@ const DocumentDetailPage = () => {
                     Export
                   </Button>
                 )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {accessLogs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-center border rounded-md bg-muted/30">
-                  <Activity className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground">No access activity recorded yet</p>
-                  <p className="text-xs text-muted-foreground mt-1">Activity will appear here as users access this document</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
                   {/* Filters */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <Select value={accessLogFilter} onValueChange={(value) => setAccessLogFilter(value as any)}>
@@ -1772,7 +2061,7 @@ const DocumentDetailPage = () => {
                         const actionVariant = log.action === 'download' ? 'default' : log.action === 'attempted-download' ? 'destructive' : 'secondary';
                         
                         return (
-                          <div key={log.id} className="flex items-center gap-2.5 p-2 border rounded-md hover:bg-muted/50 transition-colors">
+                          <div key={log.id} className="flex items-center gap-2.5 p-2.5 border border-border/50 rounded-lg hover:bg-muted/30 transition-colors">
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                               {actionIcon === Download ? (
                                 <Download className="h-3.5 w-3.5 text-primary flex-shrink-0" />
@@ -1822,9 +2111,8 @@ const DocumentDetailPage = () => {
                     </div>
                   )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
             </div>
           </div>
 

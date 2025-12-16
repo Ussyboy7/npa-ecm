@@ -148,8 +148,10 @@ class OCRRequestSerializer(serializers.Serializer):
     """Serializer for OCR processing request."""
 
     document_id = serializers.UUIDField(required=True)
-    language = serializers.CharField(default="eng", max_length=10)
+    language = serializers.CharField(default="eng", max_length=10, required=False, allow_blank=True)
+    auto_detect_language = serializers.BooleanField(default=False)
     extract_metadata = serializers.BooleanField(default=False)
+    force_reprocess = serializers.BooleanField(default=False)
 
 
 class BatchProcessRequestSerializer(serializers.Serializer):

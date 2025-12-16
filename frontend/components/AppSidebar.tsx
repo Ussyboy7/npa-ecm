@@ -35,6 +35,7 @@ import {
   Search,
   Webhook,
   Database,
+  FileCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -543,6 +544,39 @@ export function AppSidebar() {
                       <Link href="/dms">
                         <FolderKanban className="h-4 w-4" />
                         <span>Document Management</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
+                </SidebarMenuItem>
+              )}
+
+              {/* Forms */}
+              {permissions.canAccessDocumentManagement && (
+                <SidebarMenuItem>
+                  {isCollapsed ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuButton asChild isActive={isActive('/forms')}>
+                            <Link href="/forms">
+                              <FileCheck className="h-4 w-4" />
+                              <span className="sr-only">Forms</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p>Forms</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Create and manage form documents
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isActive('/forms')}>
+                      <Link href="/forms">
+                        <FileCheck className="h-4 w-4" />
+                        <span>Forms</span>
                       </Link>
                     </SidebarMenuButton>
                   )}

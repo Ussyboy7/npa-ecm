@@ -78,8 +78,9 @@ export async function getFormDocuments(params?: {
   if (params?.correspondence) queryParams.append("correspondence", params.correspondence);
   if (params?.search) queryParams.append("search", params.search);
 
+  const query = queryParams.toString();
   const response = await apiFetch<FormDocument[]>(
-    `${BASE_PATH}/form-documents/${queryParams.toString() ? `?${queryParams.toString()}` : ""}`
+    `${BASE_PATH}/form-documents${query ? `?${query}` : ""}`
   );
   return Array.isArray(response) ? response : [];
 }

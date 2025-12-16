@@ -1054,8 +1054,34 @@ class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["document", "user", "is_active"]
 
+    def get_queryset(self):
+        """Filter out sessions for deleted documents."""
+        qs = super().get_queryset()
+        # Only show sessions for non-deleted documents
+        return qs.filter(document__is_deleted=False)
+    
+    def filter_queryset(self, queryset):
+        """Override to handle document filter gracefully."""
+        # Get document filter from query params
+        document_id = self.request.query_params.get("document")
+        if document_id:
+            # Check if document exists and is not deleted
+            try:
+                document = Document.objects.get(id=document_id, is_deleted=False)
+            except Document.DoesNotExist:
+                # Document doesn't exist or is deleted - return empty queryset
+                return queryset.none()
+        
+        # Apply standard filters
+        return super().filter_queryset(queryset)
+
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        # Allow document to be passed as document_id for compatibility
+        data = request.data.copy()
+        if 'document_id' in data and 'document' not in data:
+            data['document'] = data.pop('document_id')
+        
+        serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         document = serializer.validated_data["document"]
         note = serializer.validated_data.get("note")
@@ -1091,6 +1117,13 @@ class DocumentEditorSessionViewSet(viewsets.ModelViewSet):
         document_id = request.query_params.get("document")
         if not document_id:
             raise ValidationError({"document": "Document ID is required"})
+        
+        # Check if document exists and is not deleted
+        try:
+            document = Document.objects.get(id=document_id, is_deleted=False)
+        except Document.DoesNotExist:
+            # Document doesn't exist or is deleted - return empty list
+            return Response([])
         
         sessions = DocumentEditorSession.objects.filter(
             document_id=document_id,

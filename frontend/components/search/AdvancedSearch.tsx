@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Search, Filter, Save, History, X, FileText, Mail } from 'lucide-react';
+import { Search, Filter, Save, History, X, FileText, Mail, Loader2, Calendar, User, Building2, Briefcase, Shield } from 'lucide-react';
 import {
   search,
   getSearchSuggestions,
@@ -23,20 +21,26 @@ import {
 } from '@/lib/search-storage';
 import { logError } from '@/lib/client-logger';
 import { useDebounce } from '@/hooks/use-debounce';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { formatDate } from '@/lib/correspondence-helpers';
 
 interface AdvancedSearchProps {
   onResultSelect?: (result: any) => void;
 }
 
 export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
+  const { divisions, departments, users, offices } = useOrganization();
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchRequest['filters']>({});
+  const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'all'>('all');
   const [results, setResults] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [savedSearches, setSavedSearches] = useState<any[]>([]);
   const [searchHistory, setSearchHistory] = useState<any[]>([]);
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
 
   const debouncedQuery = useDebounce(query, 300);
 
@@ -80,7 +84,7 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
     }
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async (resetPage = true, pageOverride?: number) => {
     if (!query.trim() && Object.keys(filters || {}).length === 0) {
       toast.error('Please enter a search query or apply filters');
       return;
@@ -88,16 +92,41 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
 
     try {
       setLoading(true);
+      const currentPage = pageOverride !== undefined ? pageOverride : (resetPage ? 0 : page);
+      if (resetPage) setPage(0);
+      
       const searchRequest: SearchRequest = {
         query: query.trim() || undefined,
         filters,
-        limit: 50,
-        offset: 0,
-        search_type: 'documents',
+        limit: pageSize,
+        offset: currentPage * pageSize,
+        search_type: searchType,
       };
 
       const result = await search(searchRequest);
-      setResults(result);
+      
+      // Handle unified search results (when search_type is 'all')
+      if (searchType === 'all' && (result as any).documents && (result as any).correspondence) {
+        const unifiedResult = result as any;
+        const newResults = [
+          ...unifiedResult.documents.results.map((r: any) => ({ ...r, _type: 'document' })),
+          ...unifiedResult.correspondence.results.map((r: any) => ({ ...r, _type: 'correspondence' }))
+        ];
+        const combinedResults: SearchResult = {
+          results: resetPage ? newResults : [...(results?.results || []), ...newResults],
+          total_count: unifiedResult.total_count,
+          limit: pageSize,
+          offset: currentPage * pageSize,
+          has_more: unifiedResult.documents.has_more || unifiedResult.correspondence.has_more,
+        };
+        setResults(combinedResults);
+      } else {
+        const newResults = resetPage ? result.results : [...(results?.results || []), ...result.results];
+        setResults({
+          ...result,
+          results: newResults,
+        });
+      }
     } catch (error) {
       logError('Search failed', error);
       toast.error('Search failed. Please try again.');
@@ -114,9 +143,9 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
 
     try {
       await createSavedSearch({
-        name: query || 'Saved Search',
+        name: query || `Search: ${searchType}`,
         query: query,
-        filters: filters || {},
+        filters: { ...filters, search_type: searchType } as any,
         is_shared: false,
       });
       toast.success('Search saved');
@@ -135,7 +164,9 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
   const handleHistoryClick = (historyItem: any) => {
     setQuery(historyItem.query);
     if (historyItem.filters) {
-      setFilters(historyItem.filters);
+      const { search_type, ...otherFilters } = historyItem.filters;
+      if (search_type) setSearchType(search_type);
+      setFilters(otherFilters);
     }
   };
 
@@ -152,10 +183,25 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Search Type Selector */}
+          <div className="space-y-2">
+            <Label>Search In</Label>
+            <Select value={searchType} onValueChange={(v) => setSearchType(v as any)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All (Documents & Correspondence)</SelectItem>
+                <SelectItem value="documents">Documents Only</SelectItem>
+                <SelectItem value="correspondence">Correspondence Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Search Input */}
           <div className="relative">
             <Input
-              placeholder="Search documents..."
+              placeholder="Search by title, reference number, content..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -168,7 +214,7 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
             <Button
               size="sm"
               className="absolute right-2 top-1/2 -translate-y-1/2"
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               disabled={loading}
             >
               <Search className="h-4 w-4" />
@@ -214,7 +260,7 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
           {/* Filters Panel */}
           {showFilters && (
             <Card className="p-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Document Type</Label>
                   <Select
@@ -233,6 +279,7 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
                       <SelectItem value="circular">Circular</SelectItem>
                       <SelectItem value="policy">Policy</SelectItem>
                       <SelectItem value="report">Report</SelectItem>
+                      <SelectItem value="form">Form</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -253,16 +300,222 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
                       <SelectItem value="draft">Draft</SelectItem>
                       <SelectItem value="published">Published</SelectItem>
                       <SelectItem value="archived">Archived</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="in-progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-2">
+                  <Label>Sensitivity</Label>
+                  <Select
+                    value={filters?.sensitivity || ''}
+                    onValueChange={(value) =>
+                      setFilters({ ...filters, sensitivity: value || undefined })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All levels" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All levels</SelectItem>
+                      <SelectItem value="public">Public</SelectItem>
+                      <SelectItem value="internal">Internal</SelectItem>
+                      <SelectItem value="confidential">Confidential</SelectItem>
+                      <SelectItem value="restricted">Restricted</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Author</Label>
+                  <Select
+                    value={filters?.author_id || ''}
+                    onValueChange={(value) =>
+                      setFilters({ ...filters, author_id: value || undefined })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All authors" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All authors</SelectItem>
+                      {users.filter(u => u.active).map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Division</Label>
+                  <Select
+                    value={filters?.division_id || ''}
+                    onValueChange={(value) =>
+                      setFilters({ ...filters, division_id: value || undefined })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All divisions" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All divisions</SelectItem>
+                      {divisions.filter(d => d.isActive).map((division) => (
+                        <SelectItem key={division.id} value={division.id}>
+                          {division.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={filters?.department_id || ''}
+                    onValueChange={(value) =>
+                      setFilters({ ...filters, department_id: value || undefined })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All departments</SelectItem>
+                      {departments
+                        .filter(d => d.isActive && (!filters?.division_id || d.divisionId === filters.division_id))
+                        .map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {searchType === 'correspondence' || searchType === 'all' ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Source</Label>
+                      <Select
+                        value={filters?.source || ''}
+                        onValueChange={(value) =>
+                          setFilters({ ...filters, source: value || undefined })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="All sources" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">All sources</SelectItem>
+                          <SelectItem value="internal">Internal</SelectItem>
+                          <SelectItem value="external">External</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Direction</Label>
+                      <Select
+                        value={filters?.direction || ''}
+                        onValueChange={(value) =>
+                          setFilters({ ...filters, direction: value || undefined })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="All directions" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">All directions</SelectItem>
+                          <SelectItem value="upward">Upward</SelectItem>
+                          <SelectItem value="downward">Downward</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : null}
+
+                <div className="space-y-2">
+                  <Label>Date From</Label>
+                  <Input
+                    type="date"
+                    value={filters?.date_from || ''}
+                    onChange={(e) =>
+                      setFilters({ ...filters, date_from: e.target.value || undefined })
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Date To</Label>
+                  <Input
+                    type="date"
+                    value={filters?.date_to || ''}
+                    onChange={(e) =>
+                      setFilters({ ...filters, date_to: e.target.value || undefined })
+                    }
+                  />
+                </div>
+
+                {searchType === 'correspondence' || searchType === 'all' ? (
+                  <div className="space-y-2">
+                    <Label>Priority</Label>
+                    <Select
+                      value={filters?.priority || ''}
+                      onValueChange={(value) =>
+                        setFilters({ ...filters, priority: value || undefined })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All priorities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">All priorities</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+
+                {searchType === 'correspondence' || searchType === 'all' ? (
+                  <div className="space-y-2">
+                    <Label>Office</Label>
+                    <Select
+                      value={filters?.office_id || ''}
+                      onValueChange={(value) =>
+                        setFilters({ ...filters, office_id: value || undefined })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All offices" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">All offices</SelectItem>
+                        {offices.filter(o => o.isActive).map((office) => (
+                          <SelectItem key={office.id} value={office.id}>
+                            {office.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex gap-2 mt-4">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setFilters({})}
+                  onClick={() => {
+                    setFilters({});
+                    setPage(0);
+                  }}
                 >
                   <X className="h-4 w-4 mr-2" />
                   Clear Filters
@@ -315,7 +568,9 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
                           onClick={() => {
                             setQuery(item.query);
                             if (item.filters) {
-                              setFilters(item.filters);
+                              const { search_type, ...otherFilters } = item.filters;
+                              if (search_type) setSearchType(search_type);
+                              setFilters(otherFilters);
                             }
                           }}
                         >
@@ -340,44 +595,142 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {results.results.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No results found
+            {loading ? (
+              <div className="text-center py-12">
+                <Loader2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50 animate-spin" />
+                <h3 className="text-lg font-semibold mb-2">Searching...</h3>
+                <p className="text-sm text-muted-foreground">
+                  {query ? `Searching for "${query}"` : 'Applying filters...'}
+                </p>
+              </div>
+            ) : results.results.length === 0 ? (
+              <div className="text-center py-12">
+                <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <h3 className="text-lg font-semibold mb-2">No results found</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {query
+                    ? `No documents or correspondence match "${query}"`
+                    : 'Try adjusting your search or filters'}
+                </p>
+                {query && (
+                  <Button variant="outline" onClick={() => setQuery('')}>
+                    Clear Search
+                  </Button>
+                )}
               </div>
             ) : (
-              <ScrollArea className="h-96">
-                <div className="space-y-2">
-                  {results.results.map((result: any, idx: number) => (
-                    <Card
-                      key={result.id || idx}
-                      className="cursor-pointer hover:bg-accent"
-                      onClick={() => onResultSelect?.(result)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <h4 className="font-medium">{result.title || result.subject}</h4>
-                            {result.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                {result.description}
-                              </p>
-                            )}
-                            <div className="flex gap-2 mt-2">
-                              {result.document_type && (
-                                <Badge variant="outline">{result.document_type}</Badge>
-                              )}
-                              {result.status && (
-                                <Badge variant="outline">{result.status}</Badge>
-                              )}
+              <>
+                <ScrollArea className="h-96">
+                  <div className="space-y-2">
+                    {results.results.map((result: any, idx: number) => {
+                      const resultType = result._type || (result.document_type ? 'document' : 'correspondence');
+                      const isCorrespondence = resultType === 'correspondence';
+                      
+                      return (
+                        <Card
+                          key={result.id || idx}
+                          className="cursor-pointer hover:bg-accent transition-colors"
+                          onClick={() => onResultSelect?.(result)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  {isCorrespondence ? (
+                                    <Mail className="h-4 w-4 text-muted-foreground" />
+                                  ) : (
+                                    <FileText className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                  <Badge variant="outline" className="text-xs">
+                                    {isCorrespondence ? 'Correspondence' : (result.document_type || 'Document')}
+                                  </Badge>
+                                  {result.reference_number && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {result.reference_number}
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="font-medium text-base mb-1">
+                                  {result.title || result.subject || 'Untitled'}
+                                </h4>
+                                {/* Show snippet if available, otherwise show description/body */}
+                                {result.search_snippet ? (
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {result.search_snippet}
+                                    {result.match_field && (
+                                      <span className="text-xs text-muted-foreground/70 ml-2">
+                                        (matched in {result.match_field})
+                                      </span>
+                                    )}
+                                  </p>
+                                ) : (result.description || result.body) ? (
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {result.description || result.body}
+                                  </p>
+                                ) : null}
+                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                  {result.status && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {result.status}
+                                    </Badge>
+                                  )}
+                                  {result.sensitivity && (
+                                    <Badge variant="outline" className="text-xs">
+                                      <Shield className="h-3 w-3 mr-1" />
+                                      {result.sensitivity}
+                                    </Badge>
+                                  )}
+                                  {result.priority && (
+                                    <Badge variant="outline" className="text-xs capitalize">
+                                      {result.priority}
+                                    </Badge>
+                                  )}
+                                  {result.author && (
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                      <User className="h-3 w-3" />
+                                      <span>{typeof result.author === 'object' ? result.author.name : result.author}</span>
+                                    </div>
+                                  )}
+                                  {(result.created_at || result.received_date) && (
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                      <Calendar className="h-3 w-3" />
+                                      <span>{formatDate(result.created_at || result.received_date)}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <FileText className="h-5 w-5 text-muted-foreground" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </ScrollArea>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+                
+                {/* Pagination */}
+                {results.has_more && (
+                  <div className="flex justify-center mt-4 pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const nextPage = page + 1;
+                        setPage(nextPage);
+                        handleSearch(false, nextPage);
+                      }}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Load More'
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

@@ -17,6 +17,10 @@ export interface SearchRequest {
     date_from?: string;
     date_to?: string;
     tags?: string[];
+    priority?: string;
+    source?: string;
+    direction?: string;
+    office_id?: string;
   };
   limit?: number;
   offset?: number;

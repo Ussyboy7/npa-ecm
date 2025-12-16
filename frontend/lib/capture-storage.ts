@@ -94,7 +94,9 @@ export const processOCR = async (
   documentId: string,
   options: {
     language?: string;
+    auto_detect_language?: boolean;
     extract_metadata?: boolean;
+    force_reprocess?: boolean;
   } = {}
 ): Promise<CaptureJob> => {
   try {
@@ -103,7 +105,9 @@ export const processOCR = async (
       body: JSON.stringify({
         document_id: documentId,
         language: options.language || 'eng',
+        auto_detect_language: options.auto_detect_language || false,
         extract_metadata: options.extract_metadata || false,
+        force_reprocess: options.force_reprocess || false,
       }),
     });
     return response;

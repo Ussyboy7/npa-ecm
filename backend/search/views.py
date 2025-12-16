@@ -55,24 +55,43 @@ class SearchViewSet(viewsets.ViewSet):
         # Perform search
         if search_type == "documents":
             results = SearchService.full_text_search_documents(
-                query, filters, limit, offset
+                query, filters, limit, offset, user=request.user
             )
             # Serialize documents
             from dms.serializers import DocumentSerializer
 
-            results["results"] = DocumentSerializer(results["results"], many=True).data
+            serialized = DocumentSerializer(results["results"], many=True).data
+            # Add snippet information if available
+            for i, doc in enumerate(results["results"]):
+                if hasattr(doc, '_search_snippet'):
+                    serialized[i]["search_snippet"] = getattr(doc, '_search_snippet', None)
+                    serialized[i]["match_field"] = getattr(doc, '_match_field', None)
+                    serialized[i]["matching_version_id"] = getattr(doc, '_matching_version_id', None)
+                # Add type field for frontend
+                serialized[i]["_type"] = "document"
+            
+            results["results"] = serialized
         elif search_type == "correspondence":
             results = SearchService.search_correspondence(query, filters, limit, offset)
             # Serialize correspondence
             from correspondence.serializers import CorrespondenceSerializer
 
-            results["results"] = CorrespondenceSerializer(
+            serialized = CorrespondenceSerializer(
                 results["results"], many=True
             ).data
+            # Add snippet information if available
+            for i, corr in enumerate(results["results"]):
+                if hasattr(corr, '_search_snippet'):
+                    serialized[i]["search_snippet"] = getattr(corr, '_search_snippet', None)
+                    serialized[i]["match_field"] = getattr(corr, '_match_field', None)
+                # Add type field for frontend
+                serialized[i]["_type"] = "correspondence"
+            
+            results["results"] = serialized
         else:
             # Search both
             doc_results = SearchService.full_text_search_documents(
-                query, filters, limit, offset
+                query, filters, limit, offset, user=request.user
             )
             corr_results = SearchService.search_correspondence(
                 query, filters, limit, offset
@@ -81,15 +100,34 @@ class SearchViewSet(viewsets.ViewSet):
             from correspondence.serializers import CorrespondenceSerializer
             from dms.serializers import DocumentSerializer
 
+            # Serialize documents with snippets
+            doc_serialized = DocumentSerializer(doc_results["results"], many=True).data
+            for i, doc in enumerate(doc_results["results"]):
+                if hasattr(doc, '_search_snippet'):
+                    doc_serialized[i]["search_snippet"] = getattr(doc, '_search_snippet', None)
+                    doc_serialized[i]["match_field"] = getattr(doc, '_match_field', None)
+                    doc_serialized[i]["matching_version_id"] = getattr(doc, '_matching_version_id', None)
+                # Add type field for frontend
+                doc_serialized[i]["_type"] = "document"
+            
+            # Serialize correspondence with snippets
+            corr_serialized = CorrespondenceSerializer(
+                corr_results["results"], many=True
+            ).data
+            for i, corr in enumerate(corr_results["results"]):
+                if hasattr(corr, '_search_snippet'):
+                    corr_serialized[i]["search_snippet"] = getattr(corr, '_search_snippet', None)
+                    corr_serialized[i]["match_field"] = getattr(corr, '_match_field', None)
+                # Add type field for frontend
+                corr_serialized[i]["_type"] = "correspondence"
+
             results = {
                 "documents": {
-                    "results": DocumentSerializer(doc_results["results"], many=True).data,
+                    "results": doc_serialized,
                     "total_count": doc_results["total_count"],
                 },
                 "correspondence": {
-                    "results": CorrespondenceSerializer(
-                        corr_results["results"], many=True
-                    ).data,
+                    "results": corr_serialized,
                     "total_count": corr_results["total_count"],
                 },
                 "total_count": doc_results["total_count"] + corr_results["total_count"],

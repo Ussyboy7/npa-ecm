@@ -349,10 +349,22 @@ export const fetchDocumentById = async (id: string): Promise<DocumentRecord> => 
     throw new Error('Authentication required');
   }
 
-  const payload = await apiFetch(`/dms/documents/${id}/`);
-  const document = mapDocument(payload);
-  updateDocumentsCache(document);
-  return document;
+  try {
+    const payload = await apiFetch(`/dms/documents/${id}/`);
+    const document = mapDocument(payload);
+    updateDocumentsCache(document);
+    return document;
+  } catch (error: any) {
+    // For 404 errors (document not found), create a custom error that won't be logged as critically
+    if (error?.status === 404) {
+      const notFoundError = new Error(error.message || 'Document not found');
+      (notFoundError as any).status = 404;
+      (notFoundError as any).isNotFound = true;
+      throw notFoundError;
+    }
+    // Re-throw other errors as-is
+    throw error;
+  }
 };
 
 export const fetchWorkspaces = async (): Promise<DocumentWorkspace[]> => {

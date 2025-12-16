@@ -69,7 +69,6 @@ import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { BulkUploadDialog } from '@/components/dms/BulkUploadDialog';
 import { SmartCreationWizard } from '@/components/dms/SmartCreationWizard';
-import { CreateFormDocumentDialog } from '@/components/dms/CreateFormDocumentDialog';
 import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentQuickPreviewModal } from '@/components/dms/DocumentQuickPreviewModal';
 import { WorkspaceManagementDialog } from '@/components/dms/WorkspaceManagementDialog';
@@ -84,8 +83,8 @@ import { FilterPanel, FilterBadgeGroup } from '@/components/shared/FilterPanel';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Label } from '@/components/ui/label';
-import { getFormTemplates, getSignatures } from '@/lib/api/forms';
-import type { FormTemplate, FormSignature } from '@/lib/types/forms';
+import { getSignatures } from '@/lib/api/forms';
+import type { FormSignature } from '@/lib/types/forms';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
 const STATUS_OPTIONS: DocumentStatus[] = ['draft', 'published', 'archived'];
@@ -278,7 +277,6 @@ const DocumentManagementPageContent = () => {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [bulkUploadDialogOpen, setBulkUploadDialogOpen] = useState(false);
   const [smartWizardOpen, setSmartWizardOpen] = useState(false);
-  const [createFormDialogOpen, setCreateFormDialogOpen] = useState(false);
   const [shouldReloadDocuments, setShouldReloadDocuments] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [actionsDropdownOpen, setActionsDropdownOpen] = useState(false);
@@ -291,10 +289,6 @@ const DocumentManagementPageContent = () => {
   const [workspaceManageOpen, setWorkspaceManageOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
-  const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
-  const [formTemplatesLoading, setFormTemplatesLoading] = useState(false);
-  const [formTemplatesOpen, setFormTemplatesOpen] = useState(false);
-  const [selectedTemplateForForm, setSelectedTemplateForForm] = useState<FormTemplate | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('dms_recent_searches');
@@ -389,22 +383,6 @@ const DocumentManagementPageContent = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (formTemplatesOpen && formTemplates.length === 0 && !formTemplatesLoading) {
-      setFormTemplatesLoading(true);
-      getFormTemplates({ is_active: true })
-        .then((templates) => {
-          setFormTemplates(templates);
-        })
-        .catch((error) => {
-          logError('Failed to load form templates', error);
-          toast.error('Failed to load form templates');
-        })
-        .finally(() => {
-          setFormTemplatesLoading(false);
-        });
-    }
-  }, [formTemplatesOpen, formTemplates.length, formTemplatesLoading]);
 
   // Persist filters to URL and localStorage
   useEffect(() => {
@@ -590,7 +568,6 @@ const DocumentManagementPageContent = () => {
       // Escape: Close modals
       if (e.key === 'Escape') {
         if (uploadDialogOpen) setUploadDialogOpen(false);
-        if (createFormDialogOpen) setCreateFormDialogOpen(false);
         if (shareDialogOpen) setShareDialogOpen(false);
         if (previewOpen) setPreviewOpen(false);
       }
@@ -598,7 +575,7 @@ const DocumentManagementPageContent = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [effectiveUser, uploadDialogOpen, createFormDialogOpen, shareDialogOpen, previewOpen]);
+  }, [effectiveUser, uploadDialogOpen, shareDialogOpen, previewOpen]);
 
   const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
   const departmentLookup = useMemo(() => new Map(departments.map((department) => [department.id, department.name])), [departments]);
@@ -1257,21 +1234,6 @@ const DocumentManagementPageContent = () => {
                           Smart Create
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setActionsDropdownOpen(false);
-                            requestAnimationFrame(() => {
-                              setCreateFormDialogOpen(true);
-                              setSelectedTemplateForForm(null);
-                            });
-                          }}
-                          disabled={!effectiveUser}
-                          aria-label="Create new form from template"
-                        >
-                          <FileCheck className="h-4 w-4 mr-2" />
-                          New Form
-                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </>
@@ -1280,57 +1242,6 @@ const DocumentManagementPageContent = () => {
             </div>
           </div>
 
-        {/* Form Templates Popover - opens when New Form is clicked from dropdown */}
-        <Popover open={formTemplatesOpen} onOpenChange={setFormTemplatesOpen}>
-          <PopoverContent className="w-80 p-0" align="end">
-            <Command>
-              <CommandInput placeholder="Search templates..." />
-              <CommandList>
-                <CommandEmpty>
-                  {formTemplatesLoading ? 'Loading templates...' : 'No templates found'}
-                </CommandEmpty>
-                <CommandGroup heading="Quick Create">
-                  <CommandItem
-                    onSelect={() => {
-                      setSelectedTemplateForForm(null);
-                      setFormTemplatesOpen(false);
-                      setCreateFormDialogOpen(true);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <FileCheck className="h-4 w-4 mr-2" />
-                    Create from any template
-                  </CommandItem>
-                </CommandGroup>
-                {formTemplates.length > 0 && (
-                  <CommandGroup heading="Popular Templates">
-                    {formTemplates.slice(0, 8).map((template) => (
-                      <CommandItem
-                        key={template.id}
-                        onSelect={() => {
-                          setSelectedTemplateForForm(template);
-                          setFormTemplatesOpen(false);
-                          setCreateFormDialogOpen(true);
-                        }}
-                        className="cursor-pointer"
-                      >
-                        <FileCheck className="h-4 w-4 mr-2" />
-                        <div className="flex flex-col">
-                          <span className="font-medium">{template.name}</span>
-                          {template.description && (
-                            <span className="text-xs text-muted-foreground line-clamp-1">
-                              {template.description}
-                            </span>
-                          )}
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
 
         {/* Filters Panel */}
         {showFilters && (
@@ -1545,7 +1456,7 @@ const DocumentManagementPageContent = () => {
             description={
               searchQuery || typeFilter !== 'all' || statusFilter !== 'all' || divisionFilter !== 'all' || departmentFilter !== 'all' || authorFilter !== 'all' || dateRangeFilter.start || dateRangeFilter.end
                 ? 'Try adjusting your search or filters to find what you\'re looking for. You can also clear filters to see all documents.'
-                : 'Get started by creating your first document. You can upload files, create forms, or compose documents using the rich text editor.'
+                : 'Get started by creating your first document. You can upload files or compose documents using the rich text editor.'
             }
             action={
               effectiveUser
@@ -1596,24 +1507,6 @@ const DocumentManagementPageContent = () => {
 
       {effectiveUser && (
         <>
-          <CreateFormDocumentDialog
-            open={createFormDialogOpen}
-            onOpenChange={(open) => {
-              setCreateFormDialogOpen(open);
-              if (!open) {
-                // Use setTimeout to avoid blocking
-                setTimeout(() => {
-                  setSelectedTemplateForForm(null);
-                }, 0);
-              }
-            }}
-            onComplete={(documentId) => {
-              // Navigate immediately, don't reload here
-              router.push(`/dms/${documentId}`);
-              setSelectedTemplateForForm(null);
-            }}
-            initialTemplate={selectedTemplateForForm}
-          />
           <DocumentUploadDialog
             open={uploadDialogOpen}
             onOpenChange={(open) => {

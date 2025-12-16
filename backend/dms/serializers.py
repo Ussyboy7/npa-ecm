@@ -311,6 +311,7 @@ class DocumentEditorSessionSerializer(serializers.ModelSerializer):
         source="user",
         queryset=DocumentEditorSession._meta.get_field("user").remote_field.model.objects.all(),
         write_only=True,
+        required=False,  # Not required since view uses request.user
     )
 
     class Meta:

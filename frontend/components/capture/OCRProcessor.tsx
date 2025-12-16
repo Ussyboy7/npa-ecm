@@ -8,14 +8,23 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
-import { FileText, Loader2, CheckCircle2, XCircle, RefreshCw, Eye } from 'lucide-react';
+import { FileText, Loader2, CheckCircle2, XCircle, RefreshCw, Eye, AlertTriangle, Languages, Edit2, Save } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { processOCR, getCaptureJob, getOCRResult, cancelCaptureJob, type CaptureJob, type OCRResult } from '@/lib/capture-storage';
 import { logError } from '@/lib/client-logger';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 interface OCRProcessorProps {
   documentId: string;
   onOCRComplete?: (result: OCRResult) => void;
 }
+
+const CONFIDENCE_THRESHOLDS = {
+  HIGH: 0.85,
+  MEDIUM: 0.70,
+  LOW: 0.50,
+};
 
 export const OCRProcessor = ({ documentId, onOCRComplete }: OCRProcessorProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -23,6 +32,10 @@ export const OCRProcessor = ({ documentId, onOCRComplete }: OCRProcessorProps) =
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showText, setShowText] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState('');
+  const [autoDetectLanguage, setAutoDetectLanguage] = useState(true);
+  const [forceReprocess, setForceReprocess] = useState(false);
 
   // Poll for job status
   useEffect(() => {
@@ -111,8 +124,10 @@ export const OCRProcessor = ({ documentId, onOCRComplete }: OCRProcessorProps) =
       setOcrResult(null);
 
       const job = await processOCR(documentId, {
-        language: 'eng',
+        language: autoDetectLanguage ? undefined : 'eng',
+        auto_detect_language: autoDetectLanguage,
         extract_metadata: true,
+        force_reprocess: forceReprocess,
       });
 
       setCurrentJob(job);
@@ -200,11 +215,37 @@ export const OCRProcessor = ({ documentId, onOCRComplete }: OCRProcessorProps) =
               <div className="flex items-center gap-2">
                 {ocrResult && (
                   <>
-                    <Badge variant="outline">
-                      {ocrResult.confidence_score ? `${(ocrResult.confidence_score * 100).toFixed(1)}%` : 'N/A'} confidence
-                    </Badge>
+                    {ocrResult.confidence_score !== undefined && (
+                      <Badge 
+                        variant={
+                          ocrResult.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH 
+                            ? "default" 
+                            : ocrResult.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM
+                            ? "secondary"
+                            : "destructive"
+                        }
+                        className={
+                          ocrResult.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH 
+                            ? "bg-green-500" 
+                            : ocrResult.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM
+                            ? "bg-yellow-500"
+                            : "bg-red-500"
+                        }
+                      >
+                        {ocrResult.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? '✓' : 
+                         ocrResult.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? '⚠' : '✗'} 
+                        {' '}
+                        {(ocrResult.confidence_score * 100).toFixed(1)}% confidence
+                      </Badge>
+                    )}
                     {ocrResult.page_count > 0 && (
                       <Badge variant="outline">{ocrResult.page_count} page{ocrResult.page_count !== 1 ? 's' : ''}</Badge>
+                    )}
+                    {ocrResult.language && (
+                      <Badge variant="outline" className="flex items-center gap-1">
+                        <Languages className="h-3 w-3" />
+                        {ocrResult.language.toUpperCase()}
+                      </Badge>
                     )}
                   </>
                 )}
@@ -216,11 +257,31 @@ export const OCRProcessor = ({ documentId, onOCRComplete }: OCRProcessorProps) =
               </div>
             </div>
 
+            {ocrResult && ocrResult.confidence_score !== undefined && ocrResult.confidence_score < CONFIDENCE_THRESHOLDS.MEDIUM && (
+              <Alert variant={ocrResult.confidence_score < CONFIDENCE_THRESHOLDS.LOW ? "destructive" : "default"}>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  OCR confidence is {(ocrResult.confidence_score * 100).toFixed(1)}%, which is below the recommended threshold.
+                  {ocrResult.confidence_score < CONFIDENCE_THRESHOLDS.LOW && (
+                    <span className="block mt-1">Consider re-processing with better quality source or different settings.</span>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
             {ocrResult?.extracted_text && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">
                     {ocrResult.extracted_text.length} characters extracted
+                    {ocrResult.confidence_score !== undefined && (
+                      <span className="ml-2">
+                        (Quality: {
+                          ocrResult.confidence_score >= CONFIDENCE_THRESHOLDS.HIGH ? 'High' :
+                          ocrResult.confidence_score >= CONFIDENCE_THRESHOLDS.MEDIUM ? 'Medium' : 'Low'
+                        })
+                      </span>
+                    )}
                   </span>
                   <Button
                     variant="ghost"
@@ -232,11 +293,76 @@ export const OCRProcessor = ({ documentId, onOCRComplete }: OCRProcessorProps) =
                   </Button>
                 </div>
                 {showText && (
-                  <ScrollArea className="h-64 w-full rounded-md border p-4">
-                    <pre className="text-sm whitespace-pre-wrap font-mono">
-                      {ocrResult.extracted_text}
-                    </pre>
-                  </ScrollArea>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        {isEditing ? 'Editing OCR text' : 'Extracted text (read-only)'}
+                      </span>
+                      {!isEditing && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setIsEditing(true);
+                            setEditedText(ocrResult.extracted_text);
+                          }}
+                        >
+                          <Edit2 className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                      )}
+                      {isEditing && (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setIsEditing(false);
+                              setEditedText('');
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                // Update document version with edited text
+                                // Note: This would require an API endpoint to update OCR text
+                                // For now, we'll just update local state
+                                setOcrResult({
+                                  ...ocrResult,
+                                  extracted_text: editedText,
+                                });
+                                setIsEditing(false);
+                                toast.success('OCR text updated');
+                              } catch (err) {
+                                logError('Failed to save edited text', err);
+                                toast.error('Failed to save edited text');
+                              }
+                            }}
+                          >
+                            <Save className="h-3 w-3 mr-1" />
+                            Save
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <Textarea
+                        value={editedText}
+                        onChange={(e) => setEditedText(e.target.value)}
+                        className="min-h-64 font-mono text-sm"
+                        placeholder="Edit extracted text..."
+                      />
+                    ) : (
+                      <ScrollArea className="h-64 w-full rounded-md border p-4">
+                        <pre className="text-sm whitespace-pre-wrap font-mono">
+                          {ocrResult.extracted_text}
+                        </pre>
+                      </ScrollArea>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -291,6 +417,32 @@ export const OCRProcessor = ({ documentId, onOCRComplete }: OCRProcessorProps) =
             <p className="text-sm text-muted-foreground">
               Extract searchable text from scanned documents or images. This process may take a few moments.
             </p>
+            
+            <div className="space-y-2 p-3 border rounded-lg bg-muted/50">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="auto-detect-language"
+                  checked={autoDetectLanguage}
+                  onCheckedChange={(checked) => setAutoDetectLanguage(checked as boolean)}
+                  disabled={isProcessing}
+                />
+                <Label htmlFor="auto-detect-language" className="cursor-pointer text-sm">
+                  Auto-detect language
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="force-reprocess"
+                  checked={forceReprocess}
+                  onCheckedChange={(checked) => setForceReprocess(checked as boolean)}
+                  disabled={isProcessing}
+                />
+                <Label htmlFor="force-reprocess" className="cursor-pointer text-sm">
+                  Force re-process (ignore existing OCR results)
+                </Label>
+              </div>
+            </div>
+
             <Button
               onClick={handleProcessOCR}
               className="w-full"

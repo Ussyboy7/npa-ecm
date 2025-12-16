@@ -638,6 +638,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         Optimized for performance using aggregation queries.
         """
         from django.core.cache import cache
+        from django.core.cache.backends.base import InvalidCacheBackendError
         from django.db.models import Count, Q, Exists, OuterRef
         from correspondence.models import Minute, CorrespondenceDistribution
         from organization.models import OfficeMembership, Office
@@ -646,7 +647,13 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         
         # Cache key based on user ID
         cache_key = f"sidebar_counts_{user.id}"
-        cached_result = cache.get(cache_key)
+        cached_result = None
+        try:
+            cached_result = cache.get(cache_key)
+        except (ConnectionError, InvalidCacheBackendError, Exception) as e:
+            # If cache is unavailable (e.g., Redis not running), log and continue
+            logger.warning(f"Cache unavailable for sidebar_counts: {str(e)}")
+        
         if cached_result is not None:
             return Response(cached_result)
         
@@ -756,10 +763,12 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             "delegated": delegated_count,
         }
         
-        # Cache result for 60 seconds
-        from django.core.cache import cache
-        cache_key = f"sidebar_counts_{user.id}"
-        cache.set(cache_key, result, 60)
+        # Cache result for 60 seconds (if cache is available)
+        try:
+            cache.set(cache_key, result, 60)
+        except (ConnectionError, InvalidCacheBackendError, Exception) as e:
+            # If cache is unavailable, log and continue - cache is optional
+            logger.warning(f"Failed to cache sidebar_counts: {str(e)}")
         
         return Response(result)
 

@@ -15,5 +15,7 @@ RUN pip install --upgrade pip \
 
 COPY . .
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# Use Daphne for ASGI support (WebSockets + HTTP)
+# Daphne can handle both HTTP and WebSocket connections
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "ecm_backend.asgi:application"]
 

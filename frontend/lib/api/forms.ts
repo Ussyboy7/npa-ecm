@@ -3,6 +3,9 @@
 import { apiFetch } from "@/lib/api-client";
 import type { FormTemplate, FormSubmission, FormSubmissionListItem } from "@/lib/types/forms";
 
+// Re-export types for convenience
+export type { FormTemplate, FormSubmission, FormSubmissionListItem };
+
 const BASE_PATH = "/forms";
 
 // Form Templates

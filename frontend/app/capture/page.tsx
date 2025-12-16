@@ -1,13 +1,18 @@
 "use client";
 
+import { useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Scan, FileText, Upload, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import { BatchUploadDialog } from '@/components/capture/BatchUploadDialog';
+import { ScanDialog } from '@/components/capture/ScanDialog';
 
 export default function ContentCapturePage() {
   const router = useRouter();
+  const [batchUploadOpen, setBatchUploadOpen] = useState(false);
+  const [scanDialogOpen, setScanDialogOpen] = useState(false);
 
   return (
     <DashboardLayout>
@@ -44,18 +49,40 @@ export default function ContentCapturePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Upload className="h-5 w-5" />
-                Batch Processing
+                Batch Upload & Processing
               </CardTitle>
               <CardDescription>
-                Process multiple documents in batch for OCR and metadata extraction
+                Upload multiple documents and process them with OCR and metadata extraction
               </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground mb-4">
-                Upload multiple documents and process them automatically with OCR and intelligent metadata extraction.
+                Upload multiple documents at once and automatically process them with OCR and intelligent metadata extraction.
               </p>
-              <Button onClick={() => router.push('/dms')} variant="outline">
-                Upload Documents
+              <Button onClick={() => setBatchUploadOpen(true)} variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Batch Upload
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Scan className="h-5 w-5" />
+                Document Scanning
+              </CardTitle>
+              <CardDescription>
+                Scan physical documents directly into the system
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Connect to a scanner and digitize physical documents with automatic OCR processing.
+              </p>
+              <Button onClick={() => setScanDialogOpen(true)} variant="outline">
+                <Scan className="h-4 w-4 mr-2" />
+                Start Scanning
               </Button>
             </CardContent>
           </Card>
@@ -94,6 +121,22 @@ export default function ContentCapturePage() {
             </div>
           </CardContent>
         </Card>
+
+        <BatchUploadDialog
+          open={batchUploadOpen}
+          onOpenChange={setBatchUploadOpen}
+          onComplete={(documents) => {
+            setBatchUploadOpen(false);
+            if (documents.length > 0) {
+              router.push('/dms');
+            }
+          }}
+        />
+
+        <ScanDialog
+          open={scanDialogOpen}
+          onOpenChange={setScanDialogOpen}
+        />
       </div>
     </DashboardLayout>
   );

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import pytesseract
 from django.conf import settings
@@ -15,6 +15,7 @@ from PIL import Image
 from docx import Document as DocxDocument
 
 from dms.models import Document, DocumentVersion
+from capture.models import CaptureJob
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +65,14 @@ class OCRService:
             raise
 
     @staticmethod
-    def extract_text_from_pdf(pdf_path: str, language: str = "eng") -> Dict[str, Any]:
+    def extract_text_from_pdf(pdf_path: str, language: str = "eng", progress_callback: Optional[Callable[[int, int, int], None]] = None) -> Dict[str, Any]:
         """
         Extract text from a PDF file by converting pages to images and OCRing.
 
         Args:
             pdf_path: Path to the PDF file
             language: Language code for OCR
+            progress_callback: Optional callback function(page_num, total_pages, progress_percent)
 
         Returns:
             Dictionary with extracted text, per-page results, and metadata
@@ -81,12 +83,18 @@ class OCRService:
             # Convert PDF pages to images
             # Note: Requires poppler-utils to be installed
             images = convert_from_path(pdf_path, dpi=300)
+            total_pages = len(images)
 
             page_results = []
             full_text = []
             all_confidences = []
 
             for page_num, image in enumerate(images, 1):
+                # Update progress if callback provided
+                if progress_callback:
+                    progress_percent = int((page_num / total_pages) * 100)
+                    progress_callback(page_num, total_pages, progress_percent)
+
                 # Save temporary image
                 temp_image_path = f"/tmp/pdf_page_{page_num}.png"
                 image.save(temp_image_path)
@@ -188,13 +196,14 @@ class OCRService:
             raise
 
     @staticmethod
-    def process_document(document_id: str, language: str = "eng") -> Dict[str, Any]:
+    def process_document(document_id: str, language: str = "eng", force_reprocess: bool = False, progress_callback: Optional[Callable[[int, int, int], None]] = None) -> Dict[str, Any]:
         """
         Process a document for OCR extraction.
 
         Args:
             document_id: UUID of the document
             language: Language code for OCR
+            force_reprocess: If True, reprocess even if OCR result exists
 
         Returns:
             OCR results dictionary
@@ -206,10 +215,32 @@ class OCRService:
             if not latest_version:
                 raise ValueError("Document has no versions")
 
+            # Check for existing OCR result if not forcing reprocess
+            if not force_reprocess:
+                from capture.models import OCRResult
+                existing_result = OCRResult.objects.filter(
+                    document=document,
+                    capture_job__status=CaptureJob.JobStatus.COMPLETED
+                ).order_by('-created_at').first()
+                
+                if existing_result and latest_version.ocr_text:
+                    logger.info(f"Using existing OCR result for document {document_id}")
+                    return {
+                        "extracted_text": existing_result.extracted_text,
+                        "full_text": existing_result.full_text or existing_result.extracted_text,
+                        "confidence_score": existing_result.confidence_score or 0.0,
+                        "language": existing_result.language,
+                        "page_count": existing_result.page_count,
+                        "page_results": existing_result.page_results or [],
+                        "processing_time_seconds": existing_result.processing_time_seconds or 0.0,
+                        "word_count": len(existing_result.extracted_text.split()),
+                        "from_cache": True,
+                    }
+
             # Get file path - resolve from file_url
             file_url = latest_version.file_url
             if not file_url:
-                raise ValueError("Document version has no file URL")
+                raise ValueError("Document version has no file URL. Please upload a file first.")
             
             # Resolve file path similar to dms/views.py
             if file_url.startswith('/media/'):
@@ -252,29 +283,89 @@ class OCRService:
                 }
                 file_extension = mime_to_ext.get(latest_version.file_type.lower(), '')
             
+            # Validate file type before processing
+            SUPPORTED_EXTENSIONS = [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".docx"]
+            SUPPORTED_MIME_TYPES = [
+                'application/pdf',
+                'image/png', 'image/jpeg', 'image/jpg',
+                'image/tiff', 'image/bmp',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ]
+            
+            if not file_extension:
+                raise ValueError(
+                    f"Cannot determine file type for '{latest_version.file_name}'. "
+                    f"Supported formats: PDF, PNG, JPG, TIFF, BMP, DOCX. "
+                    f"Please ensure the file has a valid extension."
+                )
+            
+            if file_extension not in SUPPORTED_EXTENSIONS:
+                raise ValueError(
+                    f"Unsupported file type: {file_extension}. "
+                    f"Supported formats: PDF, PNG, JPG, TIFF, BMP, DOCX. "
+                    f"If this is a .doc file, please convert it to .docx format."
+                )
+            
+            # Validate MIME type if available
+            if latest_version.file_type and latest_version.file_type.lower() not in [m.lower() for m in SUPPORTED_MIME_TYPES]:
+                logger.warning(
+                    f"MIME type '{latest_version.file_type}' doesn't match extension '{file_extension}'. "
+                    f"Proceeding with extension-based processing."
+                )
+            
             # Log for debugging
             logger.info(f"Processing document {document_id}: file_name={latest_version.file_name}, file_type={latest_version.file_type}, file_extension={file_extension}, file_path={file_path}")
 
             if file_extension == ".pdf":
-                result = OCRService.extract_text_from_pdf(file_path, language)
+                result = OCRService.extract_text_from_pdf(file_path, language, progress_callback)
             elif file_extension in [".png", ".jpg", ".jpeg", ".tiff", ".bmp"]:
                 result = OCRService.extract_text_from_image(file_path, language)
-            elif file_extension in [".docx", ".doc"]:
-                # Note: .doc (old format) would need additional library like python-docx2txt or antiword
-                # For now, only .docx is supported
-                if file_extension == ".docx":
-                    result = OCRService.extract_text_from_docx(file_path)
-                else:
-                    raise ValueError(f"Unsupported file type for OCR: {file_extension}. Please convert .doc to .docx")
+            elif file_extension == ".docx":
+                result = OCRService.extract_text_from_docx(file_path)
             else:
+                # This should not be reached due to validation above, but kept as safety
                 raise ValueError(f"Unsupported file type for OCR: {file_extension}")
 
             return result
         except Document.DoesNotExist:
-            raise ValueError(f"Document {document_id} not found")
-        except Exception as e:
-            logger.error(f"Document OCR processing failed: {str(e)}")
+            raise ValueError(
+                f"Document {document_id} not found. "
+                f"Please ensure the document exists and you have permission to access it."
+            )
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"File not found: {str(e)}. "
+                f"The document file may have been moved or deleted. "
+                f"Please re-upload the document."
+            )
+        except ValueError as e:
+            # Re-raise ValueError as-is (already has good error messages)
             raise
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Document OCR processing failed for {document_id}: {error_msg}")
+            
+            # Provide more helpful error messages
+            if "tesseract" in error_msg.lower() or "tesseract not found" in error_msg.lower():
+                raise RuntimeError(
+                    "OCR engine (Tesseract) is not installed or not found in PATH. "
+                    "Please install Tesseract OCR: https://github.com/tesseract-ocr/tesseract"
+                )
+            elif "poppler" in error_msg.lower() or "pdftoppm" in error_msg.lower():
+                raise RuntimeError(
+                    "PDF processing requires Poppler utilities. "
+                    "Please install poppler-utils: apt-get install poppler-utils (Linux) or brew install poppler (macOS)"
+                )
+            elif "permission denied" in error_msg.lower():
+                raise PermissionError(
+                    f"Permission denied accessing file. "
+                    f"Please check file permissions and ensure the application has read access."
+                )
+            else:
+                raise RuntimeError(
+                    f"OCR processing failed: {error_msg}. "
+                    f"If this persists, please contact support with the document details."
+                )
 
 
 class MetadataExtractionService:
