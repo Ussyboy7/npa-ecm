@@ -49,10 +49,17 @@ export function useSidebarCounts() {
       lastFetchTime = now;
       setCounts(response);
     } catch (err) {
-      console.error('[useSidebarCounts] Error fetching counts:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch counts');
-      // Keep showing cached counts on error
-      setCounts(cachedCounts);
+      // Silently handle authentication errors - they're expected when user is not logged in
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage === 'Authentication required' || errorMessage === 'Authentication expired') {
+        setCounts(DEFAULT_COUNTS);
+        setError(null);
+      } else {
+        console.error('[useSidebarCounts] Error fetching counts:', err);
+        setError(errorMessage);
+        // Keep showing cached counts on error
+        setCounts(cachedCounts);
+      }
     } finally {
       setLoading(false);
     }

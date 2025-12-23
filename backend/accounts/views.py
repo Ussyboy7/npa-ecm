@@ -850,8 +850,10 @@ class SealVerificationView(APIView):
             
             if seal.document:
                 response_data["document_title"] = seal.document.title
+                response_data["document_id"] = str(seal.document.id)
             if seal.correspondence:
                 response_data["correspondence_subject"] = seal.correspondence.subject
+                response_data["correspondence_id"] = str(seal.correspondence.id)
             
             return Response(response_data)
             
@@ -913,6 +915,7 @@ class ApplySealView(APIView):
                 user=request.user,
                 document=document,
                 correspondence=correspondence,
+                request=request,  # Pass request to detect correct frontend URL
             )
             
             # Audit log

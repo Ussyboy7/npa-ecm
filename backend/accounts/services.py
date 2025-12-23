@@ -39,6 +39,7 @@ class SealGenerationService:
         document=None,
         correspondence=None,
         document_content: Optional[bytes] = None,
+        request=None,
     ) -> Tuple[DocumentSeal, dict]:
         """
         Generate a digital seal for a document or correspondence.
@@ -48,6 +49,7 @@ class SealGenerationService:
             document: Optional Document instance
             correspondence: Optional Correspondence instance
             document_content: Optional bytes of document for hash computation
+            request: Optional Django request object to detect frontend URL from host
             
         Returns:
             Tuple of (DocumentSeal instance, seal_data dict for rendering)
@@ -86,8 +88,33 @@ class SealGenerationService:
             content = f"{correspondence.id}:{correspondence.subject}:{timezone.now().isoformat()}"
             doc_hash = hashlib.sha256(content.encode()).hexdigest()
         
-        # Build verification URL
-        base_url = getattr(settings, 'FRONTEND_URL', 'https://ecm.npa.gov.ng')
+        # Build verification URL - prefer request host, fallback to settings
+        # This ensures URLs work correctly in local/stag/prod environments
+        if request and hasattr(request, 'get_host'):
+            # Use request host to build URL dynamically
+            scheme = getattr(request, 'scheme', 'http')
+            host = request.get_host()
+            
+            # For local development, always use localhost:3002 (frontend port)
+            if 'localhost' in host or '127.0.0.1' in host:
+                # Remove port and use frontend port
+                host_without_port = host.split(':')[0]
+                base_url = f"{scheme}://{host_without_port}:3002"
+            else:
+                # For staging/production, use the host as-is but ensure https
+                host_without_port = host.split(':')[0]
+                # Check if it's a known staging/production domain
+                if 'stag' in host_without_port or 'staging' in host_without_port:
+                    base_url = f"https://{host_without_port}"
+                elif 'ecm.npa.gov.ng' in host_without_port or 'npa.gov.ng' in host_without_port:
+                    base_url = f"https://{host_without_port}"
+                else:
+                    # Unknown domain, use settings fallback
+                    base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:3002')
+        else:
+            # Fallback to settings
+            base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:3002')
+        
         verification_url = f"{base_url}/verify/{serial}"
         
         # Create the seal record

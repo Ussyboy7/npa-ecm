@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, FileStack, ShieldCheck, Workflow, BarChart3, Building2, Calendar, CheckCircle2 } from "lucide-react";
+import { ArrowRight, FileStack, ShieldCheck, Workflow, BarChart3, Building2, Calendar, CheckCircle2, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
@@ -148,6 +148,12 @@ export default function LandingPage() {
             <Link href="#phases" className="text-sm font-medium text-muted-foreground hover:text-foreground">
               Phases
             </Link>
+            <Button asChild variant="outline" className="gap-2">
+              <Link href="/verify">
+                <Shield className="h-4 w-4" />
+                Verify Seal
+              </Link>
+            </Button>
             <Button asChild variant="default" className="gap-2">
               <Link href="/login">
                 Launch ECM
@@ -174,6 +180,12 @@ export default function LandingPage() {
             <Link href="/login">
               Sign In to ECM
               <ArrowRight className="h-5 w-5" />
+            </Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="gap-2">
+            <Link href="/verify">
+              <Shield className="h-5 w-5" />
+              Verify Seal
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline">
@@ -322,6 +334,10 @@ export default function LandingPage() {
             </Link>
             <Link href="#phases" className="hover:text-foreground">
               Delivery Phases
+            </Link>
+            <Link href="/verify" className="hover:text-foreground flex items-center gap-1">
+              <Shield className="h-3.5 w-3.5" />
+              Verify Seal
             </Link>
             <Link href={`mailto:${NPA_ECM_CONTACT_EMAIL}`} className="hover:text-foreground">
               Contact

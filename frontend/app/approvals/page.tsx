@@ -21,6 +21,7 @@ import { apiFetch, getBaseUrl, getStoredAccessToken } from "@/lib/api-client";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { SealBadge } from "@/components/seals/SealBadge";
+import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
 import { EmptyState } from "@/components/shared/EmptyState";
 
 interface ExecutiveApproval {
@@ -366,9 +367,25 @@ export default function ApprovalsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {approval.sealData && (
+                          {approval.sealData && approval.isValid ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0">
+                                <DigitalSealPreview
+                                  officeName={approval.sealData.officeName}
+                                  officeTitle={approval.sealData.officeTitle}
+                                  serialNumber={approval.sealData.serialNumber}
+                                  signatureImage={approval.sealData.sealImageUrl}
+                                  timestamp={approval.sealData.sealedAt}
+                                  size={60}
+                                  showQR={false}
+                                  verificationBaseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+                                />
+                              </div>
+                              <SealBadge sealData={approval.sealData} size="sm" />
+                            </div>
+                          ) : approval.sealData ? (
                             <SealBadge sealData={approval.sealData} size="sm" />
-                          )}
+                          ) : null}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
@@ -405,7 +422,13 @@ export default function ApprovalsPage() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
-                              onClick={() => window.open(approval.verificationUrl, '_blank')}
+                              onClick={() => {
+                                // Build verification URL dynamically based on current environment
+                                const verifyUrl = typeof window !== 'undefined' 
+                                  ? `${window.location.origin}/verify/${approval.serialNumber}`
+                                  : approval.verificationUrl;
+                                window.open(verifyUrl, '_blank');
+                              }}
                               title="Verify Seal with QR Code"
                             >
                               <QrCode className="h-4 w-4" />

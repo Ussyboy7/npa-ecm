@@ -37,6 +37,19 @@ interface SealBadgeProps {
 }
 
 export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBadgeProps) {
+  // Build verification URL dynamically based on current environment
+  // This ensures it works in local/stag/prod regardless of stored URL
+  const getVerificationUrl = () => {
+    if (typeof window !== 'undefined') {
+      // Use current window origin to build URL dynamically
+      return `${window.location.origin}/verify/${sealData.serialNumber}`;
+    }
+    // Fallback to stored URL if window is not available (SSR)
+    return sealData.verificationUrl;
+  };
+
+  const verificationUrl = getVerificationUrl();
+
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleString("en-NG", {
@@ -136,7 +149,7 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
               <div className="flex flex-col items-center gap-2">
                 <div className="p-2 bg-white rounded-lg border">
                   <QRCodeSVG
-                    value={sealData.verificationUrl}
+                    value={verificationUrl}
                     size={80}
                     level="H"
                     includeMargin={false}
@@ -157,7 +170,7 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
               variant="outline"
               size="sm"
               className="gap-1"
-              onClick={() => window.open(sealData.verificationUrl, '_blank')}
+              onClick={() => window.open(verificationUrl, '_blank')}
             >
               <ExternalLink className="h-3 w-3" />
               Verify Online

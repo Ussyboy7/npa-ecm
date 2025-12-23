@@ -2369,6 +2369,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
                     seal, seal_data = SealGenerationService.generate_seal(
                         user=self.request.user,
                         correspondence=correspondence,
+                        request=self.request,  # Pass request to detect correct frontend URL
                     )
                     
                     # Store seal reference in minute

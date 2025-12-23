@@ -190,6 +190,11 @@ export const getUnreadNotificationCount = async (): Promise<number> => {
     console.log('[notifications-storage] Unread count response:', response);
     return response.count || 0;
   } catch (error) {
+    // Silently handle authentication errors - they're expected when user is not logged in
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage === 'Authentication required' || errorMessage === 'Authentication expired') {
+      return 0;
+    }
     console.error('[notifications-storage] Error fetching unread count:', error);
     logError('Failed to get unread count', error);
     return 0;

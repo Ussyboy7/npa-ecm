@@ -303,7 +303,10 @@ export const logout = async () => {
 
 export const hasTokens = () => {
   if (!isBrowser()) return false;
-  return Boolean(localStorage.getItem(ACCESS_TOKEN_KEY) && localStorage.getItem(REFRESH_TOKEN_KEY));
+  // Check if we have a valid (non-expired) access token, or at least a refresh token
+  const accessToken = getStoredAccessToken();
+  const refreshToken = getStoredRefreshToken();
+  return Boolean(accessToken || refreshToken);
 };
 
 export const buildQueryString = (params: Record<string, string | number | boolean | undefined>) => {

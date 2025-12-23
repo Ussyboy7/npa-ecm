@@ -16,7 +16,7 @@ import {
   updateFormDocument,
   generateFormDocumentPdf,
   markFormDocumentCompleted,
-  type FormDocument,
+  type FormDocument as FormDocumentType,
 } from "@/lib/api/dms-forms";
 import {
   getSignatures,
@@ -26,9 +26,10 @@ import {
 } from "@/lib/api/forms";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 import { toast } from "sonner";
-import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, CheckCircle, Paperclip, Upload, X, Download } from "lucide-react";
+import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, CheckCircle, Paperclip, Upload, X, Download, Send } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { LinkDocumentDialog } from "@/components/correspondence/LinkDocumentDialog";
+import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { FormTemplate } from "@/lib/types/forms";
 import { createDocumentVersion, type DocumentVersion } from "@/lib/dms-storage";
@@ -41,7 +42,7 @@ interface FormDocumentEditorProps {
 
 export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentEditorProps) {
   const { currentUser } = useCurrentUser();
-  const [formDoc, setFormDoc] = useState<FormDocument | null>(null);
+  const [formDoc, setFormDoc] = useState<FormDocumentType | null>(null);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
@@ -54,6 +55,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
     workflow: FormSignatureWorkflow;
   } | null>(null);
   const [showLinkCorrespondence, setShowLinkCorrespondence] = useState(false);
+  const [showForwardDialog, setShowForwardDialog] = useState(false);
   const [allSignatures, setAllSignatures] = useState<FormSignature[]>([]);
   const [supportingDocuments, setSupportingDocuments] = useState<DocumentVersion[]>([]);
   const [generatedPdf, setGeneratedPdf] = useState<DocumentVersion | null>(null);
@@ -75,7 +77,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
         )
-      ]) as FormDocument;
+      ]) as FormDocumentType;
       
       console.log('[FormDocumentEditor] Received form document:', { id: doc.id, template: doc.template });
       setFormDoc(doc);
@@ -350,15 +352,27 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               </Button>
             )}
 
-            {(formDoc.status === "draft" || formDoc.status === "in_progress") && !formDoc.signature_workflow && (
-              <Button 
-                variant="outline" 
-                onClick={() => setShowSignatureWorkflow(true)}
-                size="sm"
-              >
-                <PenTool className="h-4 w-4 mr-2" />
-                Route for Signatures
-              </Button>
+            {(formDoc.status === "draft" || formDoc.status === "in_progress") && (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowForwardDialog(true)}
+                  size="sm"
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Forward
+                </Button>
+                {!formDoc.signature_workflow && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowSignatureWorkflow(true)}
+                    size="sm"
+                  >
+                    <PenTool className="h-4 w-4 mr-2" />
+                    Route for Signatures
+                  </Button>
+                )}
+              </>
             )}
 
             {formDoc.status === "completed" && (
@@ -795,6 +809,19 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               console.error("Error linking workflow:", error);
               toast.error("Failed to link signature workflow");
             }
+          }}
+        />
+      )}
+
+      {/* Forward Form Dialog */}
+      {formDoc && (
+        <ForwardFormDialog
+          open={showForwardDialog}
+          onOpenChange={setShowForwardDialog}
+          form={formDoc as FormDocumentType}
+          onForwarded={async () => {
+            await loadFormDocument();
+            setShowForwardDialog(false);
           }}
         />
       )}

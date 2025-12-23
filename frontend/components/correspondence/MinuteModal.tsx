@@ -1147,38 +1147,83 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               )}
             </div>
 
-            {/* Action Type */}
-            <div className="space-y-2">
+            {/* Action Type - Clear Separation */}
+            <div className="space-y-3">
               <Label className="flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                Action Type
+                Action Type *
               </Label>
               <RadioGroup value={actionType} onValueChange={(v: any) => setActionType(v)}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="minute" id="minute-only" />
-                  <Label htmlFor="minute-only" className="font-normal cursor-pointer">
-                    Minute only
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="approve" id="approve-forward" />
-                  <Label htmlFor="approve-forward" className="font-normal cursor-pointer flex items-center gap-1">
-                    Approve & Forward
-                    {actionType === 'approve' && !userSignature && (
-                      <AlertCircle className="h-3 w-3 text-destructive" />
-                    )}
-                  </Label>
+                <div className="space-y-3">
+                  {/* Minute Option */}
+                  <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                    <RadioGroupItem value="minute" id="minute-only" className="mt-1" />
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor="minute-only" className="font-medium cursor-pointer flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-blue-500" />
+                        Add Minute
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Add a comment, instruction, or routing note. Optional signature. For workflow communication.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Approval Option */}
+                  <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
+                    actionType === 'approve' 
+                      ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
+                      : 'border-border hover:bg-muted/50'
+                  }`}>
+                    <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-emerald-600" />
+                        Executive Approval
+                        {actionType === 'approve' && !userSignature && (
+                          <AlertCircle className="h-3 w-3 text-destructive" />
+                        )}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        <strong className="text-emerald-600 dark:text-emerald-400">Formal approval with digital seal.</strong> Requires signature. 
+                        {isExecutive && ' This will apply a digital executive seal to the document.'}
+                      </p>
+                      {actionType === 'approve' && !userSignature && (
+                        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Digital signature required for approval
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </RadioGroup>
             </div>
           </div>
 
-          {/* Your Minute */}
+          {/* Your Minute/Approval Text */}
           <div className="space-y-3">
             <Label htmlFor="minute" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              Your Minute *
+              {actionType === 'approve' ? (
+                <>
+                  <Shield className="h-4 w-4 text-emerald-600" />
+                  Approval Comments *
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  Your Minute *
+                </>
+              )}
             </Label>
+            {actionType === 'approve' && (
+              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                  <strong>Executive Approval:</strong> This will apply a digital executive seal to the document. 
+                  Your signature is required and will be embedded in the seal.
+                </p>
+              </div>
+            )}
 
             {/* Collapsible Template Section */}
             <Collapsible open={templateSectionOpen} onOpenChange={setTemplateSectionOpen}>
@@ -1272,12 +1317,18 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             </Collapsible>
             <Textarea
               id="minute"
-              placeholder="Enter your comments, instructions, or recommendations..."
+              placeholder={
+                actionType === 'approve' 
+                  ? "Enter your approval comments or decision (this will be included with the digital seal)..."
+                  : "Enter your comments, instructions, or recommendations..."
+              }
               value={minuteText}
               onChange={(e) => handleTextChange(e.target.value)}
-              className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''}`}
+              className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''} ${
+                actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
+              }`}
               maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
-              aria-label="Minute text"
+              aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
               aria-required="true"
               aria-invalid={!!minuteTextError}
               aria-describedby="minute-text-help minute-text-error"
@@ -1908,8 +1959,17 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                         </>
                       )}
                     </Badge>
-                    <Badge variant="outline">
-                      {actionType === 'approve' ? 'Approve & Forward' : 'Minute Only'}
+                    <Badge variant={actionType === 'approve' ? 'default' : 'outline'} className={
+                      actionType === 'approve' ? 'bg-emerald-600 text-white border-emerald-600' : ''
+                    }>
+                      {actionType === 'approve' ? (
+                        <>
+                          <Shield className="h-3 w-3 mr-1" />
+                          Executive Approval
+                        </>
+                      ) : (
+                        'Minute Only'
+                      )}
                     </Badge>
                     {applySignature && userSignature && (
                       <Badge variant="outline" className="gap-1">
@@ -1919,7 +1979,14 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                     )}
                   </div>
                   <p className="text-muted-foreground">
-                    <strong>{currentUser?.name}</strong> will minute and forward to{' '}
+                    <strong>{currentUser?.name}</strong> will{' '}
+                    {actionType === 'approve' ? (
+                      <>
+                        <strong className="text-emerald-600">approve with digital seal</strong> and forward to{' '}
+                      </>
+                    ) : (
+                      'minute and forward to '
+                    )}
                     <strong>
                       {forwardTo 
                         ? findUserById(forwardTo)?.name 
