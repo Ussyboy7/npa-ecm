@@ -242,13 +242,13 @@ export default function ApprovalsPage() {
             sealedBy: (user.first_name && user.last_name) 
               ? `${user.first_name as string} ${user.last_name as string}` 
               : (user.username as string) || "Unknown",
-          sealedByRole: m.user?.system_role_name || m.grade_level || "Executive",
-          officeName: m.seal_data.office_name,
-          officeTitle: m.seal_data.office_title,
-          sealedAt: m.seal_data.sealed_at || m.timestamp,
-          serialNumber: m.seal_data.serial_number,
-          verificationUrl: m.seal_data.verification_url,
-          isValid: m.seal_data.is_valid,
+          sealedByRole: (user.system_role_name as string) || (m.grade_level as string) || "Executive",
+          officeName: (m.sealData as Record<string, unknown>)?.office_name as string,
+          officeTitle: (m.sealData as Record<string, unknown>)?.office_title as string,
+          sealedAt: ((m.sealData as Record<string, unknown>)?.sealed_at as string) || (m.timestamp as string),
+          serialNumber: (m.sealData as Record<string, unknown>)?.serial_number as string,
+          verificationUrl: (m.sealData as Record<string, unknown>)?.verification_url as string,
+          isValid: (m.sealData as Record<string, unknown>)?.is_valid as boolean,
         }));
 
       // Apply filters to export data
