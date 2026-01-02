@@ -70,7 +70,7 @@ export default function ApprovalsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterRole, setFilterRole] = useState<string>(() => getInitialFilter('role', 'all'));
   const [filterStatus, setFilterStatus] = useState<string>(() => getInitialFilter('status', 'all'));
-  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'last30' | 'last90' | 'thisYear' | 'custom'>(() => getInitialFilter('dateRange', 'all') as typeof dateRangeFilter);
+  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'last30' | 'last90' | 'thisYear' | 'custom'>(() => getInitialFilter('dateRange', 'all') as 'all' | 'last30' | 'last90' | 'thisYear' | 'custom');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>(() => getInitialFilter('sortBy', 'sealedAt'));
