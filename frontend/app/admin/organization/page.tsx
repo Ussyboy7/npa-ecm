@@ -23,7 +23,7 @@ import {
   Layers,
   FolderTree,
 } from "lucide-react";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOrganization, type Directorate, type Division, type Department } from "@/contexts/OrganizationContext";
 import { DirectorateFormModal } from "@/components/admin/DirectorateFormModal";
 import { DirectorateLeadershipDialog } from "@/components/admin/DirectorateLeadershipDialog";
 import { DivisionFormModal } from "@/components/admin/DivisionFormModal";
@@ -84,9 +84,9 @@ const OrganizationStructurePage = () => {
   const [departmentFormOpen, setDepartmentFormOpen] = useState(false);
   
   // Selected entities for editing
-  const [selectedDirectorate, setSelectedDirectorate] = useState<Record<string, unknown> | null>(null);
-  const [selectedDivision, setSelectedDivision] = useState<Record<string, unknown> | null>(null);
-  const [selectedDepartment, setSelectedDepartment] = useState<Record<string, unknown> | null>(null);
+  const [selectedDirectorate, setSelectedDirectorate] = useState<Directorate | null>(null);
+  const [selectedDivision, setSelectedDivision] = useState<Division | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
   
   // For creating new entities with parent context
   const [parentDirectorateId, setParentDirectorateId] = useState<string | null>(null);
@@ -234,12 +234,12 @@ const OrganizationStructurePage = () => {
     setDirectorateFormOpen(true);
   };
 
-  const handleEditDirectorate = (directorate: Record<string, unknown>) => {
+  const handleEditDirectorate = (directorate: Directorate) => {
     setSelectedDirectorate(directorate);
     setDirectorateFormOpen(true);
   };
 
-  const handleAssignLeader = (directorate: Record<string, unknown>) => {
+  const handleAssignLeader = (directorate: Directorate) => {
     setSelectedDirectorate(directorate);
     setDirectorateLeadershipOpen(true);
   };
@@ -250,9 +250,9 @@ const OrganizationStructurePage = () => {
     setDivisionFormOpen(true);
   };
 
-  const handleEditDivision = (division: Record<string, unknown>) => {
+  const handleEditDivision = (division: Division) => {
     setSelectedDivision(division);
-    setParentDirectorateId(typeof division.directorateId === 'string' ? division.directorateId : null);
+    setParentDirectorateId(division.directorateId);
     setDivisionFormOpen(true);
   };
 
@@ -262,9 +262,9 @@ const OrganizationStructurePage = () => {
     setDepartmentFormOpen(true);
   };
 
-  const handleEditDepartment = (department: Record<string, unknown>) => {
+  const handleEditDepartment = (department: Department) => {
     setSelectedDepartment(department);
-    setParentDivisionId(typeof department.divisionId === 'string' ? department.divisionId : null);
+    setParentDivisionId(department.divisionId);
     setDepartmentFormOpen(true);
   };
 
@@ -509,7 +509,7 @@ const OrganizationStructurePage = () => {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    onClick={() => handleAssignLeader(directorate as unknown as Record<string, unknown>)}
+                                    onClick={() => handleAssignLeader(directorate)}
                                   >
                                     <Users className="h-4 w-4" />
                                   </Button>
@@ -523,7 +523,7 @@ const OrganizationStructurePage = () => {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    onClick={() => handleEditDirectorate(directorate as unknown as Record<string, unknown>)}
+                                    onClick={() => handleEditDirectorate(directorate)}
                                   >
                                     <Edit3 className="h-4 w-4" />
                                   </Button>
@@ -616,7 +616,7 @@ const OrganizationStructurePage = () => {
                                               variant="ghost"
                                               size="icon"
                                               className="h-7 w-7"
-                                              onClick={() => handleEditDivision(division as unknown as Record<string, unknown>)}
+                                              onClick={() => handleEditDivision(division)}
                                             >
                                               <Edit3 className="h-3.5 w-3.5" />
                                             </Button>
@@ -672,7 +672,7 @@ const OrganizationStructurePage = () => {
                                                       variant="ghost"
                                                       size="icon"
                                                       className="h-6 w-6"
-                                                      onClick={() => handleEditDepartment(department as unknown as Record<string, unknown>)}
+                                                      onClick={() => handleEditDepartment(department)}
                                                     >
                                                       <Edit3 className="h-3 w-3" />
                                                     </Button>
