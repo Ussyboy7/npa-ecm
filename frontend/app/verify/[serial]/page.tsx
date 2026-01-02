@@ -469,8 +469,8 @@ export default function VerifyPage() {
                 </div>
               )}
             </CardContent>
-            </Card>
-          ) : verification && verification.serial_number ? (
+          </Card>
+        ) : verification && verification.serial_number ? (
             // Show verification result if we have verification data (valid or invalid)
             <SealVerificationResult
               verification={verification}

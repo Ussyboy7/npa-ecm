@@ -168,7 +168,6 @@ export function LinkFormDialog({
     if (open) {
       fetchForms();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.pageSize, searchQuery, open]);
 
   const toggleSelection = (id: string) => {

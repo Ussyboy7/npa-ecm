@@ -171,7 +171,6 @@ export function LinkCorrespondenceDialog({
     if (open) {
       fetchCorrespondence();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.pageSize, searchQuery, open]);
 
   const toggleSelection = (id: string) => {

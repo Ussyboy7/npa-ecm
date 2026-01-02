@@ -353,7 +353,6 @@ const RecordsArchivePage = () => {
   // Reset page when filters change
   useEffect(() => {
     pagination.setPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, sortBy, sortOrder]);
   
   // Sync pagination with URL
@@ -367,7 +366,6 @@ const RecordsArchivePage = () => {
     } else if (pagination.page !== 1) {
       pagination.setPage(1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   // Fetch records

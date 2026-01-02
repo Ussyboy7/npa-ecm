@@ -221,7 +221,6 @@ export function useSidebarCounts() {
         abortControllerRef.current.abort();
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - only run once on mount
 
   // Expose a refresh function

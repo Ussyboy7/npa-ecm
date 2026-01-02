@@ -88,7 +88,6 @@ export const DocumentsStep = memo(function DocumentsStep({
                 : 'border-border hover:bg-muted/50 hover:border-primary/50'
             }`}
           aria-label="Upload documents"
-          aria-invalid={!!errors.documentFiles}
           aria-describedby={errors.documentFiles ? 'documentFiles-error' : undefined}
         >
           <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" aria-hidden="true" />

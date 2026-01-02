@@ -503,7 +503,6 @@ const CorrespondenceDetailContent = () => {
     return () => {
       ignore = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, detailLoading]); // Removed fetchWithRetry from deps - it's stable from useApiRetry hook
 
   // Function to refresh minutes from API with retry logic

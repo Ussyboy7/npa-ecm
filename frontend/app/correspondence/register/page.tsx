@@ -209,7 +209,6 @@ const CorrespondenceRegister = () => {
         payload: { referenceNumber: generateReferenceNumber() },
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
   // Draft auto-save hook - memoize callbacks to prevent infinite loops

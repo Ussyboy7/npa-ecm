@@ -196,7 +196,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   // Reset page when filters change
   useEffect(() => {
     pagination.goToFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, scope, selectedStatuses, selectedTypes, selectedPriorities, divisionFilter, executiveFilter, dateFrom, dateTo, sortBy, sortOrder, pagination.pageSize]);
 
   // Fetch cases with request cancellation

@@ -131,7 +131,6 @@ export const useCurrentUser = () => {
       // Remove this component as a subscriber
       globalSubscribers.delete(subscriber);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - only run once on mount
 
   const loadCurrentUser = useCallback(async () => {

@@ -79,7 +79,6 @@ export default function MyDocumentsPage() {
 
   useEffect(() => {
     pagination.goToFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, debouncedSearch, selectedStatuses, selectedTypes, dateFrom, dateTo, sortBy, sortOrder]);
 
   const activeFilterCount = useMemo(() => {

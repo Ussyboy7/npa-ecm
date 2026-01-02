@@ -247,7 +247,6 @@ const CorrespondenceInbox = () => {
 
   useEffect(() => {
     pagination.goToFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOfficeId, debouncedSearch, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {

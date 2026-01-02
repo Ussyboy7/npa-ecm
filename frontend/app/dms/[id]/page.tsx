@@ -557,7 +557,6 @@ const DocumentDetailPage = () => {
       ignore = true;
       isLoadingRef.current = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params?.id, hydrated, currentUser?.id]); // loadDocument is stable (memoized with params?.id) and doesn't need to be in deps
 
 

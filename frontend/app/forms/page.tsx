@@ -72,7 +72,6 @@ const FormsPage = () => {
     if (pagination.page > 1) {
       pagination.setPage(1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, templateFilter, executiveFilter, debouncedSearch]);
   
   // Check if user is secretary
