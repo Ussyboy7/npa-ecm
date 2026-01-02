@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import type { FormTemplate } from "@/lib/types/forms";
 import { FormBuilder } from "@/components/forms/FormBuilder";
+import { logError } from "@/lib/client-logger";
 
 export default function FormTemplateEditorPage() {
   const router = useRouter();
