@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { apiFetch } from '@/lib/api-client';
 import { formatDistanceToNow } from 'date-fns';
+import { logError } from '@/lib/client-logger';
 
 interface ActivityLogEntry {
   id: string;
