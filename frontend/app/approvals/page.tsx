@@ -234,6 +234,7 @@ export default function ApprovalsPage() {
         .map((m: Record<string, unknown>) => {
           const correspondenceDetails = (m.correspondence_details as Record<string, unknown>) || {};
           const user = (m.user as Record<string, unknown>) || {};
+          const sealData = (m.sealData as Record<string, unknown>) || {};
           return {
             id: m.id,
             correspondenceId: m.correspondence,
@@ -242,14 +243,15 @@ export default function ApprovalsPage() {
             sealedBy: (user.first_name && user.last_name) 
               ? `${user.first_name as string} ${user.last_name as string}` 
               : (user.username as string) || "Unknown",
-          sealedByRole: (user.system_role_name as string) || (m.grade_level as string) || "Executive",
-          officeName: (m.sealData as Record<string, unknown>)?.office_name as string,
-          officeTitle: (m.sealData as Record<string, unknown>)?.office_title as string,
-          sealedAt: ((m.sealData as Record<string, unknown>)?.sealed_at as string) || (m.timestamp as string),
-          serialNumber: (m.sealData as Record<string, unknown>)?.serial_number as string,
-          verificationUrl: (m.sealData as Record<string, unknown>)?.verification_url as string,
-          isValid: (m.sealData as Record<string, unknown>)?.is_valid as boolean,
-        }));
+            sealedByRole: (user.system_role_name as string) || (m.grade_level as string) || "Executive",
+            officeName: (sealData.office_name as string) || "N/A",
+            officeTitle: (sealData.office_title as string) || "N/A",
+            sealedAt: (sealData.sealed_at as string) || (m.timestamp as string) || "",
+            serialNumber: (sealData.serial_number as string) || "N/A",
+            verificationUrl: (sealData.verification_url as string) || "",
+            isValid: (sealData.is_valid as boolean) ?? true,
+          };
+        });
 
       // Apply filters to export data
       const filtered = allExecutiveApprovals.filter((approval) => {
