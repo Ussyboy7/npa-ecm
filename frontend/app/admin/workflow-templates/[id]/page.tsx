@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/workflow";
 import { toast } from "@/hooks/use-toast";
 import type { WorkflowTemplate, WorkflowTemplateFormData } from "@/lib/types/workflow";
+import { logError } from "@/lib/client-logger";
 
 function WorkflowTemplateEditorPageContent() {
   const router = useRouter();

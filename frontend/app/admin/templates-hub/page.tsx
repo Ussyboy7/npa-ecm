@@ -53,6 +53,7 @@ import {
 import { getWorkflowTemplates, deleteWorkflowTemplate, updateWorkflowTemplate } from "@/lib/api/workflow";
 import { getFormTemplates, deleteFormTemplate, cloneFormTemplate } from "@/lib/api/forms";
 import type { WorkflowTemplate } from "@/lib/types/workflow";
+import { logError } from "@/lib/client-logger";
 import type { FormTemplate } from "@/lib/types/forms";
 import {
   Plus,
