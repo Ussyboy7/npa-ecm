@@ -471,54 +471,54 @@ export default function VerifyPage() {
             </CardContent>
           </Card>
         ) : verification && verification.serial_number ? (
-            // Show verification result if we have verification data (valid or invalid)
-            <SealVerificationResult
-              verification={verification}
-              serial={serial}
-              onRetry={retry}
-              onVerifyAnother={handleVerifyAnother}
-            />
-          ) : error && !verification ? (
-            // Show error state only if we have an error and no verification data (network error after retries)
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardContent className="py-16">
-                <div className="flex flex-col items-center gap-6 text-center">
-                  <Shield className="h-16 w-16 text-slate-500" />
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-2">Verification Failed</h3>
-                    <div className="space-y-3 mb-6">
-                      <p className="text-sm text-slate-400">
-                        {error || 'Unable to verify seal. Please try again.'}
-                      </p>
-                      {serial && (
-                        <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700">
-                          <p className="text-xs text-slate-500 mb-1">Serial Number:</p>
-                          <p className="text-sm font-mono text-slate-300">{serial}</p>
-                        </div>
-                      )}
-                      <div className="text-xs text-slate-500 space-y-1">
-                        <p>Possible reasons:</p>
-                        <ul className="list-disc list-inside space-y-1 text-left max-w-md mx-auto">
-                          <li>Serial number format is incorrect</li>
-                          <li>Seal does not exist in the system</li>
-                          <li>Network connection issue</li>
-                          <li>Server is temporarily unavailable</li>
-                        </ul>
+          // Show verification result if we have verification data (valid or invalid)
+          <SealVerificationResult
+            verification={verification}
+            serial={serial}
+            onRetry={retry}
+            onVerifyAnother={handleVerifyAnother}
+          />
+        ) : error && !verification ? (
+          // Show error state only if we have an error and no verification data (network error after retries)
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardContent className="py-16">
+              <div className="flex flex-col items-center gap-6 text-center">
+                <Shield className="h-16 w-16 text-slate-500" />
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Verification Failed</h3>
+                  <div className="space-y-3 mb-6">
+                    <p className="text-sm text-slate-400">
+                      {error || 'Unable to verify seal. Please try again.'}
+                    </p>
+                    {serial && (
+                      <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700">
+                        <p className="text-xs text-slate-500 mb-1">Serial Number:</p>
+                        <p className="text-sm font-mono text-slate-300">{serial}</p>
                       </div>
-                    </div>
-                    <div className="flex items-center justify-center gap-2">
-                      <Button onClick={retry} variant="outline" disabled={loading}>
-                        {loading ? 'Retrying...' : 'Retry'}
-                      </Button>
-                      <Button onClick={handleVerifyAnother} variant="default">
-                        Verify Another
-                      </Button>
+                    )}
+                    <div className="text-xs text-slate-500 space-y-1">
+                      <p>Possible reasons:</p>
+                      <ul className="list-disc list-inside space-y-1 text-left max-w-md mx-auto">
+                        <li>Serial number format is incorrect</li>
+                        <li>Seal does not exist in the system</li>
+                        <li>Network connection issue</li>
+                        <li>Server is temporarily unavailable</li>
+                      </ul>
                     </div>
                   </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <Button onClick={retry} variant="outline" disabled={loading}>
+                      {loading ? 'Retrying...' : 'Retry'}
+                    </Button>
+                    <Button onClick={handleVerifyAnother} variant="default">
+                      Verify Another
+                    </Button>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
               {/* Contact Info - Enhanced */}
               <div className="pt-6 border-t border-slate-700">
