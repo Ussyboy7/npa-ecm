@@ -145,7 +145,6 @@ export default function TemplatesHubPage() {
   };
 
   useEffect(() => {
-    initializeTemplates();
     refreshTemplates();
   }, []);
 
