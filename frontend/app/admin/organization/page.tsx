@@ -616,7 +616,7 @@ const OrganizationStructurePage = () => {
                                               variant="ghost"
                                               size="icon"
                                               className="h-7 w-7"
-                                              onClick={() => handleEditDivision(division)}
+                                              onClick={() => handleEditDivision(division as unknown as Record<string, unknown>)}
                                             >
                                               <Edit3 className="h-3.5 w-3.5" />
                                             </Button>
@@ -672,7 +672,7 @@ const OrganizationStructurePage = () => {
                                                       variant="ghost"
                                                       size="icon"
                                                       className="h-6 w-6"
-                                                      onClick={() => handleEditDepartment(department)}
+                                                      onClick={() => handleEditDepartment(department as unknown as Record<string, unknown>)}
                                                     >
                                                       <Edit3 className="h-3 w-3" />
                                                     </Button>
