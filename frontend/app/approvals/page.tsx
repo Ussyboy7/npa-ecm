@@ -166,7 +166,10 @@ export default function ApprovalsPage() {
       
       setApprovals(executiveApprovals);
       // Use backend count for accurate pagination
-      setCount(response.count ?? executiveApprovals.length);
+      const count = (response && typeof response === 'object' && 'count' in response && typeof response.count === 'number') 
+        ? response.count 
+        : executiveApprovals.length;
+      setCount(count);
     } catch (err: unknown) {
       const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to load executive approvals';
       setError(errorMessage);
