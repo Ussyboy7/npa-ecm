@@ -79,6 +79,7 @@ export function BulkLinkToCaseDialog({
   }, [debouncedSearch, open]);
 
   const loadCases = async (search?: string) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setLoading(false);
       return;
     }

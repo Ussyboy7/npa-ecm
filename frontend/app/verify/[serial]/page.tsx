@@ -8,6 +8,7 @@ import { CheckCircle2, XCircle, Shield, Calendar, User, FileText, Clock, AlertTr
 import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { useSealVerification } from "@/hooks/use-seal-verification";
 import { SealVerificationResult } from "@/components/verify/SealVerificationResult";
