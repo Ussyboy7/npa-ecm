@@ -40,7 +40,6 @@ export default function VerifyPage() {
   const rawSerial = params.serial as string;
   // Decode serial number from URL (in case it was encoded)
   const serial = rawSerial ? decodeURIComponent(rawSerial) : '';
-  const [mounted, setMounted] = useState(false);
   
   const [verification, setVerification] = useState<SealVerification | null>(null);
   const [loading, setLoading] = useState(true);
@@ -497,36 +496,3 @@ export default function VerifyPage() {
   );
 }
 
-// Mini form for manual verification
-function VerifyForm() {
-  const [serialInput, setSerialInput] = useState("");
-
-  const handleVerify = () => {
-    if (serialInput.trim()) {
-      window.location.href = `/verify/${serialInput.trim()}`;
-    }
-  };
-
-  return (
-    <div className="flex gap-2 max-w-md mx-auto">
-      <div className="relative flex-1">
-        <input
-          type="text"
-          value={serialInput}
-          onChange={(e) => setSerialInput(e.target.value.toUpperCase())}
-          placeholder="NPA-20241201-A8F3B2C1"
-          className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
-          onKeyDown={(e) => e.key === 'Enter' && handleVerify()}
-        />
-      </div>
-      <Button 
-        onClick={handleVerify} 
-        disabled={!serialInput.trim()}
-        className="bg-emerald-600 hover:bg-emerald-700"
-      >
-        <Shield className="h-4 w-4 mr-2" />
-        Verify
-      </Button>
-    </div>
-  );
-}

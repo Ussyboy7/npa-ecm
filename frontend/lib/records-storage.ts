@@ -4,7 +4,6 @@
 
 import { apiFetch } from './api-client';
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
-import { logError } from './client-logger';
 
 export interface RetentionPolicy {
   id: string;

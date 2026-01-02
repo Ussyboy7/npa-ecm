@@ -32,7 +32,6 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/dms-storage";
 import { shareDocument, apiFetch, hasTokens } from "@/lib/dms-storage";
-import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Search, Users, Building2, Users2, Globe, AlertTriangle, Loader2, X, FileText, Trash2, Edit2, History, FolderKanban, CheckCircle2, ArrowLeft, Shield, Mail, Send, MessageSquare, CheckCircle } from "lucide-react";
