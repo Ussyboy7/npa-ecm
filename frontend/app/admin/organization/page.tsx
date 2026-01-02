@@ -84,9 +84,9 @@ const OrganizationStructurePage = () => {
   const [departmentFormOpen, setDepartmentFormOpen] = useState(false);
   
   // Selected entities for editing
-  const [selectedDirectorate, setSelectedDirectorate] = useState<Record<string, unknown>>(null);
-  const [selectedDivision, setSelectedDivision] = useState<Record<string, unknown>>(null);
-  const [selectedDepartment, setSelectedDepartment] = useState<Record<string, unknown>>(null);
+  const [selectedDirectorate, setSelectedDirectorate] = useState<Record<string, unknown> | null>(null);
+  const [selectedDivision, setSelectedDivision] = useState<Record<string, unknown> | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<Record<string, unknown> | null>(null);
   
   // For creating new entities with parent context
   const [parentDirectorateId, setParentDirectorateId] = useState<string | null>(null);
