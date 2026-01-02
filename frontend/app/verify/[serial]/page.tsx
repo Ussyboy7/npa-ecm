@@ -417,59 +417,6 @@ export default function VerifyPage() {
               </div>
             </CardContent>
           </Card>
-        ) : (
-          /* INVALID SEAL */
-          <Card className="bg-slate-800/50 border-slate-700 overflow-hidden">
-            {/* Error Banner */}
-            <div className="bg-gradient-to-r from-red-600 to-red-500 p-6 text-white">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-white/20 flex items-center justify-center">
-                  <XCircle className="h-10 w-10" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold">
-                    {verification?.invalidated_at ? "Invalidated Seal" : "Invalid Seal"}
-                  </h2>
-                  <p className="text-red-100">
-                    {error || "This seal could not be verified"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <CardContent className="p-6 space-y-6">
-              {/* Serial Number - Enhanced */}
-              <div className="text-center py-5 bg-gradient-to-r from-red-950/30 to-red-900/20 rounded-lg border border-red-800/30">
-                <p className="text-xs text-red-400 uppercase tracking-wider mb-2 font-semibold">Serial Number</p>
-                <p className="text-2xl font-mono font-bold text-white tracking-wider">{serial}</p>
-                <div className="mt-3 flex items-center justify-center gap-2">
-                  <Badge variant="destructive" className="bg-red-600/20 text-red-400 border-red-600/50">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Invalid
-                  </Badge>
-                </div>
-              </div>
-
-              {verification?.invalidated_at && (
-                <div className="p-4 bg-red-950/50 rounded-lg border border-red-900">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-red-400">This seal was invalidated</p>
-                      <p className="text-xs text-red-300 mt-1">
-                        Date: {formatDate(verification.invalidated_at)}
-                      </p>
-                      {verification.invalidated_reason && (
-                        <p className="text-xs text-red-300 mt-1">
-                          Reason: {verification.invalidated_reason}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         ) : verification && verification.serial_number ? (
           // Show verification result if we have verification data (valid or invalid)
           <SealVerificationResult
