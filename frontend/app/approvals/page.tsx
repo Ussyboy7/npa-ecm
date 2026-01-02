@@ -126,8 +126,8 @@ export default function ApprovalsPage() {
         ordering: '-timestamp', // Most recent first
       });
       
-      const response = await apiFetch<Record<string, unknown>>(`/correspondence/minutes/?${params.toString()}`);
-      const minutes = Array.isArray(response) ? response : response.results || [];
+      const response = await apiFetch<Record<string, unknown> | Record<string, unknown>[] | { results: Record<string, unknown>[] }>(`/correspondence/minutes/?${params.toString()}`);
+      const minutes: Record<string, unknown>[] = Array.isArray(response) ? response : (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) ? response.results : [];
       
       // Map minutes to executive approvals (all should have seal_data since we filtered)
       const executiveApprovals = minutes
