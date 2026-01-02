@@ -136,8 +136,8 @@ export default function ApprovalsPage() {
           const user = (m.user as Record<string, unknown>) || {};
           const sealData = (m.seal_data as Record<string, unknown>) || {};
           return {
-            id: m.id,
-            correspondenceId: m.correspondence,
+            id: String(m.id || ""),
+            correspondenceId: String(m.correspondence || ""),
             correspondenceSubject: (correspondenceDetails.subject as string) || "N/A",
             correspondenceReference: (correspondenceDetails.reference_number as string) || "N/A",
             sealedBy: (user.first_name && user.last_name) 
