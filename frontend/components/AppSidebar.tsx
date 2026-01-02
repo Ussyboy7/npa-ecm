@@ -618,9 +618,45 @@ export function AppSidebar() {
                 )}
               </SidebarMenuItem>
 
+<<<<<<< HEAD
 
               {/* Forms Library - renamed from Forms */}
               {visibility.showFormsLibrary && (
+=======
+              {/* Verify Seal - Public verification page */}
+              <SidebarMenuItem>
+                {isCollapsed ? (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={pathname?.startsWith('/verify')}>
+                          <Link href="/verify">
+                            <Shield className="h-4 w-4" />
+                            <span className="sr-only">Verify Seal</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Verify Seal</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Verify digital executive seals
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ) : (
+                  <SidebarMenuButton asChild isActive={pathname?.startsWith('/verify')}>
+                    <Link href="/verify">
+                      <Shield className="h-4 w-4" />
+                      <span>Verify Seal</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
+              </SidebarMenuItem>
+
+              {/* Content Capture */}
+              {permissions.canAccessDocumentManagement && (
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                 <SidebarMenuItem>
                   {isCollapsed ? (
                       <Tooltip>

@@ -17,9 +17,15 @@ import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { toast } from "sonner";
+<<<<<<< HEAD
 import { exportToCSV } from '@/lib/admin-export';
 import { format } from 'date-fns';
 import { logError } from '@/lib/client-logger';
+=======
+import { SealBadge } from "@/components/seals/SealBadge";
+import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
+import { EmptyState } from "@/components/shared/EmptyState";
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
 
 interface ExecutiveApproval {
   id: string;
@@ -788,6 +794,7 @@ export default function ApprovalsPage() {
           />
         </div>
 
+<<<<<<< HEAD
         {/* Error */}
         {error && (
           <Alert variant="destructive">
@@ -853,6 +860,151 @@ export default function ApprovalsPage() {
             className="border-t border-border/60 pt-4"
           />
         )}
+=======
+        {/* Approvals Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Approvals ({filteredApprovals.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+              </div>
+            ) : filteredApprovals.length === 0 ? (
+              <EmptyState
+                icon={Shield}
+                title="No executive approvals found"
+                description={
+                  activeFilterCount > 0 
+                    ? "Try adjusting your filters to see more results."
+                    : "Executive approvals will appear here once they are created."
+                }
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px]">Correspondence</TableHead>
+                      <TableHead className="w-[180px]">Executive</TableHead>
+                      <TableHead className="w-[120px]">Serial Number</TableHead>
+                      <TableHead className="w-[150px]">Sealed At</TableHead>
+                      <TableHead className="w-[100px]">Status</TableHead>
+                      <TableHead className="w-[100px] text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredApprovals.map((approval) => (
+                      <TableRow key={approval.id} className="hover:bg-muted/50">
+                        <TableCell>
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">{approval.correspondenceReference}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {approval.correspondenceSubject}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm truncate">{approval.sealedBy}</div>
+                            <div className="text-xs text-muted-foreground truncate">{approval.sealedByRole}</div>
+                            <div className="text-xs text-muted-foreground truncate">{approval.officeTitle}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <code className="text-xs font-mono bg-muted px-2 py-1 rounded block truncate max-w-full">
+                            {approval.serialNumber}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs">
+                            {format(new Date(approval.sealedAt), "MMM d, yyyy")}
+                            <div className="text-muted-foreground mt-0.5">
+                              {format(new Date(approval.sealedAt), "h:mm a")}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {approval.sealData && approval.isValid ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-shrink-0">
+                                <DigitalSealPreview
+                                  officeName={approval.sealData.officeName}
+                                  officeTitle={approval.sealData.officeTitle}
+                                  serialNumber={approval.sealData.serialNumber}
+                                  signatureImage={approval.sealData.sealImageUrl}
+                                  timestamp={approval.sealData.sealedAt}
+                                  size={60}
+                                  showQR={false}
+                                  verificationBaseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+                                />
+                              </div>
+                              <SealBadge sealData={approval.sealData} size="sm" />
+                            </div>
+                          ) : approval.sealData ? (
+                            <SealBadge sealData={approval.sealData} size="sm" />
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={async () => {
+                                try {
+                                  const pdfUrl = `${getBaseUrl()}/correspondence/minutes/${approval.id}/approval-pdf/`;
+                                  const pdfBlob = await apiFetch<Blob>(pdfUrl, { responseType: 'blob' });
+                                  const blobUrl = URL.createObjectURL(pdfBlob);
+                                  window.open(blobUrl, '_blank');
+                                  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+                                } catch (error) {
+                                  console.error("Failed to load PDF:", error);
+                                  toast.error(`Failed to load PDF: ${error instanceof Error ? error.message : String(error)}`);
+                                }
+                              }}
+                              title="View Approval PDF"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => router.push(`/correspondence/${approval.correspondenceId}`)}
+                              title="View Correspondence Details"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => {
+                                // Build verification URL dynamically based on current environment
+                                const verifyUrl = typeof window !== 'undefined' 
+                                  ? `${window.location.origin}/verify/${approval.serialNumber}`
+                                  : approval.verificationUrl;
+                                window.open(verifyUrl, '_blank');
+                              }}
+                              title="Verify Seal with QR Code"
+                            >
+                              <QrCode className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
       </div>
     </DashboardLayout>
   );

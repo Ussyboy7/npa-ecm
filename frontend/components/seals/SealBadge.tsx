@@ -137,10 +137,25 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
                 <p className="text-xs font-medium text-muted-foreground mb-1">Serial Number</p>
                 <p className="font-mono font-bold text-sm text-foreground">{sealData.serialNumber}</p>
               </div>
+<<<<<<< HEAD
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Sealed By</p>
                 <p className="font-medium text-sm text-foreground">{sealData.sealedBy}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{sealData.officeTitle}</p>
+=======
+              
+              {/* QR Code */}
+              <div className="flex flex-col items-center gap-2">
+                <div className="p-2 bg-white rounded-lg border">
+                  <QRCodeSVG
+                    value={verificationUrl}
+                    size={80}
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center">Scan to verify</p>
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
               </div>
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Date & Time</p>
@@ -168,11 +183,19 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
               {sealData.isValid ? "✓ Valid" : "✗ Invalid"}
             </Badge>
             
+<<<<<<< HEAD
             <Link 
               href={`/verify/${sealData.serialNumber}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex"
+=======
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={() => window.open(verificationUrl, '_blank')}
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
             >
               <Button
                 variant="default"

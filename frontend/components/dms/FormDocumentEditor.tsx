@@ -27,11 +27,18 @@ import {
 } from "@/lib/api/forms";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 import { toast } from "sonner";
+<<<<<<< HEAD
 import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, CheckCircle, Paperclip, Upload, X, Download, Send, Eye } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { LinkDocumentDialog } from "@/components/correspondence/LinkDocumentDialog";
 import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
 import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPreviewModal";
+=======
+import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, CheckCircle, Paperclip, Upload, X, Download, Send } from "lucide-react";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { LinkDocumentDialog } from "@/components/correspondence/LinkDocumentDialog";
+import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { FormTemplate } from "@/lib/types/forms";
 import { createDocumentVersion, type DocumentVersion } from "@/lib/dms-storage";

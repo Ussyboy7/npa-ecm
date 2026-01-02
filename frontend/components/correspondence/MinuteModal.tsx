@@ -1442,7 +1442,11 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
                 Action Type *
               </Label>
+<<<<<<< HEAD
               <RadioGroup value={actionType} onValueChange={(v: Record<string, unknown>) => setActionType(v)}>
+=======
+              <RadioGroup value={actionType} onValueChange={(v: any) => setActionType(v)}>
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                 <div className="space-y-3">
                   {/* Minute Option */}
                   <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
@@ -1453,7 +1457,11 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                         Add Minute
                       </Label>
                       <p className="text-xs text-muted-foreground">
+<<<<<<< HEAD
                         Add a comment, instruction, or routing note. For workflow communication.
+=======
+                        Add a comment, instruction, or routing note. Optional signature. For workflow communication.
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                       </p>
                     </div>
                   </div>
@@ -1490,6 +1498,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             </div>
           </div>
 
+<<<<<<< HEAD
           {/* Minute Text Section - Using shared component */}
           <MinuteTextSection
             minuteText={minuteText}
@@ -1510,6 +1519,31 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             getTemplatePlainText={getTemplatePlainText}
             canDeleteTemplate={(template) => template.scope === 'user' && template.createdBy === currentUser?.id}
           />
+=======
+          {/* Your Minute/Approval Text */}
+          <div className="space-y-3">
+            <Label htmlFor="minute" className="flex items-center gap-2">
+              {actionType === 'approve' ? (
+                <>
+                  <Shield className="h-4 w-4 text-emerald-600" />
+                  Approval Comments *
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  Your Minute *
+                </>
+              )}
+            </Label>
+            {actionType === 'approve' && (
+              <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                  <strong>Executive Approval:</strong> This will apply a digital executive seal to the document. 
+                  Your signature is required and will be embedded in the seal.
+                </p>
+              </div>
+            )}
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
 
           {/* Route To - Using extracted RoutingSection component */}
           <RoutingSection
@@ -1559,6 +1593,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             getUserOfficeInfo={getUserOfficeInfo}
           />
 
+<<<<<<< HEAD
           {/* Signature Section - Only for Executive Approvals */}
           {actionType === 'approve' && (
             <SignatureSection
@@ -1577,6 +1612,56 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               templatePreview={templatePreview}
               showTemplateSelector={true}
               disabled={isSubmitting}
+=======
+                  {selectedMinuteTemplate && (
+                    <div className="rounded-md border border-dashed p-2 text-xs bg-background">
+                      <p className="font-medium text-foreground mb-1">{selectedMinuteTemplate.title}</p>
+                      <p className="text-muted-foreground line-clamp-2">
+                        {getTemplatePlainText(selectedMinuteTemplate)}
+                      </p>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      value={newTemplateName}
+                      onChange={(e) => setNewTemplateName(e.target.value)}
+                      placeholder="Save current as template..."
+                      className="flex-1 min-w-[150px] h-8"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSaveMinuteTemplate}
+                      disabled={!minuteText.trim()}
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+            <Textarea
+              id="minute"
+              placeholder={
+                actionType === 'approve' 
+                  ? "Enter your approval comments or decision (this will be included with the digital seal)..."
+                  : "Enter your comments, instructions, or recommendations..."
+              }
+              value={minuteText}
+              onChange={(e) => handleTextChange(e.target.value)}
+              className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''} ${
+                actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
+              }`}
+              maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
+              aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
+              aria-required="true"
+              aria-invalid={!!minuteTextError}
+              aria-describedby="minute-text-help minute-text-error"
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
             />
           )}
 

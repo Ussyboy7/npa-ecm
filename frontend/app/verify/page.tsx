@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+<<<<<<< HEAD
 import { Shield, Home, Info, CheckCircle2, AlertTriangle, QrCode, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,23 @@ export default function VerifyPage() {
   const handleQRScan = (serial: string) => {
     setShowQRScanner(false);
     handleVerify(serial);
+=======
+import { Shield, Home, Search, Info, CheckCircle2, AlertTriangle, QrCode, FileText } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
+
+export default function VerifyPage() {
+  const router = useRouter();
+  const [serialInput, setSerialInput] = useState("");
+
+  const handleVerify = () => {
+    if (serialInput.trim()) {
+      router.push(`/verify/${serialInput.trim()}`);
+    }
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
   };
 
   return (
@@ -57,6 +75,7 @@ export default function VerifyPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12 max-w-4xl">
+<<<<<<< HEAD
         <HelpGuideCard
           title="Digital Executive Seal Verification"
           description="Verify the authenticity of digitally approved documents using their unique serial number. Each seal contains encrypted information that confirms the document's approval status, timestamp, and authorized signatory."
@@ -69,6 +88,8 @@ export default function VerifyPage() {
           className="mb-6"
         />
 
+=======
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
         <div className="grid gap-6 md:grid-cols-3">
           {/* Main Verification Card */}
           <div className="md:col-span-2">
@@ -77,6 +98,7 @@ export default function VerifyPage() {
                 <div className="space-y-6">
                   {/* Header */}
                   <div className="text-center space-y-4">
+<<<<<<< HEAD
                     <div className="flex justify-center items-center gap-2">
                       <div className="h-20 w-20 rounded-full bg-emerald-600/20 flex items-center justify-center ring-4 ring-emerald-600/10">
                         <Shield className="h-10 w-10 text-emerald-500" />
@@ -93,6 +115,12 @@ export default function VerifyPage() {
                         placement={{ align: 'end', side: 'bottom' }}
                         className="text-slate-400"
                       />
+=======
+                    <div className="flex justify-center">
+                      <div className="h-20 w-20 rounded-full bg-emerald-600/20 flex items-center justify-center ring-4 ring-emerald-600/10">
+                        <Shield className="h-10 w-10 text-emerald-500" />
+                      </div>
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                     </div>
                     <div>
                       <h2 className="text-3xl font-bold text-white mb-2">Verify Digital Executive Seal</h2>
@@ -104,6 +132,7 @@ export default function VerifyPage() {
 
                   {/* Verification Form */}
                   <div className="space-y-4">
+<<<<<<< HEAD
                     <VerifyForm onVerify={handleVerify} />
                     
                     {/* QR Code Scanner Button */}
@@ -122,6 +151,35 @@ export default function VerifyPage() {
                     >
                       <QrCode className="h-5 w-5 mr-2" />
                       Scan QR Code
+=======
+                    <div>
+                      <label className="text-sm font-medium text-slate-300 mb-2 block">
+                        Serial Number
+                      </label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          type="text"
+                          value={serialInput}
+                          onChange={(e) => setSerialInput(e.target.value.toUpperCase())}
+                          placeholder="NPA-20241201-A8F3B2C1"
+                          className="pl-10 h-12 bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 font-mono text-base"
+                          onKeyDown={(e) => e.key === 'Enter' && handleVerify()}
+                        />
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2">
+                        Format: NPA-YYYYMMDD-XXXXXXXX
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleVerify} 
+                      disabled={!serialInput.trim()}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 h-12 text-base"
+                      size="lg"
+                    >
+                      <Shield className="h-5 w-5 mr-2" />
+                      Verify Seal
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                     </Button>
                   </div>
 
@@ -232,6 +290,7 @@ export default function VerifyPage() {
           </p>
         </div>
       </footer>
+<<<<<<< HEAD
 
       {/* QR Code Scanner Modal */}
       <QRCodeScanner
@@ -239,6 +298,8 @@ export default function VerifyPage() {
         onOpenChange={setShowQRScanner}
         onScan={handleQRScan}
       />
+=======
+>>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
     </div>
   );
 }
