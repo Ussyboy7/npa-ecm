@@ -131,33 +131,38 @@ export default function ApprovalsPage() {
       
       // Map minutes to executive approvals (all should have seal_data since we filtered)
       const executiveApprovals = minutes
-        .map((m: Record<string, unknown>) => ({
-          id: m.id,
-          correspondenceId: m.correspondence,
-          correspondenceSubject: m.correspondence_details?.subject || "N/A",
-          correspondenceReference: m.correspondence_details?.reference_number || "N/A",
-          sealedBy: m.user?.first_name && m.user?.last_name 
-            ? `${m.user.first_name} ${m.user.last_name}` 
-            : m.user?.username || "Unknown",
-          sealedByRole: m.user?.system_role_name || m.grade_level || "Executive",
-          officeName: m.seal_data?.office_name || "N/A",
-          officeTitle: m.seal_data?.office_title || "N/A",
-          sealedAt: m.seal_data?.sealed_at || m.timestamp,
-          serialNumber: m.seal_data?.serial_number || "N/A",
-          verificationUrl: m.seal_data?.verification_url || "",
-          isValid: m.seal_data?.is_valid ?? true,
-          sealData: m.seal_data ? {
-            id: String(m.seal_data.id),
-            serialNumber: m.seal_data.serial_number ?? '',
-            verificationUrl: m.seal_data.verification_url ?? '',
-            sealedBy: m.seal_data.sealed_by ?? '',
-            officeName: m.seal_data.office_name ?? '',
-            officeTitle: m.seal_data.office_title ?? '',
-            sealedAt: m.seal_data.sealed_at ?? '',
-            isValid: m.seal_data.is_valid ?? true,
-            sealImageUrl: m.seal_data.seal_image_url ?? undefined,
+        .map((m: Record<string, unknown>) => {
+          const correspondenceDetails = (m.correspondence_details as Record<string, unknown>) || {};
+          const user = (m.user as Record<string, unknown>) || {};
+          const sealData = (m.seal_data as Record<string, unknown>) || {};
+          return {
+            id: m.id,
+            correspondenceId: m.correspondence,
+            correspondenceSubject: (correspondenceDetails.subject as string) || "N/A",
+            correspondenceReference: (correspondenceDetails.reference_number as string) || "N/A",
+            sealedBy: (user.first_name && user.last_name) 
+              ? `${user.first_name as string} ${user.last_name as string}` 
+              : (user.username as string) || "Unknown",
+            sealedByRole: (user.system_role_name as string) || (m.grade_level as string) || "Executive",
+            officeName: (sealData.office_name as string) || "N/A",
+            officeTitle: (sealData.office_title as string) || "N/A",
+            sealedAt: (sealData.sealed_at as string) || (m.timestamp as string),
+            serialNumber: (sealData.serial_number as string) || "N/A",
+            verificationUrl: (sealData.verification_url as string) || "",
+            isValid: (sealData.is_valid as boolean) ?? true,
+            sealData: sealData && Object.keys(sealData).length > 0 ? {
+              id: String(sealData.id),
+              serialNumber: (sealData.serial_number as string) ?? '',
+              verificationUrl: (sealData.verification_url as string) ?? '',
+              sealedBy: (sealData.sealed_by as string) ?? '',
+              officeName: (sealData.office_name as string) ?? '',
+            officeTitle: (sealData.office_title as string) ?? '',
+            sealedAt: (sealData.sealed_at as string) ?? '',
+            isValid: (sealData.is_valid as boolean) ?? true,
+            sealImageUrl: (sealData.seal_image_url as string | undefined) ?? undefined,
           } : undefined,
-        }));
+          };
+        });
       
       setApprovals(executiveApprovals);
       // Use backend count for accurate pagination
@@ -200,31 +205,43 @@ export default function ApprovalsPage() {
       const minutes: Record<string, unknown>[] = Array.isArray(response) ? response : (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) ? response.results : [];
       
       const allExecutiveApprovals = minutes
-        .map((m: Record<string, unknown>) => ({
-          id: m.id,
-          correspondenceId: m.correspondence,
-          correspondenceSubject: m.correspondence_details?.subject || "N/A",
-          correspondenceReference: m.correspondence_details?.reference_number || "N/A",
-          sealedBy: m.user?.first_name && m.user?.last_name 
-            ? `${m.user.first_name} ${m.user.last_name}` 
-            : m.user?.username || "Unknown",
-          sealedByRole: m.user?.system_role_name || m.grade_level || "Executive",
-          officeName: m.seal_data?.office_name || "N/A",
-          officeTitle: m.seal_data?.office_title || "N/A",
-          sealedAt: m.seal_data?.sealed_at || m.timestamp,
-          serialNumber: m.seal_data?.serial_number || "N/A",
-          verificationUrl: m.seal_data?.verification_url || "",
-          isValid: m.seal_data?.is_valid ?? true,
-        }))
-        .filter((m: Record<string, unknown>) => m.seal_data && m.seal_data.is_valid !== false)
-        .map((m: Record<string, unknown>) => ({
-          id: m.id,
-          correspondenceId: m.correspondence,
-          correspondenceSubject: m.correspondence_details?.subject || "N/A",
-          correspondenceReference: m.correspondence_details?.reference_number || "N/A",
-          sealedBy: m.user?.first_name && m.user?.last_name 
-            ? `${m.user.first_name} ${m.user.last_name}` 
-            : m.user?.username || "Unknown",
+        .map((m: Record<string, unknown>) => {
+          const correspondenceDetails = (m.correspondence_details as Record<string, unknown>) || {};
+          const user = (m.user as Record<string, unknown>) || {};
+          const sealData = (m.seal_data as Record<string, unknown>) || {};
+          return {
+            id: m.id,
+            correspondenceId: m.correspondence,
+            correspondenceSubject: (correspondenceDetails.subject as string) || "N/A",
+            correspondenceReference: (correspondenceDetails.reference_number as string) || "N/A",
+            sealedBy: (user.first_name && user.last_name) 
+              ? `${user.first_name as string} ${user.last_name as string}` 
+              : (user.username as string) || "Unknown",
+            sealedByRole: (user.system_role_name as string) || (m.grade_level as string) || "Executive",
+            officeName: (sealData.office_name as string) || "N/A",
+            officeTitle: (sealData.office_title as string) || "N/A",
+            sealedAt: (sealData.sealed_at as string) || (m.timestamp as string),
+            serialNumber: (sealData.serial_number as string) || "N/A",
+            verificationUrl: (sealData.verification_url as string) || "",
+            isValid: (sealData.is_valid as boolean) ?? true,
+            sealData: sealData,
+          };
+        })
+        .filter((m: Record<string, unknown>) => {
+          const sealData = (m.sealData as Record<string, unknown>) || {};
+          return sealData && (sealData.is_valid as boolean) !== false;
+        })
+        .map((m: Record<string, unknown>) => {
+          const correspondenceDetails = (m.correspondence_details as Record<string, unknown>) || {};
+          const user = (m.user as Record<string, unknown>) || {};
+          return {
+            id: m.id,
+            correspondenceId: m.correspondence,
+            correspondenceSubject: (correspondenceDetails.subject as string) || "N/A",
+            correspondenceReference: (correspondenceDetails.reference_number as string) || "N/A",
+            sealedBy: (user.first_name && user.last_name) 
+              ? `${user.first_name as string} ${user.last_name as string}` 
+              : (user.username as string) || "Unknown",
           sealedByRole: m.user?.system_role_name || m.grade_level || "Executive",
           officeName: m.seal_data.office_name,
           officeTitle: m.seal_data.office_title,
