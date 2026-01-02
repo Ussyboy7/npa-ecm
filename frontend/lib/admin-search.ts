@@ -9,7 +9,7 @@ export interface SearchQuery {
   id: string;
   name: string;
   query: string;
-  filters: Record<string, any>;
+  filters: Record<string, unknown>;
   createdAt: string;
   lastUsed: string;
 }
@@ -30,7 +30,7 @@ const MAX_HISTORY_ITEMS = 20;
 export function saveSearchQuery(
   name: string,
   query: string,
-  filters: Record<string, any> = {}
+  filters: Record<string, unknown> = {}
 ): SearchQuery {
   const queries = getSavedQueries();
   
@@ -261,7 +261,7 @@ export function advancedSearch(users: User[], query: string): User[] {
   return users.filter(user => {
     // Check field filters
     for (const [field, value] of Object.entries(fields)) {
-      const userValue = (user as any)[field];
+      const userValue = (user as Record<string, unknown>)[field];
       if (!userValue || !userValue.toString().toLowerCase().includes(value.toLowerCase())) {
         return false;
       }

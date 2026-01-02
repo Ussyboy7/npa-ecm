@@ -13,6 +13,10 @@ from django.utils import timezone
 
 from analytics.models import ReportSnapshot, UsageMetric
 from correspondence.models import (
+    Case,
+    CaseCorrespondenceLink,
+    CaseDocumentLink,
+    CaseFormLink,
     Correspondence,
     CorrespondenceAttachment,
     CorrespondenceDistribution,
@@ -26,6 +30,7 @@ from dms.models import (
     DocumentPermission,
     DocumentVersion,
     DocumentWorkspace,
+    FormDocument,
 )
 from organization.models import Department, Directorate, Division, Office, OfficeMembership, Role
 from support.models import FaqEntry, HelpGuide, SupportTicket
@@ -78,6 +83,7 @@ class Command(BaseCommand):
                 self._ensure_workflows(users, correspondence_items)
                 self._ensure_support_content(users)
                 self._ensure_analytics(users)
+                self._ensure_project_cases(users, divisions, departments, offices)
             else:
                 self.stdout.write(self.style.WARNING("Skipping demo data creation (no users available)"))
                 
@@ -207,6 +213,20 @@ class Command(BaseCommand):
         division_offices: dict[str, Office] = {}
         department_offices: dict[str, Office] = {}
 
+        def _remove_duplicate_office_suffix(name: str) -> str:
+            """Remove duplicate 'Office' suffix from office names.
+            
+            Examples:
+                "Managing Director Office" -> "Managing Director"
+                "Managing Director Office Office" -> "Managing Director Office"
+                "Finance Division" -> "Finance Division"
+            """
+            name = name.strip()
+            # Remove trailing "Office" if it exists
+            if name.endswith(" Office"):
+                name = name[:-7]  # Remove " Office" (7 characters)
+            return name
+
         def register_office_mappings(office: Office):
             if office.department_id:
                 department_offices[office.department_id] = office
@@ -261,8 +281,9 @@ class Command(BaseCommand):
             if existing:
                 continue
             code = f"OFF_DIR_{directorate.code.upper()}"
+            base_name = _remove_duplicate_office_suffix(directorate.name)
             defaults = {
-                "name": f"{directorate.name} Directorate Office",
+                "name": f"{base_name} Directorate Office",
                 "office_type": Office.OfficeTier.DIRECTORATE,
                 "directorate": directorate,
                 "description": f"Inbox for {directorate.name}",
@@ -285,8 +306,9 @@ class Command(BaseCommand):
                 directorate=division.directorate, division__isnull=True, department__isnull=True
             ).first()
             code = f"OFF_DIV_{division.code.upper()}"
+            base_name = _remove_duplicate_office_suffix(division.name)
             defaults = {
-                "name": f"{division.name} Division Office",
+                "name": f"{base_name} Division Office",
                 "office_type": Office.OfficeTier.GENERAL_MANAGER,
                 "directorate": division.directorate,
                 "division": division,
@@ -310,8 +332,9 @@ class Command(BaseCommand):
                 division=department.division, department__isnull=True
             ).first()
             code = f"OFF_DEPT_{department.code.upper()}"
+            base_name = _remove_duplicate_office_suffix(department.name)
             defaults = {
-                "name": f"{department.name} Department Office",
+                "name": f"{base_name} Department Office",
                 "office_type": Office.OfficeTier.ASSISTANT_GENERAL_MANAGER,
                 "directorate": department.division.directorate if department.division else None,
                 "division": department.division,
@@ -1005,3 +1028,1089 @@ class Command(BaseCommand):
         )
 
         self.stdout.write(self.style.SUCCESS("Analytics data ensured."))
+
+    def _ensure_project_cases(
+        self,
+        users: dict[str, User],
+        divisions: dict[str, "Division"],
+        departments: dict[str, "Department"],
+        offices: dict[str, "Office"],
+    ):
+        """Create sample project cases with forms, documents, and correspondence."""
+        from forms.models import FormTemplate
+        from correspondence.models import Correspondence
+        from datetime import timedelta
+
+        # Get form templates
+        completion_form = FormTemplate.objects.filter(slug="project-completion-validation").first()
+        audit_form = FormTemplate.objects.filter(slug="audit-monitoring-clearance").first()
+        payment_form = FormTemplate.objects.filter(slug="payment-certification").first()
+
+        if not all([completion_form, audit_form, payment_form]):
+            self.stdout.write(self.style.WARNING("Form templates not found. Run seed_form_templates first."))
+            return
+
+        # Get required divisions and offices
+        engineering_division = None
+        audit_division = None
+        finance_division = None
+        procurement_department = None
+
+        for div in divisions.values():
+            if "engineering" in div.name.lower() or "marine" in div.name.lower():
+                engineering_division = div
+            elif "audit" in div.name.lower():
+                audit_division = div
+            elif "finance" in div.name.lower():
+                finance_division = div
+
+        for dept in departments.values():
+            if "procurement" in dept.name.lower():
+                procurement_department = dept
+
+        # Use first available division/department if specific ones not found
+        if not engineering_division:
+            engineering_division = list(divisions.values())[0] if divisions else None
+        if not audit_division:
+            audit_division = list(divisions.values())[0] if divisions else None
+        if not finance_division:
+            finance_division = list(divisions.values())[0] if divisions else None
+        if not procurement_department:
+            procurement_department = list(departments.values())[0] if departments else None
+
+        # Get offices
+        engineering_office = offices.get("office-engineering") or Office.objects.filter(
+            division=engineering_division
+        ).first() if engineering_division else None
+        audit_office = offices.get("office-audit") or Office.objects.filter(
+            division=audit_division
+        ).first() if audit_division else None
+
+        # Get users
+        engineering_user = users.get("user-gm-engineering") or users.get("gmict") or list(users.values())[0]
+        audit_user = users.get("user-gm-audit") or list(users.values())[0]
+        finance_user = users.get("user-gm-finance") or list(users.values())[0]
+
+        # Case 1: Wharf Rehabilitation (Lagos Port) - from user's design
+        case1, created1 = Case.objects.update_or_create(
+            case_number="NPA/PROC/2025/0147",
+            defaults={
+                "title": "Contract – Wharf Rehabilitation (Lagos Port)",
+                "description": "Rehabilitation of wharf infrastructure at Lagos Port. Contract awarded to ABC Marine Ltd.",
+                "case_type": Case.CaseType.PROJECT,
+                "status": Case.Status.IN_PROGRESS,
+                "priority": Correspondence.Priority.HIGH,
+                "division": engineering_division,
+                "department": procurement_department,
+                "owning_office": engineering_office,
+                "current_office": audit_office,
+                "created_by": engineering_user,
+                "assigned_to": audit_user,
+                "tags": ["wharf", "rehabilitation", "lagos-port", "infrastructure"],
+                "metadata": {
+                    "award_date": "2025-02-12",
+                    "contractor": "ABC Marine Ltd",
+                    "contract_value": 2450000000,
+                    "procurement_ref": "NPA/PROC/CON/021",
+                },
+            },
+        )
+
+        if created1:
+            # Create documents for case 1
+            doc1, _ = Document.objects.update_or_create(
+                reference_number="NPA/PROC/CON/021",
+                defaults={
+                    "title": "Contract Award Letter - Wharf Rehabilitation",
+                    "description": "Official contract award letter to ABC Marine Ltd",
+                    "document_type": Document.DocumentType.LETTER,
+                    "status": Document.DocumentStatus.PUBLISHED,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": engineering_user,
+                    "division": engineering_division,
+                    "department": procurement_department,
+                    "tags": ["contract", "award"],
+                },
+            )
+            CaseDocumentLink.objects.get_or_create(case=case1, document=doc1)
+            
+            # Add document version for contract award letter
+            DocumentVersion.objects.update_or_create(
+                document=doc1,
+                version_number=1,
+                defaults={
+                    "file_name": "Contract-Award-Letter-Wharf-Rehabilitation.pdf",
+                    "file_type": "application/pdf",
+                    "file_size": 245760,  # ~240 KB
+                    "file_url": "",  # In real scenario, this would point to actual file
+                    "content_html": """
+                    <div style="font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto;">
+                        <h1 style="text-align: center; color: #1a1a1a;">CONTRACT AWARD LETTER</h1>
+                        <p style="text-align: center; color: #666; margin-top: 10px;">Reference: NPA/PROC/CON/021</p>
+                        <hr style="margin: 30px 0; border: 1px solid #ddd;">
+                        
+                        <p><strong>Date:</strong> February 12, 2025</p>
+                        
+                        <p><strong>To:</strong><br>
+                        ABC Marine Ltd<br>
+                        Lagos, Nigeria</p>
+                        
+                        <p style="margin-top: 30px;">Dear Sir/Madam,</p>
+                        
+                        <p style="margin-top: 20px; line-height: 1.6;">
+                        Following the procurement process and evaluation of tenders, I am pleased to inform you that 
+                        your company has been awarded the contract for the <strong>Wharf Rehabilitation Project at Lagos Port</strong>.
+                        </p>
+                        
+                        <div style="background: #f5f5f5; padding: 20px; margin: 30px 0; border-left: 4px solid #2563eb;">
+                            <h3 style="margin-top: 0;">Contract Details:</h3>
+                            <ul style="line-height: 1.8;">
+                                <li><strong>Contract Value:</strong> ₦2,450,000,000.00 (Two Billion, Four Hundred and Fifty Million Naira)</li>
+                                <li><strong>Project Duration:</strong> 12 months</li>
+                                <li><strong>Project Location:</strong> Lagos Port, Apapa</li>
+                                <li><strong>Contract Reference:</strong> NPA/PROC/CON/021</li>
+                            </ul>
+                        </div>
+                        
+                        <p style="margin-top: 20px; line-height: 1.6;">
+                        Please confirm your acceptance of this award within 7 days of receipt of this letter. 
+                        The contract documents will be forwarded to you upon confirmation.
+                        </p>
+                        
+                        <p style="margin-top: 30px;">Yours faithfully,</p>
+                        
+                        <p style="margin-top: 50px;">
+                        <strong>General Manager, Procurement</strong><br>
+                        Nigerian Ports Authority<br>
+                        Lagos, Nigeria
+                        </p>
+                    </div>
+                    """,
+                    "content_text": "CONTRACT AWARD LETTER - Reference: NPA/PROC/CON/021. Date: February 12, 2025. To: ABC Marine Ltd. Following the procurement process, your company has been awarded the contract for Wharf Rehabilitation Project at Lagos Port. Contract Value: ₦2,450,000,000.00. Project Duration: 12 months. Project Location: Lagos Port, Apapa.",
+                    "summary": "Official contract award letter for Wharf Rehabilitation project to ABC Marine Ltd",
+                    "uploaded_by": engineering_user,
+                    "notes": "Contract award letter - Wharf Rehabilitation Project",
+                },
+            )
+
+            doc2, _ = Document.objects.update_or_create(
+                reference_number="NPA/ENG/BOQ/2025/001",
+                defaults={
+                    "title": "BOQ Final - Wharf Rehabilitation",
+                    "description": "Final Bill of Quantities for wharf rehabilitation project",
+                    "document_type": Document.DocumentType.REPORT,
+                    "status": Document.DocumentStatus.PUBLISHED,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": engineering_user,
+                    "division": engineering_division,
+                    "tags": ["boq", "engineering"],
+                },
+            )
+            CaseDocumentLink.objects.get_or_create(case=case1, document=doc2)
+            
+            # Add document version for BOQ
+            DocumentVersion.objects.update_or_create(
+                document=doc2,
+                version_number=1,
+                defaults={
+                    "file_name": "BOQ-Final-Wharf-Rehabilitation.pdf",
+                    "file_type": "application/pdf",
+                    "file_size": 512000,  # ~500 KB
+                    "file_url": "",
+                    "content_html": """
+                    <div style="font-family: Arial, sans-serif; padding: 40px;">
+                        <h1 style="text-align: center;">BILL OF QUANTITIES (BOQ)</h1>
+                        <h2 style="text-align: center; color: #666;">Wharf Rehabilitation Project - Lagos Port</h2>
+                        <p style="text-align: center;">Reference: NPA/ENG/BOQ/2025/001</p>
+                        <p style="text-align: center;">Date: February 15, 2025</p>
+                        
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 30px;">
+                            <thead>
+                                <tr style="background: #2563eb; color: white;">
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Item No.</th>
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Description</th>
+                                    <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">Quantity</th>
+                                    <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">Unit</th>
+                                    <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">Unit Price (₦)</th>
+                                    <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">Amount (₦)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">1</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">Concrete works - Wharf deck rehabilitation</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">2,500</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">m²</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">450,000</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">1,125,000,000</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">2</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">Steel reinforcement works</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">180</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">tons</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">2,500,000</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">450,000,000</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">3</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">Marine fender system installation</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">25</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">units</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">8,000,000</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">200,000,000</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">4</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">Dredging and excavation works</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">15,000</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">m³</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">25,000</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">375,000,000</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">5</td>
+                                    <td style="padding: 10px; border: 1px solid #ddd;">Electrical and lighting installation</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">1</td>
+                                    <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">lot</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">300,000,000</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #ddd;">300,000,000</td>
+                                </tr>
+                                <tr style="background: #f5f5f5; font-weight: bold;">
+                                    <td colspan="5" style="padding: 15px; text-align: right; border: 1px solid #ddd;">TOTAL CONTRACT SUM:</td>
+                                    <td style="padding: 15px; text-align: right; border: 1px solid #ddd;">₦2,450,000,000</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <p style="margin-top: 30px;"><strong>Prepared by:</strong> Engineering Division, NPA</p>
+                        <p><strong>Approved by:</strong> General Manager, Engineering</p>
+                    </div>
+                    """,
+                    "content_text": "BILL OF QUANTITIES - Wharf Rehabilitation Project. Item 1: Concrete works - 2,500 m² @ ₦450,000 = ₦1,125,000,000. Item 2: Steel reinforcement - 180 tons @ ₦2,500,000 = ₦450,000,000. Item 3: Marine fenders - 25 units @ ₦8,000,000 = ₦200,000,000. Item 4: Dredging - 15,000 m³ @ ₦25,000 = ₦375,000,000. Item 5: Electrical - 1 lot = ₦300,000,000. TOTAL: ₦2,450,000,000",
+                    "summary": "Final Bill of Quantities for wharf rehabilitation project with detailed item breakdown",
+                    "uploaded_by": engineering_user,
+                    "notes": "Final approved BOQ - Wharf Rehabilitation",
+                },
+            )
+
+            doc3, _ = Document.objects.update_or_create(
+                reference_number="NPA/ENG/COMP/2025/001",
+                defaults={
+                    "title": "Completion Report - Wharf Rehabilitation",
+                    "description": "Project completion report submitted by user department",
+                    "document_type": Document.DocumentType.REPORT,
+                    "status": Document.DocumentStatus.PUBLISHED,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": engineering_user,
+                    "division": engineering_division,
+                    "tags": ["completion", "report"],
+                },
+            )
+            CaseDocumentLink.objects.get_or_create(case=case1, document=doc3)
+            
+            # Add document version for completion report
+            DocumentVersion.objects.update_or_create(
+                document=doc3,
+                version_number=1,
+                defaults={
+                    "file_name": "Completion-Report-Wharf-Rehabilitation.pdf",
+                    "file_type": "application/pdf",
+                    "file_size": 384000,  # ~375 KB
+                    "file_url": "",
+                    "content_html": """
+                    <div style="font-family: Arial, sans-serif; padding: 40px;">
+                        <h1 style="text-align: center;">PROJECT COMPLETION REPORT</h1>
+                        <h2 style="text-align: center; color: #666;">Wharf Rehabilitation Project - Lagos Port</h2>
+                        <p style="text-align: center;">Reference: NPA/ENG/COMP/2025/001</p>
+                        <p style="text-align: center;">Date: May 18, 2025</p>
+                        
+                        <div style="margin-top: 40px;">
+                            <h3>1. PROJECT SUMMARY</h3>
+                            <p><strong>Project Title:</strong> Wharf Rehabilitation at Lagos Port</p>
+                            <p><strong>Contractor:</strong> ABC Marine Ltd</p>
+                            <p><strong>Contract Value:</strong> ₦2,450,000,000.00</p>
+                            <p><strong>Contract Award Date:</strong> February 12, 2025</p>
+                            <p><strong>Project Duration:</strong> 12 months</p>
+                            <p><strong>Completion Date:</strong> May 15, 2025</p>
+                        </div>
+                        
+                        <div style="margin-top: 30px;">
+                            <h3>2. SCOPE OF WORK COMPLETED</h3>
+                            <p>The following works have been fully completed as per contract specifications:</p>
+                            <ul style="line-height: 1.8;">
+                                <li>Concrete rehabilitation of wharf deck (2,500 m²) - <strong>100% Complete</strong></li>
+                                <li>Steel reinforcement works (180 tons) - <strong>100% Complete</strong></li>
+                                <li>Marine fender system installation (25 units) - <strong>100% Complete</strong></li>
+                                <li>Dredging and excavation works (15,000 m³) - <strong>100% Complete</strong></li>
+                                <li>Electrical and lighting installation - <strong>100% Complete</strong></li>
+                            </ul>
+                        </div>
+                        
+                        <div style="margin-top: 30px;">
+                            <h3>3. PHYSICAL INSPECTION</h3>
+                            <p><strong>Inspection Date:</strong> May 15, 2025</p>
+                            <p><strong>Inspection Conducted By:</strong> Engineering Division, NPA</p>
+                            <p><strong>Findings:</strong> All works completed in accordance with contract specifications. Quality standards met. Site cleared and ready for operations.</p>
+                        </div>
+                        
+                        <div style="margin-top: 30px;">
+                            <h3>4. OUTSTANDING ISSUES</h3>
+                            <p><strong>Status:</strong> None</p>
+                            <p>All contractual obligations have been fulfilled. No outstanding issues.</p>
+                        </div>
+                        
+                        <div style="margin-top: 30px;">
+                            <h3>5. SUPPORTING DOCUMENTS</h3>
+                            <ul>
+                                <li>Site inspection photographs</li>
+                                <li>Engineer's confirmation certificate</li>
+                                <li>Material test certificates</li>
+                                <li>As-built drawings</li>
+                            </ul>
+                        </div>
+                        
+                        <div style="margin-top: 40px; padding: 20px; background: #f5f5f5; border-left: 4px solid #22c55e;">
+                            <p><strong>DECLARATION:</strong></p>
+                            <p>I hereby confirm that the above information is true and accurate. The Wharf Rehabilitation Project has been completed in full accordance with the contract specifications.</p>
+                            <p style="margin-top: 30px;">
+                            <strong>Isa Umar</strong><br>
+                            General Manager, Engineering<br>
+                            Nigerian Ports Authority<br>
+                            Date: May 18, 2025
+                            </p>
+                        </div>
+                    </div>
+                    """,
+                    "content_text": "PROJECT COMPLETION REPORT - Wharf Rehabilitation Project. Contractor: ABC Marine Ltd. Contract Value: ₦2,450,000,000. All works completed 100%. Physical inspection conducted May 15, 2025. No outstanding issues. Declaration signed by General Manager, Engineering.",
+                    "summary": "Project completion report confirming full completion of wharf rehabilitation works",
+                    "uploaded_by": engineering_user,
+                    "notes": "Completion report - Wharf Rehabilitation Project",
+                },
+            )
+
+            doc4, _ = Document.objects.update_or_create(
+                reference_number="NPA/FIN/INV/2025/001",
+                defaults={
+                    "title": "Contractor Invoice (₦2.45bn) - ABC Marine Ltd",
+                    "description": "Final invoice for wharf rehabilitation project",
+                    "document_type": Document.DocumentType.FORM,
+                    "status": Document.DocumentStatus.DRAFT,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": finance_user,
+                    "division": finance_division,
+                    "tags": ["invoice", "payment"],
+                },
+            )
+            CaseDocumentLink.objects.get_or_create(case=case1, document=doc4)
+            
+            # Add document version for invoice
+            DocumentVersion.objects.update_or_create(
+                document=doc4,
+                version_number=1,
+                defaults={
+                    "file_name": "Invoice-ABC-Marine-Wharf-Rehabilitation.pdf",
+                    "file_type": "application/pdf",
+                    "file_size": 128000,  # ~125 KB
+                    "file_url": "",
+                    "content_html": """
+                    <div style="font-family: Arial, sans-serif; padding: 40px;">
+                        <div style="text-align: center; margin-bottom: 40px;">
+                            <h1 style="color: #1a1a1a;">INVOICE</h1>
+                            <p style="color: #666;">ABC Marine Ltd</p>
+                        </div>
+                        
+                        <table style="width: 100%; margin-bottom: 30px;">
+                            <tr>
+                                <td style="width: 50%;">
+                                    <p><strong>Invoice Number:</strong> INV/2025/001</p>
+                                    <p><strong>Invoice Date:</strong> May 22, 2025</p>
+                                    <p><strong>Due Date:</strong> June 22, 2025</p>
+                                </td>
+                                <td style="width: 50%; text-align: right;">
+                                    <p><strong>Bill To:</strong></p>
+                                    <p>Nigerian Ports Authority<br>
+                                    Lagos, Nigeria</p>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <div style="background: #f5f5f5; padding: 20px; margin: 30px 0;">
+                            <h3 style="margin-top: 0;">Project: Wharf Rehabilitation - Lagos Port</h3>
+                            <p><strong>Contract Reference:</strong> NPA/PROC/CON/021</p>
+                            <p><strong>Contract Award Date:</strong> February 12, 2025</p>
+                        </div>
+                        
+                        <table style="width: 100%; border-collapse: collapse; margin: 30px 0;">
+                            <thead>
+                                <tr style="background: #2563eb; color: white;">
+                                    <th style="padding: 12px; text-align: left; border: 1px solid #ddd;">Description</th>
+                                    <th style="padding: 12px; text-align: right; border: 1px solid #ddd;">Amount (₦)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td style="padding: 12px; border: 1px solid #ddd;">Final Payment - Wharf Rehabilitation Project</td>
+                                    <td style="padding: 12px; text-align: right; border: 1px solid #ddd;">2,450,000,000.00</td>
+                                </tr>
+                                <tr style="background: #f5f5f5; font-weight: bold; font-size: 1.1em;">
+                                    <td style="padding: 15px; border: 1px solid #ddd;">TOTAL AMOUNT DUE</td>
+                                    <td style="padding: 15px; text-align: right; border: 1px solid #ddd;">₦2,450,000,000.00</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        
+                        <div style="margin-top: 40px; padding: 20px; background: #fff3cd; border-left: 4px solid #ffc107;">
+                            <p><strong>Payment Terms:</strong> Net 30 days</p>
+                            <p><strong>Bank Details:</strong></p>
+                            <p>Account Name: ABC Marine Ltd<br>
+                            Account Number: 1234567890<br>
+                            Bank: First Bank of Nigeria<br>
+                            Sort Code: 011</p>
+                        </div>
+                        
+                        <p style="margin-top: 40px; text-align: right;">
+                        <strong>For: ABC Marine Ltd</strong><br><br>
+                        _________________________<br>
+                        Authorized Signatory
+                        </p>
+                    </div>
+                    """,
+                    "content_text": "INVOICE - ABC Marine Ltd. Invoice Number: INV/2025/001. Date: May 22, 2025. Project: Wharf Rehabilitation - Lagos Port. Contract Reference: NPA/PROC/CON/021. Final Payment Amount: ₦2,450,000,000.00. Payment Terms: Net 30 days.",
+                    "summary": "Final invoice for wharf rehabilitation project completion",
+                    "uploaded_by": finance_user,
+                    "notes": "Contractor invoice - Wharf Rehabilitation Project",
+                },
+            )
+
+            # Create form documents
+            # 1. Project Completion Validation (Approved)
+            completion_doc, _ = Document.objects.update_or_create(
+                reference_number="NPA/FORM/COMP/2025/001",
+                defaults={
+                    "title": "Project Completion Validation Form - Wharf Rehabilitation",
+                    "description": "Completion validation form for wharf rehabilitation project",
+                    "document_type": Document.DocumentType.FORM,
+                    "status": Document.DocumentStatus.PUBLISHED,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": engineering_user,
+                    "division": engineering_division,
+                    "department": procurement_department,
+                    "tags": ["form", "completion"],
+                },
+            )
+            completion_form_doc, _ = FormDocument.objects.update_or_create(
+                document=completion_doc,
+                defaults={
+                    "template": completion_form,
+                    "form_data": {
+                        "scope_completed": "fully",
+                        "physical_inspection": "yes",
+                        "inspection_date": "2025-05-15",
+                        "outstanding_issues": "no",
+                        "outstanding_issues_description": "",  # Empty since no outstanding issues
+                        "completion_report_attached": True,
+                        "site_photos_attached": True,
+                        "engineers_confirmation_attached": True,
+                        "declarant_name": engineering_user.get_full_name() or engineering_user.username,
+                        "declarant_designation": "General Manager, Engineering",
+                    },
+                    "status": FormDocument.FormStatus.COMPLETED,
+                },
+            )
+            CaseFormLink.objects.get_or_create(case=case1, form_document=completion_form_doc)
+            
+            # Add document version for completion form (with form content)
+            form_html_content = f"""
+            <div style="font-family: Arial, sans-serif; padding: 40px; max-width: 900px; margin: 0 auto;">
+                <h1 style="text-align: center; color: #1a1a1a; border-bottom: 3px solid #2563eb; padding-bottom: 20px;">
+                    PROJECT COMPLETION VALIDATION FORM
+                </h1>
+                <p style="text-align: center; color: #666; margin-top: 10px;">
+                    Case: {case1.case_number} - {case1.title}
+                </p>
+                
+                <div style="margin-top: 40px;">
+                    <h3 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">1. Scope of Work Completed?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Fully Completed ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">2. Physical Inspection Conducted?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Inspection Date:</strong> May 15, 2025
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">3. Any Outstanding Issues?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> No ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">4. Supporting Documents Attached</h3>
+                    <ul style="font-size: 16px; line-height: 2;">
+                        <li>✓ Completion Report</li>
+                        <li>✓ Site Photos</li>
+                        <li>✓ Engineer's Confirmation</li>
+                    </ul>
+                </div>
+                
+                <div style="margin-top: 40px; padding: 25px; background: #f5f5f5; border-left: 4px solid #22c55e;">
+                    <h3 style="margin-top: 0; color: #1a1a1a;">DECLARATION</h3>
+                    <p style="line-height: 1.8;">
+                        I confirm that the above information is true and accurate.
+                    </p>
+                    <p style="margin-top: 30px;">
+                        <strong>Name:</strong> {engineering_user.get_full_name() or engineering_user.username}<br>
+                        <strong>Designation:</strong> General Manager, Engineering<br>
+                        <strong>Date:</strong> May 18, 2025
+                    </p>
+                </div>
+            </div>
+            """
+            DocumentVersion.objects.update_or_create(
+                document=completion_doc,
+                version_number=1,
+                defaults={
+                    "file_name": "Project-Completion-Validation-Form-Wharf-Rehabilitation.html",
+                    "file_type": "text/html",
+                    "file_size": len(form_html_content.encode('utf-8')),
+                    "file_url": "",
+                    "content_html": form_html_content,
+                    "content_text": "PROJECT COMPLETION VALIDATION FORM - Wharf Rehabilitation. Scope: Fully Completed. Physical Inspection: Yes (May 15, 2025). Outstanding Issues: None. Supporting Documents: All attached. Declared by: General Manager, Engineering.",
+                    "summary": "Project completion validation form for wharf rehabilitation project",
+                    "uploaded_by": engineering_user,
+                    "notes": "Completed form - Wharf Rehabilitation",
+                },
+            )
+
+            # 2. Audit Monitoring Form (Pending)
+            audit_doc, _ = Document.objects.update_or_create(
+                reference_number="NPA/FORM/AUDIT/2025/001",
+                defaults={
+                    "title": "Audit Monitoring & Clearance Form - Wharf Rehabilitation",
+                    "description": "Audit monitoring and clearance form for wharf rehabilitation project",
+                    "document_type": Document.DocumentType.FORM,
+                    "status": Document.DocumentStatus.DRAFT,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": audit_user,
+                    "division": audit_division,
+                    "tags": ["form", "audit"],
+                },
+            )
+            audit_form_doc, _ = FormDocument.objects.update_or_create(
+                document=audit_doc,
+                defaults={
+                    "template": audit_form,
+                    "form_data": {
+                        "contract_award_compliance": "yes",
+                        "procurement_process_reviewed": "yes",
+                        "user_dept_completion_attached": "yes",
+                        "procurement_monitoring_confirmation": "yes",
+                        "audit_observations": "none",
+                        "risk_level": "low",
+                        "audit_recommendation": "clear",
+                        "audit_officer_name": audit_user.get_full_name() or audit_user.username,
+                        "gm_audit_name": audit_user.get_full_name() or audit_user.username,
+                    },
+                    "status": FormDocument.FormStatus.AWAITING_SIGNATURES,
+                },
+            )
+            CaseFormLink.objects.get_or_create(case=case1, form_document=audit_form_doc)
+            
+            # Add document version for audit form
+            audit_form_html = f"""
+            <div style="font-family: Arial, sans-serif; padding: 40px; max-width: 900px; margin: 0 auto;">
+                <h1 style="text-align: center; color: #1a1a1a; border-bottom: 3px solid #dc2626; padding-bottom: 20px;">
+                    AUDIT MONITORING & CLEARANCE FORM
+                </h1>
+                <p style="text-align: center; color: #666; margin-top: 10px;">
+                    Case: {case1.case_number} - {case1.title}
+                </p>
+                
+                <div style="margin-top: 40px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">1. Contract Award Compliance Verified?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">2. Procurement Process Reviewed?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">3. User Department Completion Acknowledgment Attached?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">4. Procurement Monitoring Officer Confirmation?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">5. Any Audit Observations?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> None ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">6. Risk Level</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Low
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px; padding: 20px; background: #dcfce7; border-left: 4px solid #22c55e;">
+                    <h3 style="margin-top: 0; color: #1a1a1a;">AUDIT RECOMMENDATION</h3>
+                    <p style="font-size: 18px; font-weight: bold; color: #16a34a;">
+                        ✓ Clear for Payment
+                    </p>
+                </div>
+                
+                <div style="margin-top: 40px; padding: 25px; background: #f5f5f5; border: 1px solid #ddd;">
+                    <h3 style="margin-top: 0;">APPROVALS</h3>
+                    <p><strong>Audit Officer:</strong> {audit_user.get_full_name() or audit_user.username}</p>
+                    <p style="margin-top: 20px;"><strong>GM Audit Approval:</strong> Pending</p>
+                </div>
+            </div>
+            """
+            DocumentVersion.objects.update_or_create(
+                document=audit_doc,
+                version_number=1,
+                defaults={
+                    "file_name": "Audit-Monitoring-Clearance-Form-Wharf-Rehabilitation.html",
+                    "file_type": "text/html",
+                    "file_size": len(audit_form_html.encode('utf-8')),
+                    "file_url": "",
+                    "content_html": audit_form_html,
+                    "content_text": "AUDIT MONITORING & CLEARANCE FORM - Wharf Rehabilitation. All compliance checks verified. Risk Level: Low. Recommendation: Clear for Payment. Pending GM Audit approval.",
+                    "summary": "Audit monitoring and clearance form - pending GM approval",
+                    "uploaded_by": audit_user,
+                    "notes": "Audit clearance form - Wharf Rehabilitation",
+                },
+            )
+
+            # 3. Payment Certification (Locked - will be created after audit approval)
+            # This form is locked until audit form is approved, so we don't create it yet
+
+            # Create correspondence items
+            from correspondence.models import Correspondence
+
+            corr1, _ = Correspondence.objects.update_or_create(
+                reference_number="NPA/CORR/2025/COMP-001",
+                defaults={
+                    "subject": "Completion Confirmation – Wharf Rehabilitation Project",
+                    "summary": "User department confirms project completion",
+                    "body_html": "<p>This is to confirm that the Wharf Rehabilitation project has been fully completed as per contract specifications.</p>",
+                    "source": Correspondence.Source.INTERNAL,
+                    "priority": Correspondence.Priority.HIGH,
+                    "direction": Correspondence.Direction.UPWARD,
+                    "status": Correspondence.Status.COMPLETED,
+                    "division": engineering_division,
+                    "department": procurement_department,
+                    "created_by": engineering_user,
+                    "current_office": audit_office,
+                    "owning_office": engineering_office,
+                    "received_date": date.today() - timedelta(days=10),
+                },
+            )
+            CaseCorrespondenceLink.objects.get_or_create(case=case1, correspondence=corr1)
+
+            corr2, _ = Correspondence.objects.update_or_create(
+                reference_number="NPA/CORR/2025/INV-001",
+                defaults={
+                    "subject": "Invoice Submission – Wharf Rehabilitation (₦2.45bn)",
+                    "summary": "Contractor submits final invoice for payment",
+                    "body_html": "<p>Please find attached the final invoice for the completed wharf rehabilitation project.</p>",
+                    "source": Correspondence.Source.EXTERNAL,
+                    "priority": Correspondence.Priority.HIGH,
+                    "direction": Correspondence.Direction.UPWARD,
+                    "status": Correspondence.Status.IN_PROGRESS,
+                    "division": finance_division,
+                    "created_by": finance_user,
+                    "current_office": audit_office,
+                    "owning_office": engineering_office,
+                    "received_date": date.today() - timedelta(days=3),
+                },
+            )
+            CaseCorrespondenceLink.objects.get_or_create(case=case1, correspondence=corr2)
+
+            self.stdout.write(
+                self.style.SUCCESS(f'Created project case: {case1.case_number} - {case1.title}')
+            )
+
+        # Case 2: Port Access Road Upgrade (Calabar Port)
+        case2, created2 = Case.objects.update_or_create(
+            case_number="NPA/PROC/2025/0089",
+            defaults={
+                "title": "Port Access Road Upgrade (Calabar Port)",
+                "description": "Upgrading and expansion of port access road infrastructure at Calabar Port",
+                "case_type": Case.CaseType.PROJECT,
+                "status": Case.Status.IN_PROGRESS,
+                "priority": Correspondence.Priority.MEDIUM,
+                "division": engineering_division,
+                "department": procurement_department,
+                "owning_office": engineering_office,
+                "current_office": engineering_office,
+                "created_by": engineering_user,
+                "assigned_to": engineering_user,
+                "tags": ["road", "upgrade", "calabar-port", "infrastructure"],
+                "metadata": {
+                    "award_date": "2025-01-15",
+                    "contractor": "InfraBuild Nigeria Ltd",
+                    "contract_value": 1850000000,
+                    "procurement_ref": "NPA/PROC/CON/015",
+                },
+            },
+        )
+
+        if created2:
+            # Create completion form (in progress)
+            completion_doc2, _ = Document.objects.update_or_create(
+                reference_number="NPA/FORM/COMP/2025/002",
+                defaults={
+                    "title": "Project Completion Validation Form - Port Access Road",
+                    "description": "Completion validation form for port access road upgrade",
+                    "document_type": Document.DocumentType.FORM,
+                    "status": Document.DocumentStatus.DRAFT,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": engineering_user,
+                    "division": engineering_division,
+                    "tags": ["form", "completion"],
+                },
+            )
+            completion_form_doc2, _ = FormDocument.objects.update_or_create(
+                document=completion_doc2,
+                defaults={
+                    "template": completion_form,
+                    "form_data": {
+                        "scope_completed": "partial",
+                        "physical_inspection": "yes",
+                        "inspection_date": "2025-05-20",
+                        "outstanding_issues": "yes",
+                        "outstanding_issues_description": "Final asphalt layer pending due to weather conditions",
+                        "completion_report_attached": True,
+                        "site_photos_attached": False,
+                        "engineers_confirmation_attached": False,
+                        "declarant_name": engineering_user.get_full_name() or engineering_user.username,
+                        "declarant_designation": "General Manager, Engineering",
+                    },
+                    "status": FormDocument.FormStatus.DRAFT,
+                },
+            )
+            CaseFormLink.objects.get_or_create(case=case2, form_document=completion_form_doc2)
+            
+            # Add document version for case2 completion form
+            form_html_content2 = f"""
+            <div style="font-family: Arial, sans-serif; padding: 40px; max-width: 900px; margin: 0 auto;">
+                <h1 style="text-align: center; color: #1a1a1a; border-bottom: 3px solid #2563eb; padding-bottom: 20px;">
+                    PROJECT COMPLETION VALIDATION FORM
+                </h1>
+                <p style="text-align: center; color: #666; margin-top: 10px;">
+                    Case: {case2.case_number} - {case2.title}
+                </p>
+                
+                <div style="margin-top: 40px;">
+                    <h3 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">1. Scope of Work Completed?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Partially Completed ⚠️
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">2. Physical Inspection Conducted?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Inspection Date:</strong> May 20, 2025
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">3. Any Outstanding Issues?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ⚠️
+                    </p>
+                    <p style="font-size: 16px; margin: 15px 0; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107;">
+                        <strong>Description:</strong> Final asphalt layer pending due to weather conditions
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #2563eb; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">4. Supporting Documents Attached</h3>
+                    <ul style="font-size: 16px; line-height: 2;">
+                        <li>✓ Completion Report</li>
+                        <li>✗ Site Photos</li>
+                        <li>✗ Engineer's Confirmation</li>
+                    </ul>
+                </div>
+                
+                <div style="margin-top: 40px; padding: 25px; background: #f5f5f5; border-left: 4px solid #f59e0b;">
+                    <h3 style="margin-top: 0; color: #1a1a1a;">DECLARATION</h3>
+                    <p style="line-height: 1.8;">
+                        I confirm that the above information is true and accurate.
+                    </p>
+                    <p style="margin-top: 30px;">
+                        <strong>Name:</strong> {engineering_user.get_full_name() or engineering_user.username}<br>
+                        <strong>Designation:</strong> General Manager, Engineering<br>
+                        <strong>Date:</strong> May 20, 2025
+                    </p>
+                </div>
+            </div>
+            """
+            from dms.models import DocumentVersion
+            DocumentVersion.objects.update_or_create(
+                document=completion_doc2,
+                version_number=1,
+                defaults={
+                    "file_name": "Project-Completion-Validation-Form-Port-Access-Road.html",
+                    "file_type": "text/html",
+                    "file_size": len(form_html_content2.encode('utf-8')),
+                    "file_url": "",
+                    "content_html": form_html_content2,
+                    "content_text": "PROJECT COMPLETION VALIDATION FORM - Port Access Road. Scope: Partially Completed. Physical Inspection: Yes (May 20, 2025). Outstanding Issues: Yes - Final asphalt layer pending due to weather conditions.",
+                    "summary": "Project completion validation form for port access road upgrade - partial completion",
+                    "uploaded_by": engineering_user,
+                    "notes": "Partial completion form - Port Access Road",
+                },
+            )
+
+            self.stdout.write(
+                self.style.SUCCESS(f'Created project case: {case2.case_number} - {case2.title}')
+            )
+
+        # Case 3: Warehouse Renovation (Port Harcourt Port) - Completed
+        case3, created3 = Case.objects.update_or_create(
+            case_number="NPA/PROC/2024/0234",
+            defaults={
+                "title": "Warehouse Renovation (Port Harcourt Port)",
+                "description": "Complete renovation of warehouse facilities at Port Harcourt Port",
+                "case_type": Case.CaseType.PROJECT,
+                "status": Case.Status.CLOSED,
+                "priority": Correspondence.Priority.MEDIUM,
+                "division": engineering_division,
+                "department": procurement_department,
+                "owning_office": engineering_office,
+                "current_office": engineering_office,
+                "created_by": engineering_user,
+                "assigned_to": engineering_user,
+                "tags": ["warehouse", "renovation", "port-harcourt"],
+                "metadata": {
+                    "award_date": "2024-08-10",
+                    "contractor": "BuildTech Solutions Ltd",
+                    "contract_value": 950000000,
+                    "procurement_ref": "NPA/PROC/CON/089",
+                },
+                "closed_at": timezone.now() - timedelta(days=30),
+            },
+        )
+
+        if created3:
+            # All forms completed for this closed case
+            completion_doc3, _ = Document.objects.update_or_create(
+                reference_number="NPA/FORM/COMP/2024/001",
+                defaults={
+                    "title": "Project Completion Validation Form - Warehouse Renovation",
+                    "description": "Completion validation form for warehouse renovation project",
+                    "document_type": Document.DocumentType.FORM,
+                    "status": Document.DocumentStatus.PUBLISHED,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": engineering_user,
+                    "division": engineering_division,
+                    "tags": ["form", "completion"],
+                },
+            )
+            completion_form_doc3, _ = FormDocument.objects.update_or_create(
+                document=completion_doc3,
+                defaults={
+                    "template": completion_form,
+                    "form_data": {
+                        "scope_completed": "fully",
+                        "physical_inspection": "yes",
+                        "inspection_date": "2024-11-15",
+                        "outstanding_issues": "no",
+                        "outstanding_issues_description": "",
+                        "completion_report_attached": True,
+                        "site_photos_attached": True,
+                        "engineers_confirmation_attached": True,
+                        "declarant_name": engineering_user.get_full_name() or engineering_user.username,
+                        "declarant_designation": "General Manager, Engineering",
+                    },
+                    "status": FormDocument.FormStatus.COMPLETED,
+                },
+            )
+            CaseFormLink.objects.get_or_create(case=case3, form_document=completion_form_doc3)
+
+            audit_doc3, _ = Document.objects.update_or_create(
+                reference_number="NPA/FORM/AUDIT/2024/001",
+                defaults={
+                    "title": "Audit Monitoring & Clearance Form - Warehouse Renovation",
+                    "description": "Audit monitoring and clearance form for warehouse renovation project",
+                    "document_type": Document.DocumentType.FORM,
+                    "status": Document.DocumentStatus.PUBLISHED,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": audit_user,
+                    "division": audit_division,
+                    "tags": ["form", "audit"],
+                },
+            )
+            audit_form_doc3, _ = FormDocument.objects.update_or_create(
+                document=audit_doc3,
+                defaults={
+                    "template": audit_form,
+                    "form_data": {
+                        "contract_award_compliance": "yes",
+                        "procurement_process_reviewed": "yes",
+                        "user_dept_completion_attached": "yes",
+                        "procurement_monitoring_confirmation": "yes",
+                        "audit_observations": "none",
+                        "risk_level": "low",
+                        "audit_recommendation": "clear",
+                        "audit_officer_name": audit_user.get_full_name() or audit_user.username,
+                        "gm_audit_name": audit_user.get_full_name() or audit_user.username,
+                    },
+                    "status": FormDocument.FormStatus.COMPLETED,
+                },
+            )
+            CaseFormLink.objects.get_or_create(case=case3, form_document=audit_form_doc3)
+            
+            # Add document version for case3 audit form
+            audit_form_html3 = f"""
+            <div style="font-family: Arial, sans-serif; padding: 40px; max-width: 900px; margin: 0 auto;">
+                <h1 style="text-align: center; color: #1a1a1a; border-bottom: 3px solid #dc2626; padding-bottom: 20px;">
+                    AUDIT MONITORING & CLEARANCE FORM
+                </h1>
+                <p style="text-align: center; color: #666; margin-top: 10px;">
+                    Case: {case3.case_number} - {case3.title}
+                </p>
+                
+                <div style="margin-top: 40px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">1. Contract Award Compliance Verified?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">2. Procurement Process Reviewed?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">3. User Department Completion Acknowledgment Attached?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">4. Procurement Monitoring Officer Confirmation?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Yes ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">5. Any Audit Observations?</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> None ✓
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px;">
+                    <h3 style="color: #dc2626; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">6. Risk Level</h3>
+                    <p style="font-size: 16px; margin: 15px 0;">
+                        <strong>Answer:</strong> Low
+                    </p>
+                </div>
+                
+                <div style="margin-top: 30px; padding: 20px; background: #dcfce7; border-left: 4px solid #22c55e;">
+                    <h3 style="margin-top: 0; color: #1a1a1a;">AUDIT RECOMMENDATION</h3>
+                    <p style="font-size: 18px; font-weight: bold; color: #16a34a;">
+                        ✓ Clear for Payment
+                    </p>
+                </div>
+                
+                <div style="margin-top: 40px; padding: 25px; background: #f5f5f5; border: 1px solid #ddd;">
+                    <h3 style="margin-top: 0;">APPROVALS</h3>
+                    <p><strong>Audit Officer:</strong> {audit_user.get_full_name() or audit_user.username}</p>
+                    <p><strong>GM Audit:</strong> {audit_user.get_full_name() or audit_user.username} ✓</p>
+                </div>
+            </div>
+            """
+            DocumentVersion.objects.update_or_create(
+                document=audit_doc3,
+                version_number=1,
+                defaults={
+                    "file_name": "Audit-Monitoring-Clearance-Form-Warehouse-Renovation.html",
+                    "file_type": "text/html",
+                    "file_size": len(audit_form_html3.encode('utf-8')),
+                    "file_url": "",
+                    "content_html": audit_form_html3,
+                    "content_text": "AUDIT MONITORING & CLEARANCE FORM - Warehouse Renovation. All compliance checks verified. Risk Level: Low. Recommendation: Clear for Payment. Approved by GM Audit.",
+                    "summary": "Audit monitoring and clearance form - approved",
+                    "uploaded_by": audit_user,
+                    "notes": "Audit clearance form - Warehouse Renovation",
+                },
+            )
+
+            payment_doc3, _ = Document.objects.update_or_create(
+                reference_number="NPA/FORM/PAY/2024/001",
+                defaults={
+                    "title": "Payment Certification Form - Warehouse Renovation",
+                    "description": "Payment certification form for warehouse renovation project",
+                    "document_type": Document.DocumentType.FORM,
+                    "status": Document.DocumentStatus.PUBLISHED,
+                    "sensitivity": Document.Sensitivity.INTERNAL,
+                    "author": finance_user,
+                    "division": finance_division,
+                    "tags": ["form", "payment"],
+                },
+            )
+            payment_form_doc3, _ = FormDocument.objects.update_or_create(
+                document=payment_doc3,
+                defaults={
+                    "template": payment_form,
+                    "form_data": {
+                        "invoice_amount": 950000000,
+                        "certified_amount": 950000000,
+                        "payment_recommendation": "pay_full",
+                        "remarks": "All documentation verified. Payment approved.",
+                        "finance_officer_name": finance_user.get_full_name() or finance_user.username,
+                        "approver_level": "gm_finance",
+                        "final_authorization": False,
+                    },
+                    "status": FormDocument.FormStatus.COMPLETED,
+                },
+            )
+            CaseFormLink.objects.get_or_create(case=case3, form_document=payment_form_doc3)
+
+            self.stdout.write(
+                self.style.SUCCESS(f'Created project case: {case3.case_number} - {case3.title}')
+            )
+
+        total_cases = Case.objects.count()
+        self.stdout.write(
+            self.style.SUCCESS(f'Project cases ensured. Total cases: {total_cases}')
+        )

@@ -38,6 +38,11 @@ import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { FlowTypeBadge } from '@/components/correspondence/FlowTypeBadge';
+import { getDocumentsSharedByUser, type DocumentRecord } from '@/lib/dms-storage';
+import { FileText } from 'lucide-react';
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: '#ef4444',
@@ -53,6 +58,7 @@ const calculateDaysPending = (item: Correspondence): number => {
 };
 
 const OutboxPage = () => {
+  const router = useRouter();
   const { currentUser, hydrated } = useCurrentUser();
   const { divisions, users: organizationUsers } = useOrganization();
 
@@ -69,7 +75,9 @@ const OutboxPage = () => {
   const [goToPageInput, setGoToPageInput] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [outboxItems, setOutboxItems] = useState<Correspondence[]>([]);
+  const [sharedDocuments, setSharedDocuments] = useState<DocumentRecord[]>([]);
   const [summary, setSummary] = useState({ total: 0, urgent: 0, pending: 0, inProgress: 0 });
+  const [documentCount, setDocumentCount] = useState(0);
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,28 +131,52 @@ const OutboxPage = () => {
         if (selectedPriorities.length > 0) {
           selectedPriorities.forEach((priority) => params.append('priority', priority));
         }
-        if (dateFrom) params.append('date_from', dateFrom);
-        if (dateTo) params.append('date_to', dateTo);
+        // Date range filters - backend should support these params
+        if (dateFrom) {
+          params.append('date_from', dateFrom);
+        }
+        if (dateTo) {
+          params.append('date_to', dateTo);
+        }
         params.append('sort_by', sortBy);
         params.append('sort_order', sortOrder);
         params.append('page', String(page));
         params.append('page_size', String(pageSize));
 
-        const response = await apiFetch<any>(`/correspondence/items/outbox/?${params.toString()}`);
-        const results = Array.isArray(response.results) ? response.results : [];
-        setOutboxItems(results.map(mapApiCorrespondence));
+        const [corrResponse, docsResponse] = await Promise.all([
+          apiFetch<Record<string, unknown>>(`/correspondence/items/outbox/?${params.toString()}`),
+          getDocumentsSharedByUser(currentUser.id, {
+            search: debouncedQuery || undefined,
+            pageSize: 50, // Get recent shared documents
+          }),
+        ]);
+
+        const corrResults = Array.isArray(corrResponse.results) ? corrResponse.results : [];
+        setOutboxItems(corrResults.map(mapApiCorrespondence));
         setSummary({
-          total: response.summary?.total ?? response.count ?? results.length,
-          urgent: response.summary?.urgent ?? 0,
-          pending: response.summary?.pending ?? 0,
-          inProgress: response.summary?.in_progress ?? 0,
+          total: corrResponse.summary?.total ?? corrResponse.count ?? corrResults.length,
+          urgent: corrResponse.summary?.urgent ?? 0,
+          pending: corrResponse.summary?.pending ?? 0,
+          inProgress: corrResponse.summary?.in_progress ?? 0,
         });
-        setCount(response.count ?? results.length);
-      } catch (err) {
-        setError('Failed to load outbox items. Please try again.');
+        setCount(corrResponse.count ?? corrResults.length);
+
+        // Set shared documents
+        setSharedDocuments(docsResponse.results || []);
+        setDocumentCount(docsResponse.count || 0);
+      } catch (err: Record<string, unknown>) {
+        // Handle backend errors gracefully, especially for unsupported params
+        const errorMessage = err?.message || 'Failed to load outbox items.';
+        if (errorMessage.includes('date_from') || errorMessage.includes('date_to')) {
+          setError('Date range filtering may not be supported. Please try without date filters.');
+        } else {
+          setError(errorMessage);
+        }
         setOutboxItems([]);
+        setSharedDocuments([]);
         setSummary({ total: 0, urgent: 0, pending: 0, inProgress: 0 });
         setCount(0);
+        setDocumentCount(0);
       } finally {
         setLoading(false);
       }
@@ -163,12 +195,12 @@ const OutboxPage = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'text-warning bg-warning/10';
-      case 'in-progress': return 'text-info bg-info/10';
-      default: return 'text-foreground bg-muted';
-    }
+  // Consistent badge variants for status
+  const getStatusBadgeVariant = (status: string): 'destructive' | 'secondary' | 'default' | 'outline' => {
+    if (status === 'pending') return 'destructive';
+    if (status === 'in-progress') return 'secondary';
+    if (status === 'completed') return 'default';
+    return 'outline';
   };
 
   const getPriorityColor = (priority: string) => {
@@ -179,6 +211,40 @@ const OutboxPage = () => {
       case 'low': return 'outline';
       default: return 'secondary';
     }
+  };
+
+  const DocumentCard = ({ doc }: { doc: DocumentRecord }) => {
+    const sharedDate = doc.permissions[0]?.createdAt || doc.updatedAt;
+    
+    return (
+      <div onClick={() => router.push(`/dms/${doc.id}`)} className="border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer">
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-lg bg-blue-500/10">
+            <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-foreground truncate mb-1">{doc.title}</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant="outline" className="gap-1"><FileText className="h-3 w-3" />Document</Badge>
+                  <Badge variant="secondary">{doc.documentType}</Badge>
+                  <Badge variant={doc.status === 'published' ? 'default' : 'outline'}>{doc.status}</Badge>
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDateShort(sharedDate)}</span>
+            </div>
+            {doc.description && (
+              <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{doc.description}</p>
+            )}
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2"><FileText className="h-3.5 w-3.5" /><span>Type: {doc.documentType}</span></div>
+              {doc.referenceNumber && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /><span>Ref: {doc.referenceNumber}</span></div>}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (!hydrated || !currentUser) {
@@ -198,7 +264,7 @@ const OutboxPage = () => {
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold">Outbox</h1>
-            <p className="text-muted-foreground mt-1">Drafts and correspondence you created that are awaiting approval or dispatch</p>
+            <p className="text-muted-foreground mt-1">Correspondence you created and documents you've shared</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
@@ -210,9 +276,9 @@ const OutboxPage = () => {
         </div>
 
         <HelpGuideCard
-          title="Managing Pending Dispatch"
-          description="Track memos you drafted or registered. Use this list to follow up on approvals, resend reminders, or withdraw drafts that need editing."
-          links={[{ label: 'Correspondence Inbox', href: '/correspondence/inbox' }, { label: 'Help & Guides', href: '/help' }]}
+          title="Your Outbox"
+          description="Items you've sent or shared: correspondence you created and documents you've shared with others. Track their status and follow up as needed."
+          links={[{ label: 'My Documents', href: '/documents' }, { label: 'Help & Guides', href: '/help' }]}
         />
 
         {/* Filters Panel */}
@@ -279,12 +345,13 @@ const OutboxPage = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {[
-            { label: 'Total Pending', value: summary.total, icon: Send, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+            { label: 'Total in Queue', value: summary.total, icon: Mail, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+            { label: 'Shared Documents', value: documentCount, icon: FileText, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
             { label: 'Urgent', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
             { label: 'Pending', value: summary.pending, icon: Clock, bgClass: 'bg-warning/10', iconClass: 'text-warning' },
-            { label: 'In Progress', value: summary.inProgress, icon: Mail, bgClass: 'bg-info/10', iconClass: 'text-info' },
+            { label: 'In Progress', value: summary.inProgress, icon: Send, bgClass: 'bg-info/10', iconClass: 'text-info' },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
               <CardContent className="p-6">
@@ -299,13 +366,14 @@ const OutboxPage = () => {
 
         {error && <Card><CardContent className="py-4 text-sm text-destructive flex items-center gap-2"><AlertCircle className="h-4 w-4" />{error}</CardContent></Card>}
 
-              {loading ? (
+        {/* Outbox Items */}
+        {loading ? (
           <Card><CardContent className="py-12 text-center text-muted-foreground text-sm flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading outbox items...</CardContent></Card>
-            ) : outboxItems.length === 0 ? (
+            ) : outboxItems.length === 0 && sharedDocuments.length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">
                 <Send className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-muted-foreground mb-2">{debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'You have no drafts or pending dispatch items at the moment.'}</p>
+              <p className="text-muted-foreground mb-2">{debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'You have no correspondence or shared documents at the moment.'}</p>
               {(debouncedQuery || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">Clear Filters</Button>}
             </CardContent>
           </Card>
@@ -317,7 +385,8 @@ const OutboxPage = () => {
                 const daysPending = calculateDaysPending(item);
 
                 return (
-                <Link key={item.id} href={`/correspondence/outbox/${item.id}`} className="block border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
+                <div key={item.id} className="border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
+                  <Link href={`/correspondence/${item.id}`} className="block">
                     <div className="flex items-start gap-4">
                     <div className={`p-3 rounded-lg ${item.priority === 'urgent' ? 'bg-destructive/10' : item.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
                       <Mail className={`h-5 w-5 ${item.priority === 'urgent' ? 'text-destructive' : item.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
@@ -328,8 +397,14 @@ const OutboxPage = () => {
                           <h3 className="font-semibold text-foreground truncate mb-1">{item.subject}</h3>
                             <div className="flex items-center gap-2 flex-wrap">
                             <Badge variant={getPriorityColor(item.priority)}>{item.priority.toUpperCase()}</Badge>
-                            <Badge variant="outline" className="gap-1">{item.direction === 'downward' ? (<><ArrowDown className="h-3 w-3 text-info" />Downward</>) : (<><ArrowUp className="h-3 w-3 text-success" />Upward</>)}</Badge>
-                            <Badge variant="secondary" className={getStatusColor(item.status)}>{item.status.replace('-', ' ')}</Badge>
+                            <FlowTypeBadge
+                              flowType={item.flowType}
+                              isInward={item.isInward}
+                              isOutward={item.isOutward}
+                              isInternal={item.isInternal}
+                              isExternal={item.isExternal}
+                            />
+                            <Badge variant={getStatusBadgeVariant(item.status)}>{item.status.replace('-', ' ')}</Badge>
                             {daysPending > 0 && <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />{daysPending} day{daysPending === 1 ? '' : 's'} pending</Badge>}
                           </div>
                         </div>
@@ -344,15 +419,55 @@ const OutboxPage = () => {
                       </div>
                     </div>
                   </Link>
+                  {/* Action Menu */}
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+                    {item.status === 'pending' && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          router.push(`/correspondence/register?edit=${item.id}`);
+                        }}
+                      >
+                        Edit Draft
+                      </Button>
+                    )}
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toast.info('Withdraw functionality coming soon');
+                      }}
+                    >
+                      Withdraw
+                    </Button>
+                    {item.status === 'pending' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          toast.info('Delete functionality coming soon');
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                </div>
                 );
             })}
+            {sharedDocuments.map(doc => <DocumentCard key={doc.id} doc={doc} />)}
           </div>
         )}
 
         {/* Pagination */}
         <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">Showing {count === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count, (page - 1) * pageSize + outboxItems.length)}`} of {count} items</p>
+            <p className="text-sm text-muted-foreground">Showing {count === 0 && documentCount === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count + documentCount, (page - 1) * pageSize + outboxItems.length + sharedDocuments.length)}`} of {count + documentCount} items</p>
             <div className="flex items-center gap-2">
               <label className="text-sm text-muted-foreground">Per page:</label>
               <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>

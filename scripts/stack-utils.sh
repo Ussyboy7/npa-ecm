@@ -36,7 +36,7 @@ stack_init_env() {
             STACK_ENV_FILE="${PROJECT_ROOT}/backend/env/local.env"
             STACK_BACKEND_SERVICE="backend"
             STACK_POSTGRES_SERVICE="postgres"
-            STACK_HEALTH_URL="${STACK_HEALTH_URL_OVERRIDE:-http://localhost:8000/api/health/}"
+            STACK_HEALTH_URL="${STACK_HEALTH_URL_OVERRIDE:-http://localhost:8002/api/health/}"
             STACK_FRONTEND_URL="${STACK_FRONTEND_URL_OVERRIDE:-http://localhost:3002}"
             ;;
         stag|staging)

@@ -57,7 +57,7 @@ const workspaceHighlights = [
     description:
       "Create, upload, version, tag metadata, collaborate, compare drafts, and link documents directly back to correspondence.",
     links: [
-      { label: "Document Library", href: "/dms" },
+      { label: "My Documents", href: "/documents" },
       { label: "My Documents", href: "/documents" },
     ],
   },
@@ -90,8 +90,8 @@ const workspaceHighlights = [
       { label: "Directorates", href: "/admin/directorates" },
       { label: "Divisions", href: "/admin/divisions" },
       { label: "Departments", href: "/admin/departments" },
-      { label: "Assistants", href: "/admin/assistants" },
-      { label: "User Management", href: "/admin/users" },
+      { label: "Assistants", href: "/admin/users-roles?tab=assistants" },
+      { label: "User Management", href: "/admin/users-roles?tab=users" },
     ],
   },
   {
@@ -102,7 +102,7 @@ const workspaceHighlights = [
     links: [
       { label: "Performance Analytics", href: "/analytics" },
       { label: "Executive Dashboard", href: "/analytics/executive" },
-      { label: "Reports", href: "/reports" },
+      { label: "Reports", href: "/analytics/reports" },
     ],
   },
 ];

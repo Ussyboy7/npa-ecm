@@ -58,7 +58,7 @@ class SearchRequestSerializer(serializers.Serializer):
     limit = serializers.IntegerField(default=50, min_value=1, max_value=100)
     offset = serializers.IntegerField(default=0, min_value=0)
     search_type = serializers.ChoiceField(
-        choices=["documents", "correspondence", "all"],
+        choices=["documents", "correspondence", "cases", "all"],
         default="documents",
     )
 

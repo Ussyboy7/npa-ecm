@@ -87,7 +87,7 @@ export const EditMinuteModal = ({ minute, isOpen, onClose, onSuccess }: EditMinu
       toast.success('Minute updated successfully');
       onSuccess?.();
       onClose();
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError('Failed to update minute', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       const errorMessage = ModalErrorHandler.getUserFriendlyMessage(modalError);
@@ -104,7 +104,7 @@ export const EditMinuteModal = ({ minute, isOpen, onClose, onSuccess }: EditMinu
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5 text-primary" />

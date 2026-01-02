@@ -1,6 +1,7 @@
 /** API client for form documents in DMS. */
 
 import { apiFetch } from "@/lib/api-client";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import type { FormTemplate } from "@/lib/types/forms";
 
 const BASE_PATH = "/dms";
@@ -14,25 +15,36 @@ export interface FormDocument {
     document_type: "form";
     reference_number?: string;
     status: "draft" | "published" | "archived";
-    sensitivity: "public" | "internal" | "confidential" | "restricted";
-    author: {
+    sensitivity?: "public" | "internal" | "confidential" | "restricted";
+    author?: {
       id: string;
       name: string;
       email: string;
     };
     division?: string;
     department?: string;
-    tags: string[];
+    tags?: string[];
     versions: Array<{
       id: string;
       version_number: number;
       file_name: string;
       file_type: string;
+      file_size?: number;
       file_url?: string;
       uploaded_at: string;
+      uploaded_by?: {
+        id: string;
+        name: string;
+        email: string;
+      };
+      notes?: string;
+      content_html?: string;
+      content_text?: string;
+      ocr_text?: string;
+      summary?: string;
     }>;
-    created_at: string;
-    updated_at: string;
+    created_at?: string;
+    updated_at?: string;
   };
   template?: {
     id: string;
@@ -51,6 +63,16 @@ export interface FormDocument {
   };
   created_at: string;
   updated_at: string;
+  case_links?: Array<{
+    id: string;
+    case: {
+      id: string;
+      caseNumber: string;
+      title: string;
+      status: string;
+    };
+    notes?: string;
+  }>;
 }
 
 export interface CreateFormDocumentData {
@@ -71,28 +93,43 @@ export async function getFormDocuments(params?: {
   template?: string;
   correspondence?: string;
   search?: string;
+  executive?: string; // For secretaries: filter by executive they've acted for
+  signal?: AbortSignal;
 }): Promise<FormDocument[]> {
   const queryParams = new URLSearchParams();
   if (params?.status) queryParams.append("status", params.status);
   if (params?.template) queryParams.append("template", params.template);
   if (params?.correspondence) queryParams.append("correspondence", params.correspondence);
   if (params?.search) queryParams.append("search", params.search);
+  if (params?.executive) queryParams.append("executive", params.executive);
 
   const query = queryParams.toString();
   const response = await apiFetch<FormDocument[]>(
-    `${BASE_PATH}/form-documents${query ? `?${query}` : ""}`
+    `${BASE_PATH}/form-documents${query ? `?${query}` : ""}`,
+    {
+      signal: params?.signal,
+    }
   );
   return Array.isArray(response) ? response : [];
 }
 
 export async function getFormDocument(id: string): Promise<FormDocument> {
-  console.log('[dms-forms] Fetching form document:', id);
+  logInfo('[dms-forms] Fetching form document:', id);
   try {
     const result = await apiFetch<FormDocument>(`${BASE_PATH}/form-documents/${id}/`);
-    console.log('[dms-forms] Received form document:', { id: result.id, hasTemplate: !!result.template });
+    logInfo('[dms-forms] Received form document:', { 
+      id: result.id, 
+      hasTemplate: !!result.template,
+      hasDocument: !!result.document,
+      hasVersions: !!result.document?.versions,
+      versionsType: typeof result.document?.versions,
+      versionsIsArray: Array.isArray(result.document?.versions),
+      versionsLength: result.document?.versions?.length,
+      documentStructure: result.document ? Object.keys(result.document) : null,
+    });
     return result;
   } catch (error) {
-    console.error('[dms-forms] Error fetching form document:', error);
+    logError('[dms-forms] Error fetching form document:', error);
     throw error;
   }
 }

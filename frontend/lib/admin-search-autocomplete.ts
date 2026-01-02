@@ -36,7 +36,7 @@ export function clearRecentSearches(pageKey: string): void {
 
 export function getSearchSuggestions(
   query: string,
-  allItems: Array<{ name?: string; email?: string; title?: string; [key: string]: any }>,
+  allItems: Array<{ name?: string; email?: string; title?: string; [key: string]: unknown }>,
   maxResults: number = 5
 ): string[] {
   if (!query.trim() || !allItems.length) return [];

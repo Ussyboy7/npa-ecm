@@ -11,7 +11,17 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle, Send, User, AlertCircle } from 'lucide-react';
+import { CheckCircle, Send, User, AlertCircle, Users } from 'lucide-react';
+
+interface DistributionRecipient {
+  id?: string;
+  type: 'directorate' | 'division' | 'department';
+  name?: string;
+  directorateId?: string;
+  divisionId?: string;
+  departmentId?: string;
+  purpose?: 'information' | 'action' | 'comment';
+}
 
 interface ConfirmationDialogProps {
   isOpen: boolean;
@@ -26,6 +36,7 @@ interface ConfirmationDialogProps {
     content: string;
     onBehalfOf?: string;
     direction?: 'upward' | 'downward';
+    distribution?: DistributionRecipient[];
   };
   disabled?: boolean;
 }
@@ -40,7 +51,7 @@ export const ConfirmationDialog = ({
 }: ConfirmationDialogProps) => {
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
-      <AlertDialogContent className="max-w-2xl">
+      <AlertDialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-accent" />
@@ -91,6 +102,39 @@ export const ConfirmationDialog = ({
                         {data.direction === 'upward' ? 'Upward' : 'Downward'}
                       </Badge>
                     )}
+                  </div>
+                </>
+              )}
+
+              {data.distribution && data.distribution.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="flex items-start gap-2">
+                    <Users className="h-4 w-4 text-primary mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Distribution (CC)</p>
+                      <div className="mt-2 space-y-1.5">
+                        {data.distribution.map((recipient, idx) => {
+                          const recipientName = recipient.name || 
+                            (recipient.type === 'directorate' ? 'Directorate' : 
+                             recipient.type === 'division' ? 'Division' : 'Department');
+                          const purposeLabel = recipient.purpose === 'action' ? 'Action' : 
+                                               recipient.purpose === 'comment' ? 'Comment' : 'Information';
+                          return (
+                            <div key={recipient.id || idx} className="flex items-center gap-2 text-xs">
+                              <Badge variant="outline" className="text-[10px] h-4 flex-shrink-0">
+                                {recipient.type === 'directorate' ? 'Dir' : 
+                                 recipient.type === 'department' ? 'Dept' : 'Div'}
+                              </Badge>
+                              <span className="text-muted-foreground flex-1">{recipientName}</span>
+                              <Badge variant="outline" className="text-[10px] h-4 flex-shrink-0">
+                                {purposeLabel}
+                              </Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </>
               )}

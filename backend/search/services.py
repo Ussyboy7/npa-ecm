@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db.models import Q, QuerySet
 
-from correspondence.models import Correspondence
+from correspondence.models import Correspondence, Case
 from dms.models import Document
 
 logger = logging.getLogger(__name__)
@@ -510,6 +510,107 @@ class SearchService:
                 corr._match_field = "body" if corr.body_html else ("summary" if corr.summary else "subject")
                 
                 enriched_results.append(corr)
+            
+            results = enriched_results
+
+        return {
+            "results": results,
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + limit) < total_count,
+        }
+
+    @staticmethod
+    def search_cases(
+        query: str,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 50,
+        offset: int = 0,
+        user: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """
+        Perform full-text search on cases.
+
+        Args:
+            query: Search query text
+            filters: Optional filters (status, case_type, priority, division_id, department_id, assigned_to_id, date_from, date_to)
+            limit: Maximum number of results
+            offset: Offset for pagination
+            user: User to apply visibility filters for (optional)
+
+        Returns:
+            Dictionary with results and metadata
+        """
+        filters = filters or {}
+
+        queryset = Case.objects.filter(is_deleted=False)
+
+        # Apply filters
+        if filters.get("status"):
+            statuses = filters["status"] if isinstance(filters["status"], list) else [filters["status"]]
+            queryset = queryset.filter(status__in=statuses)
+
+        if filters.get("case_type"):
+            case_types = filters["case_type"] if isinstance(filters["case_type"], list) else [filters["case_type"]]
+            queryset = queryset.filter(case_type__in=case_types)
+
+        if filters.get("priority"):
+            priorities = filters["priority"] if isinstance(filters["priority"], list) else [filters["priority"]]
+            queryset = queryset.filter(priority__in=priorities)
+
+        if filters.get("division_id"):
+            queryset = queryset.filter(division_id=filters["division_id"])
+
+        if filters.get("department_id"):
+            queryset = queryset.filter(department_id=filters["department_id"])
+
+        if filters.get("owning_office_id"):
+            queryset = queryset.filter(owning_office_id=filters["owning_office_id"])
+
+        if filters.get("assigned_to_id"):
+            queryset = queryset.filter(assigned_to_id=filters["assigned_to_id"])
+
+        if filters.get("date_from"):
+            queryset = queryset.filter(opened_at__gte=filters["date_from"])
+
+        if filters.get("date_to"):
+            queryset = queryset.filter(opened_at__lte=filters["date_to"])
+
+        if filters.get("tags"):
+            tags = filters["tags"] if isinstance(filters["tags"], list) else [filters["tags"]]
+            queryset = queryset.filter(tags__overlap=tags)
+
+        # Full-text search
+        if query:
+            search_vector = (
+                SearchVector("case_number", weight="A", config="english")
+                + SearchVector("title", weight="A", config="english")
+                + SearchVector("description", weight="B", config="english")
+            )
+            search_query = SearchQuery(query, config="english")
+
+            queryset = queryset.annotate(
+                search=search_vector,
+                rank=SearchRank(search_vector, search_query),
+            ).filter(search=search_query).order_by("-rank", "-opened_at")
+        else:
+            queryset = queryset.order_by("-opened_at")
+
+        total_count = queryset.count()
+        results = list(queryset[offset : offset + limit])
+        
+        # Add snippets to results
+        if query:
+            enriched_results = []
+            for case in results:
+                # Extract snippet from description or title
+                text_to_search = case.description or case.title or ""
+                snippet = SearchService.extract_snippet(text_to_search, query)
+                
+                case._search_snippet = snippet
+                case._match_field = "case"
+                enriched_results.append(case)
             
             results = enriched_results
 

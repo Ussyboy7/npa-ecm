@@ -76,7 +76,7 @@ class SLAConfiguration(UUIDModel, TimeStampedModel):
         help_text="Apply to specific correspondence type or all",
     )
     target_days = models.PositiveIntegerField(
-        help_text="Number of days to complete within SLA"
+        help_text="Number of hours to complete within SLA"
     )
     warning_threshold_percent = models.PositiveIntegerField(
         default=75,
@@ -162,12 +162,12 @@ class SLAConfiguration(UUIDModel, TimeStampedModel):
 
     @classmethod
     def get_default_sla_targets(cls) -> dict[str, int]:
-        """Return a dict of priority -> target_days for global SLAs."""
+        """Return a dict of priority -> target_hours for global SLAs."""
         defaults = {
-            cls.Priority.URGENT: 2,
-            cls.Priority.HIGH: 3,
-            cls.Priority.MEDIUM: 5,
-            cls.Priority.LOW: 7,
+            cls.Priority.URGENT: 48,  # 2 days = 48 hours
+            cls.Priority.HIGH: 72,     # 3 days = 72 hours
+            cls.Priority.MEDIUM: 120,  # 5 days = 120 hours
+            cls.Priority.LOW: 168,     # 7 days = 168 hours
         }
         
         for priority in cls.Priority.values:

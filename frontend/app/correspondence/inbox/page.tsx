@@ -291,7 +291,7 @@ const CorrespondenceInbox = () => {
         params.append('page', String(pagination.page));
         params.append('page_size', String(pagination.pageSize));
 
-        const response = await apiFetch<any>(`/correspondence/items/office-inbox/?${params.toString()}`);
+        const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/office-inbox/?${params.toString()}`);
         const results = Array.isArray(response.results) ? response.results : [];
         setInboxItems(results.map(mapApiCorrespondence));
         setSummary({

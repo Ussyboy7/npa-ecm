@@ -206,6 +206,90 @@ class ExecutiveSignature(UUIDModel, TimeStampedModel):
         return hashlib.sha256(file_content).hexdigest()
 
 
+class SignatureTemplate(UUIDModel, TimeStampedModel):
+    """Template for signature formatting in correspondence minutes and approvals."""
+    
+    class TemplateType(models.TextChoices):
+        APPROVAL = "approval", "Approval"
+        MINUTE = "minute", "Minute"
+        FORWARD = "forward", "Forward"
+        TREATMENT = "treatment", "Treatment"
+    
+    class Style(models.TextChoices):
+        STAMP = "stamp", "Stamp"
+        FORMAL = "formal", "Formal"
+        MINIMAL = "minimal", "Minimal"
+    
+    name = models.CharField(max_length=255, help_text="Template name")
+    description = models.TextField(blank=True, help_text="Template description")
+    template_type = models.CharField(
+        max_length=20,
+        choices=TemplateType.choices,
+        help_text="Type of template",
+    )
+    format = models.TextField(
+        help_text="Template format string (e.g., 'APPROVED BY {name}\\n{role}\\n{date}')"
+    )
+    style = models.CharField(
+        max_length=20,
+        choices=Style.choices,
+        default=Style.FORMAL,
+        help_text="Template style",
+    )
+    default_apply = models.BooleanField(
+        default=False,
+        help_text="Whether to apply this template by default for its type",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this template is active",
+    )
+    
+    class Meta:
+        ordering = ["template_type", "name"]
+        indexes = [
+            models.Index(fields=["template_type", "is_active"]),
+            models.Index(fields=["default_apply"]),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_template_type_display()})"
+
+
+class UserSignaturePreferences(UUIDModel, TimeStampedModel):
+    """User preferences for signature templates and auto-apply settings."""
+    
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="signature_preferences",
+    )
+    default_template = models.ForeignKey(
+        SignatureTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_users",
+        help_text="Default template to use",
+    )
+    template_overrides = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Template overrides by type: {'approval': 'template_id', 'minute': 'template_id'}",
+    )
+    auto_apply_for_minutes = models.BooleanField(
+        default=False,
+        help_text="Automatically apply signature for minutes",
+    )
+    
+    class Meta:
+        verbose_name = "User Signature Preferences"
+        verbose_name_plural = "User Signature Preferences"
+    
+    def __str__(self):
+        return f"Signature preferences for {self.user.username}"
+
+
 class DocumentSeal(UUIDModel, TimeStampedModel):
     """
     Records of digital seals applied to documents.

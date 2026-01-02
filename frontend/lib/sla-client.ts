@@ -60,10 +60,10 @@ export interface EscalationRule {
   description: string;
   triggerType: string;
   triggerTypeDisplay: string;
-  triggerConditions: Record<string, any>;
+  triggerConditions: Record<string, unknown>;
   actionType: string;
   actionTypeDisplay: string;
-  actionConfig: Record<string, any>;
+  actionConfig: Record<string, unknown>;
   emailSubjectTemplate: string;
   emailBodyTemplate: string;
   isActive: boolean;
@@ -80,9 +80,9 @@ export interface EscalationRuleInput {
   name: string;
   description?: string;
   triggerType: string;
-  triggerConditions?: Record<string, any>;
+  triggerConditions?: Record<string, unknown>;
   actionType: string;
-  actionConfig?: Record<string, any>;
+  actionConfig?: Record<string, unknown>;
   emailSubjectTemplate?: string;
   emailBodyTemplate?: string;
   isActive?: boolean;
@@ -119,7 +119,7 @@ export interface Escalation {
   triggeredAt: string;
   triggerReason: string;
   actionTaken: string;
-  actionDetails: Record<string, any>;
+  actionDetails: Record<string, unknown>;
   notifiedEmails: string[];
   status: 'pending' | 'sent' | 'acknowledged' | 'resolved' | 'failed';
   statusDisplay: string;
@@ -217,8 +217,8 @@ export interface EnhancedDivisionPerformance {
       low: number;
     };
   }[];
-  topPerformers: any[];
-  needsAttention: any[];
+  topPerformers: unknown[];
+  needsAttention: unknown[];
 }
 
 export interface EfficiencyAnalysis {
@@ -272,7 +272,7 @@ const buildQuery = (params: Record<string, string | number | boolean | undefined
 };
 
 // Transform snake_case API response to camelCase
-const mapSLAConfiguration = (data: any): SLAConfiguration => ({
+const mapSLAConfiguration = (data: Record<string, unknown>): SLAConfiguration => ({
   id: data.id,
   name: data.name,
   priority: data.priority,
@@ -290,7 +290,7 @@ const mapSLAConfiguration = (data: any): SLAConfiguration => ({
   updatedAt: data.updated_at,
 });
 
-const mapEscalationRule = (data: any): EscalationRule => ({
+const mapEscalationRule = (data: Record<string, unknown>): EscalationRule => ({
   id: data.id,
   name: data.name,
   description: data.description,
@@ -312,7 +312,7 @@ const mapEscalationRule = (data: any): EscalationRule => ({
   updatedAt: data.updated_at,
 });
 
-const mapEscalation = (data: any): Escalation => ({
+const mapEscalation = (data: Record<string, unknown>): Escalation => ({
   id: data.id,
   correspondence: data.correspondence,
   correspondenceReference: data.correspondence_reference,
@@ -352,17 +352,17 @@ export const fetchSLAConfigurations = async (params?: {
     correspondence_type: params?.correspondenceType,
     is_active: params?.isActive,
   });
-  const response = await apiFetch<any[]>(`/analytics/sla-config/?${query}`);
+  const response = await apiFetch<unknown[]>(`/analytics/sla-config/?${query}`);
   return response.map(mapSLAConfiguration);
 };
 
 export const fetchSLAConfiguration = async (id: string): Promise<SLAConfiguration> => {
-  const response = await apiFetch<any>(`/analytics/sla-config/${id}/`);
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/sla-config/${id}/`);
   return mapSLAConfiguration(response);
 };
 
 export const createSLAConfiguration = async (data: SLAConfigurationInput): Promise<SLAConfiguration> => {
-  const response = await apiFetch<any>('/analytics/sla-config/', {
+  const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/', {
     method: 'POST',
     body: JSON.stringify({
       name: data.name,
@@ -383,7 +383,7 @@ export const updateSLAConfiguration = async (
   id: string,
   data: Partial<SLAConfigurationInput>
 ): Promise<SLAConfiguration> => {
-  const body: Record<string, any> = {};
+  const body: Record<string, unknown> = {};
   if (data.name !== undefined) body.name = data.name;
   if (data.priority !== undefined) body.priority = data.priority;
   if (data.correspondenceType !== undefined) body.correspondence_type = data.correspondenceType;
@@ -394,7 +394,7 @@ export const updateSLAConfiguration = async (
   if (data.isActive !== undefined) body.is_active = data.isActive;
   if (data.description !== undefined) body.description = data.description;
 
-  const response = await apiFetch<any>(`/analytics/sla-config/${id}/`, {
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/sla-config/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(body),
   });
@@ -407,21 +407,21 @@ export const deleteSLAConfiguration = async (id: string): Promise<void> => {
 
 export const fetchSLATargets = async (): Promise<SLATargets> => {
   try {
-    const response = await apiFetch<any>('/analytics/sla-config/targets/');
+    const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
     return {
-      urgent: response.urgent ?? 2,
-      high: response.high ?? 3,
-      medium: response.medium ?? 5,
-      low: response.low ?? 7,
+      urgent: response.urgent ?? 48,   // 2 days = 48 hours
+      high: response.high ?? 72,        // 3 days = 72 hours
+      medium: response.medium ?? 120,   // 5 days = 120 hours
+      low: response.low ?? 168,         // 7 days = 168 hours
     };
   } catch {
-    // Return defaults if API fails
-    return { urgent: 2, high: 3, medium: 5, low: 7 };
+    // Return defaults if API fails (in hours)
+    return { urgent: 48, high: 72, medium: 120, low: 168 };
   }
 };
 
 export const updateSLATargets = async (targets: SLATargets): Promise<{ updated: SLAConfiguration[] }> => {
-  const response = await apiFetch<{ updated: any[] }>('/analytics/sla-config/bulk_update/', {
+  const response = await apiFetch<{ updated: unknown[] }>('/analytics/sla-config/bulk_update/', {
     method: 'POST',
     body: JSON.stringify(targets),
   });
@@ -431,7 +431,7 @@ export const updateSLATargets = async (targets: SLATargets): Promise<{ updated: 
 };
 
 export const fetchSLAChoices = async (): Promise<SLAChoices> => {
-  const response = await apiFetch<any>('/analytics/sla-config/choices/');
+  const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/choices/');
   return {
     priorities: response.priorities || [],
     correspondenceTypes: response.correspondence_types || [],
@@ -452,17 +452,17 @@ export const fetchEscalationRules = async (params?: {
     action_type: params?.actionType,
     is_active: params?.isActive,
   });
-  const response = await apiFetch<any[]>(`/analytics/escalation-rules/?${query}`);
+  const response = await apiFetch<unknown[]>(`/analytics/escalation-rules/?${query}`);
   return response.map(mapEscalationRule);
 };
 
 export const fetchEscalationRule = async (id: string): Promise<EscalationRule> => {
-  const response = await apiFetch<any>(`/analytics/escalation-rules/${id}/`);
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalation-rules/${id}/`);
   return mapEscalationRule(response);
 };
 
 export const createEscalationRule = async (data: EscalationRuleInput): Promise<EscalationRule> => {
-  const response = await apiFetch<any>('/analytics/escalation-rules/', {
+  const response = await apiFetch<Record<string, unknown>>('/analytics/escalation-rules/', {
     method: 'POST',
     body: JSON.stringify({
       name: data.name,
@@ -486,7 +486,7 @@ export const updateEscalationRule = async (
   id: string,
   data: Partial<EscalationRuleInput>
 ): Promise<EscalationRule> => {
-  const body: Record<string, any> = {};
+  const body: Record<string, unknown> = {};
   if (data.name !== undefined) body.name = data.name;
   if (data.description !== undefined) body.description = data.description;
   if (data.triggerType !== undefined) body.trigger_type = data.triggerType;
@@ -500,7 +500,7 @@ export const updateEscalationRule = async (
   if (data.cooldownHours !== undefined) body.cooldown_hours = data.cooldownHours;
   if (data.divisions !== undefined) body.divisions = data.divisions;
 
-  const response = await apiFetch<any>(`/analytics/escalation-rules/${id}/`, {
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalation-rules/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(body),
   });
@@ -512,14 +512,14 @@ export const deleteEscalationRule = async (id: string): Promise<void> => {
 };
 
 export const toggleEscalationRule = async (id: string): Promise<EscalationRule> => {
-  const response = await apiFetch<any>(`/analytics/escalation-rules/${id}/toggle/`, {
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalation-rules/${id}/toggle/`, {
     method: 'POST',
   });
   return mapEscalationRule(response);
 };
 
 export const testEscalationRule = async (id: string): Promise<EscalationRuleTestResult> => {
-  const response = await apiFetch<any>(`/analytics/escalation-rules/${id}/test/`, {
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalation-rules/${id}/test/`, {
     method: 'POST',
   });
   return {
@@ -531,7 +531,7 @@ export const testEscalationRule = async (id: string): Promise<EscalationRuleTest
 };
 
 export const fetchEscalationRuleChoices = async (): Promise<EscalationRuleChoices> => {
-  const response = await apiFetch<any>('/analytics/escalation-rules/choices/');
+  const response = await apiFetch<Record<string, unknown>>('/analytics/escalation-rules/choices/');
   return {
     triggerTypes: response.trigger_types || [],
     actionTypes: response.action_types || [],
@@ -548,24 +548,24 @@ export const fetchEscalations = async (params?: {
   correspondence?: string;
 }): Promise<Escalation[]> => {
   const query = buildQuery(params || {});
-  const response = await apiFetch<any[]>(`/analytics/escalations/?${query}`);
+  const response = await apiFetch<unknown[]>(`/analytics/escalations/?${query}`);
   return response.map(mapEscalation);
 };
 
 export const fetchEscalation = async (id: string): Promise<Escalation> => {
-  const response = await apiFetch<any>(`/analytics/escalations/${id}/`);
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalations/${id}/`);
   return mapEscalation(response);
 };
 
 export const acknowledgeEscalation = async (id: string): Promise<Escalation> => {
-  const response = await apiFetch<any>(`/analytics/escalations/${id}/acknowledge/`, {
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalations/${id}/acknowledge/`, {
     method: 'POST',
   });
   return mapEscalation(response);
 };
 
 export const resolveEscalation = async (id: string, resolutionNotes?: string): Promise<Escalation> => {
-  const response = await apiFetch<any>(`/analytics/escalations/${id}/resolve/`, {
+  const response = await apiFetch<Record<string, unknown>>(`/analytics/escalations/${id}/resolve/`, {
     method: 'POST',
     body: JSON.stringify({ resolution_notes: resolutionNotes || '' }),
   });
@@ -573,7 +573,7 @@ export const resolveEscalation = async (id: string, resolutionNotes?: string): P
 };
 
 export const fetchEscalationSummary = async (): Promise<EscalationSummary> => {
-  const response = await apiFetch<any>('/analytics/escalations/summary/');
+  const response = await apiFetch<Record<string, unknown>>('/analytics/escalations/summary/');
   return {
     total: response.total,
     pending: response.pending,

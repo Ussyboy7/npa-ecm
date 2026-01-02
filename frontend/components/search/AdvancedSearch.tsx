@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Search, Filter, Save, History, X, FileText, Mail, Loader2, Calendar, User, Building2, Briefcase, Shield } from 'lucide-react';
+import { Search, Filter, Save, History, X, FileText, Mail, Loader2, Calendar, User, Building2, Briefcase, Shield, ExternalLink, FolderTree } from 'lucide-react';
 import {
   search,
   getSearchSuggestions,
@@ -23,45 +23,126 @@ import { logError } from '@/lib/client-logger';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDate } from '@/lib/correspondence-helpers';
+import { highlightText } from '@/lib/search-highlight';
+import Link from 'next/link';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { exportToCSV } from '@/lib/admin-export';
+import { Download } from 'lucide-react';
 
 interface AdvancedSearchProps {
-  onResultSelect?: (result: any) => void;
+  onResultSelect?: (result: Record<string, unknown>) => void;
+  context?: 'all' | 'documents' | 'correspondence' | 'cases';
 }
 
-export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
+export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps) => {
   const { divisions, departments, users, offices } = useOrganization();
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<SearchRequest['filters']>({});
-  const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'all'>('all');
+  const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'cases' | 'all'>(
+    context === 'all' || !context ? 'all' : context
+  );
   const [results, setResults] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
-  const [savedSearches, setSavedSearches] = useState<any[]>([]);
-  const [searchHistory, setSearchHistory] = useState<any[]>([]);
+  const [savedSearches, setSavedSearches] = useState<unknown[]>([]);
+  const [searchHistory, setSearchHistory] = useState<unknown[]>([]);
   const [page, setPage] = useState(0);
   const pageSize = 50;
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const suggestionsAbortControllerRef = useRef<AbortController | null>(null);
 
   const debouncedQuery = useDebounce(query, 300);
 
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    'mod+k': (e) => {
+      e.preventDefault();
+      // Focus search input
+      const searchInput = document.querySelector('input[placeholder*="Search by title"]') as HTMLInputElement;
+      if (searchInput) {
+        searchInput.focus();
+      }
+    },
+    'Escape': (e) => {
+      if (showFilters) {
+        setShowFilters(false);
+      }
+    },
+  });
+
   useEffect(() => {
+    // Cancel previous suggestions request
+    if (suggestionsAbortControllerRef.current) {
+      suggestionsAbortControllerRef.current.abort();
+    }
+
     if (debouncedQuery && debouncedQuery.length > 2) {
-      loadSuggestions(debouncedQuery);
+      const controller = new AbortController();
+      suggestionsAbortControllerRef.current = controller;
+      loadSuggestions(debouncedQuery, controller.signal);
     } else {
       setSuggestions([]);
     }
+
+    return () => {
+      if (suggestionsAbortControllerRef.current) {
+        suggestionsAbortControllerRef.current.abort();
+      }
+    };
   }, [debouncedQuery]);
 
   useEffect(() => {
     loadSavedSearches();
     loadSearchHistory();
+    
+    // Handle URL query parameters
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlQuery = params.get('q');
+      const urlSearchType = params.get('search_type') as 'documents' | 'correspondence' | 'all' | null;
+      const urlFilters: SearchRequest['filters'] = {};
+      
+      // Parse filter parameters
+      params.forEach((value, key) => {
+        if (key.startsWith('filters[') && key.endsWith(']')) {
+          const filterKey = key.slice(8, -1);
+          urlFilters[filterKey as keyof SearchRequest['filters']] = value;
+        }
+      });
+      
+      if (urlQuery) {
+        setQuery(urlQuery);
+        // Auto-search if query is provided
+        setTimeout(() => {
+          if (urlSearchType) setSearchType(urlSearchType);
+          if (Object.keys(urlFilters).length > 0) setFilters(urlFilters);
+          handleSearch(true);
+        }, 100);
+      } else {
+        if (urlSearchType) setSearchType(urlSearchType);
+        if (Object.keys(urlFilters).length > 0) setFilters(urlFilters);
+      }
+    }
   }, []);
 
-  const loadSuggestions = async (q: string) => {
+  // Update search type when context prop changes
+  useEffect(() => {
+    if (context) {
+      setSearchType(context === 'all' ? 'all' : context);
+    }
+  }, [context]);
+
+  const loadSuggestions = async (q: string, signal?: AbortSignal) => {
     try {
-      const suggs = await getSearchSuggestions(q, 5);
-      setSuggestions(suggs);
+      const suggs = await getSearchSuggestions(q, 5, signal);
+      if (!signal?.aborted) {
+        setSuggestions(suggs);
+      }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       // Silently fail
     }
   };
@@ -90,6 +171,14 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
       return;
     }
 
+    // Cancel previous search request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       setLoading(true);
       const currentPage = pageOverride !== undefined ? pageOverride : (resetPage ? 0 : page);
@@ -103,21 +192,26 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
         search_type: searchType,
       };
 
-      const result = await search(searchRequest);
+      const result = await search(searchRequest, controller.signal);
+      
+      if (controller.signal.aborted) {
+        return;
+      }
       
       // Handle unified search results (when search_type is 'all')
-      if (searchType === 'all' && (result as any).documents && (result as any).correspondence) {
-        const unifiedResult = result as any;
+      if (searchType === 'all' && typeof result === 'object' && result !== null && 'documents' in result && 'correspondence' in result) {
+        const unifiedResult = result as { documents?: { results?: unknown[] }; correspondence?: { results?: unknown[] } };
         const newResults = [
-          ...unifiedResult.documents.results.map((r: any) => ({ ...r, _type: 'document' })),
-          ...unifiedResult.correspondence.results.map((r: any) => ({ ...r, _type: 'correspondence' }))
+          ...(unifiedResult.documents?.results || []).map((r: Record<string, unknown>) => ({ ...r, _type: 'document' })),
+          ...(unifiedResult.correspondence?.results || []).map((r: Record<string, unknown>) => ({ ...r, _type: 'correspondence' })),
+          ...(unifiedResult.cases?.results || []).map((r: Record<string, unknown>) => ({ ...r, _type: 'case' }))
         ];
         const combinedResults: SearchResult = {
           results: resetPage ? newResults : [...(results?.results || []), ...newResults],
           total_count: unifiedResult.total_count,
           limit: pageSize,
           offset: currentPage * pageSize,
-          has_more: unifiedResult.documents.has_more || unifiedResult.correspondence.has_more,
+          has_more: unifiedResult.documents?.has_more || unifiedResult.correspondence?.has_more || unifiedResult.cases?.has_more,
         };
         setResults(combinedResults);
       } else {
@@ -128,12 +222,29 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
         });
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       logError('Search failed', error);
       toast.error('Search failed. Please try again.');
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (suggestionsAbortControllerRef.current) {
+        suggestionsAbortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleSaveSearch = async () => {
     if (!query.trim() && Object.keys(filters || {}).length === 0) {
@@ -145,7 +256,7 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
       await createSavedSearch({
         name: query || `Search: ${searchType}`,
         query: query,
-        filters: { ...filters, search_type: searchType } as any,
+        filters: { ...filters, search_type: searchType } as SearchRequest['filters'],
         is_shared: false,
       });
       toast.success('Search saved');
@@ -161,13 +272,51 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
     setSuggestions([]);
   };
 
-  const handleHistoryClick = (historyItem: any) => {
+  const handleHistoryClick = (historyItem: Record<string, unknown>) => {
     setQuery(historyItem.query);
     if (historyItem.filters) {
       const { search_type, ...otherFilters } = historyItem.filters;
       if (search_type) setSearchType(search_type);
       setFilters(otherFilters);
     }
+  };
+
+  const handleExport = () => {
+    if (!results || results.results.length === 0) {
+      toast.error('No results to export');
+      return;
+    }
+
+    const exportData = results.results.map((result: Record<string, unknown>) => {
+      const resultType = result._type || (result.document_type ? 'document' : result.case_type ? 'case' : 'correspondence');
+      return {
+        type: resultType,
+        title: result.title || result.subject || result.case_number || 'Untitled',
+        reference_number: result.reference_number || result.case_number || '',
+        status: result.status || '',
+        sensitivity: result.sensitivity || '',
+        priority: result.priority || '',
+        author: typeof result.author === 'object' ? result.author?.name : result.author || '',
+        created_at: result.created_at || result.received_date || '',
+        snippet: result._search_snippet || result.search_snippet || result.description || result.body || '',
+      };
+    });
+
+    exportToCSV(exportData, [
+      { key: 'type', label: 'Type' },
+      { key: 'title', label: 'Title' },
+      { key: 'reference_number', label: 'Reference Number' },
+      { key: 'status', label: 'Status' },
+      { key: 'sensitivity', label: 'Sensitivity' },
+      { key: 'priority', label: 'Priority' },
+      { key: 'author', label: 'Author' },
+      { key: 'created_at', label: 'Created At' },
+      { key: 'snippet', label: 'Snippet' },
+    ], {
+      filename: `search-results-${new Date().toISOString().split('T')[0]}.csv`,
+    });
+
+    toast.success(`Exported ${exportData.length} results to CSV`);
   };
 
   return (
@@ -186,14 +335,15 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
           {/* Search Type Selector */}
           <div className="space-y-2">
             <Label>Search In</Label>
-            <Select value={searchType} onValueChange={(v) => setSearchType(v as any)}>
+            <Select value={searchType} onValueChange={(v) => setSearchType(v as 'documents' | 'correspondence' | 'cases' | 'all')}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All (Documents & Correspondence)</SelectItem>
+                <SelectItem value="all">All (Documents, Correspondence & Cases)</SelectItem>
                 <SelectItem value="documents">Documents Only</SelectItem>
                 <SelectItem value="correspondence">Correspondence Only</SelectItem>
+                <SelectItem value="cases">Cases Only</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -201,7 +351,7 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
           {/* Search Input */}
           <div className="relative">
             <Input
-              placeholder="Search by title, reference number, content..."
+              placeholder="Search by title, reference number, content... (Press Cmd/Ctrl+K to focus)"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -210,7 +360,12 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
                 }
               }}
               className="pr-10"
+              aria-label="Search input"
+              aria-describedby="search-description"
             />
+            <span id="search-description" className="sr-only">
+              Search across documents, correspondence, and cases. Press Enter to search or Cmd/Ctrl+K to focus.
+            </span>
             <Button
               size="sm"
               className="absolute right-2 top-1/2 -translate-y-1/2"
@@ -439,6 +594,57 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
                 ) : null}
 
                 <div className="space-y-2">
+                  <Label>Date Range</Label>
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      const today = new Date();
+                      const dates: { [key: string]: { from: string; to: string } } = {
+                        today: {
+                          from: today.toISOString().split('T')[0],
+                          to: today.toISOString().split('T')[0],
+                        },
+                        this_week: {
+                          from: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                          to: today.toISOString().split('T')[0],
+                        },
+                        this_month: {
+                          from: new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0],
+                          to: today.toISOString().split('T')[0],
+                        },
+                        last_month: {
+                          from: new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0],
+                          to: new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0],
+                        },
+                        this_year: {
+                          from: new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0],
+                          to: today.toISOString().split('T')[0],
+                        },
+                        last_year: {
+                          from: new Date(today.getFullYear() - 1, 0, 1).toISOString().split('T')[0],
+                          to: new Date(today.getFullYear() - 1, 11, 31).toISOString().split('T')[0],
+                        },
+                      };
+                      if (value && dates[value]) {
+                        setFilters({ ...filters, date_from: dates[value].from, date_to: dates[value].to });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Preset ranges..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="this_week">This Week</SelectItem>
+                      <SelectItem value="this_month">This Month</SelectItem>
+                      <SelectItem value="last_month">Last Month</SelectItem>
+                      <SelectItem value="this_year">This Year</SelectItem>
+                      <SelectItem value="last_year">Last Year</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Date From</Label>
                   <Input
                     type="date"
@@ -590,9 +796,22 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
       {results && (
         <Card>
           <CardHeader>
-            <CardTitle>
-              Search Results ({results.total_count} found)
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>
+                Search Results ({results.total_count} found)
+              </CardTitle>
+              {results.results.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  aria-label="Export search results to CSV"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export CSV
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -622,52 +841,80 @@ export const AdvancedSearch = ({ onResultSelect }: AdvancedSearchProps) => {
               <>
                 <ScrollArea className="h-96">
                   <div className="space-y-2">
-                    {results.results.map((result: any, idx: number) => {
-                      const resultType = result._type || (result.document_type ? 'document' : 'correspondence');
+                    {results.results.map((result: Record<string, unknown>, idx: number) => {
+                      const resultType = result._type || (result.document_type ? 'document' : result.case_type ? 'case' : 'correspondence');
                       const isCorrespondence = resultType === 'correspondence';
+                      const isCase = resultType === 'case';
                       
                       return (
                         <Card
                           key={result.id || idx}
                           className="cursor-pointer hover:bg-accent transition-colors"
-                          onClick={() => onResultSelect?.(result)}
+                          onClick={() => {
+                            if (isCase) {
+                              window.location.href = `/cases/${result.id}`;
+                            } else {
+                              onResultSelect?.(result);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              if (isCase) {
+                                window.location.href = `/cases/${result.id}`;
+                              } else {
+                                onResultSelect?.(result);
+                              }
+                            }
+                          }}
+                          aria-label={`${resultType}: ${result.title || result.subject || result.case_number || 'Untitled'}`}
                         >
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                  {isCorrespondence ? (
+                                  {isCase ? (
+                                    <FolderTree className="h-4 w-4 text-muted-foreground" />
+                                  ) : isCorrespondence ? (
                                     <Mail className="h-4 w-4 text-muted-foreground" />
                                   ) : (
                                     <FileText className="h-4 w-4 text-muted-foreground" />
                                   )}
                                   <Badge variant="outline" className="text-xs">
-                                    {isCorrespondence ? 'Correspondence' : (result.document_type || 'Document')}
+                                    {isCase ? 'Case' : isCorrespondence ? 'Correspondence' : (result.document_type || 'Document')}
                                   </Badge>
-                                  {result.reference_number && (
+                                  {(result.reference_number || (isCase && result.case_number)) && (
                                     <span className="text-xs text-muted-foreground">
-                                      {result.reference_number}
+                                      {isCase ? result.case_number : result.reference_number}
                                     </span>
                                   )}
                                 </div>
                                 <h4 className="font-medium text-base mb-1">
-                                  {result.title || result.subject || 'Untitled'}
+                                  {highlightText(result.title || result.subject || result.case_number || 'Untitled', query)}
                                 </h4>
                                 {/* Show snippet if available, otherwise show description/body */}
-                                {result.search_snippet ? (
+                                {result._search_snippet || result.search_snippet ? (
                                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                    {result.search_snippet}
-                                    {result.match_field && (
+                                    {highlightText(result._search_snippet || result.search_snippet || '', query)}
+                                    {(result._match_field || result.match_field) && (
                                       <span className="text-xs text-muted-foreground/70 ml-2">
-                                        (matched in {result.match_field})
+                                        (matched in {result._match_field || result.match_field})
                                       </span>
                                     )}
                                   </p>
                                 ) : (result.description || result.body) ? (
                                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                    {result.description || result.body}
+                                    {highlightText(result.description || result.body || '', query)}
                                   </p>
                                 ) : null}
+                                {/* Show case number for cases */}
+                                {isCase && result.case_number && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Case: {result.case_number}
+                                  </p>
+                                )}
                                 <div className="flex flex-wrap items-center gap-2 mt-2">
                                   {result.status && (
                                     <Badge variant="outline" className="text-xs">

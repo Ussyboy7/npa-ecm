@@ -23,10 +23,9 @@ import {
   Loader2,
   Users,
 } from 'lucide-react';
-import { PendingSignaturesCard } from '@/components/forms/PendingSignaturesCard';
-import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useRoleChecks } from '@/hooks/use-role-checks';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import Link from 'next/link';
 import {
@@ -35,9 +34,20 @@ import {
   fetchExecutivePortfolio,
   searchExecutiveRecords,
 } from '@/lib/analytics-client';
+import { apiFetch } from '@/lib/api-client';
+import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import type { Correspondence } from '@/lib/npa-structure';
+import dynamic from 'next/dynamic';
+
+const SecretaryDashboardContent = dynamic(
+  () => import('./components/SecretaryDashboardContent'),
+  {
+    loading: () => <div className="p-6 text-center text-muted-foreground">Loading secretary dashboard...</div>,
+    ssr: false,
+  }
+);
 
 const Dashboard = () => {
-  const { correspondence } = useCorrespondence();
   const { currentUser, hydrated } = useCurrentUser();
   const { divisions, officeMemberships, offices } = useOrganization();
   const [recordsQuery, setRecordsQuery] = useState('');
@@ -47,71 +57,111 @@ const Dashboard = () => {
   const [portfolioError, setPortfolioError] = useState<string | null>(null);
   const [recordsResults, setRecordsResults] = useState<ExecutiveRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  
+  // Dashboard data from API
+  const [pendingCorrespondence, setPendingCorrespondence] = useState<Correspondence[]>([]);
+  const [stats, setStats] = useState({
+    pending: 0,
+    inProgress: 0,
+    completedToday: 0,
+    urgent: 0,
+  });
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+
+  // Use role checks hook for type-safe role checking
+  const { isSecretary } = useRoleChecks();
 
   const division = useMemo(() => {
     if (!currentUser?.division) return undefined;
     return divisions.find((item) => item.id === currentUser.division);
   }, [currentUser?.division, divisions]);
 
-  const pendingCorrespondence = useMemo(() => {
-    if (!currentUser) return [];
-    const userDivisionId = currentUser.division;
+  // Fetch dashboard data from API
+  useEffect(() => {
+    if (!hydrated || !currentUser) return;
 
-    return correspondence
-      .filter((item) => {
-        if (item.status === 'completed') return false;
-        if (item.currentApproverId === currentUser.id) return true;
-        if (userDivisionId && item.divisionId === userDivisionId) return true;
-        return false;
-      })
-      .sort((a, b) => new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime());
-  }, [correspondence, currentUser]);
+    const fetchDashboardData = async () => {
+      setDashboardLoading(true);
+      try {
+        // Fetch my inbox data which includes summary stats
+        const inboxResponse = await apiFetch<Record<string, unknown>>('/correspondence/items/my-inbox/?page_size=10');
+        const inboxData = Array.isArray(inboxResponse) ? inboxResponse : inboxResponse.results || [];
+        const summary = inboxResponse.summary || {};
+        
+        // Map to correspondence objects
+        const pending = inboxData
+          .map(mapApiCorrespondence)
+          .filter((item) => item.status !== 'completed')
+          .sort((a, b) => new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime())
+          .slice(0, 10); // Limit to 10 most recent
+        
+        setPendingCorrespondence(pending);
+        
+        // Calculate completed today
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const completedTodayResponse = await apiFetch<Record<string, unknown>>(
+          `/correspondence/items/?status=completed&page_size=100`
+        );
+        const completedItems = Array.isArray(completedTodayResponse) 
+          ? completedTodayResponse 
+          : completedTodayResponse.results || [];
+        const completedToday = completedItems.filter((item: Record<string, unknown>) => {
+          const referenceDate = item.updated_at || item.received_date;
+          return referenceDate && new Date(referenceDate).getTime() >= startOfToday.getTime();
+        }).length;
+        
+        setStats({
+          pending: summary.pending || pending.length,
+          inProgress: summary.in_progress || 0,
+          completedToday,
+          urgent: summary.urgent || 0,
+        });
+      } catch (error) {
+        logError('Failed to load dashboard data:', error);
+        // Set defaults on error
+        setPendingCorrespondence([]);
+        setStats({ pending: 0, inProgress: 0, completedToday: 0, urgent: 0 });
+      } finally {
+        setDashboardLoading(false);
+      }
+    };
 
-  const stats = useMemo(() => {
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    fetchDashboardData();
+    
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
+  }, [hydrated, currentUser]);
 
-    const inProgress = correspondence.filter((item) => item.status === 'in-progress').length;
-    const urgent = correspondence.filter(
-      (item) => item.priority === 'urgent' && item.status !== 'completed',
-    ).length;
-    const completedToday = correspondence.filter((item) => {
-      if (item.status !== 'completed') return false;
-      const referenceDate = item.updatedAt ?? item.receivedDate;
-      return new Date(referenceDate).getTime() >= startOfToday.getTime();
-    }).length;
-
+  const statsCards = useMemo(() => {
     return [
       {
         title: 'Pending Action',
-        value: pendingCorrespondence.length.toString(),
+        value: stats.pending.toString(),
         icon: Clock,
-        color: 'text-warning',
-        bgColor: 'bg-warning/10',
+        description: 'Items awaiting your action',
       },
       {
         title: 'In Progress',
-        value: inProgress.toString(),
+        value: stats.inProgress.toString(),
         icon: Send,
-        color: 'text-info',
-        bgColor: 'bg-info/10',
+        description: 'Items being processed',
       },
       {
         title: 'Completed Today',
-        value: completedToday.toString(),
+        value: stats.completedToday.toString(),
         icon: CheckCircle,
-        color: 'text-success',
-        bgColor: 'bg-success/10',
+        description: 'Items resolved today',
       },
       {
         title: 'Urgent Items',
-        value: urgent.toString(),
+        value: stats.urgent.toString(),
         icon: AlertCircle,
-        color: 'text-destructive',
-        bgColor: 'bg-destructive/10',
+        description: 'High priority items',
       },
     ];
-  }, [correspondence, pendingCorrespondence.length]);
+  }, [stats]);
 
   const userOfficeMemberships = useMemo(() => {
     if (!currentUser) return [];
@@ -225,29 +275,25 @@ const Dashboard = () => {
         title: 'Office Workload',
         value: summary.totalQueue.toString(),
         icon: Layers,
-        color: 'text-primary',
-        bgColor: 'bg-primary/10',
+        description: 'Total items in queue',
       },
       {
         title: 'Urgent Items',
         value: summary.urgent.toString(),
         icon: AlertTriangle,
-        color: 'text-destructive',
-        bgColor: 'bg-destructive/10',
+        description: 'High priority items',
       },
       {
         title: 'SLA Breaches',
         value: summary.slaBreaches.toString(),
         icon: AlertCircle,
-        color: 'text-warning',
-        bgColor: 'bg-warning/10',
+        description: 'Items past deadline',
       },
       {
         title: 'Completion Rate',
         value: `${summary.completionRate ?? 0}%`,
         icon: Building2,
-        color: 'text-success',
-        bgColor: 'bg-success/10',
+        description: 'Items completed',
       },
     ];
   }, [executivePortfolio, isExecutive]);
@@ -299,7 +345,9 @@ const Dashboard = () => {
               Welcome back, {currentUser.name.split(' ')[0]}
             </h1>
             <p className="text-muted-foreground mt-1">
-              {currentUser.systemRole}
+              {typeof currentUser.systemRole === 'string' 
+                ? currentUser.systemRole 
+                : currentUser.systemRole?.name || 'User'}
               {division && ` - ${division.name}`}
             </p>
           </div>
@@ -319,39 +367,38 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <HelpGuideCard
-          title="Dashboard Overview"
-          description="Track high-level workload, recent correspondence, and divisional performance for your current persona. Use the Role Switcher to see how metrics change for MD, ED, GM, and departmental views."
-          links={[
-            { label: "Role Switcher", href: "/settings" },
-            { label: "Help & Guides", href: "/help" },
-          ]}
-        />
+        {/* Show Secretary Dashboard for secretaries */}
+        {isSecretary ? (
+          <SecretaryDashboardContent />
+        ) : (
+          <>
+            <HelpGuideCard
+              title="Dashboard Overview"
+              description="Track high-level workload, recent correspondence, and divisional performance for your current persona. Use the Role Switcher to see how metrics change for MD, ED, GM, and departmental views."
+              links={[
+                { label: "Role Switcher", href: "/settings" },
+                { label: "Help & Guides", href: "/help" },
+              ]}
+            />
 
-        {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat, index) => {
+            {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {statsCards.map((stat, index) => {
             const Icon = stat.icon;
             return (
-              <Card key={index} className="shadow-soft hover:shadow-medium transition-shadow">
+              <Card key={index}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    {stat.title}
-                  </CardTitle>
-                  <div className={`${stat.bgColor} p-2 rounded-lg`}>
-                    <Icon className={`h-4 w-4 ${stat.color}`} />
-                  </div>
+                  <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                  <Icon className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{stat.value}</div>
+                  <div className="text-2xl font-bold">{stat.value}</div>
+                  <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
                 </CardContent>
               </Card>
             );
           })}
         </div>
-
-        {/* Pending Signatures */}
-        <PendingSignaturesCard />
 
         {isExecutive && (
           <>
@@ -388,21 +435,18 @@ const Dashboard = () => {
                 {portfolioError && (
                   <p className="text-sm text-destructive mb-3">{portfolioError}</p>
                 )}
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   {executiveStats.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                      <Card key={index} className="shadow-soft border border-border/60">
+                      <Card key={index}>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium text-muted-foreground">
-                            {stat.title}
-                          </CardTitle>
-                          <div className={`${stat.bgColor} p-2 rounded-lg`}>
-                            <Icon className={`h-4 w-4 ${stat.color}`} />
-                          </div>
+                          <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+                          <Icon className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
                           <div className="text-2xl font-bold">{stat.value}</div>
+                          <p className="text-xs text-muted-foreground mt-1">{stat.description}</p>
                         </CardContent>
                       </Card>
                     );
@@ -769,12 +813,12 @@ const Dashboard = () => {
             </Card>
           </Link>
 
-          <Link href="/dms">
+          <Link href="/documents">
             <Card className="shadow-soft hover:shadow-medium transition-shadow cursor-pointer border-secondary/20 hover:border-secondary">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <FileText className="h-5 w-5 text-secondary" />
-                  Document Management
+                  My Documents
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -801,6 +845,8 @@ const Dashboard = () => {
             </Card>
           </Link>
         </div>
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

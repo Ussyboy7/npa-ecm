@@ -1,15 +1,18 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Search, Shield, User as UserIcon, Loader2, ChevronDown, ChevronRight, Star, StarOff, X, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { User } from "@/lib/npa-structure";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { usePagination } from "@/hooks/use-pagination";
+import { PaginationControls } from "@/components/shared/PaginationControls";
 import {
   hasTokens,
   impersonateUser,
@@ -21,7 +24,8 @@ import {
 } from "@/lib/api-client";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
-import { useDebounce } from "@/lib/use-debounce";
+import { useDebounce } from "@/hooks/use-debounce";
+import { logError } from "@/lib/client-logger";
 import { highlightText } from "@/lib/search-highlight";
 import {
   getRecentUsers,
@@ -48,6 +52,7 @@ interface SimplifiedRoleSwitcherProps {
 const USERS_PER_GROUP = 25;
 const BACKEND_SEARCH_THRESHOLD = 500;
 const DEBOUNCE_DELAY = 300;
+const DEFAULT_PAGE_SIZE = 50; // Default page size for pagination
 
 const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProps) => {
   const { directorates, divisions, departments, users, refreshOrganizationData, isSyncing } = useOrganization();
@@ -64,6 +69,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   const [favorites, setFavorites] = useState<Set<string>>(new Set(getFavoriteUsers()));
   const [recentUsers, setRecentUsers] = useState(getRecentUsers());
   const [backendSearchResults, setBackendSearchResults] = useState<User[]>([]);
+  const [backendSearchTotal, setBackendSearchTotal] = useState(0);
   const [isSearchingBackend, setIsSearchingBackend] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>(getSearchHistory());
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
@@ -74,16 +80,35 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     renderTime: 0,
   });
   
+  // Pagination for backend search
+  const backendPagination = usePagination({
+    initialPage: 1,
+    initialPageSize: DEFAULT_PAGE_SIZE,
+    totalCount: backendSearchTotal,
+  });
+  
+  // Pagination for frontend filtered results
+  const frontendPagination = usePagination({
+    initialPage: 1,
+    initialPageSize: DEFAULT_PAGE_SIZE,
+    totalCount: 0, // Will be updated dynamically in pagination controls
+  });
+  
   const mountedRef = useRef(true);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const userListRef = useRef<HTMLDivElement>(null);
   const userButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Track if component is mounted
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Cleanup: abort any pending requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
   }, []);
 
@@ -117,64 +142,97 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
 
   // Backend search if user count exceeds threshold
   useEffect(() => {
+    // Cancel previous request if still in progress
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim()) {
-      performBackendSearch(debouncedSearchQuery);
+      // Reset to page 1 when search query changes
+      backendPagination.goToFirstPage();
+      performBackendSearch(debouncedSearchQuery, backendPagination.page, backendPagination.pageSize);
     } else {
       setBackendSearchResults([]);
+      setBackendSearchTotal(0);
       setIsSearchingBackend(false);
     }
+
+    // Cleanup: abort request on unmount or when query changes
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [debouncedSearchQuery, users.length]);
 
-  const performBackendSearch = async (query: string) => {
+  // Re-fetch when backend pagination changes
+  useEffect(() => {
+    if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim() && !isSearchingBackend) {
+      performBackendSearch(debouncedSearchQuery, backendPagination.page, backendPagination.pageSize);
+    }
+  }, [backendPagination.page, backendPagination.pageSize]);
+
+  const performBackendSearch = async (query: string, page: number = 1, pageSize: number = DEFAULT_PAGE_SIZE) => {
+    // Cancel previous request if still in progress
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     setIsSearchingBackend(true);
     try {
-      // Fetch all active users - get all pages if needed
-      let allUsers: User[] = [];
-      let page = 1;
-      let hasMore = true;
+      // Fetch single page of users
+      const response = await fetchUsers({ 
+        search: query, 
+        page_size: pageSize, 
+        page,
+        is_active: true,
+        signal: abortController.signal,
+      });
       
-      while (hasMore) {
-        const response = await fetchUsers({ 
-          search: query, 
-          page_size: 1000, 
-          page,
-          is_active: true 
-        });
-        
-        // Map API users to local User type
-        const mappedUsers: User[] = response.results.map((apiUser) => ({
-          id: apiUser.id,
-          name: `${apiUser.first_name} ${apiUser.last_name}`.trim() || apiUser.username,
-          email: apiUser.email,
-          employeeId: apiUser.employee_id || '',
-          gradeLevel: apiUser.grade_level || '',
-          directorate: apiUser.directorate || undefined,
-          division: apiUser.division || undefined,
-          department: apiUser.department || undefined,
-          systemRole: apiUser.system_role_name || apiUser.system_role || '',
-          active: apiUser.is_active,
-          username: apiUser.username,
-          isSuperuser: apiUser.is_superuser,
-        }));
-        
-        allUsers = [...allUsers, ...mappedUsers];
-        
-        // Check if there are more pages
-        // If we got fewer than requested, we're on the last page
-        const requestedPageSize = 1000;
-        hasMore = !!response.next && mappedUsers.length >= requestedPageSize;
-        page++;
-        
-        // Safety limit - don't fetch more than 20 pages (20,000 users)
-        if (page > 20) break;
+      // Check if request was aborted
+      if (abortController.signal.aborted) {
+        return;
       }
       
-      setBackendSearchResults(allUsers);
-    } catch (error) {
-      console.error('Backend search failed:', error);
-      setBackendSearchResults([]);
+      // Map API users to local User type
+      const mappedUsers: User[] = response.results.map((apiUser) => ({
+        id: apiUser.id,
+        name: `${apiUser.first_name} ${apiUser.last_name}`.trim() || apiUser.username,
+        email: apiUser.email,
+        employeeId: apiUser.employee_id || '',
+        gradeLevel: apiUser.grade_level || '',
+        directorate: apiUser.directorate || undefined,
+        division: apiUser.division || undefined,
+        department: apiUser.department || undefined,
+        systemRole: apiUser.system_role_name || apiUser.system_role || '',
+        active: apiUser.is_active,
+        username: apiUser.username,
+        isSuperuser: apiUser.is_superuser,
+      }));
+      
+      // Only update state if request wasn't aborted
+      if (!abortController.signal.aborted && mountedRef.current) {
+        setBackendSearchResults(mappedUsers);
+        setBackendSearchTotal(response.count || mappedUsers.length);
+      }
+    } catch (error: Record<string, unknown>) {
+      // Ignore abort errors
+      if (error?.name === 'AbortError' || abortController.signal.aborted) {
+        return;
+      }
+      logError('Backend search failed', error);
+      if (mountedRef.current) {
+        setBackendSearchResults([]);
+        setBackendSearchTotal(0);
+      }
     } finally {
-      setIsSearchingBackend(false);
+      if (!abortController.signal.aborted && mountedRef.current) {
+        setIsSearchingBackend(false);
+      }
     }
   };
 
@@ -225,6 +283,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     let result: User[];
     
     if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim() && backendSearchResults.length > 0) {
+      // Use backend search results directly (already paginated)
       result = backendSearchResults;
     } else {
       let pool = activeUsers;
@@ -266,6 +325,40 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     return result;
   }, [activeUsers, debouncedSearchQuery, directorateMap, divisionMap, departmentMap, getDirectorateNameForUser, backendSearchResults, users.length]);
 
+  // Determine which pagination to use (defined after filteredUsers)
+  const isUsingBackendSearch = users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim();
+  
+  // Reset frontend pagination to page 1 when search query changes
+  useEffect(() => {
+    if (!isUsingBackendSearch && debouncedSearchQuery.trim()) {
+      frontendPagination.goToFirstPage();
+    }
+  }, [debouncedSearchQuery]);
+
+  // Update frontend pagination when filtered users change
+  useEffect(() => {
+    if (!isUsingBackendSearch && filteredUsers.length > 0) {
+      // Reset to page 1 if current page is beyond available pages
+      const maxPage = Math.ceil(filteredUsers.length / frontendPagination.pageSize);
+      if (frontendPagination.page > maxPage && maxPage > 0) {
+        frontendPagination.goToFirstPage();
+      }
+    }
+  }, [filteredUsers.length, isUsingBackendSearch, frontendPagination.page, frontendPagination.pageSize]);
+
+  // Get paginated users (for frontend filtering)
+  const paginatedUsers = useMemo(() => {
+    if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim()) {
+      // Backend search is already paginated
+      return filteredUsers;
+    }
+    
+    // Frontend pagination
+    const start = (frontendPagination.page - 1) * frontendPagination.pageSize;
+    const end = start + frontendPagination.pageSize;
+    return filteredUsers.slice(start, end);
+  }, [filteredUsers, frontendPagination.page, frontendPagination.pageSize, users.length, debouncedSearchQuery]);
+
   // Get recent and favorite users
   const recentUserObjects = useMemo(() => {
     return recentUsers
@@ -278,7 +371,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     return activeUsers.filter(u => favorites.has(u.id));
   }, [activeUsers, favorites]);
 
-  // Group users
+  // Group users (use paginated users for frontend, all results for backend)
   const groupedUsers = useMemo(() => {
     const groups = {
       executive: [] as User[],
@@ -290,7 +383,12 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       other: [] as User[],
     };
 
-    for (const user of filteredUsers) {
+    // Use paginated users for grouping (frontend) or all results (backend)
+    const usersToGroup = users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim()
+      ? filteredUsers // Backend search - already paginated
+      : paginatedUsers; // Frontend - use paginated slice
+
+    for (const user of usersToGroup) {
       const grade = user.gradeLevel || "";
       const role = user.systemRole || "";
 
@@ -314,7 +412,11 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     }
 
     return groups;
-  }, [filteredUsers]);
+  }, [filteredUsers, paginatedUsers, isUsingBackendSearch]);
+  
+  // Determine which pagination to use and get total count
+  const currentPagination = isUsingBackendSearch ? backendPagination : frontendPagination;
+  const totalCount = isUsingBackendSearch ? backendSearchTotal : filteredUsers.length;
 
   // Early returns AFTER all hooks
   if (!hydrated || !currentUser) {
@@ -359,6 +461,20 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     if (!impersonationEnabled || currentUser.systemRole !== "Super Admin") {
       toast.error("Impersonation is only available to Super Admins");
       return;
+    }
+
+    // Check token expiration before switching
+    const originalTokens = getOriginalTokens();
+    if (originalTokens?.expiresAt) {
+      const timeRemaining = originalTokens.expiresAt - Date.now();
+      if (timeRemaining <= 0) {
+        toast.error("Your original session has expired. Please log in again.");
+        clearOriginalTokens();
+        return;
+      }
+      if (timeRemaining < 60 * 1000) { // Less than 1 minute
+        toast.warning("Your original session is about to expire. You may need to log in again soon.");
+      }
     }
 
     setIsSwitching(true);
@@ -408,7 +524,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
               : undefined;
             storeTokens(originalTokens.access, originalTokens.refresh, secondsRemaining);
           } catch (restoreError) {
-            console.error('Failed to restore original tokens:', restoreError);
+            logError('Failed to restore original tokens', restoreError);
           }
         }
       }
@@ -521,9 +637,8 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
 
     return (
       <div key={user.id} className="relative group">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
+        <Tooltip>
+          <TooltipTrigger asChild>
               <Button
                 ref={(el) => {
                   if (el) userButtonRefs.current.set(user.id, el);
@@ -573,7 +688,6 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
               </div>
             </TooltipContent>
           </Tooltip>
-        </TooltipProvider>
         {showFavorite && (
           <button
             type="button"
@@ -660,8 +774,8 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   const isSearching = debouncedSearchQuery.trim() !== '';
 
   return (
-    <TooltipProvider>
-      <div className="space-y-4 relative" onKeyDown={handleKeyDown} tabIndex={-1}>
+    <ClientErrorBoundary>
+    <div className="space-y-4 relative" onKeyDown={handleKeyDown} tabIndex={-1}>
         {/* Loading Overlay */}
         {isSwitching && (
           <div className="absolute inset-0 bg-background/80 flex items-center justify-center z-10 rounded-lg" role="status" aria-label="Switching user">
@@ -708,8 +822,9 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             aria-expanded={showSearchSuggestions}
           />
           {isSearchingBackend && (
-            <div className="absolute right-10 top-1/2 -translate-y-1/2">
+            <div className="absolute right-10 top-1/2 -translate-y-1/2 flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Searching...</span>
             </div>
           )}
           {searchQuery && (
@@ -915,7 +1030,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             })()}
             
             {/* Empty States */}
-            {!hasResults && !isSyncing && (
+            {!hasResults && !isSyncing && !isSearchingBackend && (
               <div className="text-center py-12 text-muted-foreground" role="status">
                 {isSearching ? (
                   <>
@@ -934,6 +1049,26 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             )}
           </div>
         </div>
+        
+        {/* Pagination Controls */}
+        {hasResults && totalCount > currentPagination.pageSize && (
+          <div className="border-t pt-4">
+            <PaginationControls
+              pagination={{
+                ...currentPagination,
+                totalCount: totalCount,
+                totalPages: Math.max(1, Math.ceil(totalCount / currentPagination.pageSize)),
+                paginationInfo: {
+                  showing: `${currentPagination.startIndex}-${Math.min(currentPagination.endIndex, totalCount)}`,
+                  total: totalCount,
+                },
+              }}
+              showPageSizeSelector={true}
+              pageSizeOptions={[25, 50, 100, 200]}
+              compact={false}
+            />
+          </div>
+        )}
       </div>
 
       {/* Confirmation Dialog */}
@@ -963,7 +1098,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </TooltipProvider>
+    </ClientErrorBoundary>
   );
 };
 

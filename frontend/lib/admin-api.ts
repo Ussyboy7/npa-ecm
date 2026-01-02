@@ -90,6 +90,7 @@ export interface UserQueryParams {
   last_login_from?: string;
   last_login_to?: string;
   ordering?: string;
+  signal?: AbortSignal;
 }
 
 // ============================================================================
@@ -115,7 +116,9 @@ export async function fetchUsers(params: UserQueryParams = {}): Promise<Paginate
     ? `/accounts/users/?${searchParams.toString()}`
     : '/accounts/users/';
 
-  return apiFetch<PaginatedUsers>(url);
+  return apiFetch<PaginatedUsers>(url, {
+    signal: params.signal,
+  });
 }
 
 /**

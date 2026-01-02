@@ -515,6 +515,143 @@ class EnhancedDivisionPerformanceView(APIView):
         return Response(data)
 
 
+class CaseStatisticsView(APIView):
+    """
+    Case statistics and analytics.
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from correspondence.models import Case
+        from django.db.models import Count, Q, Avg
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        range_days = int(request.query_params.get("range", 30))
+        division_id = request.query_params.get("division_id")
+        
+        # Date range
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=range_days)
+        
+        # Base queryset
+        queryset = Case.objects.filter(is_deleted=False, opened_at__gte=start_date)
+        
+        if division_id:
+            queryset = queryset.filter(division_id=division_id)
+        
+        # Total cases
+        total_cases = queryset.count()
+        
+        # Cases by status
+        cases_by_status = queryset.values('status').annotate(count=Count('id')).order_by('status')
+        status_breakdown = {item['status']: item['count'] for item in cases_by_status}
+        
+        # Cases by type
+        cases_by_type = queryset.values('case_type').annotate(count=Count('id')).order_by('case_type')
+        type_breakdown = {item['case_type']: item['count'] for item in cases_by_type}
+        
+        # Cases by priority
+        cases_by_priority = queryset.values('priority').annotate(count=Count('id')).order_by('priority')
+        priority_breakdown = {item['priority']: item['count'] for item in cases_by_priority}
+        
+        # Average resolution time (for resolved/closed cases)
+        resolved_cases = queryset.filter(
+            status__in=[Case.Status.RESOLVED, Case.Status.CLOSED],
+            resolved_at__isnull=False
+        )
+        avg_resolution_days = None
+        if resolved_cases.exists():
+            resolution_times = []
+            for case in resolved_cases:
+                if case.resolved_at and case.opened_at:
+                    delta = case.resolved_at - case.opened_at
+                    resolution_times.append(delta.total_seconds() / 86400)  # Convert to days
+            if resolution_times:
+                avg_resolution_days = sum(resolution_times) / len(resolution_times)
+        
+        # Cases opened over time (daily)
+        from django.db.models.functions import TruncDate
+        cases_over_time = queryset.annotate(
+            date=TruncDate('opened_at')
+        ).values('date').annotate(count=Count('id')).order_by('date')
+        
+        # Cases by division
+        cases_by_division = queryset.filter(division__isnull=False).values(
+            'division__id', 'division__name'
+        ).annotate(count=Count('id')).order_by('-count')[:10]
+        
+        # Cases by department
+        cases_by_department = queryset.filter(department__isnull=False).values(
+            'department__id', 'department__name'
+        ).annotate(count=Count('id')).order_by('-count')[:10]
+        
+        # Top assigned users
+        top_assigned = queryset.filter(assigned_to__isnull=False).values(
+            'assigned_to__id', 'assigned_to__first_name', 'assigned_to__last_name'
+        ).annotate(count=Count('id')).order_by('-count')[:10]
+        
+        # Cases with completion packages
+        cases_with_packages = queryset.filter(completion_package__isnull=False).count()
+        
+        data = {
+            "summary": {
+                "total_cases": total_cases,
+                "open_cases": status_breakdown.get(Case.Status.OPEN, 0),
+                "in_progress_cases": status_breakdown.get(Case.Status.IN_PROGRESS, 0),
+                "resolved_cases": status_breakdown.get(Case.Status.RESOLVED, 0),
+                "closed_cases": status_breakdown.get(Case.Status.CLOSED, 0),
+                "archived_cases": status_breakdown.get(Case.Status.ARCHIVED, 0),
+                "cases_with_packages": cases_with_packages,
+                "avg_resolution_days": round(avg_resolution_days, 2) if avg_resolution_days else None,
+            },
+            "breakdown": {
+                "by_status": status_breakdown,
+                "by_type": type_breakdown,
+                "by_priority": priority_breakdown,
+            },
+            "trends": {
+                "cases_over_time": [
+                    {
+                        "date": item["date"].isoformat() if item["date"] else None,
+                        "count": item["count"]
+                    }
+                    for item in cases_over_time
+                ],
+            },
+            "top_assignments": {
+                "by_division": [
+                    {
+                        "id": item["division__id"],
+                        "name": item["division__name"],
+                        "count": item["count"]
+                    }
+                    for item in cases_by_division
+                ],
+                "by_department": [
+                    {
+                        "id": item["department__id"],
+                        "name": item["department__name"],
+                        "count": item["count"]
+                    }
+                    for item in cases_by_department
+                ],
+                "by_user": [
+                    {
+                        "id": item["assigned_to__id"],
+                        "name": f"{item['assigned_to__first_name']} {item['assigned_to__last_name']}".strip(),
+                        "count": item["count"]
+                    }
+                    for item in top_assigned
+                ],
+            },
+            "range_days": range_days,
+        }
+        
+        return Response(data)
+
+
 class EfficiencyAnalysisView(APIView):
     """
     Detailed efficiency analysis including staff metrics and bottlenecks.

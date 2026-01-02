@@ -1,9 +1,9 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: ecm-postgres-dev
+    container_name: ecm-postgres-local
     environment:
-      POSTGRES_DB: npa_ecm_dev
+      POSTGRES_DB: npa_ecm_local
       POSTGRES_USER: ecmadmin
       POSTGRES_PASSWORD: ecmadmin
     volumes:
@@ -11,14 +11,14 @@ services:
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U npa_ecm_local"]
+      test: ["CMD-SHELL", "pg_isready -U ecmadmin -d npa_ecm_local"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: ecm-redis-dev
+    container_name: ecm-redis-local
     ports:
       - "6380:6379"
     healthcheck:
@@ -31,18 +31,25 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: ecm-backend-dev
+    container_name: ecm-backend-local
     env_file:
       - ./backend/env/local.env
+    environment:
+      # Explicitly set DB credentials to ensure they're used
+      DB_NAME: npa_ecm_local
+      DB_USER: ecmadmin
+      DB_PASSWORD: ecmadmin
+      DB_HOST: postgres
+      DB_PORT: 5432
     volumes:
       - ./backend:/app
       - media-data:/app/media
       - static-data:/app/staticfiles
     command: >
       sh -c "python manage.py migrate &&
-             daphne -b 0.0.0.0 -p 8000 ecm_backend.asgi:application"
+             daphne -b 0.0.0.0 -p 8002 ecm_backend.asgi:application"
     ports:
-      - "8000:8000"
+      - "8002:8002"
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,9 +60,16 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: ecm-celery-worker-dev
+    container_name: ecm-celery-worker-local
     env_file:
       - ./backend/env/local.env
+    environment:
+      # Explicitly set DB credentials to ensure they're used
+      DB_NAME: npa_ecm_local
+      DB_USER: ecmadmin
+      DB_PASSWORD: ecmadmin
+      DB_HOST: postgres
+      DB_PORT: 5432
     command: celery -A ecm_backend worker -l info
     volumes:
       - ./backend:/app
@@ -70,9 +84,16 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: ecm-celery-beat-dev
+    container_name: ecm-celery-beat-local
     env_file:
       - ./backend/env/local.env
+    environment:
+      # Explicitly set DB credentials to ensure they're used
+      DB_NAME: npa_ecm_local
+      DB_USER: ecmadmin
+      DB_PASSWORD: ecmadmin
+      DB_HOST: postgres
+      DB_PORT: 5432
     command: celery -A ecm_backend beat -l info
     volumes:
       - ./backend:/app
@@ -86,16 +107,16 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.local
-    container_name: ecm-frontend-dev
+    container_name: ecm-frontend-local
     environment:
-      NEXT_PUBLIC_API_URL: http://backend:8000/api
+      NEXT_PUBLIC_API_URL: http://localhost:8002/api/v1
       NODE_ENV: development
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
     ports:
-      - "3002:3000"
+      - "3002:3002"
     depends_on:
       backend:
         condition: service_started

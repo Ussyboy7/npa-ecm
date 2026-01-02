@@ -14,12 +14,12 @@ import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 
 export const NotificationBadge = () => {
   const { correspondence, minutes, getMinutesByCorrespondenceId } = useCorrespondence();
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<unknown[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     // Generate notifications from correspondence data
-    const notifs: any[] = [];
+    const notifs: unknown[] = [];
     const now = new Date();
 
     correspondence.forEach(item => {

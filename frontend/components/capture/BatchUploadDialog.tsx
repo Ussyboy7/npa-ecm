@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -30,7 +30,7 @@ interface UploadFile {
   progress?: number;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB
 const ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
@@ -53,10 +53,12 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
   const [batchUpload, setBatchUpload] = useState<BatchUpload | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const validateFile = (file: File): string | null => {
     if (file.size > MAX_FILE_SIZE) {
-      return `File "${file.name}" exceeds maximum size of 10MB`;
+      return `File "${file.name}" exceeds maximum size of 30MB`;
     }
     if (!ALLOWED_TYPES.includes(file.type)) {
       return `File "${file.name}" has unsupported type: ${file.type}`;
@@ -123,11 +125,31 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
     setFiles(prev => prev.filter(f => f.id !== fileId));
   }, []);
 
+  // Cleanup on unmount or dialog close
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
+
   const handleUpload = useCallback(async () => {
     if (files.length === 0) {
       toast.error('Please select at least one file to upload');
       return;
     }
+
+    // Cancel previous upload if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -181,7 +203,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
           ));
 
           setUploadProgress(((i + 1) / files.length) * 50); // First 50% for upload
-        } catch (error: any) {
+        } catch (error: Record<string, unknown>) {
           logError(`Failed to upload ${uploadFile.file.name}`, error);
           setFiles(prev => prev.map(f => 
             f.id === uploadFile.id 
@@ -211,16 +233,27 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
         setBatchUpload(batch);
 
         // Poll for batch status
-        const pollInterval = setInterval(async () => {
+        pollIntervalRef.current = setInterval(async () => {
+          if (controller.signal.aborted) {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+            }
+            return;
+          }
+
           try {
             const updatedBatch = await getBatchUpload(batch.id);
+            if (controller.signal.aborted) return;
+
             setBatchUpload(updatedBatch);
 
             const progress = 50 + (updatedBatch.processed_files / updatedBatch.total_files) * 50;
             setUploadProgress(progress);
 
             if (updatedBatch.status === 'completed' || updatedBatch.status === 'partial' || updatedBatch.status === 'failed') {
-              clearInterval(pollInterval);
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+              }
               setIsUploading(false);
 
               // Update file statuses
@@ -253,8 +286,10 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
 
         // Timeout after 10 minutes
         setTimeout(() => {
-          clearInterval(pollInterval);
-          if (isUploading) {
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+          }
+          if (isUploading && !controller.signal.aborted) {
             setIsUploading(false);
             toast.warning('Batch processing is taking longer than expected. Check status later.');
           }
@@ -266,7 +301,10 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
         toast.success(`Successfully uploaded ${documentIds.length} file(s)`);
         onComplete?.(documentIds.map(id => ({ id, title: '' })));
       }
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       logError('Batch upload failed', error);
       toast.error(error?.message || 'Batch upload failed');
       setIsUploading(false);
@@ -274,13 +312,21 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
   }, [files, processOCR, extractMetadata, onComplete, isUploading]);
 
   const handleClose = useCallback(() => {
-    if (!isUploading) {
-      setFiles([]);
-      setBatchUpload(null);
-      setUploadProgress(0);
-      setIsDragging(false);
-      onOpenChange(false);
+    if (isUploading) {
+      // Cancel upload if in progress
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+      setIsUploading(false);
     }
+    setFiles([]);
+    setBatchUpload(null);
+    setUploadProgress(0);
+    setIsDragging(false);
+    onOpenChange(false);
   }, [isUploading, onOpenChange]);
 
   const getStatusIcon = (status: UploadFile['status']) => {
@@ -316,7 +362,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh]">
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Batch Document Upload</DialogTitle>
           <DialogDescription>
@@ -341,14 +387,14 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
               Drag and drop files here, or click to select
             </p>
             <p className="text-xs text-muted-foreground mb-4">
-              PDF, DOC, DOCX, XLS, XLSX, PNG, JPG, TIFF, BMP (max 10MB per file)
+              PDF, DOC, DOCX, XLS, XLSX, PNG, JPG, TIFF, BMP (max 30MB per file)
             </p>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
+              aria-label="Select files to upload"
             >
               Select Files
             </Button>
@@ -474,10 +520,18 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isUploading}>
-            {isUploading ? 'Processing...' : 'Cancel'}
+          <Button 
+            variant="outline" 
+            onClick={handleClose} 
+            disabled={isUploading}
+            aria-label={isUploading ? 'Cancel upload' : 'Close dialog'}
+          >
+            {isUploading ? 'Cancel Upload' : 'Cancel'}
           </Button>
-          <Button onClick={handleUpload} disabled={files.length === 0 || isUploading}>
+          <Button 
+            onClick={handleUpload} 
+            aria-label="Upload and process files"
+          >
             {isUploading ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

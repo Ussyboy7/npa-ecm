@@ -3,16 +3,29 @@
 from __future__ import annotations
 
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
 
 from accounts.serializers import UserSerializer
+
+User = get_user_model()
 from organization.models import Department, Division, Directorate, Office
 
 from .models import (
+    Case,
+    CaseComment,
+    CaseCorrespondenceLink,
+    CaseDocumentLink,
+    CaseFormLink,
+    CaseSLA,
+    CaseTemplate,
+    CaseWorkflowRule,
     Correspondence,
     CorrespondenceAttachment,
     CorrespondenceDelegation,
+    CorrespondenceDraft,
     CorrespondenceDistribution,
     CorrespondenceDocumentLink,
+    CorrespondenceTemplate,
     Delegation,
     Minute,
     ParallelRoutingGroup,
@@ -91,10 +104,14 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
     )
     division = serializers.PrimaryKeyRelatedField(queryset=Division.objects.all(), allow_null=True, required=False)
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), allow_null=True, required=False
+    )
     added_by = UserSerializer(read_only=True)
     directorate_name = serializers.CharField(source="directorate.name", read_only=True, allow_null=True, required=False)
     division_name = serializers.CharField(source="division.name", read_only=True, allow_null=True, required=False)
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True, required=False)
+    user_name = serializers.CharField(source="user.name", read_only=True, allow_null=True, required=False)
     added_by_id = serializers.PrimaryKeyRelatedField(
         source="added_by",
         queryset=CorrespondenceDistribution._meta.get_field("added_by").remote_field.model.objects.all(),
@@ -102,6 +119,16 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False,
     )
+    minute_id = serializers.PrimaryKeyRelatedField(
+        source="minute",
+        queryset=CorrespondenceDistribution._meta.get_field("minute").remote_field.model.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
+    # Explicitly define is_active with default to ensure it's always set
+    # This works better with DRF than relying on model defaults
+    is_active = serializers.BooleanField(default=True, required=False)
 
     class Meta:
         model = CorrespondenceDistribution
@@ -112,12 +139,17 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
             "directorate",
             "division",
             "department",
+            "user",
             "added_by",
             "added_by_id",
+            "minute",
+            "minute_id",
+            "is_active",
             "purpose",
             "directorate_name",
             "division_name",
             "department_name",
+            "user_name",
             "created_at",
             "updated_at",
         ]
@@ -138,6 +170,13 @@ class MinuteSerializer(serializers.ModelSerializer):
     )
 
     from_office = serializers.PrimaryKeyRelatedField(read_only=True)
+    from_office_id = serializers.PrimaryKeyRelatedField(
+        source="from_office",
+        queryset=Office.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
     from_office_name = serializers.CharField(source="from_office.name", read_only=True)
     to_office = serializers.PrimaryKeyRelatedField(read_only=True)
     to_office_id = serializers.PrimaryKeyRelatedField(
@@ -203,6 +242,7 @@ class MinuteSerializer(serializers.ModelSerializer):
             "mentions",
             "signature_payload",
             "from_office",
+            "from_office_id",
             "from_office_name",
             "to_office",
             "to_office_id",
@@ -387,6 +427,22 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False,
     )
+    parent_correspondence = serializers.SerializerMethodField()
+    parent_correspondence_id = serializers.PrimaryKeyRelatedField(
+        source="parent_correspondence",
+        queryset=Correspondence.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
+    case = serializers.SerializerMethodField()
+    case_id = serializers.PrimaryKeyRelatedField(
+        source="case",
+        queryset=Case.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
     division = serializers.PrimaryKeyRelatedField(queryset=Division.objects.all(), allow_null=True, required=False)
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
     owning_office = serializers.PrimaryKeyRelatedField(queryset=Office.objects.all(), allow_null=True, required=False)
@@ -403,6 +459,22 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         required=False,
     )
     completion_package = serializers.SerializerMethodField()
+    auto_created_document_id = serializers.SerializerMethodField()
+    # Routing concept metadata
+    flow_type = serializers.SerializerMethodField()
+    is_inward = serializers.SerializerMethodField()
+    is_outward = serializers.SerializerMethodField()
+    is_internal = serializers.SerializerMethodField()
+    is_external = serializers.SerializerMethodField()
+    routing_metadata = serializers.SerializerMethodField()
+
+    def validate_reference_number(self, value):
+        """
+        Skip uniqueness validation for reference_number during creation.
+        The view handles duplicate reference numbers by generating a new one.
+        """
+        # Allow empty or any value - uniqueness is handled in the view
+        return value
 
     class Meta:
         model = Correspondence
@@ -438,6 +510,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "current_approver",
             "current_approver_id",
             "linked_document_ids",
+            "auto_created_document_id",
             "attachments",
             "distribution",
             "minutes",
@@ -448,6 +521,17 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "workflow_state",
             "active_parallel_branches",
             "completed_parallel_branches",
+            "parent_correspondence",
+            "parent_correspondence_id",
+            "case",
+            "case_id",
+            # Routing concept metadata
+            "flow_type",
+            "is_inward",
+            "is_outward",
+            "is_internal",
+            "is_external",
+            "routing_metadata",
             "created_at",
             "updated_at",
         ]
@@ -467,6 +551,39 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "completion_summary_generated_at",
         ]
 
+    def get_auto_created_document_id(self, obj):
+        """Get the ID of the auto-created DMS document for this correspondence."""
+        from correspondence.models import CorrespondenceDocumentLink
+        link = CorrespondenceDocumentLink.objects.filter(
+            correspondence=obj,
+            notes__icontains="Auto-created from correspondence registration"
+        ).select_related('document').first()
+        
+        if link and link.document:
+            return str(link.document.id)
+        return None
+
+    def get_parent_correspondence(self, obj):
+        """Return parent correspondence reference if exists."""
+        if not obj.parent_correspondence:
+            return None
+        return {
+            "id": str(obj.parent_correspondence.id),
+            "reference_number": obj.parent_correspondence.reference_number,
+            "subject": obj.parent_correspondence.subject,
+        }
+
+    def get_case(self, obj):
+        """Return case reference if exists."""
+        if not obj.case:
+            return None
+        return {
+            "id": str(obj.case.id),
+            "case_number": obj.case.case_number,
+            "title": obj.case.title,
+            "status": obj.case.status,
+        }
+    
     def get_completion_package(self, obj):
         document = getattr(obj, "completion_package", None)
         if not document:
@@ -494,6 +611,57 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
                 or (version.uploaded_at if version else None)
             ),
         }
+    
+    # Routing concept metadata methods
+    def get_flow_type(self, obj):
+        """
+        Get the flow type based on routing concept.
+        Returns: 'inward-internal', 'inward-external', 'outward-internal', or 'outward-external'
+        """
+        return obj.get_flow_type()
+    
+    def get_is_inward(self, obj):
+        """Check if correspondence is INWARD (coming INTO office)."""
+        return obj.is_inward()
+    
+    def get_is_outward(self, obj):
+        """Check if correspondence is OUTWARD (going OUT OF office)."""
+        return obj.is_outward()
+    
+    def get_is_internal(self, obj):
+        """Check if correspondence is INTERNAL (within NPA)."""
+        return obj.is_internal()
+    
+    def get_is_external(self, obj):
+        """Check if correspondence is EXTERNAL (outside NPA)."""
+        return obj.is_external()
+    
+    def get_routing_metadata(self, obj):
+        """
+        Get routing metadata for the correspondence.
+        Includes flow type, location hints, and routing information.
+        """
+        flow_type = obj.get_flow_type()
+        return {
+            "flow_type": flow_type,
+            "is_inward": obj.is_inward(),
+            "is_outward": obj.is_outward(),
+            "is_internal": obj.is_internal(),
+            "is_external": obj.is_external(),
+            "should_appear_in_office_inbox": obj.should_appear_in_office_inbox(),
+            "should_appear_in_office_outbox": obj.should_appear_in_office_outbox(),
+            "description": self._get_flow_type_description(flow_type),
+        }
+    
+    def _get_flow_type_description(self, flow_type):
+        """Get human-readable description of flow type."""
+        descriptions = {
+            "inward-internal": "Coming INTO office from another NPA office (minuted to you)",
+            "inward-external": "Coming INTO office from external organization (physical copy received)",
+            "outward-internal": "Going OUT OF office to another NPA office (you minute it out)",
+            "outward-external": "Going OUT OF office to external organization (registered, printed, mailed)",
+        }
+        return descriptions.get(flow_type, "Unknown flow type")
 
 
 class ParallelRoutingGroupSerializer(serializers.ModelSerializer):
@@ -643,4 +811,362 @@ class CorrespondenceDelegationSerializer(serializers.ModelSerializer):
     def get_is_active(self, obj):
         """Check if delegation is still active."""
         return obj.is_active()
+
+
+# =============================================================================
+# CASE/FILE MANAGEMENT SERIALIZERS
+# =============================================================================
+
+class CaseCorrespondenceLinkSerializer(serializers.ModelSerializer):
+    correspondence = CorrespondenceSerializer(read_only=True)
+    correspondence_id = serializers.PrimaryKeyRelatedField(
+        source="correspondence",
+        queryset=Correspondence.objects.all(),
+        write_only=True,
+    )
+    
+    class Meta:
+        model = CaseCorrespondenceLink
+        fields = ["id", "case", "correspondence", "correspondence_id", "is_primary", "notes", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class CaseDocumentLinkSerializer(serializers.ModelSerializer):
+    document_id = serializers.SerializerMethodField()
+    document_title = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CaseDocumentLink
+        fields = ["id", "case", "document_id", "document_title", "notes", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+    
+    def get_document_id(self, obj):
+        """Get document ID, handling soft-deleted documents."""
+        if obj.document:
+            return str(obj.document.id)
+        return None
+    
+    def get_document_title(self, obj):
+        """Get document title, handling soft-deleted documents."""
+        if obj.document:
+            return obj.document.title
+        return None
+
+
+class CaseFormLinkSerializer(serializers.ModelSerializer):
+    form_document_id = serializers.SerializerMethodField()
+    form_title = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CaseFormLink
+        fields = ["id", "case", "form_document_id", "form_title", "notes", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+    
+    def get_form_document_id(self, obj):
+        """Get form document ID, handling soft-deleted documents."""
+        if obj.form_document and obj.form_document.document:
+            return str(obj.form_document.document.id)
+        return None
+    
+    def get_form_title(self, obj):
+        """Get form title, handling soft-deleted documents."""
+        if obj.form_document and obj.form_document.document:
+            return obj.form_document.document.title
+        return None
+
+
+class CaseTemplateSerializer(serializers.ModelSerializer):
+    created_by = UserSerializer(read_only=True)
+    case_type_display = serializers.CharField(source="get_case_type_display", read_only=True)
+    
+    class Meta:
+        model = CaseTemplate
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "description",
+            "case_type",
+            "case_type_display",
+            "is_active",
+            "default_priority",
+            "structure",
+            "created_by",
+            "usage_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_by", "usage_count", "created_at", "updated_at"]
+
+
+class CaseCommentSerializer(serializers.ModelSerializer):
+    author = UserSerializer(read_only=True)
+    mentions = UserSerializer(many=True, read_only=True)
+    resolved_by = UserSerializer(read_only=True)
+    replies_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CaseComment
+        fields = [
+            "id",
+            "case",
+            "author",
+            "content",
+            "parent",
+            "mentions",
+            "is_resolved",
+            "resolved_at",
+            "resolved_by",
+            "replies_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "author", "created_at", "updated_at"]
+    
+    def get_replies_count(self, obj):
+        return obj.replies.count()
+
+
+class CaseSerializer(serializers.ModelSerializer):
+    created_by = UserSerializer(read_only=True)
+    created_by_id = serializers.PrimaryKeyRelatedField(
+        source="created_by",
+        queryset=Case._meta.get_field("created_by").remote_field.model.objects.all(),
+        write_only=True,
+        required=False,
+    )
+    assigned_to = UserSerializer(read_only=True)
+    assigned_to_id = serializers.PrimaryKeyRelatedField(
+        source="assigned_to",
+        queryset=Case._meta.get_field("assigned_to").remote_field.model.objects.all(),
+        write_only=True,
+        allow_null=True,
+        required=False,
+    )
+    division = serializers.PrimaryKeyRelatedField(queryset=Division.objects.all(), allow_null=True, required=False)
+    department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
+    owning_office = serializers.PrimaryKeyRelatedField(queryset=Office.objects.all(), allow_null=True, required=False)
+    current_office = serializers.PrimaryKeyRelatedField(queryset=Office.objects.all(), allow_null=True, required=False)
+    completion_package = serializers.SerializerMethodField()
+    
+    # Related items (read-only)
+    correspondence_count = serializers.SerializerMethodField()
+    documents_count = serializers.SerializerMethodField()
+    forms_count = serializers.SerializerMethodField()
+    activities_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Case
+        fields = [
+            "id",
+            "case_number",
+            "title",
+            "description",
+            "case_type",
+            "status",
+            "priority",
+            "division",
+            "department",
+            "owning_office",
+            "current_office",
+            "created_by",
+            "created_by_id",
+            "assigned_to",
+            "assigned_to_id",
+            "opened_at",
+            "resolved_at",
+            "closed_at",
+            "tags",
+            "metadata",
+            "completion_package",
+            "completion_package_generated_at",
+            "correspondence_count",
+            "documents_count",
+            "forms_count",
+            "activities_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "case_number",
+            "created_by",
+            "assigned_to",
+            "opened_at",
+            "resolved_at",
+            "closed_at",
+            "completion_package",
+            "completion_package_generated_at",
+            "correspondence_count",
+            "documents_count",
+            "forms_count",
+            "activities_count",
+            "created_at",
+            "updated_at",
+        ]
+    
+    def get_completion_package(self, obj):
+        """Return completion package document info if exists."""
+        if not obj.completion_package:
+            return None
+        return {
+            "id": str(obj.completion_package.id),
+            "title": obj.completion_package.title,
+            "file_url": obj.completion_package.versions.first().file_url if obj.completion_package.versions.exists() else None,
+        }
+    
+    def get_correspondence_count(self, obj):
+        """Get count of related correspondence."""
+        return obj.correspondence.count()
+    
+    def get_documents_count(self, obj):
+        """Get count of related documents."""
+        return obj.document_links.count()
+    
+    def get_forms_count(self, obj):
+        """Get count of related forms."""
+        return obj.form_links.count()
+    
+    def get_activities_count(self, obj):
+        """Get count of related activities."""
+        return obj.get_all_activities().count()
+
+
+class CaseDetailSerializer(CaseSerializer):
+    """Extended serializer with full related items."""
+    correspondence = CaseCorrespondenceLinkSerializer(many=True, read_only=True, source="correspondence_links")
+    documents = CaseDocumentLinkSerializer(many=True, read_only=True, source="document_links")
+    forms = CaseFormLinkSerializer(many=True, read_only=True, source="form_links")
+    activities = serializers.SerializerMethodField()
+    
+    class Meta(CaseSerializer.Meta):
+        fields = CaseSerializer.Meta.fields + ["correspondence", "documents", "forms", "activities"]
+    
+    def get_activities(self, obj):
+        """Get all activities (minutes) related to this case."""
+        from correspondence.serializers import MinuteSerializer
+        activities = obj.get_all_activities()
+        return MinuteSerializer(activities, many=True).data
+
+
+class CaseWorkflowRuleSerializer(serializers.ModelSerializer):
+    case_type_display = serializers.CharField(source="get_case_type_display", read_only=True)
+    trigger_type_display = serializers.CharField(source="get_trigger_type_display", read_only=True)
+    action_type_display = serializers.CharField(source="get_action_type_display", read_only=True)
+    
+    class Meta:
+        model = CaseWorkflowRule
+        fields = [
+            "id",
+            "name",
+            "description",
+            "case_type",
+            "case_type_display",
+            "priority",
+            "trigger_type",
+            "trigger_type_display",
+            "trigger_conditions",
+            "action_type",
+            "action_type_display",
+            "action_config",
+            "is_active",
+            "priority_order",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class CaseSLASerializer(serializers.ModelSerializer):
+    case = CaseSerializer(read_only=True)
+    status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CaseSLA
+        fields = [
+            "id",
+            "case",
+            "target_days",
+            "target_date",
+            "warning_threshold_percent",
+            "critical_threshold_percent",
+            "warning_sent",
+            "critical_sent",
+            "breached",
+            "breached_at",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "status", "created_at", "updated_at"]
+    
+    def get_status(self, obj):
+        return obj.check_status()
+
+
+class CorrespondenceTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for correspondence/minute content templates."""
+    
+    created_by = UserSerializer(read_only=True)
+    updated_by = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = CorrespondenceTemplate
+        fields = [
+            "id",
+            "title",
+            "description",
+            "scope",
+            "scope_id",
+            "template_type",
+            "action_type",
+            "content_html",
+            "content_text",
+            "is_default",
+            "is_active",
+            "created_by",
+            "updated_by",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_by", "updated_by", "created_at", "updated_at"]
+
+
+class CorrespondenceDraftSerializer(serializers.ModelSerializer):
+    """Serializer for correspondence drafts."""
+    
+    user = UserSerializer(read_only=True)
+    correspondence_id = serializers.PrimaryKeyRelatedField(
+        source="correspondence",
+        queryset=Correspondence.objects.all(),
+        write_only=True,
+    )
+    correspondence = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = CorrespondenceDraft
+        fields = [
+            "id",
+            "correspondence",
+            "correspondence_id",
+            "user",
+            "draft_type",
+            "content",
+            "subject",
+            "forward_to",
+            "on_behalf_of",
+            "action_type",
+            "files_metadata",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "user", "correspondence", "created_at", "updated_at"]
+    
+    def get_correspondence(self, obj):
+        """Return minimal correspondence info."""
+        return {
+            "id": str(obj.correspondence.id),
+            "reference_number": obj.correspondence.reference_number,
+            "subject": obj.correspondence.subject,
+        }
 

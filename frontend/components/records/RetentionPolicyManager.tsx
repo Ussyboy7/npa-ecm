@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -22,6 +22,7 @@ import {
 import { logError } from '@/lib/client-logger';
 
 export const RetentionPolicyManager = () => {
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [policies, setPolicies] = useState<RetentionPolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -37,28 +38,54 @@ export const RetentionPolicyManager = () => {
     is_active: true,
   });
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     loadPolicies();
   }, []);
 
   const loadPolicies = async () => {
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       setLoading(true);
-      const data = await getRetentionPolicies();
+      const data = await getRetentionPolicies({ signal: controller.signal });
+      
+      if (controller.signal.aborted) {
+        return;
+      }
       // Ensure data is an array
       if (Array.isArray(data)) {
         setPolicies(data);
       } else {
-        console.error('Expected array but got:', data);
+        logError('Expected array but got:', data);
         setPolicies([]);
         toast.error('Invalid response format from server');
       }
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       logError('Failed to load retention policies', error);
       toast.error('Failed to load retention policies');
       setPolicies([]); // Set to empty array on error
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   };
 
@@ -132,7 +159,7 @@ export const RetentionPolicyManager = () => {
                 New Policy
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
               <DialogHeader>
                 <DialogTitle>
                   {editingPolicy ? 'Edit Retention Policy' : 'Create Retention Policy'}
@@ -181,7 +208,7 @@ export const RetentionPolicyManager = () => {
                     <Label htmlFor="trigger_event">Trigger Event *</Label>
                     <Select
                       value={formData.trigger_event}
-                      onValueChange={(value: any) =>
+                      onValueChange={(value: Record<string, unknown>) =>
                         setFormData({ ...formData, trigger_event: value })
                       }
                     >
@@ -203,7 +230,7 @@ export const RetentionPolicyManager = () => {
                     <Label htmlFor="applies_to">Applies To *</Label>
                     <Select
                       value={formData.applies_to}
-                      onValueChange={(value: any) =>
+                      onValueChange={(value: Record<string, unknown>) =>
                         setFormData({ ...formData, applies_to: value })
                       }
                     >
@@ -222,7 +249,7 @@ export const RetentionPolicyManager = () => {
                     <Label htmlFor="disposition_action">Disposition Action *</Label>
                     <Select
                       value={formData.disposition_action}
-                      onValueChange={(value: any) =>
+                      onValueChange={(value: Record<string, unknown>) =>
                         setFormData({ ...formData, disposition_action: value })
                       }
                     >

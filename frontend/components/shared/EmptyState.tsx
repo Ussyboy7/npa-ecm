@@ -1,54 +1,68 @@
 "use client";
 
-import { ReactNode } from 'react';
+import { FileX, Search, Inbox } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { LucideIcon } from 'lucide-react';
 
-export interface EmptyStateProps {
-  icon?: LucideIcon;
-  title: string;
-  description?: string;
-  action?: {
-    label: string;
-    onClick: () => void;
-  };
+interface EmptyStateProps {
+  icon?: 'file' | 'search' | 'inbox' | React.ReactNode;
+  title?: string;
+  message?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  variant?: 'default' | 'muted' | 'dashed';
   className?: string;
-  children?: ReactNode;
 }
 
-/**
- * Reusable empty state component for consistent empty states across pages
- */
-export function EmptyState({
-  icon: Icon,
-  title,
-  description,
-  action,
+const iconMap = {
+  file: FileX,
+  search: Search,
+  inbox: Inbox,
+};
+
+export const EmptyState = ({
+  icon = 'file',
+  title = 'No items found',
+  message = 'There are no items to display at this time.',
+  actionLabel,
+  onAction,
+  variant = 'default',
   className,
-  children,
-}: EmptyStateProps) {
+}: EmptyStateProps) => {
+  const IconComponent = typeof icon === 'string' ? iconMap[icon] : null;
+  const CustomIcon = typeof icon !== 'string' ? icon : null;
+
+  const variantClasses = {
+    default: 'border-border bg-card',
+    muted: 'border-muted bg-muted/30',
+    dashed: 'border-dashed bg-muted/20',
+  };
+
   return (
-    <Card className={cn('border-dashed', className)}>
-      <CardContent className="flex flex-col items-center justify-center py-12 px-6 text-center">
-        {Icon && (
-          <div className="mb-4 rounded-full bg-muted p-3">
-            <Icon className="h-6 w-6 text-muted-foreground" />
-          </div>
+    <Card className={cn('border', variantClasses[variant], className)}>
+      <CardContent className="flex flex-col items-center justify-center gap-3 py-12 px-6">
+        {IconComponent && (
+          <IconComponent className="h-12 w-12 text-muted-foreground" />
         )}
-        <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-        {description && (
-          <p className="text-sm text-muted-foreground max-w-md mb-4">{description}</p>
-        )}
-        {action && (
-          <Button onClick={action.onClick} variant="default" size="sm">
-            {action.label}
+        {CustomIcon && <div className="text-muted-foreground">{CustomIcon}</div>}
+        
+        <div className="text-center space-y-1">
+          <h3 className="font-semibold text-sm">{title}</h3>
+          <p className="text-sm text-muted-foreground max-w-sm">{message}</p>
+        </div>
+
+        {actionLabel && onAction && (
+          <Button
+            onClick={onAction}
+            variant="outline"
+            size="sm"
+            className="mt-2"
+          >
+            {actionLabel}
           </Button>
         )}
-        {children}
       </CardContent>
     </Card>
   );
-}
-
+};

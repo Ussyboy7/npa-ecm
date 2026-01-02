@@ -63,7 +63,7 @@ export const DocumentPreviewModal = ({
       }
       
       // Debug logging
-      console.log('[DocumentPreviewModal] Fetching attachment:', {
+      logInfo('[DocumentPreviewModal] Fetching attachment:', {
         attachmentUrl,
         attachmentFileName,
         hasToken: !!token,
@@ -77,7 +77,7 @@ export const DocumentPreviewModal = ({
         headers,
       })
         .then(response => {
-          console.log('[DocumentPreviewModal] Fetch response:', {
+          logInfo('[DocumentPreviewModal] Fetch response:', {
             status: response.status,
             statusText: response.statusText,
             ok: response.ok,
@@ -167,7 +167,7 @@ export const DocumentPreviewModal = ({
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) onClose();
     }}>
-      <DialogContent className="max-w-6xl w-full max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="space-y-1 px-6 pt-6 flex-shrink-0">
           <DialogTitle className="text-lg font-semibold">Document Preview</DialogTitle>
           <DialogDescription>

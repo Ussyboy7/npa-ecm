@@ -87,7 +87,7 @@ export function ForwardFormDialog({
       }
 
       // Create notifications for forwarded users
-      const notificationPromises: Promise<any>[] = [];
+      const notificationPromises: Promise<unknown>[] = [];
       const actionUrl = `/dms/${form.document.id}`;
       const actionText = actionType === 'review' ? 'review' : actionType === 'input' ? 'provide input on' : 'sign';
       
@@ -179,7 +179,7 @@ export function ForwardFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Send className="h-5 w-5 text-primary" />
@@ -206,7 +206,7 @@ export function ForwardFormDialog({
           {/* Action Type */}
           <div className="space-y-2">
             <Label>Action Type</Label>
-            <Select value={actionType} onValueChange={(v) => setActionType(v as any)}>
+            <Select value={actionType} onValueChange={(v) => setActionType(v as 'review' | 'input' | 'signature')}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -221,7 +221,7 @@ export function ForwardFormDialog({
           {/* Target Type */}
           <div className="space-y-2">
             <Label>Forward To</Label>
-            <Select value={targetType} onValueChange={(v) => setTargetType(v as any)}>
+            <Select value={targetType} onValueChange={(v) => setTargetType(v as 'user' | 'division' | 'department')}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

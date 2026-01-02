@@ -39,7 +39,7 @@ export const VersionCompareDialog = ({ open, onOpenChange, versions, baseVersion
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Compare Versions</DialogTitle>
           <DialogDescription>Select two versions to review changes line by line.</DialogDescription>
@@ -47,9 +47,9 @@ export const VersionCompareDialog = ({ open, onOpenChange, versions, baseVersion
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase">Baseline Version</label>
+            <label htmlFor="baseline-version" className="text-xs font-medium text-muted-foreground uppercase">Baseline Version</label>
             <Select value={baselineVersion?.id} onValueChange={setSelectedBaseline}>
-              <SelectTrigger>
+              <SelectTrigger id="baseline-version" aria-label="Select baseline version for comparison">
                 <SelectValue placeholder="Select baseline" />
               </SelectTrigger>
               <SelectContent>
@@ -63,9 +63,9 @@ export const VersionCompareDialog = ({ open, onOpenChange, versions, baseVersion
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase">Target Version</label>
+            <label htmlFor="target-version" className="text-xs font-medium text-muted-foreground uppercase">Target Version</label>
             <Select value={targetVersion?.id} onValueChange={setSelectedTarget}>
-              <SelectTrigger>
+              <SelectTrigger id="target-version" aria-label="Select target version for comparison">
                 <SelectValue placeholder="Select target" />
               </SelectTrigger>
               <SelectContent>
@@ -80,8 +80,8 @@ export const VersionCompareDialog = ({ open, onOpenChange, versions, baseVersion
         </div>
 
         {/* Side-by-side comparison view */}
-        <div className="grid grid-cols-2 gap-4 border border-border rounded-md overflow-hidden">
-          <div className="border-r border-border">
+        <div className="grid grid-cols-2 gap-4 border border-border rounded-md overflow-hidden" role="region" aria-label="Document version comparison">
+          <div className="border-r border-border" role="region" aria-label={`Baseline version ${baselineVersion?.versionNumber}`}>
             <div className="bg-muted/50 px-3 py-2 border-b border-border">
               <p className="text-xs font-medium text-muted-foreground">
                 Version {baselineVersion?.versionNumber} (Baseline)
@@ -90,13 +90,13 @@ export const VersionCompareDialog = ({ open, onOpenChange, versions, baseVersion
                 {baselineVersion?.uploadedAt ? new Date(baselineVersion.uploadedAt).toLocaleString('en-US') : 'Unknown date'}
               </p>
             </div>
-            <ScrollArea className="h-[420px]">
+            <ScrollArea className="h-[420px]" aria-label="Baseline version content">
               <div className="p-4 text-xs leading-relaxed whitespace-pre-wrap font-mono">
                 {baselineVersion?.contentText || baselineVersion?.contentHtml?.replace(/<[^>]+>/g, '') || 'No content'}
               </div>
             </ScrollArea>
           </div>
-          <div>
+          <div role="region" aria-label={`Target version ${targetVersion?.versionNumber}`}>
             <div className="bg-muted/50 px-3 py-2 border-b border-border">
               <p className="text-xs font-medium text-muted-foreground">
                 Version {targetVersion?.versionNumber} (Target)
@@ -105,7 +105,7 @@ export const VersionCompareDialog = ({ open, onOpenChange, versions, baseVersion
                 {targetVersion?.uploadedAt ? new Date(targetVersion.uploadedAt).toLocaleString('en-US') : 'Unknown date'}
               </p>
             </div>
-            <ScrollArea className="h-[420px]">
+            <ScrollArea className="h-[420px]" aria-label="Target version content with changes highlighted">
               <div className="p-4 text-xs leading-relaxed whitespace-pre-wrap font-mono space-y-1">
                 {diff.map((entry, index) => {
                   const color = entry.type === 'added' 
@@ -114,7 +114,12 @@ export const VersionCompareDialog = ({ open, onOpenChange, versions, baseVersion
                       ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 line-through' 
                       : 'text-foreground';
                   return (
-                    <div key={`${entry.type}-${index}`} className={`${color} px-1 rounded-sm`}>
+                    <div 
+                      key={`${entry.type}-${index}`} 
+                      className={`${color} px-1 rounded-sm`}
+                      role={entry.type === 'added' ? 'insertion' : entry.type === 'removed' ? 'deletion' : undefined}
+                      aria-label={entry.type === 'added' ? 'Added text' : entry.type === 'removed' ? 'Removed text' : 'Unchanged text'}
+                    >
                       {entry.value}
                     </div>
                   );

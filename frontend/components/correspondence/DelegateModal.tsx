@@ -133,12 +133,6 @@ export const DelegateModal = ({
   const executive = users.find(u => u.id === executiveId);
 
   // Get assistants assigned to this executive
-  // Debug: Log assignment data to help troubleshoot (using String() for type-safe comparison)
-  console.log('[DelegateModal] Debug Info:', {
-    currentUserId: executiveId,
-    totalAssignments: assistantAssignments.length,
-    matchingCount: assistantAssignments.filter(a => String(a.executiveId) === String(executiveId)).length,
-  });
 
   // Filter assignments for this executive (handle string/number type mismatch)
   const availableAssistants = assistantAssignments
@@ -410,15 +404,9 @@ export const DelegateModal = ({
   };
 
   const handleConfirm = async () => {
-    console.log('[DelegateModal] handleConfirm called');
-    console.log('[DelegateModal] selectedAssistant:', selectedAssistant);
-    console.log('[DelegateModal] availableAssistants:', availableAssistants);
-    
     const assignment = availableAssistants.find(a => a.assistantId === selectedAssistant);
-    console.log('[DelegateModal] Found assignment:', assignment);
     
     if (!assignment) {
-      console.log('[DelegateModal] No assignment found, showing error');
       toast.error('Invalid assistant selection');
       setShowConfirmation(false);
       return;
@@ -427,18 +415,10 @@ export const DelegateModal = ({
     setIsSubmitting(true);
     try {
       const expiresAt = calculateExpiryDate(delegationDuration);
-      console.log('[DelegateModal] Calling onDelegate with:', {
-        assistantId: selectedAssistant,
-        type: assignment.type,
-        notes: delegationNotes,
-        duration: delegationDuration,
-        expiresAt
-      });
       
       // Await the async onDelegate call
       await onDelegate(selectedAssistant, assignment.type, delegationNotes, delegationDuration, expiresAt);
       
-      console.log('[DelegateModal] onDelegate completed successfully');
       setShowConfirmation(false);
       onOpenChange(false);
       // Reset form state
@@ -447,7 +427,7 @@ export const DelegateModal = ({
       setDelegationDuration('until_completed');
       setCustomExpiryDate('');
     } catch (error) {
-      console.error('[DelegateModal] onDelegate failed:', error);
+      logError('[DelegateModal] onDelegate failed:', error);
       logError('Failed to delegate correspondence', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
@@ -465,7 +445,7 @@ export const DelegateModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserCheck className="h-5 w-5 text-primary" />
@@ -860,7 +840,7 @@ export const DelegateModal = ({
 
       {/* Confirmation Dialog - Using separate Dialog to avoid nesting issues */}
       <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserCheck className="h-5 w-5 text-primary" />

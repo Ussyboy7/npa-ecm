@@ -3,7 +3,7 @@
 # NPA ECM Staging Deployment Script
 # This script handles the deployment of the NPA ECM system to staging environment
 
-set -e  # Exit on any error
+set -euo pipefail  # Exit on any error, undefined vars, pipe failures
 
 # Colors for output
 RED='\033[0;31m'
@@ -155,13 +155,15 @@ run_health_checks() {
         fi
 
         # Check Backend
-        if ! curl -f -s http://localhost:4646/api/health/ >/dev/null 2>&1; then
+        BACKEND_HEALTH_URL="${STAGING_API_URL:-http://localhost:4646}/api/health/"
+        if ! curl -f -s "$BACKEND_HEALTH_URL" >/dev/null 2>&1; then
             warning "Backend is not healthy"
             healthy=false
         fi
 
         # Check Frontend
-        if ! curl -f -s http://localhost:4646 >/dev/null 2>&1; then
+        FRONTEND_URL="${STAGING_FRONTEND_URL:-http://localhost:4646}"
+        if ! curl -f -s "$FRONTEND_URL" >/dev/null 2>&1; then
             warning "Frontend is not healthy"
             healthy=false
         fi
@@ -197,14 +199,25 @@ post_deployment_tasks() {
 
     # Create superuser if it doesn't exist (for staging)
     log "Ensuring superuser exists..."
-    docker exec ecm-backend-stag python manage.py shell -c "
+    SUPERUSER_USERNAME="${SUPERUSER_USERNAME:-admin}"
+    SUPERUSER_EMAIL="${SUPERUSER_EMAIL:-admin@staging.npa-ecm.com}"
+    SUPERUSER_PASSWORD="${SUPERUSER_PASSWORD:-$(openssl rand -base64 32 2>/dev/null || echo 'ChangeMe123!')}"
+    
+    docker exec -e SUPERUSER_USERNAME="${SUPERUSER_USERNAME}" \
+               -e SUPERUSER_EMAIL="${SUPERUSER_EMAIL}" \
+               -e SUPERUSER_PASSWORD="${SUPERUSER_PASSWORD}" \
+               ecm-backend-stag python manage.py shell -c "
 from django.contrib.auth import get_user_model
+import os
 User = get_user_model()
-if not User.objects.filter(username='admin').exists():
-    User.objects.create_superuser('admin', 'admin@staging.npa-ecm.com', 'admin123')
-    print('Superuser created')
+username = os.environ.get('SUPERUSER_USERNAME', 'admin')
+email = os.environ.get('SUPERUSER_EMAIL', 'admin@staging.npa-ecm.com')
+password = os.environ.get('SUPERUSER_PASSWORD', 'ChangeMe123!')
+if not User.objects.filter(username=username).exists():
+    User.objects.create_superuser(username, email, password)
+    print(f'Superuser {username} created')
 else:
-    print('Superuser already exists')
+    print(f'Superuser {username} already exists')
 " 2>/dev/null || warning "Superuser creation check failed"
 
     success "Post-deployment tasks completed"
@@ -256,11 +269,11 @@ main() {
         post_deployment_tasks
         success "🎉 Deployment completed successfully!"
         success "Application is available at:"
-        success "  Frontend: http://172.16.0.46:4646"
-        success "  API Health: http://172.16.0.46:4646/api/health/"
-        success "  Admin: http://172.16.0.46:4646/admin/"
-        success "  Grafana: http://localhost:3002 (admin/staging_admin_2024)"
-        success "  Prometheus: http://localhost:9091"
+        success "  Frontend: ${STAGING_FRONTEND_URL:-http://172.16.0.46:4646}"
+        success "  API Health: ${STAGING_API_URL:-http://172.16.0.46:4646}/api/health/"
+        success "  Admin: ${STAGING_API_URL:-http://172.16.0.46:4646}/admin/"
+        success "  Grafana: ${GRAFANA_URL:-http://localhost:3002} (admin/staging_admin_2024)"
+        success "  Prometheus: ${PROMETHEUS_URL:-http://localhost:9091}"
     else
         error "Deployment failed - health checks did not pass"
         exit 1

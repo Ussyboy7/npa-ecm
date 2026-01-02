@@ -26,6 +26,13 @@ export const saveToStorage = (key: string, value: unknown) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
+export interface DraftFileMetadata {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+}
+
 export interface Draft {
   id: string;
   correspondenceId: string;
@@ -36,6 +43,7 @@ export interface Draft {
   onBehalfOf?: string;
   actionType?: 'minute' | 'approve';
   timestamp: string;
+  files?: DraftFileMetadata[]; // File metadata for uploaded files
 }
 
 // Correspondence operations
@@ -89,34 +97,43 @@ export const getMinutesByCorrespondence = (correspondenceId: string): Minute[] =
   return minutes.filter(m => m.correspondenceId === correspondenceId);
 };
 
-// Drafts operations
-export const saveDraft = (draft: Draft) => {
-  const drafts = loadDrafts();
-  const index = drafts.findIndex(d => d.id === draft.id);
-  
-  if (index >= 0) {
-    drafts[index] = draft;
-  } else {
-    drafts.push(draft);
+// Drafts operations - Now using backend API
+import * as draftApi from '@/lib/api/drafts';
+
+export const saveDraft = async (draft: Partial<Draft> & { correspondenceId: string; type: 'minute' | 'treatment'; content: string }): Promise<Draft> => {
+  try {
+    return await draftApi.saveDraft(draft);
+  } catch (error) {
+    logError('Error saving draft to backend:', error);
+    throw error;
   }
-  
-  localStorage.setItem(STORAGE_KEYS.DRAFTS, JSON.stringify(drafts));
-  return draft;
 };
 
-export const loadDrafts = (): Draft[] => {
-  const data = localStorage.getItem(STORAGE_KEYS.DRAFTS);
-  return data ? JSON.parse(data) : [];
+export const loadDrafts = async (): Promise<Draft[]> => {
+  try {
+    return await draftApi.getDrafts();
+  } catch (error) {
+    logError('Error loading drafts from backend:', error);
+    return [];
+  }
 };
 
-export const getDraftByCorrespondence = (correspondenceId: string, type: 'minute' | 'treatment'): Draft | null => {
-  const drafts = loadDrafts();
-  return drafts.find(d => d.correspondenceId === correspondenceId && d.type === type) || null;
+export const getDraftByCorrespondence = async (correspondenceId: string, type: 'minute' | 'treatment'): Promise<Draft | null> => {
+  try {
+    return await draftApi.getDraftByCorrespondence(correspondenceId, type);
+  } catch (error) {
+    logError(`Error loading draft for correspondence ${correspondenceId}:`, error);
+    return null;
+  }
 };
 
-export const deleteDraft = (draftId: string) => {
-  const drafts = loadDrafts().filter(d => d.id !== draftId);
-  localStorage.setItem(STORAGE_KEYS.DRAFTS, JSON.stringify(drafts));
+export const deleteDraft = async (draftId: string): Promise<void> => {
+  try {
+    await draftApi.deleteDraft(draftId);
+  } catch (error) {
+    logError(`Error deleting draft ${draftId}:`, error);
+    throw error;
+  }
 };
 
 // Clear all data

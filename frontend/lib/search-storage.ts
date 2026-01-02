@@ -24,11 +24,11 @@ export interface SearchRequest {
   };
   limit?: number;
   offset?: number;
-  search_type?: 'documents' | 'correspondence' | 'all';
+  search_type?: 'documents' | 'correspondence' | 'cases' | 'all';
 }
 
 export interface SearchResult {
-  results: any[];
+  results: unknown[];
   total_count: number;
   limit: number;
   offset: number;
@@ -40,7 +40,7 @@ export interface SavedSearch {
   name: string;
   description?: string;
   query: string;
-  filters: Record<string, any>;
+  filters: Record<string, unknown>;
   is_shared: boolean;
   user?: {
     id: string;
@@ -55,21 +55,25 @@ export interface SearchHistory {
   id: string;
   query: string;
   result_count: number;
-  filters: Record<string, any>;
+  filters: Record<string, unknown>;
   created_at: string;
 }
 
 /**
  * Perform advanced search.
  */
-export const search = async (request: SearchRequest): Promise<SearchResult> => {
+export const search = async (request: SearchRequest, signal?: AbortSignal): Promise<SearchResult> => {
   try {
     const response = await apiFetch<SearchResult>('/search/operations/search/', {
       method: 'POST',
       body: JSON.stringify(request),
+      signal,
     });
     return response;
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     logError('Failed to perform search', error);
     throw error;
   }
@@ -83,8 +87,8 @@ export const searchWithin = async (
   documentIds?: string[]
 ): Promise<{
   results: Array<{
-    document: any;
-    version: any;
+    document: Record<string, unknown>;
+    version: Record<string, unknown>;
     snippet: string;
     rank: number;
   }>;
@@ -93,8 +97,8 @@ export const searchWithin = async (
   try {
     const response = await apiFetch<{
       results: Array<{
-        document: any;
-        version: any;
+        document: Record<string, unknown>;
+        version: Record<string, unknown>;
         snippet: string;
         rank: number;
       }>;
@@ -118,7 +122,8 @@ export const searchWithin = async (
  */
 export const getSearchSuggestions = async (
   query: string,
-  limit: number = 10
+  limit: number = 10,
+  signal?: AbortSignal
 ): Promise<string[]> => {
   try {
     const response = await apiFetch<{ suggestions: string[] }>(
@@ -126,10 +131,14 @@ export const getSearchSuggestions = async (
       {
         method: 'POST',
         body: JSON.stringify({ query, limit }),
+        signal,
       }
     );
     return response.suggestions;
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return [];
+    }
     logError('Failed to get search suggestions', error);
     return [];
   }

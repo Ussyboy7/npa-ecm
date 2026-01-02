@@ -1,7 +1,7 @@
 "use client";
 
 import { logError, logInfo, logWarn } from '@/lib/client-logger';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useReducer, useRef, startTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
@@ -17,25 +17,20 @@ import {
   createDocumentVersion,
   replaceDocumentVersion,
   fetchWorkspaces,
-  fetchCollections,
-  getActiveEditorSessions,
-  getEditorSessionForUser,
-  createEditorSession,
-  endEditorSession,
   getDocumentComments,
   updateDocumentWorkspaces,
   getDocumentAccessLogs,
   logDocumentAccess,
+  runOCROnVersion,
   type DocumentRecord,
   type DocumentVersion,
   type DocumentWorkspace,
-  type EditorSession,
   type DocumentComment,
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { formatFileSize } from '@/lib/file-utils';
-import { ArrowLeft, FileText, Download, Layers, Filter, User as UserIcon, Tag, Pencil, FilePlus, Clock, Eye, MessageSquare, Users, Plus, X, CheckCircle2, Circle, Activity, Shield, Loader2, FolderKanban, Share2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Layers, Filter, User as UserIcon, Tag, Pencil, FilePlus, Clock, Eye, MessageSquare, Users, Plus, X, CheckCircle2, Circle, Activity, Shield, Loader2, FolderKanban, Share2, AlertCircle, FolderTree, PenTool, Scan, Download as DownloadIcon } from 'lucide-react';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -45,7 +40,6 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
-import { CollectionManagementDialog } from '@/components/dms/CollectionManagementDialog';
 import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
 import { FormDocumentEditor } from '@/components/dms/FormDocumentEditor';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -53,10 +47,19 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { apiFetch } from '@/lib/api-client';
 import { Correspondence, Minute } from '@/lib/npa-structure';
-import { Link, AlertTriangle, Download as DownloadIcon, Filter as FilterIcon, Calendar as CalendarIcon, Calendar, ExternalLink, Scan } from 'lucide-react';
+import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
+import { MinuteModal } from '@/components/correspondence/MinuteModal';
+import { unlinkDocumentFromCase } from '@/lib/api/cases';
 import { processOCR, getCaptureJob, getOCRResult, cancelCaptureJob, type CaptureJob } from '@/lib/capture-storage';
+import { DocumentHeader } from '@/components/dms/DocumentHeader';
+import { CollaborationPanel } from '@/components/dms/CollaborationPanel';
+import { AccessActivityCard } from '@/components/dms/AccessActivityCard';
+import { RelatedCorrespondenceCard } from '@/components/dms/RelatedCorrespondenceCard';
+import { DocumentCommentsCard } from '@/components/dms/DocumentCommentsCard';
+import { DocumentThreadCard } from '@/components/dms/DocumentThreadCard';
 
 const statusLabel = (status: DocumentRecord['status']) => {
   switch (status) {
@@ -87,49 +90,128 @@ const statusVariant = (status: DocumentRecord['status']): 'outline' | 'default' 
 const DocumentDetailPage = () => {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [document, setDocument] = useState<DocumentRecord | null>(null);
+  // Dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareDialogInitialView, setShareDialogInitialView] = useState<'share' | 'permissions'>('share');
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null);
-  const [replaceVersionId, setReplaceVersionId] = useState<string | null>(null);
+  const [createVersionDialogOpen, setCreateVersionDialogOpen] = useState(false);
+  const [linkCaseDialogOpen, setLinkCaseDialogOpen] = useState(false);
+  const [minuteDocumentModalOpen, setMinuteDocumentModalOpen] = useState(false);
   const [commentsDialogOpen, setCommentsDialogOpen] = useState(false);
   const [workspaceManageOpen, setWorkspaceManageOpen] = useState(false);
-  const [collectionManageOpen, setCollectionManageOpen] = useState(false);
-  const [metadataDraft, setMetadataDraft] = useState({
-    title: '',
-    description: '',
-    referenceNumber: '',
-    divisionId: undefined as string | undefined,
-    departmentId: undefined as string | undefined,
-    tags: '' as string,
-    sensitivity: 'internal' as DocumentRecord['sensitivity'],
-    status: 'draft' as DocumentRecord['status'],
-  });
+  const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null);
+  const [replaceVersionId, setReplaceVersionId] = useState<string | null>(null);
+  const [minuteDocumentCorrespondence, setMinuteDocumentCorrespondence] = useState<Correspondence | null>(null);
+  const [selectedAccessLog, setSelectedAccessLog] = useState<DocumentAccessLog | null>(null);
   
-  // Collaboration state
-  const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
-  const [collections, setCollections] = useState<import('@/lib/dms-storage').DocumentCollection[]>([]);
-  const [activeEditorSessions, setActiveEditorSessions] = useState<EditorSession[]>([]);
-  const [currentEditorSession, setCurrentEditorSession] = useState<EditorSession | null>(null);
-  const [comments, setComments] = useState<DocumentComment[]>([]);
-  const [accessLogs, setAccessLogs] = useState<DocumentAccessLog[]>([]);
-  const [relatedCorrespondence, setRelatedCorrespondence] = useState<Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>>([]);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [savingMetadata, setSavingMetadata] = useState(false);
-  const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
-  const [showStatusChangeConfirmation, setShowStatusChangeConfirmation] = useState(false);
-  const [pendingStatusChange, setPendingStatusChange] = useState<DocumentRecord['status'] | null>(null);
-  const [metadataErrors, setMetadataErrors] = useState<Record<string, string>>({});
-  const [accessLogFilter, setAccessLogFilter] = useState<'all' | 'view' | 'download' | 'attempted-download'>('all');
-  const [accessLogDateFilter, setAccessLogDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
-  const [formDocumentId, setFormDocumentId] = useState<string | null>(null);
-  const [metadataDialogOpen, setMetadataDialogOpen] = useState(false);
+  // Document state
+  const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [documentError, setDocumentError] = useState<string | null>(null);
-  // OCR state per version: versionId -> { isProcessing, currentJob, error }
-  const [versionOCRState, setVersionOCRState] = useState<Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>>({});
+  const [formDocumentId, setFormDocumentId] = useState<string | null>(null);
+  
+  // Collaboration state - using useReducer
+  type CollaborationState = {
+    workspaces: DocumentWorkspace[];
+    comments: DocumentComment[];
+    accessLogs: DocumentAccessLog[];
+    relatedCorrespondence: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>;
+  };
+  
+  type CollaborationAction =
+    | { type: 'SET_WORKSPACES'; payload: DocumentWorkspace[] }
+    | { type: 'SET_COMMENTS'; payload: DocumentComment[] }
+    | { type: 'SET_ACCESS_LOGS'; payload: DocumentAccessLog[] }
+    | { type: 'SET_RELATED_CORRESPONDENCE'; payload: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }> };
+  
+  const collaborationReducer = (state: CollaborationState, action: CollaborationAction): CollaborationState => {
+    switch (action.type) {
+      case 'SET_WORKSPACES':
+        // Only update if payload reference changed (shallow comparison)
+        if (state.workspaces === action.payload) {
+          return state;
+        }
+        return { ...state, workspaces: action.payload };
+      case 'SET_COMMENTS':
+        // Only update if payload reference changed (shallow comparison)
+        if (state.comments === action.payload) {
+          return state;
+        }
+        return { ...state, comments: action.payload };
+      case 'SET_ACCESS_LOGS':
+        // Only update if payload reference changed (shallow comparison)
+        if (state.accessLogs === action.payload) {
+          return state;
+        }
+        return { ...state, accessLogs: action.payload };
+      case 'SET_RELATED_CORRESPONDENCE':
+        // Only update if payload reference changed (shallow comparison)
+        if (state.relatedCorrespondence === action.payload) {
+          return state;
+        }
+        return { ...state, relatedCorrespondence: action.payload };
+      default:
+        return state;
+    }
+  };
+  
+  const [collaborationState, dispatchCollaboration] = useReducer(collaborationReducer, {
+    workspaces: [],
+    comments: [],
+    accessLogs: [],
+    relatedCorrespondence: [],
+  });
+  
+  // OCR state - using useReducer
+  type OCRState = Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>;
+  
+  type OCRAction =
+    | { type: 'SET_PROCESSING'; versionId: string; isProcessing: boolean }
+    | { type: 'SET_JOB'; versionId: string; job: CaptureJob | null }
+    | { type: 'SET_ERROR'; versionId: string; error: string | null }
+    | { type: 'RESET'; versionId: string }
+    | { type: 'RESET_ALL' };
+  
+  const ocrReducer = (state: OCRState, action: OCRAction): OCRState => {
+    switch (action.type) {
+      case 'SET_PROCESSING':
+        return {
+          ...state,
+          [action.versionId]: {
+            ...state[action.versionId],
+            isProcessing: action.isProcessing,
+          },
+        };
+      case 'SET_JOB':
+        return {
+          ...state,
+          [action.versionId]: {
+            ...state[action.versionId] || { isProcessing: false, currentJob: null, error: null },
+            currentJob: action.job,
+          },
+        };
+      case 'SET_ERROR':
+        return {
+          ...state,
+          [action.versionId]: {
+            ...state[action.versionId] || { isProcessing: false, currentJob: null, error: null },
+            error: action.error,
+            isProcessing: false,
+          },
+        };
+      case 'RESET':
+        const { [action.versionId]: _, ...rest } = state;
+        return rest;
+      case 'RESET_ALL':
+        return {};
+      default:
+        return state;
+    }
+  };
+  
+  const [ocrState, dispatchOCR] = useReducer(ocrReducer, {});
 
-  const { currentUser } = useCurrentUser();
+  const { currentUser, hydrated } = useCurrentUser();
   const { users: organizationUsers, divisions, departments } = useOrganization();
   const userLookup = useMemo(() => new Map(organizationUsers.map((user) => [user.id, user])), [organizationUsers]);
   const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
@@ -141,25 +223,13 @@ const DocumentDetailPage = () => {
     () => currentUser ?? organizationUsers.find((user) => user.active) ?? null,
     [currentUser, organizationUsers],
   );
-  const permissionSummaries = useMemo(() => {
-    if (!document) return [];
-    return document.permissions.map((permission, index) => ({
-      key: permission.id ?? `${permission.access}-${index}`,
-      access: permission.access,
-      userNames: permission.userIds.map((id) => userLookup.get(id)?.name ?? `User ${id}`),
-      divisionNames: permission.divisionIds.map((id) => divisionLookup.get(id) ?? `Division ${id}`),
-      departmentNames: permission.departmentIds.map((id) => departmentLookup.get(id) ?? `Department ${id}`),
-      gradeLevels: permission.gradeLevels ?? [],
-      createdAt: permission.createdAt ?? permission.updatedAt ?? document.updatedAt,
-    }));
-  }, [document, userLookup, divisionLookup, departmentLookup]);
 
   // Load workspaces lookup
   useEffect(() => {
     const loadWorkspaces = async () => {
       try {
         const ws = await fetchWorkspaces();
-        setWorkspaces(ws);
+        dispatchCollaboration({ type: 'SET_WORKSPACES', payload: ws });
       } catch (error) {
         logError('Failed to load workspaces', error);
       }
@@ -167,27 +237,17 @@ const DocumentDetailPage = () => {
     void loadWorkspaces();
   }, []);
 
-  // Load collections when document changes
-  useEffect(() => {
-    if (!document) {
-      setCollections([]);
-      return;
-    }
-    const loadCollections = async () => {
-      try {
-        const allCollections = await fetchCollections();
-        const documentCollections = allCollections.filter((c) => c.documentIds.includes(document.id));
-        setCollections(documentCollections);
-      } catch (error) {
-        logError('Failed to load collections', error);
-      }
-    };
-    void loadCollections();
-  }, [document?.id]);
+
+  // Ref to track if we're currently loading to prevent infinite loops
+  const isLoadingRef = useRef(false);
 
   // Load document function - extracted for reuse
   const loadDocument = useCallback(async (): Promise<DocumentRecord | null> => {
-    if (!params?.id) return null;
+    if (!params?.id || params.id === 'undefined' || params.id === 'null' || params.id.trim() === '') {
+      setDocumentError('Invalid document ID');
+      setLoading(false);
+      return null;
+    }
     
     setLoading(true);
     setDocumentError(null);
@@ -203,27 +263,15 @@ const DocumentDetailPage = () => {
         });
       }
       setDocument(doc);
-      setMetadataDraft({
-        title: doc.title,
-        description: doc.description ?? '',
-        referenceNumber: doc.referenceNumber ?? '',
-        divisionId: doc.divisionId,
-        departmentId: doc.departmentId,
-        tags: doc.tags.join(', '),
-        sensitivity: doc.sensitivity,
-        status: doc.status,
-      });
-      setHasUnsavedChanges(false);
-      setMetadataErrors({});
       setDocumentError(null);
       
       // If this is a form document, fetch the form document ID
       if (doc.documentType === 'form') {
         try {
-          console.log('[DocumentDetail] Fetching form document for document:', params.id);
+          logInfo('[DocumentDetail] Fetching form document for document', { documentId: params.id });
           // Check if form_document is already in the document data
           if (doc.form_document?.id) {
-            console.log('[DocumentDetail] Form document ID from document data:', doc.form_document.id);
+            logInfo('[DocumentDetail] Form document ID from document data', { formDocumentId: doc.form_document.id });
             setFormDocumentId(doc.form_document.id);
           } else {
             // Fallback: query form documents
@@ -236,7 +284,7 @@ const DocumentDetailPage = () => {
               )
             ]) as Array<{ id: string; document: { id: string } }>;
             
-            console.log('[DocumentDetail] Form documents query result:', formDocs);
+            logInfo('[DocumentDetail] Form documents query result', formDocs);
             if (formDocs && formDocs.length > 0) {
               setFormDocumentId(formDocs[0].id);
             }
@@ -246,19 +294,27 @@ const DocumentDetailPage = () => {
         }
       }
       return doc;
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       // Check if it's a 404 (expected for missing documents) - don't log as error
       const isNotFound = error?.status === 404 || error?.isNotFound || error?.message?.includes('No Document matches') || error?.message?.includes('not found');
       
       if (!isNotFound) {
         // Only log unexpected errors
         logError('Failed to load document', error);
-      } else {
-        // For expected 404s, just log as info (suppressed in production)
-        logInfo('Document not found:', params.id);
+        const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to load document';
+        setDocumentError(errorMessage);
+        setDocument(null);
+        return null;
       }
       
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Document not found';
+      // For expected 404s, provide a helpful error message
+      // The document might be: deleted, permission-restricted, or truly doesn't exist
+      const errorMessage = error?.response?.data?.detail || 
+        'The document you are looking for does not exist, has been deleted, or you do not have permission to view it.';
+      
+        // For expected 404s, just log as info (suppressed in production)
+        logInfo('Document not found:', params.id);
+      
       setDocumentError(errorMessage);
       setDocument(null);
       return null;
@@ -270,6 +326,11 @@ const DocumentDetailPage = () => {
   // Load document and collaboration data
   useEffect(() => {
     if (!params?.id) return;
+    if (!hydrated || !currentUser?.id) return; // Wait for user to be fully hydrated
+
+    // Prevent multiple concurrent loads
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
 
     let ignore = false;
 
@@ -285,77 +346,9 @@ const DocumentDetailPage = () => {
         }
 
         // Load collaboration data
-        if (currentUser) {
-          // Create or reactivate editor session when viewing document
-          try {
-            // First, check if user already has a session (active or inactive)
-            const existingSession = await getEditorSessionForUser(params.id, currentUser.id);
-            
-            if (existingSession) {
-              // Use existing session (backend will reactivate it when we call create)
-              // The backend's create method handles reactivation, so we can just call it
-              try {
-                const session = await createEditorSession(params.id, currentUser.id, 'Viewing document');
-                if (!ignore) setCurrentEditorSession(session);
-              } catch (createError: any) {
-                // If creation fails due to unique constraint, use the existing session
-                const isUniqueError = createError?.response?.data?.non_field_errors?.some?.(
-                  (msg: string) => msg.includes('unique') || msg.includes('must make a unique set')
-                ) || createError?.message?.includes('unique');
-                
-                if (isUniqueError && existingSession) {
-                  // Unique constraint error - session already exists, use it
-                  if (!ignore) setCurrentEditorSession(existingSession);
-                } else if (!ignore && existingSession) {
-                  // Other error, but we have existing session
-                  setCurrentEditorSession(existingSession);
-                } else {
-                  logWarn('Failed to create/reactivate editor session (non-critical)', createError);
-                }
-              }
-            } else {
-              // No existing session, create new one
-              try {
-                const session = await createEditorSession(params.id, currentUser.id, 'Viewing document');
-                if (!ignore) setCurrentEditorSession(session);
-              } catch (createError: any) {
-                // Check if it's a unique constraint error - might have been created between check and create
-                const isUniqueError = createError?.response?.data?.non_field_errors?.some?.(
-                  (msg: string) => msg.includes('unique') || msg.includes('must make a unique set')
-                ) || createError?.message?.includes('unique');
-                
-                if (isUniqueError) {
-                  // Session was created by another request, try to fetch it
-                  try {
-                    const session = await getEditorSessionForUser(params.id, currentUser.id);
-                    if (session && !ignore) {
-                      setCurrentEditorSession(session);
-                    }
-                  } catch (fetchError) {
-                    logWarn('Failed to fetch editor session after unique error (non-critical)', fetchError);
-                  }
-                } else {
-                  // Other error - it's okay, we'll just not track the session
-                  logWarn('Failed to create editor session (non-critical)', createError);
-                }
-              }
-        }
-      } catch (error) {
-            // Non-critical error - editor session tracking is optional
-            logWarn('Failed to handle editor session (non-critical)', error);
-          }
-
-          // Load active editors
-          const editors = await getActiveEditorSessions(params.id);
-          logInfo('Loaded active editors:', editors, 'for document:', params.id);
-          if (!ignore) {
-            setActiveEditorSessions(editors);
-            logInfo('Set active editors state:', editors);
-          }
-
           // Load comments
           const cmts = await getDocumentComments(params.id);
-          if (!ignore) setComments(cmts);
+          if (!ignore) dispatchCollaboration({ type: 'SET_COMMENTS', payload: cmts });
 
           // Log document view
           if (doc) {
@@ -373,68 +366,132 @@ const DocumentDetailPage = () => {
 
           // Load access logs
           const logs = await getDocumentAccessLogs(params.id);
-          if (!ignore) setAccessLogs(logs);
+          if (!ignore) dispatchCollaboration({ type: 'SET_ACCESS_LOGS', payload: logs });
 
           // Load related correspondence
           try {
-            const linksResponse = await apiFetch<Array<{ id: string; correspondence: any; notes?: string }>>(
+            const linksResponse = await apiFetch<Record<string, unknown>>(
               `/correspondence/document-links/?document=${params.id}`
             );
-            const links = Array.isArray(linksResponse) ? linksResponse : [];
+            // Handle both array and paginated response
+            const links = Array.isArray(linksResponse) 
+              ? linksResponse 
+              : (linksResponse.results || linksResponse.data || []);
+            
+            logInfo(`[DMS Detail] Loaded ${links.length} document link(s) for document ${params.id}`);
             
             if (links.length > 0) {
-              // Fetch full correspondence details and minutes for each
-              const correspondenceData = await Promise.all(
-                links.map(async (link) => {
-                  try {
-                    const corrId = typeof link.correspondence === 'string' ? link.correspondence : link.correspondence?.id;
-                    if (!corrId) return null;
+              // Limit concurrent API calls to prevent overwhelming the backend
+              // Process in batches of 5 to balance performance and server load
+              const BATCH_SIZE = 5;
+              const correspondenceData: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string } | null> = [];
+              
+              for (let i = 0; i < links.length; i += BATCH_SIZE) {
+                const batch = links.slice(i, i + BATCH_SIZE);
+                const batchResults = await Promise.all(
+                  batch.map(async (link) => {
+                    try {
+                      const corrId = typeof link.correspondence === 'string' ? link.correspondence : link.correspondence?.id;
+                      if (!corrId) return null;
 
-                    const [corrResponse, minutesResponse] = await Promise.all([
-                      apiFetch<any>(`/correspondence/items/${corrId}/`),
-                      apiFetch<any[]>(`/correspondence/minutes/?correspondence=${corrId}`),
-                    ]);
+                      const [corrResponse, minutesResponse] = await Promise.all([
+                        apiFetch<Record<string, unknown>>(`/correspondence/items/${corrId}/`),
+                        apiFetch<unknown[]>(`/correspondence/minutes/?correspondence=${corrId}`),
+                      ]);
+
+                    logInfo(`[DMS Detail] Minutes API response for correspondence ${corrId}:`, minutesResponse);
+                    logInfo(`[DMS Detail] Correspondence API response for ${corrId}:`, {
+                      distribution: corrResponse.distribution,
+                      distributionCount: Array.isArray(corrResponse.distribution) ? corrResponse.distribution.length : 0
+                    });
+                    
+                    // Helper function to normalize IDs
+                    const normalizeId = (value: unknown): string | undefined => {
+                      if (value === null || value === undefined) return undefined;
+                      if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
+                        return normalizeId((value as Record<string, unknown>).id);
+                      }
+                      return String(value);
+                    };
+                    
+                    // Handle paginated response
+                    const minutesArray = Array.isArray(minutesResponse) 
+                      ? minutesResponse 
+                      : (minutesResponse?.results || minutesResponse?.data || []);
 
                     // Map minutes to extract user info
-                    const minutes: Minute[] = Array.isArray(minutesResponse)
-                      ? minutesResponse.map((item: any) => {
-                          const normalizeId = (value: unknown): string | undefined => {
-                            if (value === null || value === undefined) return undefined;
-                            if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
-                              return normalizeId((value as Record<string, unknown>).id);
-                            }
-                            return String(value);
-                          };
+                    const minutes: Minute[] = minutesArray.map((item: Record<string, unknown>) => {
 
+                      return {
+                        id: String(item.id),
+                        correspondenceId: String(corrId),
+                        userId: normalizeId(item.user ?? item.user_id) ?? '',
+                        userName:
+                          typeof item.user === 'object' && item.user
+                            ? (() => {
+                                const fullName = `${item.user.first_name ?? ''} ${item.user.last_name ?? ''}`.trim();
+                                if (fullName.length > 0) return fullName;
+                                return item.user.username ?? undefined;
+                              })()
+                            : undefined,
+                        userEmail: typeof item.user === 'object' ? item.user.email ?? undefined : undefined,
+                        userSystemRole: undefined, // Can be extracted if needed
+                        gradeLevel: item.grade_level ?? '',
+                        actionType: item.action_type ?? 'minute',
+                        minuteText: item.minute_text ?? '',
+                        direction: item.direction ?? 'downward',
+                        stepNumber: item.step_number ?? 1,
+                        timestamp: item.timestamp ?? new Date().toISOString(),
+                        actedBySecretary: item.acted_by_secretary ?? false,
+                        actedByAssistant: item.acted_by_assistant ?? false,
+                        assistantType: item.assistant_type ?? undefined,
+                        readAt: item.read_at ?? undefined,
+                        mentions: Array.isArray(item.mentions) ? item.mentions : [],
+                        signature: item.signature_payload ?? undefined,
+                        toOfficeId: item.to_office ? (typeof item.to_office === 'string' ? item.to_office : item.to_office.id) : undefined,
+                        toOfficeName: item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? item.to_office.name : undefined),
+                        toUserId: item.to_user ? (typeof item.to_user === 'string' ? item.to_user : item.to_user.id) : undefined,
+                        toUserName: item.to_user_name ?? (typeof item.to_user === 'object' && item.to_user ? `${item.to_user.first_name ?? ''} ${item.to_user.last_name ?? ''}`.trim() : undefined),
+                        isRecalled: item.is_recalled ?? false,
+                        recalledAt: item.recalled_at ?? undefined,
+                        recallReason: item.recall_reason ?? undefined,
+                      };
+                    });
+                    // Map distribution (reuse normalizeId function defined above)
+                    const distribution = Array.isArray(corrResponse.distribution)
+                      ? corrResponse.distribution.map((recipient: Record<string, unknown>) => {
+                          const recipientType = recipient.recipient_type ?? 'division';
                           return {
-                            id: String(item.id),
-                            correspondenceId: String(corrId),
-                            userId: normalizeId(item.user ?? item.user_id) ?? '',
-                            userName:
-                              typeof item.user === 'object' && item.user
+                            id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
+                            type:
+                              recipientType === 'directorate'
+                                ? 'directorate'
+                                : recipientType === 'department'
+                                ? 'department'
+                                : 'division',
+                            directorateId: normalizeId(recipient.directorate),
+                            divisionId: normalizeId(recipient.division),
+                            departmentId: normalizeId(recipient.department),
+                            name:
+                              recipient.directorate_name ??
+                              recipient.division_name ??
+                              recipient.department_name ??
+                              undefined,
+                            addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
+                            addedByName:
+                              typeof recipient.added_by === 'object' && recipient.added_by
                                 ? (() => {
-                                    const fullName = `${item.user.first_name ?? ''} ${item.user.last_name ?? ''}`.trim();
+                                    const fullName = `${recipient.added_by.first_name ?? ''} ${recipient.added_by.last_name ?? ''}`.trim();
                                     if (fullName.length > 0) return fullName;
-                                    return item.user.username ?? undefined;
+                                    return recipient.added_by.username ?? undefined;
                                   })()
                                 : undefined,
-                            userEmail: typeof item.user === 'object' ? item.user.email ?? undefined : undefined,
-                            userSystemRole: undefined, // Can be extracted if needed
-                            gradeLevel: item.grade_level ?? '',
-                            actionType: item.action_type ?? 'minute',
-                            minuteText: item.minute_text ?? '',
-                            direction: item.direction ?? 'downward',
-                            stepNumber: item.step_number ?? 1,
-                            timestamp: item.timestamp ?? new Date().toISOString(),
-                            actedBySecretary: item.acted_by_secretary ?? false,
-                            actedByAssistant: item.acted_by_assistant ?? false,
-                            assistantType: item.assistant_type ?? undefined,
-                            readAt: item.read_at ?? undefined,
-                            mentions: Array.isArray(item.mentions) ? item.mentions : [],
-                            signature: item.signature_payload ?? undefined,
+                            addedAt: recipient.created_at ?? undefined,
+                            purpose: recipient.purpose ?? undefined,
                           };
                         })
                       : [];
+                    
                     const correspondence: Correspondence = {
                       id: String(corrResponse.id),
                       referenceNumber: corrResponse.reference_number ?? '',
@@ -450,239 +507,139 @@ const DocumentDetailPage = () => {
                       currentApproverId: corrResponse.current_approver ? (typeof corrResponse.current_approver === 'string' ? corrResponse.current_approver : corrResponse.current_approver.id) : undefined,
                       createdById: corrResponse.created_by ? (typeof corrResponse.created_by === 'string' ? corrResponse.created_by : corrResponse.created_by.id) : undefined,
                       direction: corrResponse.direction ?? 'upward',
+                      distribution,
                       createdAt: corrResponse.created_at,
                       updatedAt: corrResponse.updated_at,
                     };
 
-                    return {
-                      correspondence,
-                      minutes,
-                      linkNotes: link.notes,
-                    };
-                  } catch (error) {
-                    logError('Failed to load related correspondence', error);
-                    return null;
-                  }
-                })
-              );
+                      return {
+                        correspondence,
+                        minutes,
+                        linkNotes: link.notes,
+                      };
+                    } catch (error) {
+                      logError('Failed to load related correspondence', error);
+                      return null;
+                    }
+                  })
+                );
+                correspondenceData.push(...batchResults);
+              }
 
               const validData = correspondenceData.filter((item) => item !== null) as Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>;
-              if (!ignore) setRelatedCorrespondence(validData);
+              logInfo('[DMS Detail] Processed correspondence data', { 
+                validDataCount: validData.length, 
+                totalMinutes: validData.reduce((sum, item) => sum + item.minutes.length, 0),
+                data: validData 
+              });
+              if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: validData });
             } else {
-              if (!ignore) setRelatedCorrespondence([]);
+              logInfo('[DMS Detail] No document links found for document', { documentId: params.id });
+              if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
             }
           } catch (error) {
+            logError('[DMS Detail] Error loading related correspondence', error);
             logError('Failed to load related correspondence', error);
-            if (!ignore) setRelatedCorrespondence([]);
-          }
+            if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
         }
       } catch (error) {
         logError('Failed to load document', error);
         toast.error('Unable to load document');
-        router.push('/dms');
+        router.push('/documents');
       }
     };
 
-    void load();
+    void load().finally(() => {
+      isLoadingRef.current = false;
+    });
 
     return () => {
       ignore = true;
+      isLoadingRef.current = false;
     };
-  }, [params?.id, router, currentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params?.id, hydrated, currentUser?.id]); // loadDocument is stable (memoized with params?.id) and doesn't need to be in deps
 
-  // End editor session on unmount
-  useEffect(() => {
-    return () => {
-      if (currentEditorSession) {
-        endEditorSession(currentEditorSession.id).catch(logError);
-      }
-    };
-  }, [currentEditorSession]);
 
-  // Poll for active editors every 5 seconds
-  useEffect(() => {
-    if (!params?.id) return;
 
-    const pollEditors = async () => {
-      try {
-        const editors = await getActiveEditorSessions(params.id);
-        logInfo('Polled active editors:', editors, 'for document:', params.id);
-        if (editors && editors.length > 0) {
-          logInfo('Setting active editors:', editors);
-        }
-        setActiveEditorSessions(editors);
-      } catch (error) {
-        logError('Failed to poll active editors', error);
-      }
-    };
-
-    const interval = setInterval(pollEditors, 5000);
-    pollEditors(); // Initial load
-
-    return () => clearInterval(interval);
-  }, [params?.id]);
-
-  const validateMetadata = (): boolean => {
-    const errors: Record<string, string> = {};
-    
-    if (!metadataDraft.title.trim()) {
-      errors.title = 'Title is required';
-    }
-    if (metadataDraft.title.length > 500) {
-      errors.title = 'Title must be less than 500 characters';
-    }
-    if (metadataDraft.referenceNumber && metadataDraft.referenceNumber.length > 100) {
-      errors.referenceNumber = 'Reference number must be less than 100 characters';
-    }
-    
-    setMetadataErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const checkStatusChange = (newStatus: DocumentRecord['status']): boolean => {
-    if (!document) return false;
-    const oldStatus = document.status;
-    
-    // Check if status is changing from draft to published (requires confirmation)
-    if (oldStatus === 'draft' && newStatus === 'published') {
-      return true;
-    }
-    // Check if status is changing from published to archived (requires confirmation)
-    if (oldStatus === 'published' && newStatus === 'archived') {
-      return true;
-    }
-    return false;
-  };
-
-  const handleStatusChange = (newStatus: DocumentRecord['status']) => {
-    if (checkStatusChange(newStatus)) {
-      setPendingStatusChange(newStatus);
-      setShowStatusChangeConfirmation(true);
-    } else {
-      setMetadataDraft({ ...metadataDraft, status: newStatus });
-      setHasUnsavedChanges(true);
-    }
-  };
-
-  const confirmStatusChange = () => {
-    if (pendingStatusChange) {
-      setMetadataDraft({ ...metadataDraft, status: pendingStatusChange });
-      setHasUnsavedChanges(true);
-      setPendingStatusChange(null);
-      setShowStatusChangeConfirmation(false);
-      toast.info('Status change will be saved when you click "Save Changes"');
-    }
-  };
-
-  const handleMetadataSave = async () => {
-    if (!document) return;
-
-    if (!validateMetadata()) {
-      toast.error('Please fix validation errors before saving');
-      return;
-    }
-
-    // Check for unsaved changes
-    const hasChanges = 
-      metadataDraft.title !== document.title ||
-      metadataDraft.description !== (document.description ?? '') ||
-      metadataDraft.referenceNumber !== (document.referenceNumber ?? '') ||
-      metadataDraft.divisionId !== document.divisionId ||
-      metadataDraft.departmentId !== document.departmentId ||
-      metadataDraft.tags !== document.tags.join(', ') ||
-      metadataDraft.sensitivity !== document.sensitivity ||
-      metadataDraft.status !== document.status;
-
-    if (!hasChanges) {
-      toast.info('No changes to save');
-      return;
-    }
-
-    setShowSaveConfirmation(true);
-  };
-
-  const confirmMetadataSave = async () => {
-    if (!document) return;
-
-    setSavingMetadata(true);
-    try {
-      const tags = metadataDraft.tags
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-
-      const oldStatus = document.status;
-      const updated = await updateDocumentMetadata(document.id, {
-        title: metadataDraft.title,
-        description: metadataDraft.description,
-        referenceNumber: metadataDraft.referenceNumber,
-        divisionId: metadataDraft.divisionId,
-        departmentId: metadataDraft.departmentId,
-        tags,
-        sensitivity: metadataDraft.sensitivity,
-        status: metadataDraft.status,
-      });
-
-      setDocument(updated);
-      setHasUnsavedChanges(false);
-      setMetadataErrors({});
-      setShowSaveConfirmation(false);
-      setMetadataDialogOpen(false);
-      
-      // Show notification if status changed
-      if (oldStatus !== updated.status) {
-        toast.success(`Document ${oldStatus} → ${updated.status}`);
-      } else {
-      toast.success('Document details updated');
-      }
-    } catch (error: any) {
-      logError('Failed to update metadata', error);
-      const errorMessage = error?.response?.data?.detail || 
-                          error?.response?.data?.title?.[0] ||
-                          'Unable to update document';
-      toast.error(errorMessage);
-      setShowSaveConfirmation(false);
-    } finally {
-      setSavingMetadata(false);
-    }
-  };
-
-  // Track unsaved changes
-  useEffect(() => {
-    if (!document) return;
-    
-    const hasChanges = 
-      metadataDraft.title !== document.title ||
-      metadataDraft.description !== (document.description ?? '') ||
-      metadataDraft.referenceNumber !== (document.referenceNumber ?? '') ||
-      metadataDraft.divisionId !== document.divisionId ||
-      metadataDraft.departmentId !== document.departmentId ||
-      metadataDraft.tags !== document.tags.join(', ') ||
-      metadataDraft.sensitivity !== document.sensitivity ||
-      metadataDraft.status !== document.status;
-    
-    setHasUnsavedChanges(hasChanges);
-  }, [metadataDraft, document]);
-
-  const handleVersionUploadComplete = (updated: DocumentRecord) => {
-    setDocument(updated);
+  const handleVersionUploadComplete = useCallback((updated: DocumentRecord) => {
+    // 1. Close dialogs immediately to trigger the closing animation
     setUploadDialogOpen(false);
-  };
+    setCreateVersionDialogOpen(false);
+    
+    // 2. Defer the heavy document state update until the dialog is fully closed
+    // This prevents the page from re-rendering heavily while the dialog is still unmounting
+    setTimeout(() => {
+      startTransition(() => {
+        setDocument(updated);
+        toast.success('Document updated successfully');
+      });
+    }, 300);
+  }, []);
 
   const handleQuickVersionUpload = () => {
     if (!document || !uploadUser) return;
     setUploadDialogOpen(true);
   };
 
+  const handleCreateVersion = () => {
+    if (!document || !uploadUser) return;
+    setCreateVersionDialogOpen(true);
+  };
+
   // OCR handlers
   const handleVersionOCR = async (versionId: string) => {
     if (!document) return;
 
+    // Find the version
+    const version = document.versions.find(v => v.id === versionId);
+    if (!version) return;
+
+    // Check if this is a Word document
+    const isWordDoc = version.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                      version.fileType === 'application/msword' ||
+                      version.fileName?.toLowerCase().endsWith('.docx') ||
+                      version.fileName?.toLowerCase().endsWith('.doc');
+
+    // For HTML content or Word documents, extract text directly using backend API
+    if ((version.contentHtml && version.contentHtml.trim() !== '') || isWordDoc) {
+      try {
+        dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: true });
+        dispatchOCR({ type: 'SET_JOB', versionId, job: null });
+        dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
+
+        // Call backend API to extract text (works for both HTML and Word documents)
+        const result = await runOCROnVersion(versionId);
+        
+        dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
+        dispatchOCR({ type: 'SET_JOB', versionId, job: null });
+        dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
+        
+        const method = isWordDoc ? 'Word document' : 'HTML content';
+        toast.success(`Text extracted from ${method} (${result.characters} characters)`);
+        await loadDocument();
+        return;
+      } catch (err: Record<string, unknown>) {
+        const errorMsg = err?.message || (isWordDoc ? 'Failed to extract text from Word document' : 'Failed to extract text from HTML');
+        dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
+        dispatchOCR({ type: 'SET_JOB', versionId, job: null });
+        dispatchOCR({ type: 'SET_ERROR', versionId, error: errorMsg });
+        toast.error(errorMsg);
+        logError(`Failed to extract text from ${isWordDoc ? 'Word document' : 'HTML'}`, err);
+        return;
+      }
+    }
+
+    // For files (PDFs/images), use OCR
+    if (!version.fileUrl || version.fileUrl.trim() === '') {
+      toast.error('No file available for OCR processing');
+      return;
+    }
+
     // Initialize OCR state for this version
-    setVersionOCRState(prev => ({
-      ...prev,
-      [versionId]: { isProcessing: true, currentJob: null, error: null }
-    }));
+    dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: true });
+    dispatchOCR({ type: 'SET_JOB', versionId, job: null });
+    dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
 
     try {
       const job = await processOCR(document.id, {
@@ -690,48 +647,53 @@ const DocumentDetailPage = () => {
         extract_metadata: true,
       });
 
-      setVersionOCRState(prev => ({
-        ...prev,
-        [versionId]: { isProcessing: true, currentJob: job, error: null }
-      }));
+      dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: true });
+      dispatchOCR({ type: 'SET_JOB', versionId, job });
+      dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
 
       // If job is already completed, handle immediately
       if (job.status === 'completed') {
-        setVersionOCRState(prev => ({
-          ...prev,
-          [versionId]: { isProcessing: false, currentJob: job, error: null }
-        }));
+        dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
+        dispatchOCR({ type: 'SET_JOB', versionId, job });
+        dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
         toast.success('OCR processing completed');
         await loadDocument();
       } else {
-        toast.info('OCR processing started');
+        toast.info('OCR processing started. This may take a few moments...');
         // Start polling for status updates
         pollOCRJobStatus(versionId, job.id);
       }
-    } catch (err: any) {
-      const errorMsg = err?.message || 'Failed to start OCR processing';
-      setVersionOCRState(prev => ({
-        ...prev,
-        [versionId]: { isProcessing: false, currentJob: null, error: errorMsg }
-      }));
+    } catch (err: Record<string, unknown>) {
+      const errorMsg = err?.message || 'Failed to start OCR processing. Ensure Celery worker is running.';
+      dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
+      dispatchOCR({ type: 'SET_JOB', versionId, job: null });
+      dispatchOCR({ type: 'SET_ERROR', versionId, error: errorMsg });
       toast.error(errorMsg);
       logError('Failed to process OCR', err);
     }
   };
 
   const pollOCRJobStatus = async (versionId: string, jobId: string) => {
+    let pollCount = 0;
+    const maxPolls = 150; // 5 minutes max (150 * 2 seconds)
+    
     const pollInterval = setInterval(async () => {
+      pollCount++;
+      
       try {
         const updatedJob = await getCaptureJob(jobId);
         
-        setVersionOCRState(prev => ({
-          ...prev,
-          [versionId]: { 
-            isProcessing: updatedJob.status !== 'completed' && updatedJob.status !== 'failed' && updatedJob.status !== 'cancelled',
-            currentJob: updatedJob,
+        dispatchOCR({ 
+          type: 'SET_PROCESSING', 
+          versionId, 
+          isProcessing: updatedJob.status !== 'completed' && updatedJob.status !== 'failed' && updatedJob.status !== 'cancelled' 
+        });
+        dispatchOCR({ type: 'SET_JOB', versionId, job: updatedJob });
+        dispatchOCR({ 
+          type: 'SET_ERROR', 
+          versionId, 
             error: updatedJob.status === 'failed' ? (updatedJob.error_message || 'OCR processing failed') : null
-          }
-        }));
+        });
 
         if (updatedJob.status === 'completed') {
           clearInterval(pollInterval);
@@ -740,33 +702,54 @@ const DocumentDetailPage = () => {
         } else if (updatedJob.status === 'failed' || updatedJob.status === 'cancelled') {
           clearInterval(pollInterval);
           if (updatedJob.status === 'failed') {
-            toast.error('OCR processing failed');
+            toast.error(updatedJob.error_message || 'OCR processing failed');
           }
+        } else if (pollCount >= maxPolls) {
+          // Timeout after max polls
+          clearInterval(pollInterval);
+          dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
+          dispatchOCR({ type: 'SET_JOB', versionId, job: updatedJob });
+          dispatchOCR({ type: 'SET_ERROR', versionId, error: 'OCR processing timed out. The job may still be running in the background.' });
+          toast.warning('OCR processing is taking longer than expected. Please check back later.');
         }
-      } catch (err) {
+      } catch (err: Record<string, unknown>) {
         logError('Failed to poll OCR job status', err);
+        // Don't clear interval on first error, but clear after multiple failures
+        if (pollCount >= 10) {
         clearInterval(pollInterval);
-        setVersionOCRState(prev => ({
-          ...prev,
-          [versionId]: { isProcessing: false, currentJob: null, error: 'Failed to check OCR status' }
-        }));
+          dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
+          dispatchOCR({ type: 'SET_JOB', versionId, job: null });
+          dispatchOCR({ type: 'SET_ERROR', versionId, error: err?.message || 'Failed to check OCR status. The Celery worker may not be running.' });
+          toast.error('Failed to check OCR status. Please ensure the backend worker is running.');
+        }
       }
     }, 2000);
 
     // Cleanup after 5 minutes
-    setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000);
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      // Check final status
+      getCaptureJob(jobId).then((finalJob) => {
+        if (finalJob.status === 'processing') {
+          dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
+          dispatchOCR({ type: 'SET_JOB', versionId, job: finalJob });
+          dispatchOCR({ type: 'SET_ERROR', versionId, error: 'OCR processing timed out. The job may still be running in the background.' });
+        }
+      }).catch(() => {
+        // Ignore errors on final check
+      });
+    }, 5 * 60 * 1000);
   };
 
   const handleCancelOCR = async (versionId: string) => {
-    const state = versionOCRState[versionId];
+    const state = ocrState[versionId];
     if (!state?.currentJob) return;
 
     try {
       await cancelCaptureJob(state.currentJob.id);
-      setVersionOCRState(prev => ({
-        ...prev,
-        [versionId]: { isProcessing: false, currentJob: null, error: null }
-      }));
+      dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
+      dispatchOCR({ type: 'SET_JOB', versionId, job: null });
+      dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
       toast.info('OCR processing cancelled');
     } catch (err) {
       logError('Failed to cancel OCR job', err);
@@ -775,7 +758,7 @@ const DocumentDetailPage = () => {
   };
 
   // Workspace management
-  const workspaceLookup = useMemo(() => new Map(workspaces.map((ws) => [ws.id, ws])), [workspaces]);
+  const workspaceLookup = useMemo(() => new Map(collaborationState.workspaces.map((ws) => [ws.id, ws])), [collaborationState.workspaces]);
   const documentWorkspaces = useMemo(() => {
     if (!document) return [];
     return document.workspaceIds
@@ -783,7 +766,169 @@ const DocumentDetailPage = () => {
       .filter((ws): ws is DocumentWorkspace => ws !== undefined);
   }, [document, workspaceLookup]);
 
-  const handleAddWorkspace = async (workspaceId: string) => {
+  // Memoize refresh handlers to prevent infinite loops
+  const handleRefreshRelatedCorrespondence = useCallback(async () => {
+    if (!document?.id) return;
+    try {
+      const linksResponse = await apiFetch<Array<{ id: string; correspondence: Correspondence; notes?: string }>>(
+        `/correspondence/document-links/?document=${document.id}`
+      );
+      const links = Array.isArray(linksResponse) ? linksResponse : [];
+      
+      if (links.length > 0) {
+        const correspondenceData = await Promise.all(
+          links.map(async (link) => {
+            try {
+              const corrId = typeof link.correspondence === 'string' ? link.correspondence : link.correspondence?.id;
+              if (!corrId) return null;
+
+              const [corrResponse, minutesResponse] = await Promise.all([
+                apiFetch<Record<string, unknown>>(`/correspondence/items/${corrId}/`),
+                apiFetch<unknown[]>(`/correspondence/minutes/?correspondence=${corrId}`),
+              ]);
+
+              logInfo(`[DMS Detail] Minutes API response (refresh) for correspondence ${corrId}:`, minutesResponse);
+              
+              // Handle paginated response
+              const minutesArray = Array.isArray(minutesResponse) 
+                ? minutesResponse 
+                : (minutesResponse?.results || minutesResponse?.data || []);
+
+              const minutes: Minute[] = minutesArray.map((item: Record<string, unknown>) => {
+
+                    return {
+                      id: String(item.id),
+                      correspondenceId: String(corrId),
+                      userId: normalizeId(item.user ?? item.user_id) ?? '',
+                      userName:
+                        typeof item.user === 'object' && item.user
+                          ? (() => {
+                              const fullName = `${item.user.first_name ?? ''} ${item.user.last_name ?? ''}`.trim();
+                              if (fullName.length > 0) return fullName;
+                              return item.user.username ?? undefined;
+                            })()
+                          : undefined,
+                      userEmail: typeof item.user === 'object' ? item.user.email ?? undefined : undefined,
+                      userSystemRole: undefined,
+                      gradeLevel: item.grade_level ?? '',
+                      actionType: item.action_type ?? 'minute',
+                      minuteText: item.minute_text ?? '',
+                      direction: item.direction ?? 'downward',
+                      stepNumber: item.step_number ?? 1,
+                      timestamp: item.timestamp ?? new Date().toISOString(),
+                      actedBySecretary: item.acted_by_secretary ?? false,
+                      actedByAssistant: item.acted_by_assistant ?? false,
+                      assistantType: item.assistant_type ?? undefined,
+                      readAt: item.read_at ?? undefined,
+                      mentions: Array.isArray(item.mentions) ? item.mentions : [],
+                      signature: item.signature_payload ?? undefined,
+                      toOfficeId: item.to_office ? (typeof item.to_office === 'string' ? item.to_office : item.to_office.id) : undefined,
+                      toOfficeName: item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? item.to_office.name : undefined),
+                      toUserId: item.to_user ? (typeof item.to_user === 'string' ? item.to_user : item.to_user.id) : undefined,
+                      toUserName: item.to_user_name ?? (typeof item.to_user === 'object' && item.to_user ? `${item.to_user.first_name ?? ''} ${item.to_user.last_name ?? ''}`.trim() : undefined),
+                      isRecalled: item.is_recalled ?? false,
+                      recalledAt: item.recalled_at ?? undefined,
+                      recallReason: item.recall_reason ?? undefined,
+                    };
+                  });
+              
+              // Map distribution (reuse normalizeId function defined above)
+              const distribution = Array.isArray(corrResponse.distribution)
+                ? corrResponse.distribution.map((recipient: Record<string, unknown>) => {
+                    const recipientType = recipient.recipient_type ?? 'division';
+                    return {
+                      id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
+                      type:
+                        recipientType === 'directorate'
+                          ? 'directorate'
+                          : recipientType === 'department'
+                          ? 'department'
+                          : 'division',
+                      directorateId: normalizeId(recipient.directorate),
+                      divisionId: normalizeId(recipient.division),
+                      departmentId: normalizeId(recipient.department),
+                      name:
+                        recipient.directorate_name ??
+                        recipient.division_name ??
+                        recipient.department_name ??
+                        undefined,
+                      addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
+                      addedByName:
+                        typeof recipient.added_by === 'object' && recipient.added_by
+                          ? (() => {
+                              const fullName = `${recipient.added_by.first_name ?? ''} ${recipient.added_by.last_name ?? ''}`.trim();
+                              if (fullName.length > 0) return fullName;
+                              return recipient.added_by.username ?? undefined;
+                            })()
+                          : undefined,
+                      addedAt: recipient.created_at ?? undefined,
+                      purpose: recipient.purpose ?? undefined,
+                    };
+                  })
+                : [];
+              
+              const correspondence: Correspondence = {
+                id: String(corrResponse.id),
+                referenceNumber: corrResponse.reference_number ?? '',
+                subject: corrResponse.subject ?? '',
+                source: corrResponse.source ?? 'internal',
+                receivedDate: corrResponse.received_date ?? '',
+                senderName: corrResponse.sender_name ?? '',
+                senderOrganization: corrResponse.sender_organization ?? '',
+                status: corrResponse.status ?? 'pending',
+                priority: corrResponse.priority ?? 'medium',
+                divisionId: corrResponse.division ? (typeof corrResponse.division === 'string' ? corrResponse.division : corrResponse.division.id) : undefined,
+                departmentId: corrResponse.department ? (typeof corrResponse.department === 'string' ? corrResponse.department : corrResponse.department.id) : undefined,
+                currentApproverId: corrResponse.current_approver ? (typeof corrResponse.current_approver === 'string' ? corrResponse.current_approver : corrResponse.current_approver.id) : undefined,
+                createdById: corrResponse.created_by ? (typeof corrResponse.created_by === 'string' ? corrResponse.created_by : corrResponse.created_by.id) : undefined,
+                direction: corrResponse.direction ?? 'upward',
+                distribution,
+                createdAt: corrResponse.created_at,
+                updatedAt: corrResponse.updated_at,
+              };
+
+              return {
+                correspondence,
+                minutes,
+                linkNotes: link.notes,
+              };
+            } catch (error) {
+              logError('Failed to load related correspondence', error);
+              return null;
+            }
+          })
+        );
+
+        const validData = correspondenceData.filter((item) => item !== null) as Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>;
+        dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: validData });
+      } else {
+        dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
+      }
+    } catch (error) {
+      logError('Failed to refresh related correspondence', error);
+      throw error;
+    }
+  }, [document?.id]);
+
+  // Memoize access logs refresh handler
+  const handleRefreshAccessLogs = useCallback(async () => {
+    if (!document?.id) return;
+    const logs = await getDocumentAccessLogs(document.id);
+    dispatchCollaboration({ type: 'SET_ACCESS_LOGS', payload: logs });
+  }, [document?.id]);
+
+  // Memoize workspaces refresh handler
+  const handleWorkspacesRefreshed = useCallback(async () => {
+    const ws = await fetchWorkspaces();
+    dispatchCollaboration({ type: 'SET_WORKSPACES', payload: ws });
+  }, []);
+
+  // Memoize open comments dialog handler
+  const handleOpenCommentsDialog = useCallback(() => {
+    setCommentsDialogOpen(true);
+  }, []);
+
+  const handleAddWorkspace = useCallback(async (workspaceId: string) => {
     if (!document) return;
     try {
       const currentIds = document.workspaceIds;
@@ -798,9 +943,9 @@ const DocumentDetailPage = () => {
       logError('Failed to add workspace', error);
       toast.error('Unable to add workspace');
     }
-  };
+  }, [document]);
 
-  const handleRemoveWorkspace = async (workspaceId: string) => {
+  const handleRemoveWorkspace = useCallback(async (workspaceId: string) => {
     if (!document) return;
     try {
       const updated = await updateDocumentWorkspaces(
@@ -813,7 +958,7 @@ const DocumentDetailPage = () => {
       logError('Failed to remove workspace', error);
       toast.error('Unable to remove workspace');
     }
-  };
+  }, [document]);
 
   // Get user initials for avatar
   const getUserInitials = (userId: string) => {
@@ -853,9 +998,9 @@ const DocumentDetailPage = () => {
                 {documentError || 'The document you are looking for does not exist or you do not have permission to view it.'}
               </p>
               <div className="flex gap-2 justify-center">
-                <Button onClick={() => router.push('/dms')} variant="default">
+                <Button onClick={() => router.push('/documents')} variant="default">
                   <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Documents
+                  Back to My Documents
                 </Button>
               </div>
             </CardContent>
@@ -874,521 +1019,66 @@ const DocumentDetailPage = () => {
       <DashboardLayout>
         <div className="flex flex-col min-h-screen">
           {/* Header */}
-          <div className="border-b border-border bg-background sticky top-0 z-10">
-            <div className="container mx-auto px-6 py-4">
-              <div className="flex flex-col gap-4">
-                {/* Title and Back Button */}
-                <div className="flex items-center gap-4 min-w-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => router.push('/dms')}
-                    aria-label="Back to documents"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <FileText className="h-5 w-5 text-primary flex-shrink-0" />
-                    <h1 className="text-xl md:text-2xl font-bold text-foreground truncate">
-                      {document.title}
-                    </h1>
-                  </div>
-                </div>
+          <DocumentHeader
+            document={document}
+            author={author}
+            currentUser={currentUser}
+            divisionLookup={divisionLookup}
+            departmentLookup={departmentLookup}
+            divisions={divisions}
+            departments={departments}
+            hasLinkedCorrespondence={collaborationState.relatedCorrespondence.length > 0}
+            onShare={() => {
+              setShareDialogInitialView('share');
+              setShareDialogOpen(true);
+            }}
+            onDocumentUpdate={(updated) => {
+              setDocument(updated);
+            }}
+            onLinkCase={() => setLinkCaseDialogOpen(true)}
+            onUnlinkCase={async (caseId: string) => {
+              try {
+                await unlinkDocumentFromCase(caseId, document.id);
+                toast.success("Document unlinked from case");
+                // Reload document
+                if (params?.id) {
+                  const updated = await fetchDocumentById(params.id);
+                  setDocument(updated);
+                }
+              } catch (err) {
+                logError("Failed to unlink document from case", err);
+                toast.error("Failed to unlink from case");
+              }
+            }}
+            onMinuteDocument={async () => {
+              if (!document || !currentUser) return;
+              
+              // Check if document is linked to correspondence
+              // Minutes are a correspondence workflow feature - only available for correspondence documents
+              const relatedCorrespondence = collaborationState.relatedCorrespondence;
+              if (!relatedCorrespondence || relatedCorrespondence.length === 0) {
+                toast.error(
+                  'This document is not linked to any correspondence. ' +
+                  'Minutes are only available for correspondence documents. ' +
+                  'To minute this document, first link it to a correspondence item.'
+                );
+                return;
+              }
 
-                {/* Badges and Actions Row */}
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant={
-                      document.status === 'published'
-                        ? 'default'
-                        : document.status === 'archived'
-                          ? 'secondary'
-                          : 'outline'
-                    }>
-                      {statusLabel(document.status)}
-                    </Badge>
-                    <Badge variant="outline" className="capitalize">
-                      {document.documentType}
-                    </Badge>
-                    <Badge
-                      variant={document.sensitivity === 'restricted' ? 'destructive' : 'outline'}
-                      className="capitalize"
-                    >
-                      {document.sensitivity}
-                    </Badge>
-                    {author && (
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                        <UserIcon className="h-3.5 w-3.5" />
-                        <span>{author.name}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      <span>Updated {formatDate(document.updatedAt)}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShareDialogOpen(true)}
-                    >
-                      <Share2 className="h-4 w-4 mr-2" />
-                      Share
-                    </Button>
-                    <Button 
-                      variant="default" 
-                      size="sm" 
-                      onClick={handleQuickVersionUpload} 
-                      disabled={!uploadUser}
-                    >
-                      <FilePlus className="h-4 w-4 mr-2" />
-                      <span className="hidden sm:inline">Upload Version</span>
-                      <span className="sm:hidden">Upload</span>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+              // Use the first linked correspondence
+              const existingCorr = relatedCorrespondence[0].correspondence;
+              setMinuteDocumentCorrespondence(existingCorr);
+              setMinuteDocumentModalOpen(true);
+            }}
+          />
 
           <div className="container mx-auto px-6 py-6">
             {/* Main Content Grid */}
-            <div className="grid gap-6 lg:grid-cols-3">
+            <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
               {/* Left Column - Main Details */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Document Metadata Section */}
-                <Card className="border-border/50">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-base font-semibold flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-primary" />
-                          Document Information
-                        </CardTitle>
-                        <CardDescription className="mt-1">
-                          {document?.referenceNumber && `Ref: ${document.referenceNumber}`}
-                        </CardDescription>
-                      </div>
-                      <Dialog open={metadataDialogOpen} onOpenChange={(open) => {
-                        setMetadataDialogOpen(open);
-                        // Reset draft to current document state when opening
-                        if (open && document) {
-                          setMetadataDraft({
-                            title: document.title,
-                            description: document.description ?? '',
-                            referenceNumber: document.referenceNumber ?? '',
-                            divisionId: document.divisionId,
-                            departmentId: document.departmentId,
-                            tags: document.tags.join(', '),
-                            sensitivity: document.sensitivity,
-                            status: document.status,
-                          });
-                          setHasUnsavedChanges(false);
-                          setMetadataErrors({});
-                        }
-                      }}>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" size="sm">
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Edit
-                          </Button>
-                        </DialogTrigger>
-                      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-primary" />
-                            Edit Document Metadata
-                          </DialogTitle>
-                          <DialogDescription>
-                            Update document details, classification, and metadata
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-6 py-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="doc-title">
-                    Title <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="doc-title"
-                    value={metadataDraft.title}
-                    onChange={(e) => {
-                      setMetadataDraft((prev) => ({ ...prev, title: e.target.value }));
-                      setHasUnsavedChanges(true);
-                      if (metadataErrors.title) setMetadataErrors({ ...metadataErrors, title: '' });
-                    }}
-                    placeholder="Enter document title..."
-                    aria-label="Document title"
-                    aria-required="true"
-                    aria-invalid={!!metadataErrors.title}
-                    aria-describedby={metadataErrors.title ? "title-error" : undefined}
-                  />
-                  {metadataErrors.title && (
-                    <p id="title-error" className="text-xs text-destructive" role="alert">
-                      {metadataErrors.title}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select
-                    value={metadataDraft.status}
-                    onValueChange={(value) => {
-                      const newStatus = value as DocumentRecord['status'];
-                      handleStatusChange(newStatus);
-                    }}
-                    aria-label="Document status"
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="published">Published</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {document && metadataDraft.status !== document.status && (
-                    <p className="text-xs text-muted-foreground">
-                      Status will change from <span className="font-medium">{document.status}</span> to{' '}
-                      <span className="font-medium">{metadataDraft.status}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="doc-division">Division</Label>
-                  <Select
-                    value={metadataDraft.divisionId && metadataDraft.divisionId.trim() !== '' ? metadataDraft.divisionId : 'none'}
-                    onValueChange={(value) => {
-                      setMetadataDraft((prev) => ({ ...prev, divisionId: value === 'none' ? undefined : value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select division" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {divisions
-                        .filter((division) => division.id && division.id.trim() !== '')
-                        .map((division) => (
-                          <SelectItem key={division.id} value={division.id}>
-                            {division.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="doc-department">Department</Label>
-                  <Select
-                    value={metadataDraft.departmentId && metadataDraft.departmentId.trim() !== '' ? metadataDraft.departmentId : 'none'}
-                    onValueChange={(value) => {
-                      setMetadataDraft((prev) => ({ ...prev, departmentId: value === 'none' ? undefined : value }));
-                      setHasUnsavedChanges(true);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {departments
-                        .filter((department) => department.id && department.id.trim() !== '')
-                        .map((department) => (
-                          <SelectItem key={department.id} value={department.id}>
-                            {department.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="doc-reference">Reference Number</Label>
-                  <Input
-                    id="doc-reference"
-                    value={metadataDraft.referenceNumber}
-                    onChange={(e) => {
-                      setMetadataDraft((prev) => ({ ...prev, referenceNumber: e.target.value }));
-                      setHasUnsavedChanges(true);
-                      if (metadataErrors.referenceNumber) setMetadataErrors({ ...metadataErrors, referenceNumber: '' });
-                    }}
-                    placeholder="Enter reference number..."
-                    aria-label="Reference number"
-                    aria-invalid={!!metadataErrors.referenceNumber}
-                    aria-describedby={metadataErrors.referenceNumber ? "reference-error" : undefined}
-                  />
-                  {metadataErrors.referenceNumber && (
-                    <p id="reference-error" className="text-xs text-destructive" role="alert">
-                      {metadataErrors.referenceNumber}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label>Sensitivity</Label>
-                  <Select
-                    value={metadataDraft.sensitivity}
-                    onValueChange={(value) => {
-                      const newSensitivity = value as DocumentRecord['sensitivity'];
-                      setMetadataDraft((prev) => ({ ...prev, sensitivity: newSensitivity }));
-                      setHasUnsavedChanges(true);
-                      // Show warning for restricted documents
-                      if (newSensitivity === 'restricted' && document && document.sensitivity !== 'restricted') {
-                        toast.warning('Restricted sensitivity requires high-level access permissions');
-                      }
-                    }}
-                    aria-label="Document sensitivity"
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="public">Public</SelectItem>
-                      <SelectItem value="internal">Internal</SelectItem>
-                      <SelectItem value="confidential">Confidential</SelectItem>
-                      <SelectItem value="restricted">Restricted</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {metadataDraft.sensitivity === 'restricted' && (
-                    <div className="flex items-start gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-xs">
-                      <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
-                      <p className="text-destructive">
-                        Restricted documents are only accessible to MDCS, EDCS, and MSS1 grade levels.
-                      </p>
-                    </div>
-                  )}
-                  {metadataDraft.sensitivity === 'confidential' && (
-                    <div className="flex items-start gap-2 p-2 bg-warning/10 border border-warning/20 rounded text-xs">
-                      <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
-                      <p className="text-warning">
-                        Confidential documents require MSS2 or higher grade level access.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="doc-description">Description</Label>
-                <Textarea
-                  id="doc-description"
-                  rows={4}
-                  value={metadataDraft.description}
-                  onChange={(e) => {
-                    setMetadataDraft((prev) => ({ ...prev, description: e.target.value }));
-                    setHasUnsavedChanges(true);
-                  }}
-                  placeholder="Enter document description..."
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="doc-tags">Tags</Label>
-                <Input
-                  id="doc-tags"
-                  value={metadataDraft.tags}
-                  onChange={(e) => {
-                    setMetadataDraft((prev) => ({ ...prev, tags: e.target.value }));
-                    setHasUnsavedChanges(true);
-                  }}
-                  placeholder="Comma separated e.g. operations, berth-allocation"
-                  aria-label="Document tags"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Separate multiple tags with commas. Duplicate tags will be removed.
-                </p>
-              </div>
-              
-                          <div className="flex items-center justify-between pt-2 border-t">
-                            {hasUnsavedChanges && (
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <AlertTriangle className="h-4 w-4 text-warning" />
-                                <span>You have unsaved changes</span>
-                              </div>
-                            )}
-                            <div className="flex gap-2 ml-auto">
-                              {hasUnsavedChanges && (
-                                <Button
-                                  variant="outline"
-                                  onClick={() => {
-                                    if (document) {
-                                      setMetadataDraft({
-                                        title: document.title,
-                                        description: document.description ?? '',
-                                        referenceNumber: document.referenceNumber ?? '',
-                                        divisionId: document.divisionId,
-                                        departmentId: document.departmentId,
-                                        tags: document.tags.join(', '),
-                                        sensitivity: document.sensitivity,
-                                        status: document.status,
-                                      });
-                                      setHasUnsavedChanges(false);
-                                      setMetadataErrors({});
-                                      toast.info('Changes discarded');
-                                    }
-                                  }}
-                                  aria-label="Discard changes"
-                                >
-                                  Discard
-                                </Button>
-                              )}
-                              <Button 
-                                onClick={async () => {
-                                  await handleMetadataSave();
-                                }}
-                                disabled={!hasUnsavedChanges || savingMetadata}
-                                aria-label="Save document changes"
-                              >
-                                {savingMetadata ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    Saving...
-                                  </>
-                                ) : (
-                                  <>
-                                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                                    Save Changes
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-                  </CardHeader>
-                  
-                  <CardContent>
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <div className="space-y-4">
-                        <div>
-                          <Label className="text-xs font-medium text-muted-foreground mb-2 block">Status</Label>
-                          <Badge variant={statusVariant(document?.status || 'draft')}>
-                            {statusLabel(document?.status || 'draft')}
-                          </Badge>
-                        </div>
-                        <div>
-                          <Label className="text-xs font-medium text-muted-foreground mb-2 block">Sensitivity</Label>
-                          <Badge 
-                            variant={document?.sensitivity === 'restricted' ? 'destructive' : 'outline'} 
-                            className="capitalize"
-                          >
-                            {document?.sensitivity || 'internal'}
-                          </Badge>
-                        </div>
-                        {document?.divisionId && (
-                          <div>
-                            <Label className="text-xs font-medium text-muted-foreground mb-2 block">Division</Label>
-                            <p className="text-sm">{divisionLookup.get(document.divisionId) || 'Unknown'}</p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-4">
-                        {document?.departmentId && (
-                          <div>
-                            <Label className="text-xs font-medium text-muted-foreground mb-2 block">Department</Label>
-                            <p className="text-sm">{departmentLookup.get(document.departmentId) || 'Unknown'}</p>
-                          </div>
-                        )}
-                        {document?.tags && document.tags.length > 0 && (
-                          <div>
-                            <Label className="text-xs font-medium text-muted-foreground mb-2 block">Tags</Label>
-                            <div className="flex flex-wrap gap-1.5">
-                              {document.tags.map((tag) => (
-                                <Badge key={tag} variant="secondary" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {document?.description && (
-                      <div className="mt-6 pt-6 border-t">
-                        <Label className="text-xs font-medium text-muted-foreground mb-2 block">Description</Label>
-                        <p className="text-sm leading-relaxed text-muted-foreground">{document.description}</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Access & Permissions Section */}
-                <Card className="border-border/50">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-base font-semibold flex items-center gap-2">
-                          <Shield className="h-4 w-4 text-primary" />
-                          Access & Permissions
-                        </CardTitle>
-                        <CardDescription className="mt-1">
-                          Track who currently has visibility into this record
-                        </CardDescription>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={() => setShareDialogOpen(true)}>
-                        Manage
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {permissionSummaries.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4 text-center">
-                          No explicit share rules exist yet. Use the Share button to grant targeted access.
-                        </p>
-                      ) : (
-                        permissionSummaries.map((entry) => (
-                          <div key={entry.key} className="rounded-lg border border-border/50 p-4 space-y-3 bg-muted/30">
-                            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <p className="text-sm font-medium capitalize">{entry.access} access</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {entry.createdAt ? `Updated ${formatDateTime(entry.createdAt)}` : 'Inherited rule'}
-                                </p>
-                              </div>
-                              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                                <span>{entry.userNames.length} users</span>
-                                <span>• {entry.divisionNames.length} divisions</span>
-                                <span>• {entry.departmentNames.length} departments</span>
-                              </div>
-                            </div>
-                            <div className="grid gap-3 text-xs text-muted-foreground md:grid-cols-2 pt-2 border-t border-border/50">
-                              <div>
-                                <p className="font-medium text-foreground text-xs mb-1">Users</p>
-                                <p>{entry.userNames.length ? entry.userNames.join(', ') : '—'}</p>
-                              </div>
-                              <div>
-                                <p className="font-medium text-foreground text-xs mb-1">Divisions</p>
-                                <p>{entry.divisionNames.length ? entry.divisionNames.join(', ') : '—'}</p>
-                              </div>
-                              <div>
-                                <p className="font-medium text-foreground text-xs mb-1">Departments</p>
-                                <p>{entry.departmentNames.length ? entry.departmentNames.join(', ') : '—'}</p>
-                              </div>
-                              <div>
-                                <p className="font-medium text-foreground text-xs mb-1">Grade Levels</p>
-                                <p>{entry.gradeLevels.length ? entry.gradeLevels.join(', ') : '—'}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Versions Section */}
-                <Card className="border-border/50">
+              <div className="lg:col-span-2 flex flex-col gap-6">
+                {/* Versions Section - Full width */}
+                <Card className="border-border/50 flex flex-col flex-1 min-h-0">
                   <CardHeader className="pb-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -1400,14 +1090,46 @@ const DocumentDetailPage = () => {
                           All uploaded versions of this document
                         </CardDescription>
                       </div>
-                      <Button variant="outline" size="sm" onClick={handleQuickVersionUpload} disabled={!uploadUser}>
+                      {handleCreateVersion ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!uploadUser}
+                              aria-label="Add new version"
+                            >
+                              <FilePlus className="h-4 w-4 mr-2" />
+                              Add Version
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={handleCreateVersion} disabled={!uploadUser}>
+                              <PenTool className="h-4 w-4 mr-2" />
+                              Create Version
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={handleQuickVersionUpload} disabled={!uploadUser}>
+                              <FilePlus className="h-4 w-4 mr-2" />
+                              Upload Version
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleQuickVersionUpload}
+                          disabled={!uploadUser}
+                          aria-label="Upload new version"
+                        >
                         <FilePlus className="h-4 w-4 mr-2" />
                         Upload Version
                       </Button>
+                      )}
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
+                  <CardContent className="flex-1 min-h-0 flex flex-col">
+                    <div className="space-y-3 flex-1 overflow-y-auto pr-2">
                       {versions.length === 0 ? (
                         <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
                           <Layers className="h-10 w-10 mx-auto mb-3 opacity-50" />
@@ -1419,42 +1141,58 @@ const DocumentDetailPage = () => {
                           const uploader = userLookup.get(version.uploadedBy);
                           const isLatest = index === 0;
                           const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
+                          const versionOCR = ocrState?.[version.id];
+                          const isProcessing = versionOCR?.isProcessing || false;
+                          const hasOCRText = version.ocrText && version.ocrText.trim() !== '';
+                          const canShowOCR = (version.fileUrl && version.fileUrl.trim() !== '' &&
+                            (version.fileType?.startsWith('image/') ||
+                              version.fileType === 'application/pdf' ||
+                              version.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                              version.fileType === 'application/msword' ||
+                              version.fileName?.toLowerCase().endsWith('.docx') ||
+                              version.fileName?.toLowerCase().endsWith('.doc')) ||
+                            (version.contentHtml && version.contentHtml.trim() !== ''));
                           
                           return (
-                            <div key={version.id} className={`p-4 border rounded-lg transition-colors hover:bg-muted/50 ${isLatest ? 'border-primary/40 bg-primary/5' : 'border-border'}`}>
-                          <div className="flex flex-col gap-3">
-                            {/* Header Row */}
+                            <div
+                              key={version.id}
+                              className={`p-3 border rounded-lg transition-colors hover:bg-muted/50 ${
+                                isLatest ? 'border-primary/40 bg-primary/5' : 'border-border'
+                              }`}
+                            >
+                              <div className="flex flex-col gap-2">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <Badge variant={isLatest ? "default" : "outline"} className="flex-shrink-0">
+                                    <Badge variant={isLatest ? 'default' : 'outline'} className="flex-shrink-0 text-xs">
                                   v{version.versionNumber}
                                 </Badge>
                                 {isLatest && (
-                                  <Badge variant="secondary" className="text-xs flex-shrink-0">Latest</Badge>
+                                      <Badge variant="secondary" className="text-xs flex-shrink-0">
+                                        Latest
+                                      </Badge>
                                 )}
                                 <span className="text-sm font-medium text-foreground truncate min-w-0" title={version.fileName}>
                                   {version.fileName}
                                 </span>
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
-                                {/* Show Preview button if there's a file (fileName) or HTML content */}
                                 {(version.fileName || (version.contentHtml && version.contentHtml.trim() !== '')) && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8"
+                                        className="h-7 w-7"
                                     onClick={() => setPreviewVersion(version)}
                                     title="Preview version"
+                                        aria-label="Preview version"
                                   >
-                                    <Eye className="h-4 w-4" />
+                                        <Eye className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
-                                {/* Show Download button only if there's a fileUrl */}
                                 {version.fileUrl && version.fileUrl.trim() !== '' && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8"
+                                        className="h-7 w-7"
                                     onClick={() => {
                                       const link = window.document.createElement('a');
                                       link.href = version.fileUrl as string;
@@ -1464,23 +1202,16 @@ const DocumentDetailPage = () => {
                                       window.document.body.removeChild(link);
                                     }}
                                     title="Download version"
+                                        aria-label="Download version"
                                   >
-                                    <Download className="h-4 w-4" />
+                                        <Download className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
-                                {/* OCR button - show for image/PDF files */}
-                                {version.fileUrl && version.fileUrl.trim() !== '' && 
-                                 (version.fileType?.startsWith('image/') || version.fileType === 'application/pdf') && (
-                                  (() => {
-                                    const ocrState = versionOCRState[version.id];
-                                    const isProcessing = ocrState?.isProcessing || false;
-                                    const hasOCRText = version.ocrText && version.ocrText.trim() !== '';
-                                    
-                                    return (
+                                    {canShowOCR && (
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-8 w-8"
+                                        className="h-7 w-7"
                                         onClick={() => {
                                           if (isProcessing) {
                                             handleCancelOCR(version.id);
@@ -1488,631 +1219,134 @@ const DocumentDetailPage = () => {
                                             handleVersionOCR(version.id);
                                           }
                                         }}
-                                        title={isProcessing ? "Cancel OCR processing" : hasOCRText ? "Re-process OCR" : "Process OCR"}
-                                        disabled={isProcessing && ocrState?.currentJob?.status === 'processing'}
+                                        title={isProcessing ? 'Cancel OCR processing' : hasOCRText ? 'Re-process OCR' : 'Process OCR'}
+                                        disabled={isProcessing && versionOCR?.currentJob?.status === 'processing'}
+                                        aria-label={isProcessing ? 'Cancel OCR' : 'Process OCR'}
                                       >
                                         {isProcessing ? (
-                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                         ) : (
-                                          <Scan className="h-4 w-4" />
+                                          <Scan className="h-3.5 w-3.5" />
                                         )}
                                       </Button>
-                                    );
-                                  })()
                                 )}
-                                {/* Replace version button - only show if user can edit */}
-                                {uploadUser && (uploadUser.id === version.uploadedBy || uploadUser.id === document.authorId) && (
+                                    {uploadUser &&
+                                      (uploadUser.id === version.uploadedBy || uploadUser.id === document.authorId) && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8"
+                                          className="h-7 w-7"
                                     onClick={() => setReplaceVersionId(version.id)}
                                     title="Replace this version"
+                                          aria-label="Replace version"
                                   >
-                                    <Pencil className="h-4 w-4" />
+                                          <Pencil className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
                               </div>
                             </div>
-                            
-                            {/* Metadata Row */}
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-1.5">
-                                <FileText className="h-3 w-3" />
-                                <span className="capitalize">{version.fileType.split('/').pop() || version.fileType}</span>
-                              </div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <span className="capitalize">
+                                    {version.fileType?.split('/').pop() || version.fileType || 'Unknown'}
+                                  </span>
                               {fileSize && (
-                                <div className="flex items-center gap-1.5">
+                                    <>
                                   <span>•</span>
                                   <span>{fileSize}</span>
-                                </div>
+                                    </>
                               )}
-                              <div className="flex items-center gap-1.5">
                                 <span>•</span>
                                 <Clock className="h-3 w-3" />
                                 <span>{formatDateTime(version.uploadedAt)}</span>
-                              </div>
                               {uploader && (
-                                <div className="flex items-center gap-1.5">
+                                    <>
                                   <span>•</span>
                                   <UserIcon className="h-3 w-3" />
                                   <span>{uploader.name}</span>
-                                </div>
+                                    </>
                               )}
                             </div>
-                            
-                            {/* Notes */}
                             {version.notes && (
-                              <div className="flex items-start gap-2 text-xs">
-                                <Tag className="h-3 w-3 mt-0.5 text-muted-foreground flex-shrink-0" />
-                                <span className="text-muted-foreground">{version.notes}</span>
-                              </div>
-                            )}
-                            
-                            {/* Content Preview */}
-                            {version.contentText && (
-                              <p className="text-muted-foreground/80 text-xs leading-4 line-clamp-2">
-                                {version.contentText}
-                              </p>
-                            )}
-                            
-                            {/* Summary */}
-                            {version.summary && (
-                              <div className="text-xs leading-4 border border-primary/20 bg-primary/5 text-primary-foreground/90 rounded-md p-2">
-                                <span className="font-semibold">Summary:</span> {version.summary}
-                              </div>
-                            )}
-                            
-                            {/* OCR Status and Text */}
-                            {(() => {
-                              const ocrState = versionOCRState[version.id];
-                              const isProcessing = ocrState?.isProcessing || false;
-                              const hasOCRText = version.ocrText && version.ocrText.trim() !== '';
-                              
-                              return (
-                                <>
-                                  {(isProcessing || hasOCRText) && (
-                                    <div className="flex items-center gap-2 text-xs">
-                                      {isProcessing && (
-                                        <Badge variant="secondary" className="flex items-center gap-1">
-                                          <Loader2 className="h-3 w-3 animate-spin" />
-                                          Processing OCR...
-                                        </Badge>
-                                      )}
-                                      {hasOCRText && !isProcessing && (
-                                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                          OCR Available
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  )}
-                                  {version.ocrText && (
-                                    <details className="text-xs">
-                                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-                                        <span className="font-semibold">OCR Text</span> (click to expand)
-                                      </summary>
-                                      <div className="mt-2 p-2 border border-border bg-muted/60 rounded-md text-muted-foreground">
-                                        {version.ocrText}
-                                      </div>
-                                    </details>
-                                  )}
-                                </>
-                              );
-                            })()}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Column - Collaboration & Activity */}
-            <div className="space-y-6">
-              {/* Collaboration Section */}
-              <Card className="border-border/50">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Users className="h-4 w-4 text-primary" />
-                    Collaboration
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    Active editors and workspace organization
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {/* Active Editors */}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <Label className="text-xs font-medium text-muted-foreground">Active Editors</Label>
-                      {activeEditorSessions.length > 0 && (
-                        <Badge variant="secondary" className="text-xs">
-                          {activeEditorSessions.length} {activeEditorSessions.length === 1 ? 'editor' : 'editors'}
-                        </Badge>
-                      )}
-                    </div>
-                    {activeEditorSessions.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-6 text-center border border-dashed rounded-lg">
-                        <Users className="h-6 w-6 text-muted-foreground mb-2 opacity-50" />
-                        <p className="text-xs text-muted-foreground">No active editors</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {activeEditorSessions.map((session) => {
-                          const user = userLookup.get(session.userId);
-                          const editingSince = session.since ? new Date(session.since) : null;
-                          const timeAgo = editingSince
-                            ? Math.floor((Date.now() - editingSince.getTime()) / 1000 / 60)
-                            : null;
-                          
-                          return (
-                            <div
-                              key={session.id}
-                              className="flex items-center gap-2.5 p-2.5 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors"
-                            >
-                              <Avatar className="h-7 w-7 flex-shrink-0">
-                                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                  {getUserInitials(session.userId)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-medium truncate">
-                                    {user ? user.name : session.userId}
-                                  </span>
-                                  <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                                </div>
-                                {timeAgo !== null && (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {timeAgo < 1 ? '<1 min' : `${timeAgo} min`}
-                                  </span>
+                                  <p className="text-xs text-muted-foreground">{version.notes}</p>
                                 )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Workspaces */}
-                  <div className="pt-4 border-t">
-                    <div className="flex items-center justify-between mb-3">
-                      <Label className="text-xs font-medium text-muted-foreground">Workspaces</Label>
-                      <Dialog open={workspaceManageOpen} onOpenChange={setWorkspaceManageOpen}>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
-                            <Plus className="h-3 w-3" />
-                            Manage
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2">
-                              <FolderKanban className="h-4 w-4 text-primary" />
-                              Manage Workspaces
-                            </DialogTitle>
-                            <DialogDescription>
-                              Add or remove workspaces for this document.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label>Available Workspaces</Label>
-                              <ScrollArea className="max-h-[300px]">
-                                <div className="space-y-2 pr-4">
-                                  {workspaces.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground text-center py-4">
-                                      No workspaces available. Create workspaces in settings.
-                                    </p>
-                                  ) : (
-                                    workspaces.map((workspace) => {
-                                      const isAssigned = document.workspaceIds.includes(workspace.id);
-                                      return (
-                                        <div
-                                          key={workspace.id}
-                                          className="flex items-center justify-between p-2.5 border rounded-md hover:bg-muted/50 transition-colors"
-                                        >
-                                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                                            <div
-                                              className="w-3 h-3 rounded-full flex-shrink-0"
-                                              style={{ backgroundColor: workspace.color }}
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                              <span className="text-sm font-medium">{workspace.name}</span>
-                                              {workspace.description && (
-                                                <p className="text-xs text-muted-foreground truncate">
-                                                  {workspace.description}
-                                                </p>
-                                              )}
-                                            </div>
-                                          </div>
-                                          {isAssigned ? (
+                                {hasOCRText && (
+                                  <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded border border-primary/20">
+                                    <FileText className="h-3.5 w-3.5 text-primary" />
+                                    <span className="text-xs text-muted-foreground">
+                                      OCR text available ({version.ocrText?.length || 0} characters)
+                                  </span>
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              onClick={() => handleRemoveWorkspace(workspace.id)}
-                                              className="h-7 text-xs gap-1"
-                                            >
-                                              <X className="h-3 w-3" />
-                                              Remove
+                                      className="h-6 text-xs ml-auto"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setPreviewVersion(version);
+                                      }}
+                                    >
+                                      View Text
                                             </Button>
-                                          ) : (
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={() => handleAddWorkspace(workspace.id)}
-                                              className="h-7 text-xs gap-1"
-                                            >
-                                              <Plus className="h-3 w-3" />
-                                              Add
-                                            </Button>
-                                          )}
+                                  </div>
+                                )}
+                              </div>
                                         </div>
                                       );
                                     })
-                                  )}
-                                </div>
-                              </ScrollArea>
-                            </div>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                  </div>
-                  {documentWorkspaces.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-6 text-center border border-dashed rounded-lg">
-                      <FolderKanban className="h-6 w-6 text-muted-foreground mb-2 opacity-50" />
-                      <p className="text-xs text-muted-foreground">No workspaces assigned</p>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {documentWorkspaces.map((workspace) => (
-                          <Badge
-                            key={workspace.id}
-                            variant="outline"
-                            className="gap-1.5 text-xs py-1 px-2"
-                            style={{ borderColor: workspace.color }}
-                          >
-                            <div
-                              className="w-2 h-2 rounded-full"
-                              style={{ backgroundColor: workspace.color }}
-                            />
-                            {workspace.name}
-                          </Badge>
-                        ))}
-                      </div>
                     )}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Collections Section */}
-              <Card className="border-border/50">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <FolderKanban className="h-4 w-4 text-primary" />
-                        Collections
-                      </CardTitle>
-                      <CardDescription className="mt-1">
-                        Group this document with related documents for projects
-                      </CardDescription>
+                {/* Related Correspondence - Full width */}
+                <RelatedCorrespondenceCard
+                  relatedCorrespondence={collaborationState.relatedCorrespondence}
+                  onRefresh={handleRefreshRelatedCorrespondence}
+                  userLookup={userLookup}
+                  divisionLookup={divisionLookup}
+                  departmentLookup={departmentLookup}
+                />
+                
+                {document && (
+                  <DocumentThreadCard
+                    documentId={document.id}
+                    parentDocumentId={(document as DocumentRecord & { parent_document?: { id: string }; parent_document_id?: string }).parent_document?.id || (document as DocumentRecord & { parent_document_id?: string }).parent_document_id}
+                  />
+                )}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs gap-1"
-                      onClick={() => setCollectionManageOpen(true)}
-                    >
-                      <Plus className="h-3 w-3" />
-                      Manage
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {collections.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-8 text-center border border-dashed rounded-lg">
-                        <FolderKanban className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
-                        <p className="text-sm text-muted-foreground mb-1">No collections assigned</p>
-                        <p className="text-xs text-muted-foreground mb-3">Add this document to collections for project organization</p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1"
-                          onClick={() => setCollectionManageOpen(true)}
-                        >
-                          <Plus className="h-3 w-3" />
-                          Add to Collection
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {collections.map((collection) => (
-                          <Badge
-                            key={collection.id}
-                            variant="outline"
-                            className="gap-1.5 text-xs py-1.5 px-2.5"
-                          >
-                            <FolderKanban className="h-3 w-3" />
-                            {collection.name}
-                            {collection.documentCount !== undefined && (
-                              <span className="text-muted-foreground">
-                                ({collection.documentCount})
-                              </span>
-                            )}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+
+              {/* Right Column - Collaboration & Activity */}
+              <div className="space-y-6">
+                {/* Collaboration Section */}
+                <CollaborationPanel
+                  document={document}
+                  documentWorkspaces={documentWorkspaces}
+                  workspaces={collaborationState.workspaces}
+                  onAddWorkspace={handleAddWorkspace}
+                  onRemoveWorkspace={handleRemoveWorkspace}
+                  workspaceManageOpen={workspaceManageOpen}
+                  onWorkspaceManageOpenChange={setWorkspaceManageOpen}
+                  onWorkspacesRefreshed={handleWorkspacesRefreshed}
+                />
 
               {/* Comments Section */}
-              <Card className="border-border/50">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <MessageSquare className="h-4 w-4 text-primary" />
-                        Comments
-                      </CardTitle>
-                      <CardDescription className="mt-1">
-                        Discuss, annotate, and collaborate on this document
-                      </CardDescription>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs gap-1"
-                      onClick={() => setCommentsDialogOpen(true)}
-                    >
-                      <MessageSquare className="h-3 w-3" />
-                      {comments.length > 0 ? `${comments.length}` : 'Add'}
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {comments.length > 0 && (
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variant="outline" className="text-xs">
-                          {comments.filter((c) => !c.resolved).length} unresolved
-                        </Badge>
-                        <Badge variant="secondary" className="text-xs">
-                          {comments.length} total
-                        </Badge>
-                      </div>
-                    )}
-                    {comments.length > 0 ? (
-                      <div className="space-y-2">
-                        {comments.slice(0, 3).map((comment) => {
-                          const author = userLookup.get(comment.authorId);
-                          return (
-                            <div key={comment.id} className="flex items-start gap-2.5 p-2.5 border border-border/50 rounded-lg hover:bg-muted/50 transition-colors">
-                              <Avatar className="h-7 w-7 flex-shrink-0">
-                                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                  {getUserInitials(comment.authorId)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs font-medium">{author?.name ?? 'Unknown'}</span>
-                                  <span className="text-[10px] text-muted-foreground">
-                                    {formatDateTime(comment.createdAt)}
-                                  </span>
-                                  {comment.resolved ? (
-                                    <Badge variant="secondary" className="h-4 text-[10px] gap-1">
-                                      <CheckCircle2 className="h-2.5 w-2.5" />
-                                      Resolved
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="h-4 text-[10px] gap-1">
-                                      <Circle className="h-2.5 w-2.5" />
-                                      Open
-                                    </Badge>
-                                  )}
-                                </div>
-                                <p className="text-xs text-muted-foreground line-clamp-2">
-                                  {comment.content}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {comments.length > 3 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-xs w-full"
-                            onClick={() => setCommentsDialogOpen(true)}
-                          >
-                            View all {comments.length} comments
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-8 text-center border border-dashed rounded-lg">
-                        <MessageSquare className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
-                        <p className="text-sm text-muted-foreground mb-1">No comments yet</p>
-                        <p className="text-xs text-muted-foreground">Start the conversation</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                <DocumentCommentsCard
+                  comments={collaborationState.comments}
+                  userLookup={userLookup}
+                  getUserInitials={getUserInitials}
+                  onOpenCommentsDialog={handleOpenCommentsDialog}
+                />
 
               {/* Access Activity Section */}
-              <Card className="border-border/50">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <Activity className="h-4 w-4 text-primary" />
-                        Access Activity
-                      </CardTitle>
-                      <CardDescription className="mt-1">
-                        Recent views and download attempts
-                      </CardDescription>
+                <AccessActivityCard
+                  documentId={document.id}
+                  accessLogs={collaborationState.accessLogs}
+                  userLookup={userLookup}
+                  getUserInitials={getUserInitials}
+                  onViewActivityDetails={(log) => setSelectedAccessLog(log)}
+                  onRefresh={handleRefreshAccessLogs}
+                />
                     </div>
-                {accessLogs.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => {
-                      // Export access logs as CSV
-                      const csv = [
-                        ['User', 'Action', 'Sensitivity', 'Timestamp'].join(','),
-                        ...accessLogs.map((log) => {
-                          const user = userLookup.get(log.userId);
-                          return [
-                            user?.name || 'Unknown',
-                            log.action,
-                            log.sensitivity,
-                            log.timestamp,
-                          ].join(',');
-                        }),
-                      ].join('\n');
-                      const blob = new Blob([csv], { type: 'text/csv' });
-                      const url = URL.createObjectURL(blob);
-                      const a = window.document.createElement('a');
-                      a.href = url;
-                      a.download = `document-access-logs-${document.id}-${new Date().toISOString().split('T')[0]}.csv`;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                      toast.success('Access logs exported');
-                    }}
-                    aria-label="Export access logs"
-                  >
-                    <DownloadIcon className="h-3 w-3" />
-                    Export
-                  </Button>
-                )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                  {/* Filters */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Select value={accessLogFilter} onValueChange={(value) => setAccessLogFilter(value as any)}>
-                      <SelectTrigger className="w-32 h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Actions</SelectItem>
-                        <SelectItem value="view">Views Only</SelectItem>
-                        <SelectItem value="download">Downloads Only</SelectItem>
-                        <SelectItem value="attempted-download">Attempted Downloads</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={accessLogDateFilter} onValueChange={(value) => setAccessLogDateFilter(value as any)}>
-                      <SelectTrigger className="w-28 h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Time</SelectItem>
-                        <SelectItem value="today">Today</SelectItem>
-                        <SelectItem value="week">This Week</SelectItem>
-                        <SelectItem value="month">This Month</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  {/* Filtered Logs */}
-                  <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
-                    {(() => {
-                      const now = new Date();
-                      const filtered = accessLogs.filter((log) => {
-                        // Action filter
-                        if (accessLogFilter !== 'all' && log.action !== accessLogFilter) return false;
-                        
-                        // Date filter
-                        if (accessLogDateFilter !== 'all') {
-                          const logDate = new Date(log.timestamp);
-                          const diffMs = now.getTime() - logDate.getTime();
-                          const diffDays = diffMs / (1000 * 60 * 60 * 24);
-                          
-                          if (accessLogDateFilter === 'today' && diffDays >= 1) return false;
-                          if (accessLogDateFilter === 'week' && diffDays >= 7) return false;
-                          if (accessLogDateFilter === 'month' && diffDays >= 30) return false;
-                        }
-                        
-                        return true;
-                      });
-                      
-                      if (filtered.length === 0) {
-                        return (
-                          <div className="flex flex-col items-center justify-center py-6 text-center">
-                            <Filter className="h-6 w-6 text-muted-foreground mb-2" />
-                            <p className="text-xs text-muted-foreground">No logs match the selected filters</p>
-                          </div>
-                        );
-                      }
-                      
-                      return filtered.slice(0, 20).map((log) => {
-                        const user = userLookup.get(log.userId);
-                        const actionIcon = log.action === 'download' ? Download : Eye;
-                        const actionLabel = log.action === 'download' ? 'Downloaded' : log.action === 'attempted-download' ? 'Attempted' : 'Viewed';
-                        const actionVariant = log.action === 'download' ? 'default' : log.action === 'attempted-download' ? 'destructive' : 'secondary';
-                        
-                        return (
-                          <div key={log.id} className="flex items-center gap-2.5 p-2.5 border border-border/50 rounded-lg hover:bg-muted/30 transition-colors">
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              {actionIcon === Download ? (
-                                <Download className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                              ) : (
-                                <Eye className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                              )}
-                              <Avatar className="h-5 w-5 flex-shrink-0">
-                                <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
-                                  {getUserInitials(log.userId)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="text-xs font-medium truncate">{user?.name ?? 'Unknown'}</span>
-                              <Badge variant={actionVariant} className="text-[10px] px-1.5 py-0 h-4">
-                                {actionLabel}
-                              </Badge>
-                            </div>
-                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                              {formatDateTime(log.timestamp)}
-                            </span>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                  
-                  {/* Statistics */}
-                  {accessLogs.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2 pt-2 border-t text-xs">
-                      <div>
-                        <p className="text-[10px] text-muted-foreground">Views</p>
-                        <p className="text-sm font-semibold">
-                          {accessLogs.filter((l) => l.action === 'view').length}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-muted-foreground">Downloads</p>
-                        <p className="text-sm font-semibold">
-                          {accessLogs.filter((l) => l.action === 'download').length}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-muted-foreground">Users</p>
-                        <p className="text-sm font-semibold">
-                          {new Set(accessLogs.map((l) => l.userId)).size}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
             </div>
           </div>
 
@@ -2124,7 +1358,7 @@ const DocumentDetailPage = () => {
             version={primaryVersion}
             currentUser={uploadUser}
             onCommentsUpdated={(updatedComments) => {
-              setComments(updatedComments);
+              dispatchCollaboration({ type: 'SET_COMMENTS', payload: updatedComments });
             }}
           />
 
@@ -2141,175 +1375,13 @@ const DocumentDetailPage = () => {
               </CardContent>
             </Card>
           ) : null}
-
-          {/* Related Correspondence */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Link className="h-4 w-4 text-primary" />
-                Related Correspondence
-              </CardTitle>
-              <CardDescription>Workflows that reference this document, including minute history.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {relatedCorrespondence.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Link className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm font-medium mb-1">No related correspondence</p>
-                  <p className="text-xs">This document hasn't been linked to any correspondence workflows.</p>
                 </div>
-              ) : (
-                <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                  {relatedCorrespondence.map(({ correspondence, minutes, linkNotes }) => {
-                    const createdBy = userLookup.get(correspondence.createdById ?? '');
-                    const currentApprover = userLookup.get(correspondence.currentApproverId ?? '');
-                    const divisionName = correspondence.divisionId ? divisionLookup.get(correspondence.divisionId) : undefined;
-                    const departmentName = correspondence.departmentId ? departmentLookup.get(correspondence.departmentId) : undefined;
-                    
-                    // Priority badge variant
-                    const getPriorityVariant = (priority: string) => {
-                      switch (priority?.toLowerCase()) {
-                        case 'urgent': return 'destructive';
-                        case 'high': return 'default';
-                        case 'medium': return 'secondary';
-                        case 'low': return 'outline';
-                        default: return 'outline';
-                      }
-                    };
-                    
-                    // Status badge variant
-                    const getStatusVariant = (status: string) => {
-                      switch (status?.toLowerCase()) {
-                        case 'completed': return 'default';
-                        case 'in-progress': return 'secondary';
-                        case 'pending': return 'outline';
-                        default: return 'outline';
-                      }
-                    };
 
-                    return (
-                      <div key={correspondence.id} className="border rounded-lg p-3 space-y-3 hover:bg-muted/30 transition-colors">
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                              <Button
-                                variant="link"
-                                className="h-auto p-0 font-semibold text-sm text-primary hover:underline"
-                                onClick={() => router.push(`/correspondence/${correspondence.id}`)}
-                              >
-                                {correspondence.referenceNumber || 'N/A'}
-                              </Button>
-                              <Badge variant={getStatusVariant(correspondence.status)} className="text-xs capitalize">
-                                {correspondence.status?.replace('-', ' ') || 'Unknown'}
-                              </Badge>
-                              <Badge variant={getPriorityVariant(correspondence.priority)} className="text-xs">
-                                {correspondence.priority?.toUpperCase() || 'NORMAL'}
-                              </Badge>
-                            </div>
-                            <p className="text-sm font-medium text-foreground mb-1.5 line-clamp-2">{correspondence.subject || 'No subject'}</p>
-                            {linkNotes && (
-                              <div className="flex items-start gap-1.5 text-xs text-muted-foreground mb-1.5">
-                                <Tag className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                                <span>{linkNotes}</span>
-                              </div>
-                            )}
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              {correspondence.receivedDate && (
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  <span>{formatDate(correspondence.receivedDate)}</span>
-                                </div>
-                              )}
-                              {divisionName && (
-                                <>
-                                  <span>•</span>
-                                  <span>{divisionName}</span>
-                                </>
-                              )}
-                              {departmentName && (
-                                <>
-                                  <span>•</span>
-                                  <span>{departmentName}</span>
-                                </>
-                              )}
-                              {createdBy && (
-                                <>
-                                  <span>•</span>
-                                  <div className="flex items-center gap-1">
-                                    <UserIcon className="h-3 w-3" />
-                                    <span>{createdBy.name}</span>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 flex-shrink-0"
-                            onClick={() => router.push(`/correspondence/${correspondence.id}`)}
-                            title="View correspondence details"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        {/* Minute History */}
-                        {minutes.length > 0 && (
-                          <div className="pt-2 border-t">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                                <MessageSquare className="h-3 w-3" />
-                                Minute History
-                              </p>
-                              <Badge variant="outline" className="text-xs">{minutes.length}</Badge>
-                            </div>
-                            <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                              {minutes
-                                .sort((a, b) => new Date(b.timestamp ?? '').getTime() - new Date(a.timestamp ?? '').getTime())
-                                .map((minute) => {
-                                  const minuteUser = userLookup.get(minute.userId ?? '');
-                                  const displayName = minute.userName ?? minuteUser?.name ?? 'Unknown';
-                                  const isApproval = minute.actionType === 'approve';
-                                  return (
-                                    <div key={minute.id} className="text-xs bg-muted/50 rounded p-2 border border-border/50">
-                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <span className="font-medium text-foreground">{displayName}</span>
-                                        <Badge 
-                                          variant={isApproval ? 'default' : 'outline'} 
-                                          className="text-[10px]"
-                                        >
-                                          {isApproval ? 'Approval' : minute.actionType === 'minute' ? 'Minute' : minute.actionType}
-                                        </Badge>
-                                        <span className="text-muted-foreground text-[10px]">
-                                          {formatDateTime(minute.timestamp ?? '')}
-                                        </span>
-                                      </div>
-                                      {minute.minuteText && (
-                                        <p className="text-muted-foreground mt-1 whitespace-pre-wrap line-clamp-2 text-[11px] leading-relaxed">
-                                          {minute.minuteText}
-                                        </p>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-        </div>
-      </div>
-
-      {uploadUser && (
+      {hydrated && uploadUser && document && (
+        <>
+          {uploadDialogOpen && (
         <DocumentUploadDialog
+              key={`upload-version-${document.id}`}
           open={uploadDialogOpen}
           onOpenChange={setUploadDialogOpen}
           mode="version"
@@ -2317,45 +1389,75 @@ const DocumentDetailPage = () => {
           document={document}
           onComplete={handleVersionUploadComplete}
         />
+          )}
+          {createVersionDialogOpen && (
+            <DocumentUploadDialog
+              key={`create-version-${document.id}`}
+              open={createVersionDialogOpen}
+              onOpenChange={setCreateVersionDialogOpen}
+              mode="version"
+              currentUser={uploadUser}
+              document={document}
+              onComplete={handleVersionUploadComplete}
+              initialComposeMode={true}
+            />
+          )}
+        </>
       )}
 
+      {shareDialogOpen && document && (
       <ShareDocumentDialog
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
         document={document}
         currentUserId={currentUser?.id}
-      />
+          initialView={shareDialogInitialView}
+        />
+      )}
+      {minuteDocumentCorrespondence && (
+        <MinuteModal
+          correspondence={minuteDocumentCorrespondence}
+          isOpen={minuteDocumentModalOpen}
+          onClose={() => {
+            setMinuteDocumentModalOpen(false);
+            setMinuteDocumentCorrespondence(null);
+            // Refresh document to show updated correspondence links
+            if (document) {
+              void fetchDocumentById(document.id).then(setDocument).catch((err) => {
+                logError('Failed to refresh document', err);
+              });
+            }
+          }}
+          direction="upward"
+        />
+      )}
 
-      {previewVersion && (
+      {linkCaseDialogOpen && document && (
+        <LinkCaseDialog
+          open={linkCaseDialogOpen}
+          onOpenChange={setLinkCaseDialogOpen}
+          documentId={document.id}
+          document={document}
+          onLinked={async () => {
+            // Reload document to get updated case links
+            if (params?.id) {
+              const updated = await fetchDocumentById(params.id);
+              setDocument(updated);
+            }
+          }}
+        />
+      )}
+
+      {previewVersion && document && (
         <DocumentVersionPreviewModal
           version={previewVersion}
           isOpen={!!previewVersion}
           onClose={() => setPreviewVersion(null)}
-        />
-      )}
-
-      {document && (
-        <CollectionManagementDialog
-          open={collectionManageOpen}
-          onOpenChange={setCollectionManageOpen}
-          document={document}
-          currentUser={currentUser || undefined}
-          onComplete={async () => {
-            // Reload document
-            if (params?.id) {
-              try {
-                const doc = await fetchDocumentById(params.id);
-                setDocument(doc);
-              } catch (error) {
-                logError('Failed to reload document', error);
-              }
-            }
-            // Reload collections
-            if (document) {
-              const allCollections = await fetchCollections();
-              const documentCollections = allCollections.filter((c) => c.documentIds.includes(document.id));
-              setCollections(documentCollections);
-            }
+          documentId={document.id}
+          onVersionCreated={async (updated) => {
+            setDocument(updated);
+            setPreviewVersion(null);
+            toast.success('New version created from edited OCR text');
           }}
         />
       )}
@@ -2375,66 +1477,116 @@ const DocumentDetailPage = () => {
         />
       )}
 
-      {/* Save Confirmation Dialog */}
-      <AlertDialog open={showSaveConfirmation} onOpenChange={setShowSaveConfirmation}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Save Document Changes</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to save these changes? This will update the document metadata.
-              {document && metadataDraft.status !== document.status && (
-                <div className="mt-2 p-2 bg-warning/10 border border-warning/20 rounded text-sm">
-                  <strong>Status Change:</strong> {document.status} → {metadataDraft.status}
-                </div>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmMetadataSave}>
-              Save Changes
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Access Activity Details Dialog */}
+      {selectedAccessLog && (
+        <Dialog open={!!selectedAccessLog} onOpenChange={(open) => !open && setSelectedAccessLog(null)}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Activity className="h-4 w-4" />
+                Access Activity Details
+              </DialogTitle>
+              <DialogDescription>Detailed information about this access activity</DialogDescription>
+            </DialogHeader>
+            {(() => {
+              const user = userLookup.get(selectedAccessLog.userId);
+              const actionLabel =
+                selectedAccessLog.action === 'download'
+                  ? 'Downloaded'
+                  : selectedAccessLog.action === 'attempted-download'
+                    ? 'Attempted Download'
+                    : 'Viewed';
+              const actionIcon = selectedAccessLog.action === 'download' ? DownloadIcon : Eye;
+              
+              // Check if this was the user's first access
+              const userLogs = collaborationState.accessLogs.filter((log) => log.userId === selectedAccessLog.userId);
+              const sortedUserLogs = [...userLogs].sort((a, b) => 
+                new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+              );
+              const isFirstAccess = sortedUserLogs.length > 0 && sortedUserLogs[0].id === selectedAccessLog.id;
+              
+              // Format relative time
+              const relativeTime = (() => {
+                try {
+                  const { formatDistanceToNow } = require('date-fns');
+                  return formatDistanceToNow(new Date(selectedAccessLog.timestamp), { addSuffix: true });
+                } catch {
+                  return null;
+                }
+              })();
 
-      {/* Status Change Confirmation Dialog */}
-      <AlertDialog open={showStatusChangeConfirmation} onOpenChange={setShowStatusChangeConfirmation}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Status Change</AlertDialogTitle>
-            <AlertDialogDescription>
-              {document && pendingStatusChange && (
-                <>
-                  You are about to change the document status from{' '}
-                  <strong>{document.status}</strong> to <strong>{pendingStatusChange}</strong>.
-                  {pendingStatusChange === 'published' && (
-                    <div className="mt-2 p-2 bg-primary/10 border border-primary/20 rounded text-sm">
-                      Publishing this document will make it visible to users with appropriate permissions.
+              return (
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      {actionIcon === DownloadIcon ? (
+                        <DownloadIcon className="h-5 w-5 text-primary" />
+                      ) : (
+                        <Eye className="h-5 w-5 text-muted-foreground" />
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Action</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-sm text-muted-foreground">{actionLabel}</p>
+                          {selectedAccessLog.action === 'attempted-download' && (
+                            <Badge variant="destructive" className="text-[10px]">
+                              Failed
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  {pendingStatusChange === 'archived' && (
-                    <div className="mt-2 p-2 bg-secondary/10 border border-secondary/20 rounded text-sm">
-                      Archiving this document will move it to archived status. It can still be accessed but won't appear in active document lists.
+
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <UserIcon className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">User</p>
+                        <p className="text-sm text-muted-foreground">{user?.name ?? 'Unknown User'}</p>
+                        {user?.gradeLevel && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {user.gradeLevel}
+                          </p>
+                        )}
+                        {isFirstAccess && (
+                          <Badge variant="secondary" className="text-[10px] mt-1">
+                            First Access
+                          </Badge>
+                        )}
                     </div>
-                  )}
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setPendingStatusChange(null);
-              setShowStatusChangeConfirmation(false);
-            }}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={confirmStatusChange}>
-              Confirm Change
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+                    </div>
+
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Clock className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Timestamp</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatDateTime(selectedAccessLog.timestamp)}
+                        </p>
+                        {relativeTime && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {relativeTime}
+                          </p>
+                        )}
+                    </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Shield className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Document Sensitivity</p>
+                        <Badge variant="outline" className="mt-1">
+                          {selectedAccessLog.sensitivity || 'N/A'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
+      )}
+
       </DashboardLayout>
     </ClientErrorBoundary>
   );

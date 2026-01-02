@@ -29,7 +29,7 @@ export interface WebhookEvent {
   id: string;
   webhook: Webhook;
   event_type: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   status: 'pending' | 'sent' | 'failed' | 'retrying';
   response_code?: number;
   response_body?: string;
@@ -68,7 +68,7 @@ export interface ERPConnector {
   is_active: boolean;
   sync_enabled: boolean;
   sync_interval_minutes: number;
-  field_mappings: Record<string, any>;
+  field_mappings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -79,7 +79,7 @@ export interface IntegrationLog {
   integration_id: string;
   status: 'success' | 'failed' | 'pending';
   message: string;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
   error_message?: string;
   duration_ms?: number;
   created_at: string;

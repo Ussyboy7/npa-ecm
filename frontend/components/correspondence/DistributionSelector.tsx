@@ -12,8 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { X, Building2, Users, Info, CheckCircle, MessageSquare, Layers } from 'lucide-react';
+import { X, Building2, Users, Info, CheckCircle, MessageSquare, Layers, User as UserIcon, AlertCircle } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { DistributionRecipient } from '@/lib/npa-structure';
 
 interface DistributionSelectorProps {
@@ -29,13 +32,25 @@ export const DistributionSelector = ({
   currentDivisionId,
   currentDepartmentId,
 }: DistributionSelectorProps) => {
-  const { directorates, divisions, departments } = useOrganization();
+  const { directorates, divisions, departments, users } = useOrganization();
+  const { currentUser } = useCurrentUser();
   const allDirectorates = useMemo(() => directorates, [directorates]);
   const allDivisions = useMemo(() => divisions, [divisions]);
   const allDepartments = useMemo(() => departments, [departments]);
-  const [selectedType, setSelectedType] = useState<'directorate' | 'division' | 'department'>('division');
+  const allUsers = useMemo(() => users.filter(u => u.active !== false), [users]);
+  
+  // Check if current user can create parallel routing (executives/principals)
+  const canCreateParallelRouting = useMemo(() => {
+    if (!currentUser?.gradeLevel) return false;
+    const executiveGrades = ['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3'];
+    return executiveGrades.includes(currentUser.gradeLevel);
+  }, [currentUser?.gradeLevel]);
+  
+  const [selectedType, setSelectedType] = useState<'directorate' | 'division' | 'department' | 'user'>('division');
   const [selectedId, setSelectedId] = useState<string>('');
-  const [selectedPurpose, setSelectedPurpose] = useState<'information' | 'action' | 'comment'>('information');
+  const [selectedPurpose, setSelectedPurpose] = useState<'information' | 'action'>('information');
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [customMinuteTexts, setCustomMinuteTexts] = useState<Record<string, string>>({});
 
   const currentDirectorateId = useMemo(() => {
     if (currentDivisionId) {
@@ -91,20 +106,35 @@ export const DistributionSelector = ({
       .filter((department) => !selectedDistribution.some((recipient) => recipient.type === 'department' && recipient.id === department.id));
   }, [allDepartments, currentDepartmentId, selectedDistribution]);
 
+  const availableUsers = useMemo(() => {
+    return allUsers
+      .filter((user) => user.id !== currentUser?.id)
+      .filter((user) => !selectedDistribution.some((recipient) => recipient.type === 'user' && recipient.userId === user.id));
+  }, [allUsers, currentUser?.id, selectedDistribution]);
+
   const handleAdd = () => {
-    if (!selectedId) return;
+    if (selectedType === 'user' && !selectedUserId) return;
+    if (selectedType !== 'user' && !selectedId) return;
 
     let name = '';
     const newRecipient: DistributionRecipient = {
       type: selectedType,
-      id: selectedId,
+      id: selectedType === 'user' ? selectedUserId : selectedId,
+      userId: selectedType === 'user' ? selectedUserId : undefined,
       directorateId: selectedType === 'directorate' ? selectedId : undefined,
       divisionId: selectedType === 'division' ? selectedId : undefined,
       departmentId: selectedType === 'department' ? selectedId : undefined,
       purpose: selectedPurpose,
     };
 
-    if (selectedType === 'directorate') {
+    if (selectedType === 'user') {
+      const user = allUsers.find((u) => u.id === selectedUserId);
+      name = user?.name ?? '';
+      // Store custom minute text if provided
+      if (selectedPurpose === 'action' && customMinuteTexts[selectedUserId]) {
+        newRecipient.customMinuteText = customMinuteTexts[selectedUserId];
+      }
+    } else if (selectedType === 'directorate') {
       name = allDirectorates.find((directorate) => directorate.id === selectedId)?.name ?? '';
     } else if (selectedType === 'division') {
       const division = allDivisions.find((item) => item.id === selectedId);
@@ -123,33 +153,52 @@ export const DistributionSelector = ({
     newRecipient.name = name;
     onDistributionChange([...selectedDistribution, newRecipient]);
     setSelectedId('');
+    setSelectedUserId('');
+    if (selectedType === 'user' && selectedPurpose === 'action') {
+      setCustomMinuteTexts(prev => {
+        const next = { ...prev };
+        delete next[selectedUserId];
+        return next;
+      });
+    }
   };
 
-  const handleRemove = (id: string, type: DistributionRecipient['type']) => {
+  const handleRemove = (id: string, type: DistributionRecipient['type'], userId?: string) => {
     onDistributionChange(
-      selectedDistribution.filter(d => !(d.id === id && d.type === type))
+      selectedDistribution.filter(d => !(d.id === id && d.type === type && (!userId || d.userId === userId)))
     );
+    // Clean up custom minute text
+    if (userId && customMinuteTexts[userId]) {
+      setCustomMinuteTexts(prev => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+    }
   };
 
-  const getPurposeIcon = (purpose: 'information' | 'action' | 'comment') => {
+  const updateCustomMinuteText = (userId: string, text: string) => {
+    setCustomMinuteTexts(prev => ({
+      ...prev,
+      [userId]: text,
+    }));
+  };
+
+  const getPurposeIcon = (purpose: 'information' | 'action') => {
     switch (purpose) {
       case 'information':
         return <Info className="h-3 w-3" />;
       case 'action':
         return <CheckCircle className="h-3 w-3" />;
-      case 'comment':
-        return <MessageSquare className="h-3 w-3" />;
     }
   };
 
-  const getPurposeColor = (purpose: 'information' | 'action' | 'comment') => {
+  const getPurposeColor = (purpose: 'information' | 'action') => {
     switch (purpose) {
       case 'information':
         return 'bg-info/10 text-info border-info/20';
       case 'action':
         return 'bg-warning/10 text-warning border-warning/20';
-      case 'comment':
-        return 'bg-success/10 text-success border-success/20';
     }
   };
 
@@ -194,6 +243,14 @@ export const DistributionSelector = ({
                     Department
                   </div>
                 </SelectItem>
+                {canCreateParallelRouting && (
+                  <SelectItem value="user">
+                    <div className="flex items-center gap-2">
+                      <UserIcon className="h-4 w-4" />
+                      User (Creates Parallel Routing)
+                    </div>
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -204,32 +261,52 @@ export const DistributionSelector = ({
                 ? 'Directorate'
                 : selectedType === 'division'
                 ? 'Division'
-                : 'Department'}
+                : selectedType === 'department'
+                ? 'Department'
+                : 'User'}
             </Label>
-            <Select value={selectedId} onValueChange={setSelectedId}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder={`Select ${selectedType}`} />
-              </SelectTrigger>
-              <SelectContent>
-                {selectedType === 'directorate'
-                  ? availableDirectorates.map((directorate) => (
-                      <SelectItem key={directorate.id} value={directorate.id}>
-                        {directorate.name}
-                      </SelectItem>
-                    ))
-                  : selectedType === 'division'
-                  ? availableDivisions.map((division) => (
-                      <SelectItem key={division.id} value={division.id}>
-                        {division.name}
-                      </SelectItem>
-                    ))
-                  : availableDepartments.map((department) => (
-                      <SelectItem key={department.id} value={department.id}>
-                        {department.name}
-                      </SelectItem>
-                    ))}
-              </SelectContent>
-            </Select>
+            {selectedType === 'user' ? (
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select user" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{user.name}</span>
+                        <span className="text-xs text-muted-foreground">({user.systemRole})</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={selectedId} onValueChange={setSelectedId}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={`Select ${selectedType}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {selectedType === 'directorate'
+                    ? availableDirectorates.map((directorate) => (
+                        <SelectItem key={directorate.id} value={directorate.id}>
+                          {directorate.name}
+                        </SelectItem>
+                      ))
+                    : selectedType === 'division'
+                    ? availableDivisions.map((division) => (
+                        <SelectItem key={division.id} value={division.id}>
+                          {division.name}
+                        </SelectItem>
+                      ))
+                    : availableDepartments.map((department) => (
+                        <SelectItem key={department.id} value={department.id}>
+                          {department.name}
+                        </SelectItem>
+                      ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -253,20 +330,43 @@ export const DistributionSelector = ({
                     For Action
                   </div>
                 </SelectItem>
-                <SelectItem value="comment">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="h-4 w-4" />
-                    For Comment
-                  </div>
-                </SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
+        {/* Custom minute text for users with "For Action" */}
+        {selectedType === 'user' && selectedPurpose === 'action' && selectedUserId && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">
+              Custom Minute Text <span className="text-muted-foreground/70">(Optional)</span>
+            </Label>
+            <Textarea
+              placeholder="Enter custom minute text for this user (uses main minute text if empty)..."
+              value={customMinuteTexts[selectedUserId] || ''}
+              onChange={(e) => updateCustomMinuteText(selectedUserId, e.target.value)}
+              className="min-h-[80px] resize-none text-sm"
+              maxLength={500}
+            />
+            <p className="text-xs text-muted-foreground">
+              {(customMinuteTexts[selectedUserId] || '').length} / 500 characters
+            </p>
+          </div>
+        )}
+
+        {/* Warning for parallel routing */}
+        {selectedType === 'user' && selectedPurpose === 'action' && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              This will create a parallel routing branch. The user will receive an actionable minute.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Button
           onClick={handleAdd}
-          disabled={!selectedId}
+          disabled={(selectedType === 'user' ? !selectedUserId : !selectedId)}
           size="sm"
           variant="outline"
           className="w-full"
@@ -283,7 +383,7 @@ export const DistributionSelector = ({
           </Label>
           <div className="space-y-2">
             {selectedDistribution.map((recipient, idx) => (
-              <Card key={`${recipient.type}-${recipient.id}-${idx}`} className="border-border">
+              <Card key={`${recipient.type}-${recipient.id}-${recipient.userId || ''}-${idx}`} className="border-border">
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">
@@ -291,29 +391,38 @@ export const DistributionSelector = ({
                         <Layers className="h-4 w-4 text-primary" />
                       ) : recipient.type === 'division' ? (
                         <Building2 className="h-4 w-4 text-primary" />
-                      ) : (
+                      ) : recipient.type === 'department' ? (
                         <Users className="h-4 w-4 text-secondary" />
+                      ) : (
+                        <UserIcon className="h-4 w-4 text-accent" />
                       )}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium">{recipient.name}</p>
                         <p className="text-xs text-muted-foreground capitalize">
                           {recipient.type}
+                          {recipient.type === 'user' && recipient.purpose === 'action' && (
+                            <span className="ml-1 text-warning">(Parallel Routing)</span>
+                          )}
                         </p>
+                        {recipient.customMinuteText && (
+                          <p className="text-xs text-muted-foreground mt-1 italic">
+                            Custom text: {recipient.customMinuteText.substring(0, 50)}...
+                          </p>
+                        )}
                       </div>
                       <Badge
                         variant="outline"
                         className={`text-xs gap-1 ${getPurposeColor(recipient.purpose || 'information')}`}
                       >
                         {getPurposeIcon(recipient.purpose || 'information')}
-                        {recipient.purpose === 'information' ? 'Info' : 
-                         recipient.purpose === 'action' ? 'Action' : 'Comment'}
+                        {recipient.purpose === 'information' ? 'Info' : 'Action'}
                       </Badge>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 ml-2"
-                      onClick={() => handleRemove(recipient.id, recipient.type)}
+                      onClick={() => handleRemove(recipient.id, recipient.type, recipient.userId)}
                     >
                       <X className="h-4 w-4" />
                     </Button>

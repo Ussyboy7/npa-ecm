@@ -42,7 +42,6 @@ import { toast } from "@/hooks/use-toast";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
@@ -85,9 +84,9 @@ const OrganizationStructurePage = () => {
   const [departmentFormOpen, setDepartmentFormOpen] = useState(false);
   
   // Selected entities for editing
-  const [selectedDirectorate, setSelectedDirectorate] = useState<any>(null);
-  const [selectedDivision, setSelectedDivision] = useState<any>(null);
-  const [selectedDepartment, setSelectedDepartment] = useState<any>(null);
+  const [selectedDirectorate, setSelectedDirectorate] = useState<Record<string, unknown>>(null);
+  const [selectedDivision, setSelectedDivision] = useState<Record<string, unknown>>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<Record<string, unknown>>(null);
   
   // For creating new entities with parent context
   const [parentDirectorateId, setParentDirectorateId] = useState<string | null>(null);
@@ -235,12 +234,12 @@ const OrganizationStructurePage = () => {
     setDirectorateFormOpen(true);
   };
 
-  const handleEditDirectorate = (directorate: any) => {
+  const handleEditDirectorate = (directorate: Record<string, unknown>) => {
     setSelectedDirectorate(directorate);
     setDirectorateFormOpen(true);
   };
 
-  const handleAssignLeader = (directorate: any) => {
+  const handleAssignLeader = (directorate: Record<string, unknown>) => {
     setSelectedDirectorate(directorate);
     setDirectorateLeadershipOpen(true);
   };
@@ -251,7 +250,7 @@ const OrganizationStructurePage = () => {
     setDivisionFormOpen(true);
   };
 
-  const handleEditDivision = (division: any) => {
+  const handleEditDivision = (division: Record<string, unknown>) => {
     setSelectedDivision(division);
     setParentDirectorateId(division.directorateId);
     setDivisionFormOpen(true);
@@ -263,7 +262,7 @@ const OrganizationStructurePage = () => {
     setDepartmentFormOpen(true);
   };
 
-  const handleEditDepartment = (department: any) => {
+  const handleEditDepartment = (department: Record<string, unknown>) => {
     setSelectedDepartment(department);
     setParentDivisionId(department.divisionId);
     setDepartmentFormOpen(true);
@@ -345,7 +344,7 @@ const OrganizationStructurePage = () => {
             title="Unified Organization Management"
             description="This tree view consolidates Directorates, Divisions, and Departments into a single interface. Expand/collapse nodes, search across all levels, and manage leadership assignments."
             links={[
-              { label: "User Management", href: "/admin/users" },
+              { label: "User Management", href: "/admin/users-roles?tab=users" },
               { label: "Help & Guides", href: "/help" },
             ]}
           />
@@ -439,7 +438,6 @@ const OrganizationStructurePage = () => {
                   </p>
                 </div>
               ) : (
-                <TooltipProvider>
                   <div className="space-y-2">
                     {filteredData.directorates.map((directorate) => {
                       const isExpanded = expandedDirectorates.has(directorate.id);
@@ -723,7 +721,6 @@ const OrganizationStructurePage = () => {
                       );
                     })}
                   </div>
-                </TooltipProvider>
               )}
             </CardContent>
           </Card>

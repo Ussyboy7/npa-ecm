@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, startTransition } from 'react';
+import { useState, useCallback, startTransition, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -18,11 +18,11 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { createDocument, createCollection as createCollectionAPI, type DocumentRecord, type DocumentType, type DocumentStatus, type DocumentSensitivity } from '@/lib/dms-storage';
+import { createDocument, createCollection as createCollectionAPI, fetchWorkspaces, type DocumentRecord, type DocumentType, type DocumentStatus, type DocumentSensitivity, type DocumentWorkspace } from '@/lib/dms-storage';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB, formatFileSize } from '@/lib/file-utils';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
-import { Upload, X, FileText, Loader2, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Upload, X, FileText, Loader2, Sparkles, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { User } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 
@@ -62,10 +62,18 @@ export const SmartCreationWizard = ({
   onComplete,
 }: SmartCreationWizardProps) => {
   const { divisions, departments } = useOrganization();
+  const activeDivisions = useMemo(() => divisions.filter((division) => division.isActive !== false), [divisions]);
+  const activeDepartments = useMemo(() => departments.filter((department) => department.isActive !== false), [departments]);
   const [step, setStep] = useState(1);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  
+  // Filter departments based on selected division
+  const filteredDepartments = useMemo(() => {
+    if (!defaultDivisionId) return activeDepartments;
+    return activeDepartments.filter((dept) => dept.divisionId === defaultDivisionId);
+  }, [defaultDivisionId, activeDepartments]);
   
   // Project metadata
   const [projectName, setProjectName] = useState('');
@@ -79,6 +87,27 @@ export const SmartCreationWizard = ({
   const [defaultDivisionId, setDefaultDivisionId] = useState<string | undefined>(currentUser.division);
   const [defaultDepartmentId, setDefaultDepartmentId] = useState<string | undefined>(currentUser.department);
   const [defaultTags, setDefaultTags] = useState('');
+  const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<string[]>([]);
+  const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
+  
+  // Clear department when division changes
+  useEffect(() => {
+    if (defaultDivisionId && defaultDepartmentId) {
+      const dept = activeDepartments.find((d) => d.id === defaultDepartmentId);
+      if (dept && dept.divisionId !== defaultDivisionId) {
+        setDefaultDepartmentId(undefined);
+      }
+    }
+  }, [defaultDivisionId, defaultDepartmentId, activeDepartments]);
+  
+  // Load workspaces
+  useEffect(() => {
+    if (open) {
+      fetchWorkspaces().then(setWorkspaces).catch(() => {
+        // Silently fail
+      });
+    }
+  }, [open]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
@@ -164,6 +193,7 @@ export const SmartCreationWizard = ({
               referenceNumber: fileMeta.referenceNumber?.trim() || undefined,
               tags: uniqueTags,
               authorId: currentUser.id,
+              workspaceIds: selectedWorkspaceIds.length > 0 ? selectedWorkspaceIds : undefined,
             },
             {
               fileName: fileMeta.file.name,
@@ -223,7 +253,7 @@ export const SmartCreationWizard = ({
       setIsSubmitting(false);
       setUploadProgress(0);
     }
-  }, [files, defaultTags, defaultStatus, defaultSensitivity, defaultDivisionId, defaultDepartmentId, currentUser, createCollection, projectName, projectDescription, onComplete]);
+  }, [files, defaultTags, defaultStatus, defaultSensitivity, defaultDivisionId, defaultDepartmentId, currentUser, createCollection, projectName, projectDescription, selectedWorkspaceIds, onComplete]);
 
   const handleClose = useCallback((newOpen: boolean) => {
     // Just close the dialog - don't reset state here to avoid blocking
@@ -258,7 +288,7 @@ export const SmartCreationWizard = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
@@ -368,7 +398,7 @@ export const SmartCreationWizard = ({
                               <X className="h-3 w-3" />
                             </Button>
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <Input
                               value={fileMeta.title}
                               onChange={(e) => handleUpdateFileMetadata(index, { title: e.target.value })}
@@ -402,9 +432,9 @@ export const SmartCreationWizard = ({
 
           {step === 3 && (
             <div className="space-y-4">
-              <div className="p-4 border rounded-lg bg-muted/30">
+              <div className="p-3 sm:p-4 border rounded-lg bg-muted/30">
                 <h3 className="text-sm font-semibold mb-3">Default Metadata (applied to all files)</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <Label>Document Type</Label>
                     <Select value={defaultDocumentType} onValueChange={(value) => setDefaultDocumentType(value as DocumentType)}>
@@ -427,13 +457,56 @@ export const SmartCreationWizard = ({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {SENSITIVITY_OPTIONS.map((sens) => (
-                          <SelectItem key={sens} value={sens}>
-                            {sens.charAt(0).toUpperCase() + sens.slice(1)}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="public">
+                          <div className="flex flex-col">
+                            <span>Public</span>
+                            <span className="text-xs text-muted-foreground">All authenticated users • May be shareable externally</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="internal">
+                          <div className="flex flex-col">
+                            <span>Internal</span>
+                            <span className="text-xs text-muted-foreground">All authenticated users • Internal use only</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="confidential">
+                          <div className="flex flex-col">
+                            <span>Confidential</span>
+                            <span className="text-xs text-muted-foreground">MSS2+ (MSS2, MSS3, MSS4, MSS5, MSS1, EDCS, MDCS)</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="restricted">
+                          <div className="flex flex-col">
+                            <span>Restricted</span>
+                            <span className="text-xs text-muted-foreground">MSS1, EDCS, MDCS only</span>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
+                    {defaultSensitivity === 'public' && (
+                      <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-blue-700 dark:text-blue-300">Accessible to all authenticated users. Suitable for documents that may be shared externally.</p>
+                      </div>
+                    )}
+                    {defaultSensitivity === 'internal' && (
+                      <div className="flex items-start gap-2 p-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded text-xs">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                        <p className="text-green-700 dark:text-green-300">Accessible to all authenticated users. For internal organizational use only.</p>
+                      </div>
+                    )}
+                    {defaultSensitivity === 'confidential' && (
+                      <div className="flex items-start gap-2 p-2 bg-warning/10 border border-warning/20 rounded text-xs">
+                        <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                        <p className="text-warning/90">Requires MSS2 or higher grade level access.</p>
+                      </div>
+                    )}
+                    {defaultSensitivity === 'restricted' && (
+                      <div className="flex items-start gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-xs">
+                        <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                        <p className="text-destructive/90">Highest security level. Only accessible to top management (MSS1, EDCS, MDCS).</p>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Status</Label>
@@ -442,11 +515,82 @@ export const SmartCreationWizard = ({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
+                        <SelectItem value="draft">
+                          <div className="flex flex-col">
+                            <span>Draft</span>
+                            <span className="text-xs text-muted-foreground">Work in progress • Not published</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="published">
+                          <div className="flex flex-col">
+                            <span>Published</span>
+                            <span className="text-xs text-muted-foreground">Finalized and available</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="archived">
+                          <div className="flex flex-col">
+                            <span>Archived</span>
+                            <span className="text-xs text-muted-foreground">No longer active</span>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Division</Label>
+                    <Select
+                      value={defaultDivisionId ?? 'none'}
+                      onValueChange={(value) => {
+                        setDefaultDivisionId(value === 'none' ? undefined : value);
+                        if (value === 'none') {
+                          setDefaultDepartmentId(undefined);
+                        } else {
+                          if (defaultDepartmentId) {
+                            const dept = activeDepartments.find((d) => d.id === defaultDepartmentId);
+                            if (dept && dept.divisionId !== value) {
+                              setDefaultDepartmentId(undefined);
+                            }
+                          }
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select division" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {activeDivisions.map((division) => (
+                          <SelectItem key={division.id} value={division.id}>
+                            {division.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Department</Label>
+                    <Select
+                      value={defaultDepartmentId ?? 'none'}
+                      onValueChange={(value) => setDefaultDepartmentId(value === 'none' ? undefined : value)}
+                      disabled={!defaultDivisionId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={defaultDivisionId ? "Select department" : "Select division first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Unassigned</SelectItem>
+                        {filteredDepartments.map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!defaultDivisionId && (
+                      <p className="text-xs text-muted-foreground">
+                        Select a division first to choose a department
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>Tags</Label>
@@ -456,44 +600,90 @@ export const SmartCreationWizard = ({
                       placeholder="Comma separated"
                     />
                   </div>
+                  {workspaces.length > 0 && (
+                    <div className="sm:col-span-2 space-y-2">
+                      <Label>Workspaces</Label>
+                      <div className="space-y-2 border rounded-lg p-3 max-h-32 overflow-y-auto">
+                        {workspaces.map((workspace) => (
+                          <div key={workspace.id} className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`workspace-${workspace.id}`}
+                              checked={selectedWorkspaceIds.includes(workspace.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedWorkspaceIds((prev) => [...prev, workspace.id]);
+                                } else {
+                                  setSelectedWorkspaceIds((prev) => prev.filter((id) => id !== workspace.id));
+                                }
+                              }}
+                              disabled={isSubmitting}
+                              className="rounded"
+                            />
+                            <label
+                              htmlFor={`workspace-${workspace.id}`}
+                              className="flex items-center gap-2 flex-1 cursor-pointer"
+                            >
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: workspace.color }}
+                                aria-hidden="true"
+                              />
+                              <span className="text-sm">{workspace.name}</span>
+                              {workspace.description && (
+                                <span className="text-xs text-muted-foreground">- {workspace.description}</span>
+                              )}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Workspaces group documents by project or theme. For workflow-based grouping (cases, complaints, requests), link documents to Cases instead.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
         </ScrollArea>
 
-        <DialogFooter className="mt-4">
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0 mt-4">
           {uploadProgress > 0 && uploadProgress < 100 && (
             <div className="w-full mb-2">
               <Progress value={uploadProgress} className="h-2" />
             </div>
           )}
-          <div className="flex items-center justify-between w-full">
-            <Button variant="outline" onClick={() => handleClose(false)} disabled={isSubmitting}>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between w-full gap-2">
+            <Button variant="outline" onClick={() => handleClose(false)} disabled={isSubmitting} className="w-full sm:w-auto order-2 sm:order-1">
               Cancel
             </Button>
-            <div className="flex gap-2">
+            <div className="flex gap-2 order-1 sm:order-2">
               {step > 1 && (
-                <Button variant="outline" onClick={() => setStep(step - 1)} disabled={isSubmitting}>
-                  Previous
+                <Button variant="outline" onClick={() => setStep(step - 1)} disabled={isSubmitting} className="flex-1 sm:flex-initial">
+                  <span className="hidden sm:inline">Previous</span>
+                  <span className="sm:hidden">Prev</span>
                 </Button>
               )}
               {step < 3 ? (
-                <Button onClick={() => setStep(step + 1)} disabled={isSubmitting || (step === 2 && files.length === 0)}>
-                  Next
+                <Button onClick={() => setStep(step + 1)} disabled={isSubmitting || (step === 2 && files.length === 0)} className="flex-1 sm:flex-initial">
+                  <span className="hidden sm:inline">Next</span>
+                  <span className="sm:hidden">Next</span>
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               ) : (
-                <Button onClick={handleSubmit} disabled={isSubmitting || files.length === 0}>
+                <Button onClick={handleSubmit} disabled={isSubmitting || files.length === 0} className="flex-1 sm:flex-initial">
                   {isSubmitting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Creating...
+                      <span className="hidden sm:inline">Creating...</span>
+                      <span className="sm:hidden">Creating...</span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4 mr-2" />
-                      Create {files.length} Document{files.length !== 1 ? 's' : ''}
+                      <span className="hidden sm:inline">Create {files.length} Document{files.length !== 1 ? 's' : ''}</span>
+                      <span className="sm:hidden">Create {files.length}</span>
                     </>
                   )}
                 </Button>

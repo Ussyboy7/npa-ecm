@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import {
   Dialog,
   DialogContent,
@@ -86,7 +87,7 @@ export const DocumentQuickPreviewModal = ({
           setLoadingFormData(false);
         })
         .catch((err) => {
-          console.error('Failed to load form data:', err);
+          logError('Failed to load form data:', err);
           setLoadingFormData(false);
         });
     } else {
@@ -98,7 +99,7 @@ export const DocumentQuickPreviewModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">
             {document.title}

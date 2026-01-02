@@ -36,6 +36,7 @@ import {
   createDocument,
   createDocumentVersion,
   fetchWorkspaces,
+  queryDocuments,
   type DocumentRecord,
   type DocumentType,
   type DocumentStatus,
@@ -48,15 +49,16 @@ import { RichTextEditor } from './RichTextEditor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileUploadZone } from './FileUploadZone';
 import {
-  initializeTemplates,
   getTemplatesForUser,
   getDefaultTemplateForUser,
   createTemplate as createTemplateRecord,
   type DocumentTemplate,
 } from '@/lib/template-storage';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
-import { AlertTriangle, Loader2, Save, Upload as UploadIcon, FilePlus, FileText } from 'lucide-react';
+import { AlertTriangle, Loader2, Save, Upload as UploadIcon, FilePlus, FileText, Scan, CheckCircle2, HelpCircle } from 'lucide-react';
 import { sanitizeRichText } from '@/lib/sanitize-html';
+import { processOCR } from '@/lib/capture-storage';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
 const SENSITIVITY_OPTIONS: DocumentSensitivity[] = ['public', 'internal', 'confidential', 'restricted'];
@@ -107,6 +109,7 @@ export const DocumentUploadDialog = ({
   currentUser,
   document,
   onComplete,
+  initialComposeMode,
 }: DocumentUploadDialogProps) => {
   const { divisions, departments } = useOrganization();
   const activeDivisions = useMemo(() => divisions.filter((division) => division.isActive !== false), [divisions]);
@@ -124,7 +127,7 @@ export const DocumentUploadDialog = ({
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [composeMode, setComposeMode] = useState(mode === 'create');
+  const [composeMode, setComposeMode] = useState(initialComposeMode ?? (mode === 'create'));
   const [editorHtml, setEditorHtml] = useState('');
   const [editorJson, setEditorJson] = useState<Record<string, unknown> | null>(null);
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
@@ -139,13 +142,34 @@ export const DocumentUploadDialog = ({
   const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [scanMode, setScanMode] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
+  const [checkingReferenceNumber, setCheckingReferenceNumber] = useState(false);
+  const [referenceNumberExists, setReferenceNumberExists] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [editorCharacterCount, setEditorCharacterCount] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
+  const scanFileInputRef = useRef<HTMLInputElement>(null);
+  const isMountedRef = useRef(true);
 
   useEffect(() => {
-    if (!composeMode || !document) return;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Force release any potential scroll locks on unmount using the global window object
+      if (typeof window !== 'undefined') {
+        window.document.body.style.pointerEvents = 'auto';
+        window.document.body.style.overflow = 'auto';
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open || !composeMode || !document) return;
     const latest = document.versions[0];
     if (!latest) return;
-    if (latest.contentHtml) {
+    if (latest.contentHtml && isMountedRef.current) {
       setEditorHtml(latest.contentHtml);
       // Ensure contentJson is either a valid Record or null
       const jsonValue = latest.contentJson;
@@ -156,12 +180,13 @@ export const DocumentUploadDialog = ({
       );
       setTemplateApplied(true);
     }
-  }, [composeMode, document]);
+  }, [open, composeMode, document]);
 
   useEffect(() => {
-    if (document) {
+    if (!open) return;
+    if (document && isMountedRef.current) {
       setSensitivity(document.sensitivity ?? 'internal');
-    } else {
+    } else if (isMountedRef.current) {
       setSensitivity('internal');
     }
   }, [document, open]);
@@ -170,6 +195,16 @@ export const DocumentUploadDialog = ({
     if (!divisionId) return activeDepartments;
     return activeDepartments.filter((dept) => dept.divisionId === divisionId);
   }, [activeDepartments, divisionId]);
+
+  // Clear department when division changes
+  useEffect(() => {
+    if (divisionId && departmentId) {
+      const dept = activeDepartments.find((d) => d.id === departmentId);
+      if (dept && dept.divisionId !== divisionId) {
+        setDepartmentId(undefined);
+      }
+    }
+  }, [divisionId, departmentId, activeDepartments]);
 
   // Load workspaces
   useEffect(() => {
@@ -180,85 +215,165 @@ export const DocumentUploadDialog = ({
     }
   }, [mode, open]);
 
-  // Auto-save draft to localStorage
+  // Auto-save draft to localStorage (debounced) - only when dialog is open
+  const saveDraftRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
-    if (!open || mode !== 'create') return;
+    // Clear any pending saves when dialog closes
+    if (!open || mode !== 'create') {
+      if (saveDraftRef.current) {
+        clearTimeout(saveDraftRef.current);
+        saveDraftRef.current = null;
+      }
+      return;
+    }
     
-    const draft = {
-      title,
-      description,
-      documentType,
-      status,
-      divisionId,
-      departmentId,
-      referenceNumber,
-      tagsInput,
-      notes,
-      sensitivity,
-      selectedWorkspaceIds,
-      composeMode,
-      editorHtml,
-      selectedTemplateId,
-    };
+    // Clear previous timeout
+    if (saveDraftRef.current) {
+      clearTimeout(saveDraftRef.current);
+    }
     
-    const timeoutId = setTimeout(() => {
+    // Set new timeout to save
+    saveDraftRef.current = setTimeout(() => {
+      // Double-check dialog is still open and component is mounted before saving
+      if (!open || mode !== 'create' || !isMountedRef.current) return;
+      
+      const draft = {
+        title,
+        description,
+        documentType,
+        status,
+        divisionId,
+        departmentId,
+        referenceNumber,
+        tagsInput,
+        notes,
+        sensitivity,
+        selectedWorkspaceIds,
+        composeMode,
+        editorHtml,
+        selectedTemplateId,
+      };
+      
       try {
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
       } catch (err) {
         // Ignore localStorage errors
       }
+      saveDraftRef.current = null;
     }, 1000);
     
-    return () => clearTimeout(timeoutId);
+    return () => {
+      if (saveDraftRef.current) {
+        clearTimeout(saveDraftRef.current);
+        saveDraftRef.current = null;
+      }
+    };
   }, [open, mode, title, description, documentType, status, divisionId, departmentId, referenceNumber, tagsInput, notes, sensitivity, selectedWorkspaceIds, composeMode, editorHtml, selectedTemplateId]);
 
-  // Load draft from localStorage on open
+  // Load draft from localStorage when dialog opens (create mode only)
   useEffect(() => {
-    if (!open || mode !== 'create') return;
+    if (!open || mode !== 'create' || !isMountedRef.current) return;
     
     try {
       const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
-      if (saved) {
+      if (saved && isMountedRef.current) {
         const draft = JSON.parse(saved);
-        setTitle(draft.title || '');
-        setDescription(draft.description || '');
-        setDocumentType(draft.documentType || 'memo');
-        setStatus(draft.status || 'draft');
-        setDivisionId(draft.divisionId);
-        setDepartmentId(draft.departmentId);
-        setReferenceNumber(draft.referenceNumber || '');
-        setTagsInput(draft.tagsInput || '');
-        setNotes(draft.notes || '');
-        setSensitivity(draft.sensitivity || 'internal');
-        setSelectedWorkspaceIds(draft.selectedWorkspaceIds || []);
-        setComposeMode(draft.composeMode ?? true);
-        setEditorHtml(draft.editorHtml || '');
-        setSelectedTemplateId(draft.selectedTemplateId || null);
+        if (isMountedRef.current && (draft.title || draft.editorHtml)) {
+          setTitle(draft.title || '');
+          setDescription(draft.description || '');
+          setDocumentType(draft.documentType || 'memo');
+          setStatus(draft.status || 'draft');
+          setDivisionId(draft.divisionId);
+          setDepartmentId(draft.departmentId);
+          setReferenceNumber(draft.referenceNumber || '');
+          setTagsInput(draft.tagsInput || '');
+          setNotes(draft.notes || '');
+          setSensitivity(draft.sensitivity || 'internal');
+          setSelectedWorkspaceIds(draft.selectedWorkspaceIds || []);
+          setComposeMode(draft.composeMode ?? true);
+          setEditorHtml(draft.editorHtml || '');
+          setSelectedTemplateId(draft.selectedTemplateId || null);
+          setDraftRestored(true);
+          toast.info('Draft restored from previous session', { duration: 3000 });
+        }
       }
     } catch (err) {
       // Ignore parse errors
     }
   }, [open, mode]);
 
+  // Check for duplicate reference numbers
   useEffect(() => {
-    initializeTemplates();
-  }, []);
+    if (!referenceNumber.trim() || mode !== 'create') {
+      setReferenceNumberExists(false);
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setCheckingReferenceNumber(true);
+      try {
+        const result = await queryDocuments({ 
+          page: 1, 
+          pageSize: 100,
+          referenceNumber: referenceNumber.trim(),
+        });
+        const exists = result.documents.some((doc) => 
+          doc.referenceNumber?.toLowerCase() === referenceNumber.trim().toLowerCase()
+        );
+        setReferenceNumberExists(exists);
+        if (exists) {
+          setValidationErrors((prev) => ({
+            ...prev,
+            referenceNumber: 'This reference number already exists',
+          }));
+        } else {
+          setValidationErrors((prev) => {
+            const next = { ...prev };
+            delete next.referenceNumber;
+            return next;
+          });
+        }
+      } catch (error) {
+        // Silently fail - duplicate check is optional
+        logError('Failed to check reference number', error);
+      } finally {
+        setCheckingReferenceNumber(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [referenceNumber, mode]);
+
+  // Templates are now loaded from backend - no initialization needed
 
   useEffect(() => {
     if (!currentUser) return;
     setIsLoadingTemplates(true);
-    try {
-      const available = getTemplatesForUser(currentUser);
-      setTemplates(available);
-      if (!selectedTemplateId) {
-        const defaultTemplate = getDefaultTemplateForUser(currentUser);
-        if (defaultTemplate) {
-          setSelectedTemplateId(defaultTemplate.id);
+    const loadTemplates = async () => {
+      try {
+        const available = await getTemplatesForUser(currentUser);
+        setTemplates(available);
+        if (!selectedTemplateId) {
+          const defaultTemplate = await getDefaultTemplateForUser(currentUser);
+          if (defaultTemplate) {
+            setSelectedTemplateId(defaultTemplate.id);
+          }
         }
+      } catch (error: Record<string, unknown>) {
+        // Handle 404 gracefully - endpoint may not be available yet
+        if (error?.status === 404) {
+          logWarn('Templates endpoint not available, continuing without templates');
+          setTemplates([]);
+        } else {
+          logError('Failed to load templates:', error);
+          setTemplates([]);
+        }
+      } finally {
+        setIsLoadingTemplates(false);
       }
-    } finally {
-      setIsLoadingTemplates(false);
-    }
+    };
+    loadTemplates();
   }, [currentUser, selectedTemplateId]);
 
   useEffect(() => {
@@ -347,68 +462,45 @@ export const DocumentUploadDialog = ({
       .replace(/\{\{date\.today\}\}/g, formattedDate);
   }, [currentUser, divisionId, departmentId, title, referenceNumber, activeDivisions, activeDepartments]);
 
-  const resetState = useCallback(() => {
-    // Use startTransition to batch all state updates
-    startTransition(() => {
-      setTitle('');
-      setDescription('');
-      setDocumentType('memo');
-      setStatus(mode === 'create' ? 'draft' : document?.status ?? 'draft');
-      setDivisionId(currentUser.division);
-      setDepartmentId(currentUser.department);
-      setReferenceNumber('');
-      setTagsInput('');
-      setNotes('');
-      setFile(null);
-      setComposeMode(mode === 'create');
-      setEditorHtml('');
-      setEditorJson(null);
-      setTemplateApplied(false);
-      setTemplatePreviewId(null);
-      setSensitivity(document?.sensitivity ?? 'internal');
-      setSelectedWorkspaceIds([]);
-      setValidationErrors({});
-      setUploadProgress(0);
-      if (currentUser) {
-        const defaultTemplate = getDefaultTemplateForUser(currentUser);
-        setSelectedTemplateId(defaultTemplate ? defaultTemplate.id : null);
-      } else {
-        setSelectedTemplateId(null);
-      }
-      // Clear draft from localStorage
-      try {
-        localStorage.removeItem(DRAFT_STORAGE_KEY);
-      } catch (err) {
-        // Ignore
-      }
-    });
-  }, [mode, document?.status, document?.sensitivity, currentUser]);
 
   const handleClose = useCallback((nextOpen: boolean) => {
-    if (!nextOpen) {
-      // Close dialog immediately without blocking
-      onOpenChange(false);
-      // Reset state after dialog animation completes (use requestIdleCallback if available, else setTimeout)
-      const resetAfterClose = () => {
-        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-          requestIdleCallback(() => {
-            resetState();
-          }, { timeout: 500 });
-        } else {
-          setTimeout(() => {
-            resetState();
-          }, 300);
-        }
-      };
-      resetAfterClose();
-    } else {
-      onOpenChange(nextOpen);
-    }
-  }, [resetState, onOpenChange]);
+    // Simply close the dialog - no state reset needed
+    // Component will unmount when closed, naturally resetting everything
+    onOpenChange(nextOpen);
+  }, [onOpenChange]);
 
   const handleFileSelect = useCallback((selectedFile: File | null) => {
     setFile(selectedFile);
+    setScanMode(false);
     if (selectedFile && validationErrors.file) {
+      setValidationErrors((prev) => {
+        const next = { ...prev };
+        delete next.file;
+        return next;
+      });
+    }
+  }, [validationErrors]);
+
+  const handleScanFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+
+    const MAX_SCAN_SIZE = 30 * 1024 * 1024; // 30MB
+    const SCAN_ALLOWED_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/tiff'];
+
+    if (selectedFile.size > MAX_SCAN_SIZE) {
+      toast.error(`File exceeds maximum size of 30MB`);
+      return;
+    }
+
+    if (!SCAN_ALLOWED_TYPES.includes(selectedFile.type)) {
+      toast.error(`Unsupported file type. Please use PDF or image files.`);
+      return;
+    }
+
+    setFile(selectedFile);
+    setScanMode(true);
+    if (validationErrors.file) {
       setValidationErrors((prev) => {
         const next = { ...prev };
         delete next.file;
@@ -444,7 +536,8 @@ export const DocumentUploadDialog = ({
         let contentJson: Record<string, unknown> | undefined;
 
         if (composeMode) {
-          contentHtml = editorHtml;
+          // Replace template tokens in content before creating document
+          contentHtml = replaceTemplateTokens(editorHtml);
           contentJson = editorJson ?? undefined;
           fileType = 'text/html';
           fileName = `${title.trim().replace(/\s+/g, '-') || 'document'}.html`;
@@ -492,6 +585,20 @@ export const DocumentUploadDialog = ({
         
         setUploadProgress(100);
 
+        // Process OCR if this was a scanned document
+        if (scanMode) {
+          try {
+            await processOCR(created.id, {
+              language: 'eng',
+              extract_metadata: true,
+            });
+            toast.info('OCR processing started for scanned document');
+          } catch (ocrError) {
+            logError('Failed to start OCR processing', ocrError);
+            // Don't fail the upload if OCR fails
+          }
+        }
+
         // Clear draft after successful creation
         try {
           localStorage.removeItem(DRAFT_STORAGE_KEY);
@@ -500,12 +607,10 @@ export const DocumentUploadDialog = ({
         }
         toast.success('Document created successfully');
         handleClose(false);
-        // Use startTransition to batch the onComplete callback
-        startTransition(() => {
-          setTimeout(() => {
-            onComplete(created);
-          }, 100);
-        });
+        // Call onComplete after dialog closes
+        setTimeout(() => {
+          onComplete(created);
+        }, 200);
         return;
       }
 
@@ -548,13 +653,11 @@ export const DocumentUploadDialog = ({
         });
 
         handleClose(false);
-        // Use startTransition to batch the onComplete callback
-        startTransition(() => {
-          setTimeout(() => {
-            onComplete(updated);
-            toast.success('New version added');
-          }, 100);
-        });
+        // Call onComplete after dialog closes
+        setTimeout(() => {
+          onComplete(updated);
+          toast.success('New version added');
+        }, 200);
       }
     } catch (error: unknown) {
       logError('Document upload error:', error);
@@ -586,7 +689,7 @@ export const DocumentUploadDialog = ({
       setIsSubmitting(false);
       setUploadProgress(0);
     }
-  }, [mode, validateForm, tagsInput, composeMode, editorHtml, editorJson, file, title, description, documentType, status, sensitivity, divisionId, departmentId, referenceNumber, currentUser, selectedWorkspaceIds, document, onComplete]);
+  }, [mode, validateForm, tagsInput, composeMode, editorHtml, editorJson, file, title, description, documentType, status, sensitivity, divisionId, departmentId, referenceNumber, currentUser, selectedWorkspaceIds, document, scanMode, onComplete, replaceTemplateTokens]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -679,7 +782,15 @@ export const DocumentUploadDialog = ({
   return (
     <>
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl w-full max-h-[85vh] overflow-hidden">
+      <DialogContent 
+        className="max-w-5xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[85vh] overflow-hidden p-4 sm:p-6"
+        onPointerDownOutside={(e) => {
+          if (isSubmitting) e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (isSubmitting) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <DialogIcon className="h-5 w-5 text-primary" />
@@ -688,18 +799,28 @@ export const DocumentUploadDialog = ({
           <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[65vh] pr-4">
-          <div className="space-y-6 pb-2">
+        <ScrollArea className="max-h-[calc(95vh-180px)] sm:max-h-[65vh] pr-2 sm:pr-4">
+          <div className="space-y-4 sm:space-y-6 pb-2">
           {mode === 'create' && (
             <>
+              {/* Draft Restored Notification */}
+              {draftRestored && (
+                <Alert className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20">
+                  <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <AlertDescription className="text-blue-900 dark:text-blue-100">
+                    Your previous draft has been restored. You can continue editing or start fresh.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Basic Information */}
               <div className="space-y-4">
-                <h3 className="text-sm font-medium text-foreground flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Basic Information
-                </h3>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2 space-y-2">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <FileText className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold">Basic Information</h3>
+                </div>
+                <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+                  <div className="col-span-1 sm:col-span-2 space-y-2">
                     <Label htmlFor="doc-title" className="text-sm font-medium">
                       Title <span className="text-destructive">*</span>
                     </Label>
@@ -754,11 +875,34 @@ export const DocumentUploadDialog = ({
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
+                    <SelectItem value="draft">
+                      <div className="flex flex-col">
+                        <span>Draft</span>
+                        <span className="text-xs text-muted-foreground">Work in progress • Not published</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="published">
+                      <div className="flex flex-col">
+                        <span>Published</span>
+                        <span className="text-xs text-muted-foreground">Finalized and available</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="archived">
+                      <div className="flex flex-col">
+                        <span>Archived</span>
+                        <span className="text-xs text-muted-foreground">No longer active</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
+                {status === 'draft' && (
+                  <div className="flex items-start gap-2 p-2 bg-muted/50 border border-border rounded text-xs">
+                    <FileText className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <p className="text-muted-foreground">
+                      Draft documents are work in progress and not yet published. You can edit and finalize later.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Sensitivity</Label>
@@ -775,113 +919,227 @@ export const DocumentUploadDialog = ({
                       );
                     }
                   }}
+                  aria-label="Document sensitivity"
                 >
-                  <SelectTrigger disabled={mode !== 'create'} aria-label="Document sensitivity">
+                  <SelectTrigger disabled={mode !== 'create'}>
                     <SelectValue placeholder="Select sensitivity" />
                   </SelectTrigger>
                   <SelectContent>
-                    {SENSITIVITY_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {sensitivityLabel(option)}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="public">
+                      <div className="flex flex-col">
+                        <span>Public</span>
+                        <span className="text-xs text-muted-foreground">All authenticated users • May be shareable externally</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="internal">
+                      <div className="flex flex-col">
+                        <span>Internal</span>
+                        <span className="text-xs text-muted-foreground">All authenticated users • Internal use only</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="confidential">
+                      <div className="flex flex-col">
+                        <span>Confidential</span>
+                        <span className="text-xs text-muted-foreground">MSS2+ (MSS2, MSS3, MSS4, MSS5, MSS1, EDCS, MDCS)</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="restricted">
+                      <div className="flex flex-col">
+                        <span>Restricted</span>
+                        <span className="text-xs text-muted-foreground">MSS1, EDCS, MDCS only</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
-                {sensitivity === 'restricted' && (
-                  <Alert variant="destructive" className="mt-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>
-                      Restricted documents are only accessible to MDCS, EDCS, and MSS1 grade levels.
-                    </AlertDescription>
-                  </Alert>
+                {sensitivity === 'public' && (
+                  <div className="flex items-start gap-2 p-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded text-xs">
+                    <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-medium text-blue-900 dark:text-blue-100 mb-1">Public Access</p>
+                      <p className="text-blue-700 dark:text-blue-300 mb-2">
+                        Accessible to all authenticated users. Suitable for documents that may be shared externally or published publicly.
+                      </p>
+                      <div className="mt-1.5 pt-1.5 border-t border-blue-200 dark:border-blue-800">
+                        <p className="text-blue-700 dark:text-blue-300 text-[10px]">
+                          <strong>Use for:</strong> Public announcements, published policies, external communications, shareable content
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {sensitivity === 'internal' && (
+                  <div className="flex items-start gap-2 p-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded text-xs">
+                    <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-medium text-green-900 dark:text-green-100 mb-1">Internal Access</p>
+                      <p className="text-green-700 dark:text-green-300 mb-2">
+                        Accessible to all authenticated users. For internal organizational use only, not intended for external sharing.
+                      </p>
+                      <div className="mt-1.5 pt-1.5 border-t border-green-200 dark:border-green-800">
+                        <p className="text-green-700 dark:text-green-300 text-[10px]">
+                          <strong>Use for:</strong> Internal memos, organizational procedures, staff communications, internal reports
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 )}
                 {sensitivity === 'confidential' && (
-                  <Alert className="mt-2 border-warning/50 bg-warning/10">
-                    <AlertTriangle className="h-4 w-4 text-warning" />
-                    <AlertDescription className="text-warning">
-                      Confidential documents require MSS2 or higher grade level access.
-                    </AlertDescription>
-                  </Alert>
+                  <div className="flex items-start gap-2 p-2 bg-warning/10 border border-warning/20 rounded text-xs">
+                    <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-medium text-warning mb-1">Confidential Access</p>
+                      <p className="text-warning/90 mb-2">
+                        Requires MSS2 or higher grade level access.
+                      </p>
+                      <div className="mt-1.5 pt-1.5 border-t border-warning/20">
+                        <p className="text-warning/80 text-[10px] font-medium mb-1">Accessible to:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {['MSS2', 'MSS3', 'MSS4', 'MSS5', 'MSS1', 'EDCS', 'MDCS'].map((grade) => (
+                            <Badge key={grade} variant="outline" className="text-[10px] h-5 px-1.5 border-warning/30 text-warning">
+                              {grade}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
-                {sensitivity !== 'restricted' && sensitivity !== 'confidential' && (
-                  <p className="text-xs text-muted-foreground">
-                    {sensitivity === 'public' 
-                      ? 'Public documents are accessible to all users.'
-                      : 'Internal documents are accessible to all authenticated users.'}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Division</Label>
-                <Select
-                  value={divisionId ?? 'none'}
-                  onValueChange={(value) => setDivisionId(value === 'none' ? undefined : value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select division" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {activeDivisions.map((division) => (
-                      <SelectItem key={division.id} value={division.id}
-                        className="flex flex-col items-start gap-1"
-                      >
-                        <span className="text-sm font-medium">{division.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {division.code ?? division.name}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Department</Label>
-                <Select
-                  value={departmentId ?? 'none'}
-                  onValueChange={(value) => setDepartmentId(value === 'none' ? undefined : value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {filteredDepartments.map((department) => (
-                      <SelectItem key={department.id} value={department.id}>
-                        {department.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reference-number">Reference Number</Label>
-                <Input
-                  id="reference-number"
-                  value={referenceNumber}
-                  onChange={(e) => {
-                    setReferenceNumber(e.target.value);
-                    if (validationErrors.referenceNumber) {
-                      setValidationErrors((prev) => {
-                        const next = { ...prev };
-                        delete next.referenceNumber;
-                        return next;
-                      });
-                    }
-                  }}
-                  placeholder="e.g. NPA/MOPS/2024/045"
-                  aria-label="Reference number"
-                  aria-invalid={!!validationErrors.referenceNumber}
-                  aria-describedby={validationErrors.referenceNumber ? "reference-error" : undefined}
-                  maxLength={MAX_REFERENCE_LENGTH}
-                />
-                {validationErrors.referenceNumber && (
-                  <p id="reference-error" className="text-xs text-destructive" role="alert">
-                    {validationErrors.referenceNumber}
-                  </p>
+                {sensitivity === 'restricted' && (
+                  <div className="flex items-start gap-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-xs">
+                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-medium text-destructive mb-1">Restricted Access</p>
+                      <p className="text-destructive/90 mb-2">
+                        Highest security level. Only accessible to top management.
+                      </p>
+                      <div className="mt-1.5 pt-1.5 border-t border-destructive/20">
+                        <p className="text-destructive/80 text-[10px] font-medium mb-1">Accessible to:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {['MSS1', 'EDCS', 'MDCS'].map((grade) => (
+                            <Badge key={grade} variant="outline" className="text-[10px] h-5 px-1.5 border-destructive/30 text-destructive">
+                              {grade}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
-              <div className="sm:col-span-2 space-y-2">
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Classification & Organization Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <AlertTriangle className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold">Classification & Organization</h3>
+              </div>
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Division</Label>
+                  <Select
+                    value={divisionId ?? 'none'}
+                    onValueChange={(value) => {
+                      setDivisionId(value === 'none' ? undefined : value);
+                      // Clear department when division changes
+                      if (value === 'none') {
+                        setDepartmentId(undefined);
+                      } else {
+                        // Validate department belongs to new division
+                        if (departmentId) {
+                          const dept = activeDepartments.find((d) => d.id === departmentId);
+                          if (dept && dept.divisionId !== value) {
+                            setDepartmentId(undefined);
+                          }
+                        }
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {activeDivisions.map((division) => (
+                        <SelectItem key={division.id} value={division.id}
+                          className="flex flex-col items-start gap-1"
+                        >
+                          <span className="text-sm font-medium">{division.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {division.code ?? division.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select
+                    value={departmentId ?? 'none'}
+                    onValueChange={(value) => setDepartmentId(value === 'none' ? undefined : value)}
+                    disabled={!divisionId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={divisionId ? "Select department" : "Select division first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {filteredDepartments.map((department) => (
+                        <SelectItem key={department.id} value={department.id}>
+                          {department.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!divisionId && (
+                    <p className="text-xs text-muted-foreground">
+                      Select a division first to choose a department
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reference-number">Reference Number</Label>
+                  <div className="relative">
+                    <Input
+                      id="reference-number"
+                      value={referenceNumber}
+                      onChange={(e) => {
+                        setReferenceNumber(e.target.value);
+                        if (validationErrors.referenceNumber) {
+                          setValidationErrors((prev) => {
+                            const next = { ...prev };
+                            delete next.referenceNumber;
+                            return next;
+                          });
+                        }
+                      }}
+                      placeholder="e.g. NPA/MOPS/2024/045"
+                      aria-label="Reference number"
+                      aria-invalid={!!validationErrors.referenceNumber || referenceNumberExists}
+                      aria-describedby={validationErrors.referenceNumber || referenceNumberExists ? "reference-error" : undefined}
+                      maxLength={MAX_REFERENCE_LENGTH}
+                      className={referenceNumberExists ? "border-destructive" : ""}
+                    />
+                    {checkingReferenceNumber && (
+                      <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                  {validationErrors.referenceNumber && (
+                    <p id="reference-error" className="text-xs text-destructive" role="alert">
+                      {validationErrors.referenceNumber}
+                    </p>
+                  )}
+                  {referenceNumberExists && !validationErrors.referenceNumber && (
+                    <p id="reference-error" className="text-xs text-destructive" role="alert">
+                      This reference number already exists. Please use a unique reference number.
+                    </p>
+                  )}
+                </div>
+              <div className="col-span-1 sm:col-span-2 space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
@@ -896,7 +1154,7 @@ export const DocumentUploadDialog = ({
                   {description.length}/{MAX_DESCRIPTION_LENGTH} characters
                 </p>
               </div>
-              <div className="sm:col-span-2 space-y-2">
+              <div className="col-span-1 sm:col-span-2 space-y-2">
                 <Label htmlFor="tags">Tags</Label>
                 <Input
                   id="tags"
@@ -927,8 +1185,8 @@ export const DocumentUploadDialog = ({
               </div>
               
               {/* Workspace Assignment */}
-              {workspaces.length > 0 && (
-                <div className="sm:col-span-2 space-y-2">
+                {workspaces.length > 0 && (
+                <div className="col-span-1 sm:col-span-2 space-y-2">
                   <Label>Workspaces</Label>
                   <div className="space-y-2 border rounded-lg p-3 max-h-32 overflow-y-auto">
                     {workspaces.map((workspace) => (
@@ -962,9 +1220,9 @@ export const DocumentUploadDialog = ({
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Assign this document to one or more workspaces for better organization.
-                  </p>
+                    <p className="text-xs text-muted-foreground">
+                      Workspaces group documents by project or theme. For workflow-based grouping (cases, complaints, requests), link documents to Cases instead.
+                    </p>
                 </div>
               )}
                 </div>
@@ -993,10 +1251,10 @@ export const DocumentUploadDialog = ({
             {composeMode ? (
               <div className="space-y-2">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-center w-full lg:w-auto">
                     <Label className="text-sm font-medium text-muted-foreground">Template</Label>
                     <Select value={selectedTemplateId ?? ''} onValueChange={(value) => setSelectedTemplateId(value || null)}>
-                      <SelectTrigger className="w-[260px]">
+                      <SelectTrigger className="w-full lg:w-[260px]">
                         <SelectValue placeholder="Choose template" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1081,26 +1339,98 @@ export const DocumentUploadDialog = ({
                     Save as Template
                   </Button>
                 </div>
-                <RichTextEditor
-                  value={editorHtml}
-                  onChange={(html, json) => {
-                    setEditorHtml(html);
-                    setEditorJson(json);
-                    setTemplateApplied(true);
-                  }}
-                  placeholder="Compose your document content..."
-                  tokens={templateTokens}
-                  maxCharacters={20000}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Compose directly in the system. Use tokens to insert placeholders that can be customised later.
-                </p>
+                {composeMode && (
+                  <>
+                    <RichTextEditor
+                      value={editorHtml}
+                      onChange={(html, json) => {
+                        setEditorHtml(html);
+                        setEditorJson(json);
+                        setTemplateApplied(true);
+                        // Calculate character count (strip HTML tags for accurate count)
+                        const textContent = html.replace(/<[^>]*>/g, '');
+                        setEditorCharacterCount(textContent.length);
+                      }}
+                      placeholder="Compose your document content..."
+                      tokens={templateTokens}
+                      maxCharacters={20000}
+                    />
+                    <div className="flex items-center justify-between">
+                      {validationErrors.content && (
+                        <p className="text-xs text-destructive" role="alert">
+                          {validationErrors.content}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground ml-auto">
+                        {editorCharacterCount.toLocaleString()} / 20,000 characters
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2 p-2 bg-muted/50 rounded text-xs">
+                      <HelpCircle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="font-medium text-foreground mb-1">Using Template Tokens</p>
+                        <p className="text-muted-foreground mb-2">
+                          Insert tokens like <code className="px-1 py-0.5 bg-background rounded text-[10px]">{'{{document.title}}'}</code> or <code className="px-1 py-0.5 bg-background rounded text-[10px]">{'{{preparedBy.name}}'}</code> in your content. These will be automatically replaced with actual values when the document is created.
+                        </p>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="link" size="sm" className="h-auto p-0 text-xs text-primary">
+                              View all available tokens →
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80" align="start">
+                            <div className="space-y-2">
+                              <p className="font-medium text-sm mb-2">Available Template Tokens</p>
+                              {templateTokens.map((token) => (
+                                <div key={token.value} className="space-y-1 pb-2 border-b last:border-0">
+                                  <div className="flex items-center gap-2">
+                                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{token.value}</code>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">{token.description}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-2">
-                <Label htmlFor="file">
-                  Attach File <span className="text-destructive">*</span>
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="file">
+                    Attach File <span className="text-destructive">*</span>
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => scanFileInputRef.current?.click()}
+                    disabled={isSubmitting}
+                    className="gap-2"
+                  >
+                    <Scan className="h-4 w-4" />
+                    Scan Document
+                  </Button>
+                  <input
+                    ref={scanFileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.png,.jpg,.jpeg,.tiff"
+                    onChange={handleScanFileSelect}
+                    disabled={isSubmitting}
+                  />
+                </div>
+                {scanMode && file && (
+                  <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                    <Scan className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <AlertDescription className="text-blue-800 dark:text-blue-200">
+                      Scanned document selected. OCR processing will start automatically after upload.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <FileUploadZone
                   file={file}
                   onFileSelect={handleFileSelect}
@@ -1165,7 +1495,7 @@ export const DocumentUploadDialog = ({
     </Dialog>
 
     <Dialog open={!!templatePreviewId} onOpenChange={(open) => !open && setTemplatePreviewId(null)}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Template Preview</DialogTitle>
           <DialogDescription>
@@ -1285,7 +1615,7 @@ export const DocumentUploadDialog = ({
             Cancel
           </Button>
           <Button
-            onClick={() => {
+            onClick={async () => {
               if (!templateName.trim()) {
                 toast.error('Template name is required');
                 return;
@@ -1298,20 +1628,26 @@ export const DocumentUploadDialog = ({
                 toast.error('Compose content before saving as template');
                 return;
               }
-              const created = createTemplateRecord({
-                scope: 'user',
-                scopeId: currentUser.id,
-                title: templateName.trim(),
-                description: `Saved by ${currentUser.name}`,
-                contentHtml: editorHtml,
-                templateType: 'document',
-                createdBy: currentUser.id,
-                updatedBy: currentUser.id,
-                isDefault: false,
-              });
-              const refreshed = getTemplatesForUser(currentUser);
-              setTemplates(refreshed);
-              setSelectedTemplateId(created.id);
+              try {
+                const created = await createTemplateRecord({
+                  scope: 'user',
+                  scopeId: currentUser.id,
+                  title: templateName.trim(),
+                  description: `Saved by ${currentUser.name}`,
+                  contentHtml: editorHtml,
+                  templateType: 'document',
+                  createdBy: currentUser.id,
+                  updatedBy: currentUser.id,
+                  isDefault: false,
+                });
+                const refreshed = await getTemplatesForUser(currentUser);
+                setTemplates(refreshed);
+                setSelectedTemplateId(created.id);
+              } catch (error) {
+                logError('Failed to save template:', error);
+                toast.error('Failed to save template. Please try again.');
+                return;
+              }
               setShowSaveTemplateDialog(false);
               setTemplateName('');
               toast.success('Personal template saved');

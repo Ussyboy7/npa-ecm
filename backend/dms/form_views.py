@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.db.models import Max, Q
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.conf import settings
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -37,16 +38,37 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         user = self.request.user
         
+        # Check if user is a secretary and if executive filter is provided
+        role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
+        is_secretary = role_name.lower() == "secretary"
+        executive_id = self.request.query_params.get("executive")
+        
         # For now, show all form documents to authenticated users
         # Can be refined later with proper permission checks
         # Filter by document permissions
         # Users can see forms they created, have permission to, or are assigned to sign
-        queryset = queryset.filter(
+        base_filter = Q(
             Q(document__author=user) |
             Q(document__permissions__users=user) |
             Q(signature_workflow__signatures__assigned_to_user=user) |
             Q(document__is_deleted=False)  # Only show non-deleted documents
-        ).distinct()
+        )
+        
+        # If secretary is filtering by executive, show forms linked to correspondence
+        # where secretary acted on behalf of that executive
+        if is_secretary and executive_id:
+            from correspondence.models import Minute
+            # Get correspondence where secretary acted for this executive
+            secretary_correspondence_ids = Minute.objects.filter(
+                acted_by_secretary=True,
+                performed_by=user,
+                user_id=executive_id  # The executive the secretary acted for
+            ).values_list('correspondence_id', flat=True).distinct()
+            
+            # Get forms linked to these correspondence (FormDocument has correspondence FK)
+            base_filter |= Q(correspondence_id__in=secretary_correspondence_ids)
+        
+        queryset = queryset.filter(base_filter).distinct()
         
         return queryset
     
@@ -104,66 +126,83 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         
-        # Check if this is a Project Monitoring Report
-        if form_doc.template and form_doc.template.slug == "project-monitoring-report-audit":
-            try:
-                from forms.pdf_generator import generate_project_monitoring_report_pdf
-                
-                # Merge form data with signature data
-                pdf_data = form_doc.form_data.copy()
-                
-                # Get signature data from workflow if exists
-                if form_doc.signature_workflow:
-                    for signature in form_doc.signature_workflow.signatures.filter(
-                        status="signed"
-                    ):
-                        field_prefix = signature.field_name.replace("_signature", "")
-                        pdf_data[f"{field_prefix}_name"] = signature.signer_name
-                        pdf_data[f"{field_prefix}_pn"] = signature.signer_pn
-                        pdf_data[f"{field_prefix}_designation"] = signature.signer_designation
-                        pdf_data[f"{field_prefix}_date"] = signature.signed_date.isoformat() if signature.signed_date else ""
-                
-                pdf_bytes = generate_project_monitoring_report_pdf(pdf_data)
-                
-                # Create new DocumentVersion with PDF
-                latest_version = form_doc.document.versions.aggregate(
-                    Max("version_number")
-                )["version_number__max"] or 0
-                
-                version = DocumentVersion.objects.create(
-                    document=form_doc.document,
-                    version_number=latest_version + 1,
-                    file_name=f"{form_doc.document.title.replace(' ', '_')}_final.pdf",
-                    file_type="application/pdf",
-                    file_size=len(pdf_bytes),
-                    uploaded_by=request.user,
-                    notes="Generated PDF from completed form",
-                )
-                
-                # Save PDF file
-                file_path = f"dms_versions/{form_doc.document.id}/{version.file_name}"
-                saved_path = default_storage.save(file_path, ContentFile(pdf_bytes))
-                
-                # Build relative URL (browser will resolve to current domain)
-                media_url = settings.MEDIA_URL or '/media/'
-                if not media_url.startswith('/'):
-                    media_url = f'/{media_url}'
-                version.file_url = f"{media_url.rstrip('/')}/{saved_path}"
-                version.save()
-                
-                serializer = DocumentVersionSerializer(version, context={"request": request})
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-                
-            except Exception as e:
-                return Response(
-                    {"error": f"Failed to generate PDF: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+        if not form_doc.template:
+            return Response(
+                {"error": "Form template is required for PDF generation"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
-        return Response(
-            {"error": "PDF generation not supported for this form type"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        try:
+            from forms.pdf_generator import (
+                generate_project_monitoring_report_pdf,
+                generate_project_completion_validation_pdf,
+                generate_generic_form_pdf,
+            )
+            
+            # Merge form data with signature data
+            pdf_data = form_doc.form_data.copy()
+            
+            # Get signature data from workflow if exists
+            if form_doc.signature_workflow:
+                for signature in form_doc.signature_workflow.signatures.filter(
+                    status="signed"
+                ):
+                    field_prefix = signature.field_name.replace("_signature", "")
+                    pdf_data[f"{field_prefix}_name"] = signature.signer_name
+                    pdf_data[f"{field_prefix}_pn"] = signature.signer_pn
+                    pdf_data[f"{field_prefix}_designation"] = signature.signer_designation
+                    pdf_data[f"{field_prefix}_date"] = signature.signed_date.isoformat() if signature.signed_date else ""
+            
+            # Generate PDF based on template slug
+            template_slug = form_doc.template.slug
+            
+            if template_slug == "project-monitoring-report-audit":
+                pdf_bytes = generate_project_monitoring_report_pdf(pdf_data)
+            elif template_slug == "project-completion-validation":
+                pdf_bytes = generate_project_completion_validation_pdf(pdf_data)
+            else:
+                # Use generic PDF generator for other forms
+                template_structure = {
+                    "name": form_doc.template.name,
+                    "structure": form_doc.template.structure,
+                }
+                pdf_bytes = generate_generic_form_pdf(pdf_data, template_structure)
+            
+            # Create new DocumentVersion with PDF
+            latest_version = form_doc.document.versions.aggregate(
+                Max("version_number")
+            )["version_number__max"] or 0
+            
+            version = DocumentVersion.objects.create(
+                document=form_doc.document,
+                version_number=latest_version + 1,
+                file_name=f"{form_doc.document.title.replace(' ', '_')}_final.pdf",
+                file_type="application/pdf",
+                file_size=len(pdf_bytes),
+                uploaded_by=request.user,
+                notes="Generated PDF from completed form",
+            )
+            
+            # Save PDF file
+            file_path = f"dms_versions/{form_doc.document.id}/{version.file_name}"
+            saved_path = default_storage.save(file_path, ContentFile(pdf_bytes))
+            
+            # Build relative URL (browser will resolve to current domain)
+            media_url = settings.MEDIA_URL or '/media/'
+            if not media_url.startswith('/'):
+                media_url = f'/{media_url}'
+            version.file_url = f"{media_url.rstrip('/')}/{saved_path}"
+            version.save()
+            
+            serializer = DocumentVersionSerializer(version, context={"request": request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            import traceback
+            return Response(
+                {"error": f"Failed to generate PDF: {str(e)}", "traceback": traceback.format_exc()},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(detail=True, methods=["post"])
     def mark_completed(self, request, pk=None):

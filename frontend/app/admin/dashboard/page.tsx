@@ -17,6 +17,7 @@ import {
   CheckCircle,
   FileText,
   ArrowRight,
+  Briefcase,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -95,7 +96,7 @@ export default function AdminDashboardPage() {
       );
       setRecentActivity(response.results || []);
     } catch (error) {
-      console.error('Failed to load activity:', error);
+      logError('Failed to load activity:', error);
     } finally {
       setLoading(false);
     }
@@ -214,16 +215,22 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <Link href="/admin/users">
+              <Link href="/admin/users-roles?tab=users">
                 <Button variant="outline" className="w-full justify-start">
                   <Users className="h-4 w-4 mr-2" />
                   Manage Users
                 </Button>
               </Link>
-              <Link href="/admin/roles">
+              <Link href="/admin/users-roles?tab=roles">
                 <Button variant="outline" className="w-full justify-start">
                   <Shield className="h-4 w-4 mr-2" />
                   Manage Roles
+                </Button>
+              </Link>
+              <Link href="/admin/users-roles?tab=assistants">
+                <Button variant="outline" className="w-full justify-start">
+                  <Briefcase className="h-4 w-4 mr-2" />
+                  Manage Assistants
                 </Button>
               </Link>
               <Link href="/admin/organization">

@@ -11,7 +11,7 @@ from django.core.files.base import ContentFile
 from datetime import timedelta, datetime
 
 from django.db.models import Prefetch, Q, Max
-from django.db import models
+from django.db import models, IntegrityError
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from common.upload_validators import validate_file_upload
@@ -31,22 +31,43 @@ from organization.models import Office, OfficeMembership
 from dms.models import DocumentVersion
 
 from .models import (
+    Case,
+    CaseComment,
+    CaseCorrespondenceLink,
+    CaseDocumentLink,
+    CaseFormLink,
+    CaseSLA,
+    CaseTemplate,
+    CaseWorkflowRule,
     Correspondence,
     CorrespondenceAttachment,
     CorrespondenceDelegation,
+    CorrespondenceDraft,
     CorrespondenceDistribution,
     CorrespondenceDocumentLink,
+    CorrespondenceTemplate,
     Delegation,
-    Minute,
     Minute,
     ParallelRoutingGroup,
 )
+from .services import CorrespondenceDocumentService, CaseService
 from .serializers import (
+    CaseCommentSerializer,
+    CaseCorrespondenceLinkSerializer,
+    CaseDetailSerializer,
+    CaseDocumentLinkSerializer,
+    CaseFormLinkSerializer,
+    CaseSerializer,
+    CaseSLASerializer,
+    CaseTemplateSerializer,
+    CaseWorkflowRuleSerializer,
     CorrespondenceAttachmentSerializer,
     CorrespondenceDelegationSerializer,
+    CorrespondenceDraftSerializer,
     CorrespondenceDistributionSerializer,
     CorrespondenceDocumentLinkSerializer,
     CorrespondenceSerializer,
+    CorrespondenceTemplateSerializer,
     DelegationSerializer,
     MinuteSerializer,
     ParallelRoutingGroupSerializer,
@@ -87,6 +108,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 "directorate",
                 "division",
                 "department",
+                "user",
                 "added_by",
             ),
         ),
@@ -116,6 +138,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         "department",
         "owning_office",
         "current_office",
+        "parent_correspondence",
     ]
     search_fields = ["reference_number", "subject", "summary", "tags"]
     ordering_fields = ["created_at", "updated_at", "received_date"]
@@ -190,6 +213,29 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         # Extract file attachments from request (before serializer processes data)
         attachments = request.FILES.getlist('attachments', [])
         
+        # Validate attachments BEFORE creating correspondence to avoid partial creation
+        if attachments:
+            from common.upload_validators import validate_file_upload
+            for file in attachments:
+                # Read file bytes for validation
+                if hasattr(file, 'seek'):
+                    file.seek(0)
+                file_bytes = file.read()
+                if hasattr(file, 'seek'):
+                    file.seek(0)  # Reset for later use
+                
+                # Validate file before proceeding
+                try:
+                    validate_file_upload(
+                        file_name=file.name,
+                        mime_type=file.content_type,
+                        file_bytes=file_bytes,
+                        field_name='attachments'
+                    )
+                except ValidationError as e:
+                    # If validation fails, raise error before creating correspondence
+                    raise ValidationError({'attachments': str(e)})
+        
         # Create serializer with request data
         # The serializer will automatically ignore fields not in the model
         serializer = self.get_serializer(data=request.data)
@@ -204,24 +250,93 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             # Use date-based counting instead of full table scan
             # Count only today's records - much faster with index on created_at
             today = timezone.now().date()
-            count = Correspondence.all_objects.filter(
+            base_count = Correspondence.all_objects.filter(
                 created_at__date=today
-            ).count() + 1
-            reference_number = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{count:04d}"
+            ).count()
+            
+            # Generate unique reference number with retry logic to handle race conditions
+            max_retries = 100
+            reference_number = None
+            for attempt in range(max_retries):
+                count = base_count + attempt + 1
+                candidate = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{count:04d}"
+                
+                # Check if this reference number already exists
+                if not Correspondence.all_objects.filter(reference_number=candidate).exists():
+                    reference_number = candidate
+                    break
+            
+            # Fallback if we couldn't generate a unique number (shouldn't happen)
+            if not reference_number:
+                import uuid
+                reference_number = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:4].upper()}"
         else:
             reference_number = validated_data["reference_number"]
+            # Check if provided reference number already exists
+            existing = Correspondence.all_objects.filter(reference_number=reference_number).first()
+            if existing:
+                # If it exists and is not deleted, raise a helpful error
+                if not existing.is_deleted:
+                    raise ValidationError({
+                        'reference_number': f'A correspondence with reference number "{reference_number}" already exists. Please use a different reference number, or edit the existing correspondence to add your file.'
+                    })
+                # If it's deleted, we can reuse it (soft delete allows reuse)
+                reference_number = validated_data["reference_number"]
 
         # Create the correspondence instance
         owning_office = validated_data.get("owning_office") or self._get_user_primary_office(request.user)
         current_office = validated_data.get("current_office") or owning_office
 
-        correspondence = serializer.save(
-            created_by=creator,
-            priority=priority,
-            reference_number=reference_number,
-            owning_office=owning_office,
-            current_office=current_office,
-        )
+        # Try to save with retry logic for race conditions
+        max_save_retries = 5
+        correspondence = None
+        for save_attempt in range(max_save_retries):
+            try:
+                # Recreate serializer for each retry to ensure clean state
+                if save_attempt > 0:
+                    serializer = self.get_serializer(data=request.data)
+                    serializer.is_valid(raise_exception=True)
+                
+                correspondence = serializer.save(
+                    created_by=creator,
+                    priority=priority,
+                    reference_number=reference_number,
+                    owning_office=owning_office,
+                    current_office=current_office,
+                )
+                break  # Success, exit retry loop
+            except IntegrityError as e:
+                # Check if it's a reference_number uniqueness error
+                # Also check for the underlying database error
+                error_str = str(e).lower()
+                is_ref_error = (
+                    'reference_number' in error_str or 
+                    'reference_number_key' in error_str or
+                    'unique constraint' in error_str and 'reference_number' in error_str
+                )
+                if is_ref_error:
+                    if save_attempt < max_save_retries - 1:
+                        # Generate a new reference number and retry
+                        today = timezone.now().date()
+                        base_count = Correspondence.all_objects.filter(
+                            created_at__date=today
+                        ).count()
+                        count = base_count + save_attempt + 2
+                        reference_number = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{count:04d}"
+                        # Continue to next retry
+                        continue
+                    else:
+                        # Last attempt failed, use UUID fallback
+                        import uuid
+                        reference_number = f"NPA/REG/{request.user.username.upper()}/{timezone.now().strftime('%Y%m%d')}/{uuid.uuid4().hex[:4].upper()}"
+                        # Continue to last attempt
+                        continue
+                else:
+                    # Different integrity error, re-raise
+                    raise
+        
+        if not correspondence:
+            raise ValidationError("Failed to create correspondence after multiple retry attempts")
         self._sync_completed_timestamp(correspondence, None)
         
         # Create audit log
@@ -277,11 +392,159 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                     file_url=file_url,
                 )
 
+        # Auto-create DMS Document from correspondence
+        try:
+            CorrespondenceDocumentService.create_document_from_correspondence(correspondence)
+        except Exception as e:
+            # Log error but don't fail correspondence creation
+            logger.error(
+                f"Failed to auto-create DMS document for correspondence {correspondence.id}: {e}",
+                exc_info=True
+            )
+        
+        # Auto-create Case from correspondence (if type matches trigger criteria)
+        try:
+            case = CaseService.create_case_from_correspondence(correspondence, created_by=request.user)
+            if case:
+                logger.info(f"Auto-created case {case.case_number} from correspondence {correspondence.reference_number}")
+        except Exception as e:
+            # Log error but don't fail correspondence creation
+            logger.error(
+                f"Failed to auto-create case for correspondence {correspondence.id}: {e}",
+                exc_info=True
+            )
+
         # Return the created correspondence with attachments
         output_serializer = self.get_serializer(correspondence)
         headers = self.get_success_headers(output_serializer.data)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+    def update(self, request, *args, **kwargs):
+        """Handle correspondence update with attachment support."""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        
+        # Check if correspondence is completed (read-only)
+        if instance.status == Correspondence.Status.COMPLETED:
+            raise ValidationError({"detail": "Completed correspondence is read-only."})
+        
+        # Extract file attachments from request (before serializer processes data)
+        attachments = request.FILES.getlist('attachments', [])
+        
+        # Validate attachments BEFORE updating correspondence
+        if attachments:
+            from common.upload_validators import validate_file_upload
+            for file in attachments:
+                # Read file bytes for validation
+                if hasattr(file, 'seek'):
+                    file.seek(0)
+                file_bytes = file.read()
+                if hasattr(file, 'seek'):
+                    file.seek(0)  # Reset for later use
+                
+                # Validate file before proceeding
+                try:
+                    validate_file_upload(
+                        file_name=file.name,
+                        mime_type=file.content_type,
+                        file_bytes=file_bytes,
+                        field_name='attachments'
+                    )
+                except ValidationError as e:
+                    # If validation fails, raise error before updating correspondence
+                    raise ValidationError({'attachments': str(e)})
+        
+        # Update serializer with request data
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        
+        # Store previous status for comparison
+        previous_status = instance.status
+        
+        # Save the correspondence
+        correspondence = serializer.save()
+        
+        # Sync completed timestamp if needed
+        self._sync_completed_timestamp(correspondence, previous_status)
+        
+        # Handle file uploads (append new attachments, don't replace existing ones)
+        if attachments:
+            # Ensure media directory exists
+            media_root = settings.MEDIA_ROOT
+            attachments_dir = os.path.join(media_root, 'correspondence_attachments', str(correspondence.id))
+            os.makedirs(attachments_dir, exist_ok=True)
+            
+            for file in attachments:
+                # Generate file path
+                file_path = os.path.join('correspondence_attachments', str(correspondence.id), file.name)
+
+                # Validate the upload before persisting
+                if hasattr(file, 'seek'):
+                    file.seek(0)
+                file_bytes = file.read()
+                validate_file_upload(
+                    file_name=file.name,
+                    mime_type=getattr(file, 'content_type', None),
+                    file_bytes=file_bytes,
+                    field_name='attachments',
+                )
+                file_size = len(file_bytes)
+                if hasattr(file, 'seek'):
+                    file.seek(0)
+
+                # Save file to storage
+                saved_path = default_storage.save(file_path, file)
+
+                # Build relative URL for the file (browser will resolve to current domain)
+                media_url = settings.MEDIA_URL or '/media/'
+                if not media_url.startswith('/'):
+                    media_url = f'/{media_url}'
+                file_url = f"{media_url.rstrip('/')}/{saved_path}"
+                
+                # Create attachment record
+                CorrespondenceAttachment.objects.create(
+                    correspondence=correspondence,
+                    file_name=file.name,
+                    file_type=getattr(file, 'content_type', None) or 'application/octet-stream',
+                    file_size=file_size,
+                    file_url=file_url,
+                )
+        
+        # Handle completion package generation if status changed to completed
+        if (
+            correspondence.status == Correspondence.Status.COMPLETED
+            and previous_status != Correspondence.Status.COMPLETED
+        ):
+            try:
+                CompletionPackageService.generate_completion_package(correspondence, request.user)
+            except Exception:
+                logger.exception(
+                    "Failed to generate completion package for correspondence %s",
+                    correspondence.id,
+                )
+            
+            # Update DMS document status to PUBLISHED
+            try:
+                CorrespondenceDocumentService.update_document_status_on_completion(correspondence)
+            except Exception:
+                logger.exception(
+                    "Failed to update DMS document status for correspondence %s",
+                    correspondence.id,
+                )
+        
+        # Create audit log
+        from audit.models import ActivityLog
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Updated correspondence: {correspondence.reference_number} - {correspondence.subject}",
+        )
+        
+        # Return the updated correspondence with attachments
+        output_serializer = self.get_serializer(correspondence)
+        return Response(output_serializer.data)
 
     def perform_update(self, serializer):
         instance = self.get_object()
@@ -299,6 +562,15 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             except Exception:
                 logger.exception(
                     "Failed to generate completion package for correspondence %s",
+                    correspondence.id,
+                )
+            
+            # Update DMS document status to PUBLISHED
+            try:
+                CorrespondenceDocumentService.update_document_status_on_completion(correspondence)
+            except Exception:
+                logger.exception(
+                    "Failed to update DMS document status for correspondence %s",
                     correspondence.id,
                 )
 
@@ -409,6 +681,84 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if current_office:
             self._notify_office_members(current_office, correspondence, request.user, reason)
 
+        serializer = self.get_serializer(correspondence)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="withdraw")
+    def withdraw(self, request, pk=None):
+        """Withdraw a pending correspondence (similar to recall in minutes)."""
+        correspondence = self.get_object()
+        
+        # Store previous status before changing
+        previous_status = correspondence.status
+        
+        # Check if correspondence can be withdrawn
+        if previous_status not in [Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]:
+            raise ValidationError({
+                "detail": "Only pending or in-progress correspondence can be withdrawn."
+            })
+        
+        # Check if user has permission (creator or office member)
+        user = request.user
+        can_withdraw = False
+        
+        if correspondence.created_by == user:
+            can_withdraw = True
+        elif correspondence.owning_office:
+            from organization.models import OfficeMembership
+            is_office_member = OfficeMembership.objects.filter(
+                user=user,
+                office=correspondence.owning_office,
+                is_active=True
+            ).exists()
+            if is_office_member:
+                can_withdraw = True
+        
+        if not can_withdraw and not user.is_superuser:
+            raise PermissionDenied({
+                "detail": "You don't have permission to withdraw this correspondence. Only the creator or office members can withdraw."
+            })
+        
+        # Get withdrawal reason
+        withdraw_reason = request.data.get("reason", "")
+        
+        # Mark as withdrawn
+        correspondence.status = Correspondence.Status.WITHDRAWN
+        correspondence.withdrawn_at = timezone.now()
+        correspondence.withdrawn_by = user
+        if withdraw_reason:
+            correspondence.withdraw_reason = withdraw_reason
+        correspondence.save(update_fields=["status", "withdrawn_at", "withdrawn_by", "withdraw_reason", "updated_at"])
+        
+        # Create audit log
+        from audit.models import ActivityLog
+        AuditService.log_correspondence_activity(
+            user=user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Withdrew correspondence: {correspondence.reference_number} - {correspondence.subject}",
+            metadata={
+                "withdraw_reason": withdraw_reason,
+                "previous_status": previous_status,
+            },
+        )
+        
+        # Notify relevant users
+        if correspondence.current_approver and correspondence.current_approver != user:
+            NotificationService.create_notification(
+                recipient=correspondence.current_approver,
+                title=f"Correspondence Withdrawn - {correspondence.reference_number}",
+                message=f"{user.get_full_name() or user.username} has withdrawn the correspondence: {correspondence.subject}. Reason: {withdraw_reason or 'No reason provided'}",
+                notification_type=Notification.NotificationType.CORRESPONDENCE,
+                priority=Notification.Priority.NORMAL,
+                sender=user,
+                module="correspondence",
+                related_object_type="correspondence",
+                related_object_id=str(correspondence.id),
+                action_url=f"/correspondence/{correspondence.id}",
+            )
+        
         serializer = self.get_serializer(correspondence)
         return Response(serializer.data)
 
@@ -674,7 +1024,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                     to_user=user,
                     is_parallel_branch=True,
                     correspondence__workflow_state='parallel',
-                    correspondence_id=OuterRef('id')
+                    correspondence_id=OuterRef('id'),
+                    is_recalled=False  # Exclude recalled minutes
                 )
                 
                 # Distribution subquery - get user's org units once
@@ -712,6 +1063,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 if user_directorate_ids:
                     distribution_filter |= Q(directorate_id__in=user_directorate_ids)
                     has_distribution_filter = True
+                # Add user distribution filter
+                distribution_filter |= Q(user=user, recipient_type='user')
+                has_distribution_filter = True
                 
                 # Build main query with subqueries
                 office_filter = Q(current_office_id__in=office_ids) | Q(owning_office_id__in=office_ids)
@@ -721,7 +1075,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 if has_distribution_filter:
                     distribution_subquery = CorrespondenceDistribution.objects.filter(
                         distribution_filter,
-                        correspondence_id=OuterRef('id')
+                        correspondence_id=OuterRef('id'),
+                        is_active=True  # Only active distribution entries
                     )
                     office_filter |= Exists(distribution_subquery)
                 
@@ -735,7 +1090,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             is_parallel_branch=True,
             correspondence__workflow_state__in=['parallel', 'waiting_merge'],
             correspondence__status__in=['pending', 'in-progress'],
-            correspondence_id=OuterRef('id')
+            correspondence_id=OuterRef('id'),
+            is_recalled=False  # Exclude recalled minutes
         )
         
         my_inbox_count = Correspondence.objects.filter(
@@ -756,11 +1112,27 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             status=CorrespondenceDelegation.Status.ACTIVE
         ).count()
         
+        # === Secretary Inbox Count (for secretaries only) ===
+        secretary_inbox_count = 0
+        role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
+        is_secretary = role_name.lower() == "secretary"
+        if is_secretary:
+            secretary_correspondence_ids = Minute.objects.filter(
+                acted_by_secretary=True,
+                performed_by=user,
+                is_recalled=False  # Exclude recalled minutes
+            ).values_list('correspondence_id', flat=True).distinct()
+            secretary_inbox_count = Correspondence.objects.filter(
+                is_deleted=False,
+                id__in=secretary_correspondence_ids
+            ).exclude(status=Correspondence.Status.COMPLETED).count()
+        
         result = {
             "officeInbox": office_inbox_count,
             "myInbox": my_inbox_count,
             "outbox": outbox_count,
             "delegated": delegated_count,
+            "secretaryInbox": secretary_inbox_count,
         }
         
         # Cache result for 60 seconds (if cache is available)
@@ -774,6 +1146,21 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="office-inbox")
     def office_inbox(self, request):
+        """
+        Get correspondence for Office Inbox.
+        
+        Office Inbox shows INWARD correspondence (coming INTO office):
+        - Inward-Internal: From another NPA office (minuted to your office)
+        - Inward-External: From external organization (physical copy received, registered)
+        - Distribution (CC): Correspondence where your office/division/department is in distribution list
+          - Distribution items appear in Office Inbox for awareness
+          - Distribution can be "For Information", "For Action", or "For Comment"
+          - Distribution items can be further minuted down (acted upon)
+          - Everything is tracked and recorded
+        
+        Concept: Inward = Coming INTO office → Office Inbox
+        Distribution = CC/information sharing → Also appears in Office Inbox
+        """
         user = request.user
         requested_offices = request.query_params.getlist("office")
         office_ids = [office_id for office_id in requested_offices if office_id and office_id.lower() != "all"]
@@ -803,7 +1190,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             parallel_correspondence_ids = Minute.objects.filter(
                 to_user=user,
                 is_parallel_branch=True,
-                correspondence__workflow_state='parallel'
+                correspondence__workflow_state='parallel',
+                is_recalled=False  # Exclude recalled minutes
             ).values_list('correspondence_id', flat=True).distinct()
             
             # Get user's organizational units from their office memberships
@@ -838,11 +1226,15 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                 distribution_filter |= Q(department_id__in=user_department_ids)
             if user_directorate_ids:
                 distribution_filter |= Q(directorate_id__in=user_directorate_ids)
+            # Add user distribution filter
+            distribution_filter |= Q(user=user, recipient_type='user')
             
             distribution_correspondence_ids = []
             if distribution_filter:
+                # Only get active distribution entries (excludes those from recalled minutes)
                 distribution_correspondence_ids = CorrespondenceDistribution.objects.filter(
-                    distribution_filter
+                    distribution_filter,
+                    is_active=True  # Only active distribution entries
                 ).values_list('correspondence_id', flat=True).distinct()
             
             queryset = self.base_queryset.filter(is_deleted=False).filter(
@@ -891,7 +1283,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             parallel_correspondence_ids = Minute.objects.filter(
                 to_user=user,
                 is_parallel_branch=True,
-                correspondence__workflow_state='parallel'
+                correspondence__workflow_state='parallel',
+                is_recalled=False  # Exclude recalled minutes
             ).values_list('correspondence_id', flat=True).distinct()
             
             queryset = queryset.filter(
@@ -964,6 +1357,116 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         response.data["summary"] = summary
         return response
 
+    @action(detail=False, methods=["get"], url_path="secretary-inbox")
+    def secretary_inbox(self, request):
+        """Get correspondence where secretary has acted on behalf of executives."""
+        user = request.user
+        
+        # Check if user is a secretary
+        role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
+        is_secretary = role_name.lower() == "secretary"
+        
+        if not is_secretary:
+            return Response(
+                {"detail": "This endpoint is only available for secretaries."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Find correspondence where secretary has acted (via minutes with acted_by_secretary=True and performed_by=user)
+        from correspondence.models import Minute
+        secretary_correspondence_ids = Minute.objects.filter(
+            acted_by_secretary=True,
+            performed_by=user
+        ).values_list('correspondence_id', flat=True).distinct()
+        
+        queryset = self.base_queryset.filter(
+            is_deleted=False,
+            id__in=secretary_correspondence_ids
+        )
+        
+        # Filter by status
+        statuses = request.query_params.getlist("status")
+        if statuses:
+            queryset = queryset.filter(status__in=statuses)
+        
+        # Filter by priority
+        priorities = request.query_params.getlist("priority")
+        if priorities:
+            queryset = queryset.filter(priority__in=priorities)
+        
+        # Search
+        search_term = request.query_params.get("search")
+        if search_term:
+            queryset = queryset.filter(
+                Q(reference_number__icontains=search_term)
+                | Q(subject__icontains=search_term)
+                | Q(sender_name__icontains=search_term)
+                | Q(sender_organization__icontains=search_term)
+            )
+        
+        # Date filtering
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        if date_from:
+            queryset = queryset.filter(received_date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(received_date__lte=date_to)
+        
+        # Sorting
+        sort_by = request.query_params.get("sort_by", "priority")
+        sort_order = request.query_params.get("sort_order", "desc")
+        order_prefix = "-" if sort_order == "desc" else ""
+        
+        if sort_by == "priority":
+            from django.db.models import Case, When, IntegerField
+            queryset = queryset.annotate(
+                priority_order=Case(
+                    When(priority=Correspondence.Priority.URGENT, then=0),
+                    When(priority=Correspondence.Priority.HIGH, then=1),
+                    When(priority=Correspondence.Priority.MEDIUM, then=2),
+                    When(priority=Correspondence.Priority.LOW, then=3),
+                    default=99,
+                    output_field=IntegerField(),
+                )
+            ).order_by(f"{order_prefix}priority_order", "-created_at")
+        elif sort_by == "days_pending":
+            queryset = queryset.order_by(f"{'' if sort_order == 'desc' else '-'}received_date")
+        elif sort_by == "updated":
+            queryset = queryset.order_by(f"{order_prefix}updated_at")
+        elif sort_by == "reference":
+            queryset = queryset.order_by(f"{order_prefix}reference_number")
+        else:
+            queryset = queryset.order_by("-created_at")
+        
+        # Calculate summary
+        total_count = queryset.count()
+        urgent_count = queryset.filter(priority=Correspondence.Priority.URGENT).count()
+        
+        today = timezone.now().date()
+        overdue_filter = (
+            Q(priority=Correspondence.Priority.URGENT, received_date__lt=today - timedelta(days=2))
+            | Q(priority=Correspondence.Priority.HIGH, received_date__lt=today - timedelta(days=5))
+            | Q(priority=Correspondence.Priority.MEDIUM, received_date__lt=today - timedelta(days=10))
+            | Q(priority=Correspondence.Priority.LOW, received_date__lt=today - timedelta(days=14))
+        ) & ~Q(status=Correspondence.Status.COMPLETED)
+        
+        overdue_count = queryset.filter(overdue_filter).count()
+        
+        # Pagination
+        paginator = OfficeInboxPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        serializer = self.get_serializer(page, many=True)
+        response = paginator.get_paginated_response(serializer.data)
+        
+        summary = {
+            "total": total_count,
+            "urgent": urgent_count,
+            "overdue": overdue_count,
+            "assigned_to_user": 0,  # Not applicable for secretary inbox
+        }
+        response.data["summary"] = summary
+        return response
+
     @action(detail=False, methods=["get"], url_path="my-inbox")
     def my_inbox(self, request):
         """Get correspondence assigned to the current user."""
@@ -977,7 +1480,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             to_user=user,
             is_parallel_branch=True,
             correspondence__workflow_state__in=['parallel', 'waiting_merge'],
-            correspondence__status__in=['pending', 'in-progress']
+            correspondence__status__in=['pending', 'in-progress'],
+            is_recalled=False  # Exclude recalled minutes
         ).values_list('correspondence_id', flat=True).distinct()
         
         queryset = self.base_queryset.filter(is_deleted=False).filter(
@@ -1077,15 +1581,54 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="outbox")
     def outbox(self, request):
-        """Get correspondence created by current user that's pending dispatch."""
+        """Get correspondence created by current user or from user's office(s) that's pending dispatch."""
         user = request.user
         
-        # Base queryset: items created by user that are pending or in-progress
-        queryset = self.base_queryset.filter(
-            is_deleted=False,
-            created_by=user,
-            status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
-        )
+        # Check if filtering by office (for Office Outbox)
+        office_ids = request.query_params.getlist("office")
+        
+        if office_ids:
+            # Office Outbox: Items from specific office(s) that are pending/in-progress
+            from organization.models import OfficeMembership
+            # Verify user is a member of the requested office(s)
+            user_office_ids = list(OfficeMembership.objects.filter(
+                user=user,
+                is_active=True,
+                office_id__in=office_ids
+            ).values_list('office_id', flat=True))
+            
+            if not user_office_ids and not user.is_superuser:
+                return Response(
+                    {"detail": "You don't have access to the requested office(s)."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Filter by owning_office OR correspondence that has been minuted/treated from these offices
+            correspondence_ids_from_minutes = Minute.objects.filter(
+                from_office_id__in=user_office_ids if user_office_ids else office_ids,
+                action_type__in=['minute', 'forward', 'approve', 'treat']
+            ).values_list('correspondence_id', flat=True).distinct()
+            
+            queryset = self.base_queryset.filter(
+                is_deleted=False,
+                status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
+            ).filter(
+                Q(owning_office_id__in=user_office_ids if user_office_ids else office_ids) |
+                Q(id__in=correspondence_ids_from_minutes)
+            )
+        else:
+            # My Outbox: Items created by current user OR minuted/treated by current user
+            correspondence_ids_from_minutes = Minute.objects.filter(
+                user=user,
+                action_type__in=['minute', 'forward', 'approve', 'treat']
+            ).values_list('correspondence_id', flat=True).distinct()
+            
+            queryset = self.base_queryset.filter(
+                is_deleted=False,
+                status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
+            ).filter(
+                Q(created_by=user) | Q(id__in=correspondence_ids_from_minutes)
+            )
         
         # Filter by status
         statuses = request.query_params.getlist("status")
@@ -1760,10 +2303,11 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
         grade = (user.grade_level or "").upper()
         is_super_admin = getattr(user, "is_superuser", False) or role_name.lower() == "super admin"
+        is_secretary = role_name.lower() == "secretary"
         allowed = {Correspondence.ArchiveLevel.DEPARTMENT}
-        if grade in {"MDCS", "EDCS", "MSS1", "MSS2"} or is_super_admin:
+        if grade in {"MDCS", "EDCS", "MSS1", "MSS2"} or is_super_admin or is_secretary:
             allowed.add(Correspondence.ArchiveLevel.DIVISION)
-        if grade in {"MDCS", "EDCS"} or is_super_admin:
+        if grade in {"MDCS", "EDCS"} or is_super_admin or is_secretary:
             allowed.add(Correspondence.ArchiveLevel.DIRECTORATE)
         return list(allowed)
 
@@ -1903,6 +2447,7 @@ class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
         "directorate",
         "division",
         "department",
+        "user",
         "added_by",
     )
     serializer_class = CorrespondenceDistributionSerializer
@@ -1913,6 +2458,113 @@ class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(added_by=self.request.user)
+
+    @action(detail=False, methods=["post"])
+    def share_with_department(self, request):
+        """
+        Share department distribution with all department members.
+        
+        Creates distribution entries for all active department members when
+        office holder clicks "Share with Department".
+        """
+        from organization.models import OfficeMembership, Department
+        
+        correspondence_id = request.data.get('correspondence_id')
+        department_id = request.data.get('department_id')
+        parent_distribution_id = request.data.get('parent_distribution_id')
+        
+        if not correspondence_id or not department_id:
+            return Response(
+                {"detail": "correspondence_id and department_id are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            correspondence = Correspondence.objects.get(id=correspondence_id)
+            department = Department.objects.get(id=department_id)
+        except (Correspondence.DoesNotExist, Department.DoesNotExist) as e:
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Verify user is office holder (principal) of this department
+        user = request.user
+        is_office_holder = OfficeMembership.objects.filter(
+            user=user,
+            office__department=department,
+            assignment_role='principal',
+            is_active=True,
+            is_primary=True
+        ).exists()
+        
+        if not is_office_holder and not user.is_superuser:
+            return Response(
+                {"detail": "Only office holders (principals) can share with department"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get all active department members
+        department_members = OfficeMembership.objects.filter(
+            office__department=department,
+            is_active=True
+        ).select_related('user').values_list('user', flat=True).distinct()
+        
+        if not department_members:
+            return Response(
+                {"detail": "No active members found in this department"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get parent distribution entry if provided
+        parent_distribution = None
+        if parent_distribution_id:
+            try:
+                parent_distribution = CorrespondenceDistribution.objects.get(id=parent_distribution_id)
+            except CorrespondenceDistribution.DoesNotExist:
+                pass
+        
+        # Create distribution entries for all department members
+        created_count = 0
+        errors = []
+        for member_id in department_members:
+            # Skip if distribution already exists for this user
+            existing = CorrespondenceDistribution.objects.filter(
+                correspondence=correspondence,
+                user_id=member_id,
+                recipient_type='user',
+                purpose='information'
+            ).exists()
+            
+            if not existing:
+                try:
+                    CorrespondenceDistribution.objects.create(
+                        correspondence=correspondence,
+                        recipient_type='user',
+                        user_id=member_id,
+                        purpose='information',
+                        added_by=user,
+                        minute=parent_distribution.minute if parent_distribution else None,
+                    )
+                    created_count += 1
+                except Exception as e:
+                    errors.append(str(e))
+                    logger.error(f"Failed to create distribution for user {member_id}: {e}")
+        
+        if created_count > 0:
+            return Response({
+                "detail": f"Shared with {created_count} department member(s)",
+                "created_count": created_count,
+                "total_members": len(department_members),
+                "errors": errors if errors else None
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                "detail": "No new distribution entries created (all members may already have access)",
+                "created_count": 0,
+                "total_members": len(department_members),
+                "errors": errors if errors else None
+            }, status=status.HTTP_200_OK)
 
 
 class CorrespondenceDocumentLinkViewSet(viewsets.ModelViewSet):
@@ -1928,11 +2580,31 @@ class MinuteViewSet(viewsets.ModelViewSet):
     queryset = Minute.objects.select_related("correspondence", "user", "seal_applied", "seal_applied__sealed_by", "seal_applied__signature_used")
     serializer_class = MinuteSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = OfficeInboxPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["correspondence", "user", "action_type", "direction"]
     ordering_fields = ["timestamp", "step_number"]
     ordering = ["timestamp"]
+
+    def get_queryset(self):
+        """Filter queryset based on query parameters."""
+        queryset = super().get_queryset()
+        
+        # Filter for minutes with executive seals (for Executive Approvals page)
+        has_seal = self.request.query_params.get('has_seal')
+        if has_seal is not None:
+            has_seal_bool = has_seal.lower() in ('true', '1', 'yes')
+            if has_seal_bool:
+                # Only minutes with valid seals
+                queryset = queryset.filter(
+                    seal_applied__isnull=False,
+                    seal_applied__is_valid=True
+                )
+            else:
+                # Only minutes without seals
+                queryset = queryset.filter(seal_applied__isnull=True)
+        
+        return queryset
 
     def _find_office_recipient(self, office, preferred_user=None):
         """
@@ -2073,13 +2745,16 @@ class MinuteViewSet(viewsets.ModelViewSet):
             status=CorrespondenceDelegation.Status.ACTIVE
         ).select_related('principal').first()
         
+        # Get from_office from validated data if provided, otherwise use current_office
+        from_office = serializer.validated_data.get('from_office') or current_office
+        
         if active_delegation:
             # User is acting as delegatee - record action under principal's name
             # but track who actually performed it for audit
             principal = active_delegation.principal
             minute = serializer.save(
                 user=principal,  # Shows as ED's action
-                from_office=current_office,
+                from_office=from_office,
                 performed_by=self.request.user,  # Audit trail - who actually did it
                 acted_by_assistant=True,
                 assistant_type='PA',  # Default to PA for delegated actions
@@ -2095,7 +2770,18 @@ class MinuteViewSet(viewsets.ModelViewSet):
             )
         else:
             # Normal action - user acting as themselves
-            minute = serializer.save(user=self.request.user, from_office=current_office)
+            minute = serializer.save(user=self.request.user, from_office=from_office)
+        
+        # Auto-grant document access to minute recipients
+        from correspondence.services import CorrespondenceDocumentService
+        try:
+            CorrespondenceDocumentService.grant_document_access_for_minute(minute)
+        except Exception as e:
+            # Log error but don't fail minute creation
+            logger.error(
+                f"Failed to auto-grant document access for minute {minute.id}: {str(e)}",
+                exc_info=True
+            )
         
         correspondence = minute.correspondence
         
@@ -2235,6 +2921,55 @@ class MinuteViewSet(viewsets.ModelViewSet):
                         f"Parallel branch completing - routing up to branch originator {branch_originator_to_route_to} "
                         f"at office {originator_office_membership.office.name} for review"
                     )
+        # For REJECT action, route back to sender's office (owning_office or from previous minute)
+        elif minute.action_type == Minute.ActionType.REJECT:
+            # Route back to the office that sent this correspondence
+            # Priority: owning_office > from_office of previous minute > created_by's office
+            reject_target_office = None
+            reject_target_user = None
+            
+            # 1. Try owning_office (office that owns/created the correspondence)
+            if correspondence.owning_office:
+                reject_target_office = correspondence.owning_office
+                # Find office head
+                reject_target_user, _ = self._find_office_recipient(reject_target_office, None)
+                logger.info(f"REJECT: Routing back to owning office {reject_target_office.name}")
+            
+            # 2. If no owning_office, try to find the office that sent it (from previous minute)
+            if not reject_target_office:
+                previous_minute = MinuteModel.objects.filter(
+                    correspondence=correspondence,
+                    timestamp__lt=minute.timestamp
+                ).exclude(
+                    action_type=Minute.ActionType.REJECT
+                ).order_by('-timestamp', '-step_number').first()
+                
+                if previous_minute and previous_minute.from_office:
+                    reject_target_office = previous_minute.from_office
+                    reject_target_user, _ = self._find_office_recipient(reject_target_office, previous_minute.user)
+                    logger.info(f"REJECT: Routing back to previous sender's office {reject_target_office.name}")
+            
+            # 3. If still no office, try created_by's office
+            if not reject_target_office and correspondence.created_by:
+                from organization.models import OfficeMembership
+                creator_office_membership = OfficeMembership.objects.filter(
+                    user=correspondence.created_by,
+                    is_active=True,
+                    is_primary=True
+                ).select_related('office').first()
+                
+                if creator_office_membership:
+                    reject_target_office = creator_office_membership.office
+                    reject_target_user = correspondence.created_by
+                    logger.info(f"REJECT: Routing back to creator's office {reject_target_office.name}")
+            
+            # Set routing if we found a target office
+            if reject_target_office:
+                recipient_user = reject_target_user
+                minute.to_office = reject_target_office
+                minute.save(update_fields=['to_office'])
+                logger.info(f"REJECT: Will route to {reject_target_office.name}")
+        
         # For FORWARD, MINUTE, and APPROVE actions, handle office routing (only if not completing parallel branch)
         # APPROVE actions can also route to another office (e.g., MD approves and forwards to ED)
         elif minute.action_type in (Minute.ActionType.FORWARD, Minute.ActionType.MINUTE, Minute.ActionType.APPROVE):
@@ -2271,7 +3006,8 @@ class MinuteViewSet(viewsets.ModelViewSet):
         
         # Always update current_office if to_office is specified and different (unless branch completing)
         # Also update if we derived an office from the user
-        if not is_completing_parallel_branch:
+        # For REJECT, always route back (even if it's completing a branch)
+        if not is_completing_parallel_branch or minute.action_type == Minute.ActionType.REJECT:
             if minute.to_office and minute.to_office_id != (current_office.id if current_office else None):
                 correspondence.current_office = minute.to_office
                 office_updated = True
@@ -2290,8 +3026,8 @@ class MinuteViewSet(viewsets.ModelViewSet):
                     office_updated = True
                     logger.info(f"Setting current_office to {user_office_membership.office.name} from recipient user {recipient_user}")
         
-        # Set current_approver if we found a recipient user (unless branch completing)
-        if not is_completing_parallel_branch and recipient_user and recipient_user.id != self.request.user.id:
+        # Set current_approver if we found a recipient user (unless branch completing, but allow for REJECT)
+        if (not is_completing_parallel_branch or minute.action_type == Minute.ActionType.REJECT) and recipient_user and recipient_user.id != self.request.user.id:
             if correspondence.current_approver_id != recipient_user.id:
                 correspondence.current_approver = recipient_user
                 approver_updated = True
@@ -2341,9 +3077,9 @@ class MinuteViewSet(viewsets.ModelViewSet):
             },
         )
         
-        # Automatically apply digital seal for executive actions (approvals and minutes)
-        # Executives' minutes are authoritative and should be sealed
-        if minute.action_type in [Minute.ActionType.APPROVE, Minute.ActionType.MINUTE]:
+        # Automatically apply digital seal for executive approvals only
+        # Only APPROVE actions require seals, not regular minutes
+        if minute.action_type == Minute.ActionType.APPROVE:
             # Check if user is an executive (MD, ED) with an active signature
             user_grade = self.request.user.grade_level
             user_role_obj = getattr(self.request.user, 'system_role', None)
@@ -2369,6 +3105,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
                     seal, seal_data = SealGenerationService.generate_seal(
                         user=self.request.user,
                         correspondence=correspondence,
+                        request=self.request,  # Pass request to detect correct frontend URL
                     )
                     
                     # Store seal reference in minute
@@ -2381,18 +3118,18 @@ class MinuteViewSet(viewsets.ModelViewSet):
                         action=action_type,
                         correspondence=correspondence,
                         request=self.request,
-                        description=f"Applied digital seal {seal.serial_number} on approval",
+                        description=f"Applied digital seal {seal.serial_number} on executive approval",
                         metadata={
                             "seal_id": str(seal.id),
                             "serial_number": seal.serial_number,
                         },
                     )
                     
-                    print(f"[SEAL] Applied digital seal {seal.serial_number} for correspondence {correspondence.reference_number}")
+                    print(f"[SEAL] Applied digital seal {seal.serial_number} for executive approval on correspondence {correspondence.reference_number}")
                     
                 except ExecutiveSignature.DoesNotExist:
                     # User doesn't have an active signature - log but don't fail
-                    print(f"[SEAL] Executive {self.request.user.username} approved without digital signature")
+                    print(f"[SEAL] Executive {self.request.user.username} attempted approval without digital signature")
                 except Exception as e:
                     # Don't fail the approval if seal generation fails
                     print(f"[SEAL ERROR] Failed to apply seal: {e}")
@@ -2545,8 +3282,27 @@ class MinuteViewSet(viewsets.ModelViewSet):
         
         # Check if minute can be recalled
         if not minute.can_be_recalled():
+            # Check why it can't be recalled to provide a more specific error message
+            if minute.is_recalled:
+                raise ValidationError({
+                    "detail": "This minute has already been recalled."
+                })
+            
+            # Check if subsequent minutes exist
+            subsequent_minutes = Minute.objects.filter(
+                correspondence=minute.correspondence,
+                timestamp__gt=minute.timestamp,
+                is_recalled=False
+            ).exists()
+            
+            if subsequent_minutes:
+                raise ValidationError({
+                    "detail": "This minute cannot be recalled because subsequent actions have been taken on this correspondence."
+                })
+            
+            # Fallback error (shouldn't reach here, but just in case)
             raise ValidationError({
-                "detail": "This minute cannot be recalled. It has either been opened/acted upon or the 30-minute window has expired."
+                "detail": "This minute cannot be recalled."
             })
         
         # Check if user is the original sender
@@ -2558,16 +3314,25 @@ class MinuteViewSet(viewsets.ModelViewSet):
         # Mark as recalled
         recall_reason = request.data.get("recall_reason", "")
         minute.is_recalled = True
-        minute.recalled_at = timezone.now()
+        from django.utils import timezone as tz
+        minute.recalled_at = tz.now()
         if recall_reason:
             minute.recall_reason = recall_reason
         minute.save(update_fields=["is_recalled", "recalled_at", "recall_reason"])
+        
+        # Mark all distribution entries linked to this minute as inactive
+        # This ensures distribution recipients can't see the correspondence anymore
+        CorrespondenceDistribution.objects.filter(
+            minute=minute,
+            is_active=True
+        ).update(is_active=False)
         
         correspondence = minute.correspondence
         
         # If this was a routing minute (forward/minute/approve/treat) that routed the correspondence,
         # revert the routing back appropriately
         routing_actions = (Minute.ActionType.FORWARD, Minute.ActionType.MINUTE, Minute.ActionType.APPROVE, Minute.ActionType.TREAT)
+        should_revert = False  # Initialize for case update logic
         if minute.action_type in routing_actions and minute.to_office:
             # Check if there are any minutes created AFTER this one
             # If yes, we can't safely revert routing (workflow has progressed)
@@ -2579,7 +3344,6 @@ class MinuteViewSet(viewsets.ModelViewSet):
             
             # Only revert if this is the last routing action (no subsequent minutes)
             # OR if the correspondence is currently at the minute's to_office
-            should_revert = False
             if not subsequent_minutes:
                 # No subsequent minutes - safe to revert
                 should_revert = True
@@ -2646,6 +3410,163 @@ class MinuteViewSet(viewsets.ModelViewSet):
                     action_url=f"/correspondence/{correspondence.id}",
                     action_required=False,
                 )
+        
+        # Notify distribution (CC) recipients about the recall
+        # Distribution recipients should be aware that a minute they were copied on has been recalled
+        from organization.models import OfficeMembership
+        distribution_recipients = set()  # Use set to avoid duplicate notifications
+        
+        # Get all distribution items for this correspondence
+        distribution_items = CorrespondenceDistribution.objects.filter(
+            correspondence=correspondence
+        ).select_related('added_by')
+        
+        for dist_item in distribution_items:
+            # Find office heads for each distribution recipient
+            office_heads = []
+            
+            if dist_item.division_id:
+                # Get offices in this division
+                from organization.models import Office
+                division_offices = Office.objects.filter(
+                    division_id=dist_item.division_id,
+                    is_active=True
+                )
+                for office in division_offices:
+                    office_head = OfficeMembership.objects.filter(
+                        office=office,
+                        is_active=True,
+                        assignment_role__in=['principal', 'acting']
+                    ).select_related('user').first()
+                    if office_head:
+                        office_heads.append(office_head.user)
+            
+            elif dist_item.department_id:
+                # Get offices in this department
+                from organization.models import Office
+                dept_offices = Office.objects.filter(
+                    department_id=dist_item.department_id,
+                    is_active=True
+                )
+                for office in dept_offices:
+                    office_head = OfficeMembership.objects.filter(
+                        office=office,
+                        is_active=True,
+                        assignment_role__in=['principal', 'acting']
+                    ).select_related('user').first()
+                    if office_head:
+                        office_heads.append(office_head.user)
+            
+            elif dist_item.directorate_id:
+                # Get offices in this directorate
+                from organization.models import Office
+                dir_offices = Office.objects.filter(
+                    directorate_id=dist_item.directorate_id,
+                    is_active=True
+                )
+                for office in dir_offices:
+                    office_head = OfficeMembership.objects.filter(
+                        office=office,
+                        is_active=True,
+                        assignment_role__in=['principal', 'acting']
+                    ).select_related('user').first()
+                    if office_head:
+                        office_heads.append(office_head.user)
+            
+            # Add office heads to distribution recipients set
+            for user in office_heads:
+                if user.id != request.user.id:  # Don't notify the person who recalled
+                    distribution_recipients.add(user)
+        
+        # Send notifications to all distribution recipients
+        for recipient in distribution_recipients:
+            NotificationService.create_notification(
+                recipient=recipient,
+                title=f"Minute Recalled - {correspondence.reference_number}",
+                message=f"{request.user.get_full_name() or request.user.username} has recalled a minute on correspondence: {correspondence.subject} that you were copied on.",
+                notification_type=Notification.NotificationType.CORRESPONDENCE,
+                priority=Notification.Priority.NORMAL,
+                sender=request.user,
+                module="correspondence",
+                related_object_type="correspondence",
+                related_object_id=str(correspondence.id),
+                action_url=f"/correspondence/{correspondence.id}",
+                action_required=False,
+            )
+        
+        # Update case if correspondence is linked to a case
+        if correspondence.case:
+            from correspondence.models import Case
+            from correspondence.services import CaseService
+            from django.utils import timezone
+            
+            case = correspondence.case
+            
+            # Check if there are any other active (non-recalled) minutes for this correspondence
+            active_minutes_count = Minute.objects.filter(
+                correspondence=correspondence,
+                is_recalled=False
+            ).count()
+            
+            # Update case's updated_at timestamp to reflect the change
+            case.updated_at = timezone.now()
+            case.save(update_fields=["updated_at"])
+            
+            # Log case activity
+            AuditService.log_activity(
+                user=request.user,
+                action="minute_recalled_on_case",
+                object_type="case",
+                object_id=str(case.id),
+                description=f"Minute recalled on correspondence {correspondence.reference_number} linked to case {case.case_number}",
+                module="correspondence",
+                metadata={
+                    "minute_id": str(minute.id),
+                    "correspondence_id": str(correspondence.id),
+                    "recall_reason": recall_reason,
+                    "active_minutes_remaining": active_minutes_count,
+                },
+            )
+            
+            # If routing was reverted and this was a significant action,
+            # consider updating case status back to previous state
+            if should_revert and minute.action_type in (Minute.ActionType.APPROVE, Minute.ActionType.TREAT):
+                # If this was an approval or treatment that was recalled,
+                # and routing was reverted, the case might need status update
+                # Check if case status should be reverted
+                if case.status == Case.Status.IN_PROGRESS and active_minutes_count == 0:
+                    # No other active minutes, might want to keep status as is
+                    # or revert based on business logic
+                    pass
+            
+            # Notify case assignee about the minute recall
+            if case.assigned_to and case.assigned_to_id != request.user.id:
+                NotificationService.create_notification(
+                    recipient=case.assigned_to,
+                    title=f"Minute Recalled on Case {case.case_number}",
+                    message=f"A minute on correspondence {correspondence.reference_number} linked to case {case.case_number} has been recalled by {request.user.get_full_name() or request.user.username}.",
+                    notification_type=Notification.NotificationType.SYSTEM,
+                    priority=Notification.Priority.NORMAL,
+                    sender=request.user,
+                    module="case_management",
+                    related_object_type="case",
+                    related_object_id=str(case.id),
+                    action_url=f"/cases/{case.id}",
+                    action_required=False,
+                )
+            
+            # Evaluate workflow rules for the case
+            CaseService.evaluate_workflow_rules(
+                case,
+                "minute_recalled",
+                {
+                    "minute_id": str(minute.id),
+                    "minute_action_type": minute.action_type,
+                    "recall_reason": recall_reason,
+                    "routing_reverted": should_revert,
+                    "active_minutes_remaining": active_minutes_count,
+                }
+            )
         
         serializer = self.get_serializer(minute)
         return Response(serializer.data)
@@ -2976,6 +3897,30 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
         # User can see delegations they created (as principal) or received (as assistant)
         return qs.filter(Q(principal=user) | Q(assistant=user))
 
+
+class CorrespondenceDraftViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint for correspondence drafts.
+    Allows users to save and resume drafts for minutes and treatments.
+    """
+    queryset = CorrespondenceDraft.objects.select_related("correspondence", "user")
+    serializer_class = CorrespondenceDraftSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ["correspondence", "draft_type", "user"]
+    search_fields = ["content", "subject"]
+
+    def get_queryset(self):
+        """Filter drafts to only show current user's drafts."""
+        user = self.request.user
+        qs = super().get_queryset()
+        return qs.filter(user=user)
+
+    def perform_create(self, serializer):
+        """Set the user to the current user."""
+        serializer.save(user=self.request.user)
+
     def perform_create(self, serializer):
         """Create delegation and send notification to assistant."""
         principal = self.request.user
@@ -3146,3 +4091,817 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(delegation)
         return Response(serializer.data)
+
+
+class CaseViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing cases."""
+
+    queryset = Case.objects.select_related(
+        "created_by", "assigned_to", "owning_office", "current_office", "completion_package"
+    ).prefetch_related(
+        "correspondence_links__correspondence",
+        "document_links__document",
+        "form_links__form_document__document",
+    )
+    serializer_class = CaseSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = [
+        "status",
+        "case_type",
+        "priority",
+        "created_by",
+        "assigned_to",
+        "owning_office",
+        "current_office",
+    ]
+    
+    def get_queryset(self):
+        """Override to add executive filtering for secretaries and scope-based filtering."""
+        queryset = super().get_queryset()
+        
+        user = self.request.user
+        role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
+        is_secretary = role_name.lower() == "secretary"
+        is_superuser = getattr(user, "is_superuser", False) or role_name.lower() == "super admin"
+        
+        # Get scope parameter
+        scope = self.request.query_params.get("scope", "personal")
+        
+        # Scope-based filtering (hierarchical access)
+        if scope == "organization" or (is_superuser and scope == "all"):
+            # MD or Super Admin: Show all cases (no filtering)
+            pass
+        elif scope == "directorate":
+            # ED: Filter by directorate
+            if user.directorate_id:
+                # Cases in divisions that belong to this directorate
+                from organization.models import Division
+                division_ids = Division.objects.filter(
+                    directorate_id=user.directorate_id
+                ).values_list('id', flat=True)
+                # Filter cases by division OR cases linked to correspondence in this directorate
+                from correspondence.models import Correspondence, CaseCorrespondenceLink
+                directorate_correspondence_ids = Correspondence.objects.filter(
+                    directorate_id=user.directorate_id
+                ).values_list('id', flat=True)
+                case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
+                    correspondence_id__in=directorate_correspondence_ids
+                ).values_list('case_id', flat=True).distinct()
+                queryset = queryset.filter(
+                    Q(division_id__in=division_ids) | Q(id__in=case_ids_from_correspondence)
+                )
+        elif scope == "division":
+            # GM: Filter by division
+            if user.division_id:
+                # Cases in this division OR cases linked to correspondence in this division
+                from correspondence.models import Correspondence, CaseCorrespondenceLink
+                division_correspondence_ids = Correspondence.objects.filter(
+                    division_id=user.division_id
+                ).values_list('id', flat=True)
+                case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
+                    correspondence_id__in=division_correspondence_ids
+                ).values_list('case_id', flat=True).distinct()
+                queryset = queryset.filter(
+                    Q(division_id=user.division_id) | Q(id__in=case_ids_from_correspondence)
+                )
+        elif scope == "department":
+            # AGM: Filter by department
+            if user.department_id:
+                # Cases in this department OR cases linked to correspondence in this department
+                from correspondence.models import Correspondence, CaseCorrespondenceLink
+                department_correspondence_ids = Correspondence.objects.filter(
+                    department_id=user.department_id
+                ).values_list('id', flat=True)
+                case_ids_from_correspondence = CaseCorrespondenceLink.objects.filter(
+                    correspondence_id__in=department_correspondence_ids
+                ).values_list('case_id', flat=True).distinct()
+                queryset = queryset.filter(
+                    Q(department_id=user.department_id) | Q(id__in=case_ids_from_correspondence)
+                )
+        elif scope == "office":
+            # Office cases: Filter by user's office memberships
+            from organization.models import OfficeMembership
+            user_office_ids = OfficeMembership.objects.filter(
+                user=user,
+                is_active=True
+            ).values_list('office_id', flat=True)
+            if user_office_ids:
+                queryset = queryset.filter(
+                    Q(owning_office_id__in=user_office_ids) | 
+                    Q(current_office_id__in=user_office_ids)
+                )
+        elif scope == "my":
+            # My cases: Assigned to user
+            queryset = queryset.filter(assigned_to=user)
+        # "personal" scope (default): My cases + Office cases (handled by frontend)
+        
+        # Executive filtering for secretaries
+        executive_id = self.request.query_params.get("executive")
+        if is_secretary and executive_id:
+            # Filter cases where secretary has acted on behalf of this executive
+            # via correspondence linked to cases
+            from correspondence.models import Minute
+            secretary_correspondence_ids = Minute.objects.filter(
+                acted_by_secretary=True,
+                performed_by=user,
+                user_id=executive_id  # The executive the secretary acted for
+            ).values_list('correspondence_id', flat=True).distinct()
+            
+            # Get cases linked to these correspondence
+            case_ids = CaseCorrespondenceLink.objects.filter(
+                correspondence_id__in=secretary_correspondence_ids
+            ).values_list('case_id', flat=True).distinct()
+            
+            queryset = queryset.filter(id__in=case_ids)
+        
+        return queryset
+    search_fields = ["case_number", "title", "description"]
+    ordering_fields = ["opened_at", "closed_at", "priority", "status"]
+    ordering = ["-opened_at"]
+
+    def get_serializer_class(self):
+        if self.action in ["retrieve", "update", "partial_update"]:
+            return CaseDetailSerializer
+        return super().get_serializer_class()
+
+    def perform_create(self, serializer):
+        # Auto-generate case number if not provided
+        if not serializer.validated_data.get("case_number"):
+            today = timezone.now().date()
+            count = Case.all_objects.filter(opened_at__date=today).count() + 1
+            serializer.validated_data["case_number"] = f"CASE/{today.strftime('%Y%m%d')}/{count:04d}"
+
+        serializer.save(created_by=self.request.user)
+        case = serializer.instance
+
+        from audit.models import ActivityLog
+        AuditService.log_activity(
+            user=self.request.user,
+            action=ActivityLog.ActionType.CASE_CREATED,
+            object_type="Case",
+            object_id=str(case.id),
+            object_repr=str(case),
+            description=f"Created case: {case.case_number} - {case.title}",
+            module="Case Management",
+            severity="info",
+        )
+        
+        # Send notifications
+        # Notify assigned user if different from creator
+        if case.assigned_to and case.assigned_to != self.request.user:
+            NotificationService.create_notification(
+                recipient=case.assigned_to,
+                title=f"New Case Assigned: {case.case_number}",
+                message=f"Case '{case.title}' has been assigned to you.",
+                notification_type=Notification.NotificationType.SYSTEM,
+                priority=Notification.Priority.HIGH if case.priority == "urgent" else Notification.Priority.NORMAL,
+                sender=self.request.user,
+                module="case_management",
+                related_object_type="case",
+                related_object_id=str(case.id),
+                action_url=f"/cases/{case.id}",
+                action_required=True,
+            )
+
+    def perform_update(self, serializer):
+        old_status = serializer.instance.status
+        old_assigned_to = serializer.instance.assigned_to
+        serializer.save()
+        case = serializer.instance
+        
+        # Handle status changes
+        if old_status != case.status:
+            from audit.models import ActivityLog
+            AuditService.log_activity(
+                user=self.request.user,
+                action=ActivityLog.ActionType.CASE_UPDATED,
+                object_type="Case",
+                object_id=str(case.id),
+                object_repr=str(case),
+                description=f"Case '{case.title}' ({case.case_number}) status changed from {old_status} to {case.status}.",
+                module="Case Management",
+                severity="info",
+            )
+            
+            # Notify via CaseService.update_case_status (which handles notifications)
+            # But we need to call it here since perform_update doesn't call the action
+            from correspondence.services import CaseService
+            CaseService.update_case_status(case, case.status, updated_by=self.request.user)
+        
+        # Handle assignment changes
+        if old_assigned_to != case.assigned_to:
+            # Notify new assignee
+            if case.assigned_to:
+                NotificationService.create_notification(
+                    recipient=case.assigned_to,
+                    title=f"Case Assigned: {case.case_number}",
+                    message=f"Case '{case.title}' has been assigned to you.",
+                    notification_type=Notification.NotificationType.SYSTEM,
+                    priority=Notification.Priority.HIGH if case.priority == "urgent" else Notification.Priority.NORMAL,
+                    sender=self.request.user,
+                    module="case_management",
+                    related_object_type="case",
+                    related_object_id=str(case.id),
+                    action_url=f"/cases/{case.id}",
+                    action_required=True,
+                )
+            
+            # Notify previous assignee if unassigned
+            if old_assigned_to and old_assigned_to != case.assigned_to:
+                NotificationService.create_notification(
+                    recipient=old_assigned_to,
+                    title=f"Case Unassigned: {case.case_number}",
+                    message=f"Case '{case.title}' has been unassigned from you.",
+                    notification_type=Notification.NotificationType.SYSTEM,
+                    priority=Notification.Priority.NORMAL,
+                    sender=self.request.user,
+                    module="case_management",
+                    related_object_type="case",
+                    related_object_id=str(case.id),
+                    action_url=f"/cases/{case.id}",
+                    action_required=False,
+                )
+
+    @action(detail=True, methods=["post"], url_path="link_correspondence")
+    def link_correspondence(self, request, pk=None):
+        case = self.get_object()
+        correspondence_id = request.data.get("correspondence_id")
+        is_primary = request.data.get("is_primary", False)
+        notes = request.data.get("notes", "")
+        if not correspondence_id:
+            raise ValidationError({"detail": "Correspondence ID is required."})
+        try:
+            correspondence = Correspondence.objects.get(id=correspondence_id)
+        except Correspondence.DoesNotExist:
+            raise ValidationError({"detail": "Correspondence not found."})
+
+        link = CaseService.link_correspondence_to_case(case, correspondence, is_primary, notes)
+        return Response(CaseCorrespondenceLinkSerializer(link).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="link_document")
+    def link_document(self, request, pk=None):
+        case = self.get_object()
+        document_id = request.data.get("document_id")
+        notes = request.data.get("notes", "")
+        if not document_id:
+            raise ValidationError({"detail": "Document ID is required."})
+        try:
+            from dms.models import Document
+            document = Document.objects.get(id=document_id)
+        except Document.DoesNotExist:
+            raise ValidationError({"detail": "Document not found."})
+
+        link = CaseService.link_document_to_case(case, document, notes)
+        from .serializers import CaseDocumentLinkSerializer
+        return Response(CaseDocumentLinkSerializer(link).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="link_form")
+    def link_form(self, request, pk=None):
+        case = self.get_object()
+        form_document_id = request.data.get("form_document_id")
+        notes = request.data.get("notes", "")
+        if not form_document_id:
+            raise ValidationError({"detail": "Form Document ID is required."})
+        try:
+            from dms.models import FormDocument
+            form_document = FormDocument.objects.get(id=form_document_id)
+        except FormDocument.DoesNotExist:
+            raise ValidationError({"detail": "Form Document not found."})
+
+        link = CaseService.link_form_to_case(case, form_document, notes)
+        return Response(CaseFormLinkSerializer(link).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"], url_path="secretary-executives")
+    def secretary_executives(self, request):
+        """Get list of executives that the secretary has acted on behalf of."""
+        user = request.user
+        role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
+        is_secretary = role_name.lower() == "secretary"
+        
+        if not is_secretary:
+            return Response(
+                {"detail": "This endpoint is only available for secretaries."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Get distinct executives (users) that secretary has acted for
+        from correspondence.models import Minute
+        executive_ids = Minute.objects.filter(
+            acted_by_secretary=True,
+            performed_by=user
+        ).values_list('user_id', flat=True).distinct()
+        
+        # Get user details
+        executives = User.objects.filter(id__in=executive_ids).values(
+            'id', 'first_name', 'last_name', 'email', 'username'
+        )
+        
+        executives_list = [
+            {
+                'id': str(exec['id']),
+                'name': f"{exec['first_name']} {exec['last_name']}".strip() or exec['username'],
+                'email': exec['email'],
+            }
+            for exec in executives
+        ]
+        
+        return Response(executives_list)
+
+    def perform_create(self, serializer):
+        case = serializer.save(created_by=self.request.user)
+        
+        # Create default SLA
+        CaseService.create_case_sla(case)
+        
+        # Evaluate workflow rules
+        CaseService.evaluate_workflow_rules(case, "status_change", {"new_status": case.status})
+    
+    @action(detail=True, methods=["get"], url_path="sla-status")
+    def sla_status(self, request, pk=None):
+        """Get SLA status for a case."""
+        case = self.get_object()
+        sla_data = CaseService.check_case_sla(case)
+        return Response(sla_data)
+    
+    @action(detail=True, methods=["post"], url_path="update-status")
+    def update_status(self, request, pk=None):
+        case = self.get_object()
+        new_status = request.data.get("status")
+        if not new_status:
+            raise ValidationError({"detail": "New status is required."})
+        try:
+            old_status = case.status
+            updated_case = CaseService.update_case_status(case, new_status, user=request.user)
+            
+            # Evaluate workflow rules
+            CaseService.evaluate_workflow_rules(case, "status_change", {"old_status": old_status, "new_status": new_status})
+            
+            # Check SLA
+            CaseService.check_case_sla(case)
+            
+            return Response(self.get_serializer(updated_case).data)
+        except ValueError as e:
+            raise ValidationError({"detail": str(e)})
+
+    @action(detail=True, methods=["get", "post"], url_path="comments")
+    def comments(self, request, pk=None):
+        """Get or create comments for a case."""
+        case = self.get_object()
+        from correspondence.models import CaseComment
+        from correspondence.serializers import CaseCommentSerializer
+        
+        if request.method == "GET":
+            # Get all comments for this case
+            comments = CaseComment.objects.filter(case=case, parent__isnull=True).select_related(
+                "author", "resolved_by"
+            ).prefetch_related("mentions", "replies__author", "replies__mentions").order_by("-created_at")
+            serializer = CaseCommentSerializer(comments, many=True)
+            return Response(serializer.data)
+        else:
+            # Create new comment
+            serializer = CaseCommentSerializer(data={
+                **request.data,
+                "case": str(case.id),
+                "author": str(request.user.id),
+            })
+            serializer.is_valid(raise_exception=True)
+            comment = serializer.save(author=request.user)
+            
+            # Handle mentions
+            mentions = request.data.get("mentions", [])
+            if mentions:
+                from accounts.models import User
+                mention_users = User.objects.filter(id__in=mentions)
+                comment.mentions.set(mention_users)
+                
+                # Send notifications to mentioned users
+                from notifications.models import Notification
+                from notifications.services import NotificationService
+                for user in mention_users:
+                    NotificationService.create_notification(
+                        recipient=user,
+                        title=f"Mentioned in Case: {case.case_number}",
+                        message=f"{request.user.get_full_name() or request.user.username} mentioned you in a comment on case '{case.title}'.",
+                        notification_type=Notification.NotificationType.SYSTEM,
+                        priority=Notification.Priority.NORMAL,
+                        sender=request.user,
+                        module="case_management",
+                        related_object_type="case",
+                        related_object_id=str(case.id),
+                        action_url=f"/cases/{case.id}",
+                        action_required=False,
+                    )
+            
+            # Notify case assignee if different from comment author
+            if case.assigned_to and case.assigned_to != request.user:
+                NotificationService.create_notification(
+                    recipient=case.assigned_to,
+                    title=f"New Comment on Case: {case.case_number}",
+                    message=f"{request.user.get_full_name() or request.user.username} added a comment on case '{case.title}'.",
+                    notification_type=Notification.NotificationType.SYSTEM,
+                    priority=Notification.Priority.NORMAL,
+                    sender=request.user,
+                    module="case_management",
+                    related_object_type="case",
+                    related_object_id=str(case.id),
+                    action_url=f"/cases/{case.id}",
+                    action_required=False,
+                )
+            
+            return Response(CaseCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=["post"], url_path="export")
+    def export_case(self, request, pk=None):
+        """Export case data as JSON."""
+        case = self.get_object()
+        from correspondence.models import CaseCorrespondenceLink, CaseDocumentLink, CaseFormLink, CaseComment
+        
+        # Get all related data
+        correspondence_links = CaseCorrespondenceLink.objects.filter(case=case).select_related("correspondence")
+        document_links = CaseDocumentLink.objects.filter(case=case).select_related("document")
+        form_links = CaseFormLink.objects.filter(case=case).select_related("form_document__document", "form_document__template")
+        comments = CaseComment.objects.filter(case=case).select_related("author", "resolved_by").prefetch_related("mentions")
+        
+        export_data = {
+            "case": {
+                "case_number": case.case_number,
+                "title": case.title,
+                "description": case.description,
+                "case_type": case.case_type,
+                "status": case.status,
+                "priority": case.priority,
+                "tags": case.tags,
+                "metadata": case.metadata,
+                "opened_at": case.opened_at.isoformat() if case.opened_at else None,
+                "resolved_at": case.resolved_at.isoformat() if case.resolved_at else None,
+                "closed_at": case.closed_at.isoformat() if case.closed_at else None,
+            },
+            "correspondence": [
+                {
+                    "reference_number": link.correspondence.reference_number,
+                    "subject": link.correspondence.subject,
+                    "is_primary": link.is_primary,
+                    "notes": link.notes,
+                }
+                for link in correspondence_links
+            ],
+            "documents": [
+                {
+                    "title": link.document.title,
+                    "reference_number": link.document.reference_number,
+                    "document_type": link.document.document_type,
+                    "notes": link.notes,
+                }
+                for link in document_links
+            ],
+            "forms": [
+                {
+                    "title": link.form_document.document.title,
+                    "template": link.form_document.template.name if link.form_document.template else None,
+                    "status": link.form_document.status,
+                    "notes": link.notes,
+                }
+                for link in form_links
+            ],
+            "comments": [
+                {
+                    "author": comment.author.get_full_name() if comment.author else "Unknown",
+                    "content": comment.content,
+                    "created_at": comment.created_at.isoformat(),
+                    "is_resolved": comment.is_resolved,
+                }
+                for comment in comments
+            ],
+            "exported_at": timezone.now().isoformat(),
+            "exported_by": request.user.get_full_name() or request.user.username,
+        }
+        
+        return Response(export_data)
+    
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_cases(self, request):
+        """Import cases from JSON data."""
+        import_data = request.data
+        
+        if not isinstance(import_data, list):
+            import_data = [import_data]
+        
+        results = {
+            "imported": 0,
+            "failed": 0,
+            "errors": [],
+        }
+        
+        for case_data in import_data:
+            try:
+                # Validate required fields
+                if "case_number" not in case_data:
+                    results["failed"] += 1
+                    results["errors"].append("Missing case_number")
+                    continue
+                
+                # Check if case already exists
+                if Case.objects.filter(case_number=case_data["case_number"]).exists():
+                    results["failed"] += 1
+                    results["errors"].append(f"Case {case_data['case_number']} already exists")
+                    continue
+                
+                # Create case
+                case_serializer = CaseSerializer(data=case_data)
+                case_serializer.is_valid(raise_exception=True)
+                case = case_serializer.save(created_by=request.user)
+                
+                results["imported"] += 1
+            except Exception as e:
+                results["failed"] += 1
+                results["errors"].append(str(e))
+        
+        return Response(results, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=["post"], url_path="generate-completion-package")
+    def generate_completion_package(self, request, pk=None):
+        case = self.get_object()
+        try:
+            completion_doc = CaseService.generate_case_completion_package(case, triggered_by=request.user)
+            return Response(
+                {"message": "Completion package generated successfully.", "document_id": str(completion_doc.id)},
+                status=status.HTTP_200_OK,
+            )
+        except ValueError as e:
+            raise ValidationError({"detail": str(e)})
+        except Exception as e:
+            logger.error(f"Error generating case completion package for case {case.id}: {e}", exc_info=True)
+            raise ValidationError({"detail": "Failed to generate completion package."})
+
+    @action(detail=True, methods=["delete"], url_path="unlink_correspondence")
+    def unlink_correspondence(self, request, pk=None):
+        case = self.get_object()
+        correspondence_id = request.data.get("correspondence_id")
+        if not correspondence_id:
+            raise ValidationError({"detail": "Correspondence ID is required."})
+        try:
+            link = CaseCorrespondenceLink.objects.get(case=case, correspondence_id=correspondence_id)
+            link.delete()
+            from audit.models import ActivityLog
+            AuditService.log_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.CASE_UPDATED,
+                object_type="Case",
+                object_id=str(case.id),
+                object_repr=str(case),
+                description=f"Unlinked correspondence from case {case.case_number}.",
+                module="Case Management",
+                severity="info",
+            )
+            return Response({"message": "Correspondence unlinked successfully."}, status=status.HTTP_200_OK)
+        except CaseCorrespondenceLink.DoesNotExist:
+            raise ValidationError({"detail": "Link not found."})
+
+    @action(detail=True, methods=["delete"], url_path="unlink_document")
+    def unlink_document(self, request, pk=None):
+        case = self.get_object()
+        document_id = request.data.get("document_id")
+        if not document_id:
+            raise ValidationError({"detail": "Document ID is required."})
+        try:
+            link = CaseDocumentLink.objects.get(case=case, document_id=document_id)
+            link.delete()
+            from audit.models import ActivityLog
+            AuditService.log_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.CASE_UPDATED,
+                object_type="Case",
+                object_id=str(case.id),
+                object_repr=str(case),
+                description=f"Unlinked document from case {case.case_number}.",
+                module="Case Management",
+                severity="info",
+            )
+            return Response({"message": "Document unlinked successfully."}, status=status.HTTP_200_OK)
+        except CaseDocumentLink.DoesNotExist:
+            raise ValidationError({"detail": "Link not found."})
+
+    @action(detail=True, methods=["delete"], url_path="unlink_form")
+    def unlink_form(self, request, pk=None):
+        case = self.get_object()
+        form_document_id = request.data.get("form_document_id")
+        if not form_document_id:
+            raise ValidationError({"detail": "Form Document ID is required."})
+        try:
+            link = CaseFormLink.objects.get(case=case, form_document_id=form_document_id)
+            link.delete()
+            from audit.models import ActivityLog
+            AuditService.log_activity(
+                user=request.user,
+                action=ActivityLog.ActionType.CASE_UPDATED,
+                object_type="Case",
+                object_id=str(case.id),
+                object_repr=str(case),
+                description=f"Unlinked form from case {case.case_number}.",
+                module="Case Management",
+                severity="info",
+            )
+            return Response({"message": "Form unlinked successfully."}, status=status.HTTP_200_OK)
+        except CaseFormLink.DoesNotExist:
+            raise ValidationError({"detail": "Link not found."})
+
+
+class CaseTemplateViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing case templates."""
+    
+    queryset = CaseTemplate.objects.filter(is_deleted=False)
+    serializer_class = CaseTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["case_type", "is_active"]
+    search_fields = ["name", "description", "slug"]
+    ordering_fields = ["name", "usage_count", "created_at"]
+    ordering = ["case_type", "name"]
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=["post"], url_path="create-case")
+    def create_case_from_template(self, request, pk=None):
+        """Create a case from this template."""
+        template = self.get_object()
+        case_data = request.data.copy()
+        
+        # Apply template defaults
+        case_data.setdefault("case_type", template.case_type)
+        case_data.setdefault("priority", template.default_priority)
+        
+        # Apply template structure defaults
+        structure = template.structure or {}
+        default_fields = structure.get("default_fields", {})
+        if "title" not in case_data and "title" in default_fields:
+            case_data["title"] = default_fields["title"]
+        if "description" not in case_data and "description" in default_fields:
+            case_data["description"] = default_fields["description"]
+        if "tags" not in case_data and "tags" in default_fields:
+            case_data["tags"] = default_fields["tags"]
+        if "metadata" not in case_data and "metadata" in default_fields:
+            case_data["metadata"] = default_fields["metadata"]
+        
+        # Create case
+        serializer = CaseSerializer(data=case_data)
+        serializer.is_valid(raise_exception=True)
+        case = serializer.save(created_by=request.user, template=template)
+        
+        # Increment template usage
+        template.increment_usage()
+        
+        return Response(CaseSerializer(case).data, status=status.HTTP_201_CREATED)
+
+
+class CaseCommentViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing case comments."""
+    
+    queryset = CaseComment.objects.all()
+    serializer_class = CaseCommentSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["case", "author", "is_resolved", "parent"]
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at"]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        case_id = self.request.query_params.get("case")
+        if case_id:
+            queryset = queryset.filter(case_id=case_id)
+        return queryset.select_related("author", "resolved_by", "case").prefetch_related("mentions", "replies")
+    
+    def perform_create(self, serializer):
+        comment = serializer.save(author=self.request.user)
+        
+        # Handle mentions
+        mentions = self.request.data.get("mentions", [])
+        if mentions:
+            from accounts.models import User
+            mention_users = User.objects.filter(id__in=mentions)
+            comment.mentions.set(mention_users)
+            
+            # Send notifications
+            from notifications.models import Notification
+            from notifications.services import NotificationService
+            for user in mention_users:
+                NotificationService.create_notification(
+                    recipient=user,
+                    title=f"Mentioned in Case: {comment.case.case_number}",
+                    message=f"{self.request.user.get_full_name() or self.request.user.username} mentioned you in a comment on case '{comment.case.title}'.",
+                    notification_type=Notification.NotificationType.SYSTEM,
+                    priority=Notification.Priority.NORMAL,
+                    sender=self.request.user,
+                    module="case_management",
+                    related_object_type="case",
+                    related_object_id=str(comment.case.id),
+                    action_url=f"/cases/{comment.case.id}",
+                    action_required=False,
+                )
+        
+        # Notify case assignee
+        if comment.case.assigned_to and comment.case.assigned_to != self.request.user:
+            NotificationService.create_notification(
+                recipient=comment.case.assigned_to,
+                title=f"New Comment on Case: {comment.case.case_number}",
+                message=f"{self.request.user.get_full_name() or self.request.user.username} added a comment on case '{comment.case.title}'.",
+                notification_type=Notification.NotificationType.SYSTEM,
+                priority=Notification.Priority.NORMAL,
+                sender=self.request.user,
+                module="case_management",
+                related_object_type="case",
+                related_object_id=str(comment.case.id),
+                action_url=f"/cases/{comment.case.id}",
+                action_required=False,
+            )
+    
+    @action(detail=True, methods=["post"], url_path="resolve")
+    def resolve_comment(self, request, pk=None):
+        """Mark a comment as resolved."""
+        comment = self.get_object()
+        comment.resolve(request.user)
+        return Response(CaseCommentSerializer(comment).data)
+    
+    @action(detail=True, methods=["post"], url_path="unresolve")
+    def unresolve_comment(self, request, pk=None):
+        """Mark a comment as unresolved."""
+        comment = self.get_object()
+        comment.unresolve()
+        return Response(CaseCommentSerializer(comment).data)
+
+
+class CaseWorkflowRuleViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing case workflow rules."""
+    
+    queryset = CaseWorkflowRule.objects.all()
+    serializer_class = CaseWorkflowRuleSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["case_type", "priority", "trigger_type", "action_type", "is_active"]
+    search_fields = ["name", "description"]
+    ordering_fields = ["priority_order", "name", "created_at"]
+    ordering = ["priority_order", "name"]
+
+
+class CaseSLAViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for viewing case SLA information."""
+    
+    queryset = CaseSLA.objects.all()
+    serializer_class = CaseSLASerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ["case", "breached"]
+    ordering_fields = ["target_date", "created_at"]
+    ordering = ["target_date"]
+
+
+class CorrespondenceTemplateViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing correspondence/minute content templates."""
+    
+    queryset = CorrespondenceTemplate.objects.all()
+    serializer_class = CorrespondenceTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["scope", "scope_id", "template_type", "is_active", "is_default"]
+    search_fields = ["title", "description"]
+    ordering_fields = ["title", "scope", "template_type", "created_at"]
+    ordering = ["scope", "scope_id", "template_type", "title"]
+    
+    def get_queryset(self):
+        """Filter templates based on user permissions and scope."""
+        qs = super().get_queryset()
+        user = self.request.user
+        
+        # Superusers can see all templates
+        if user.is_superuser:
+            return qs
+        
+        # Regular users can see:
+        # - Organization-wide templates
+        # - Templates for their directorate/division/department
+        # - Their personal templates
+        filters = Q(scope="organization")
+        
+        if user.directorate_id:
+            filters |= Q(scope="directorate", scope_id=str(user.directorate_id))
+        if user.division_id:
+            filters |= Q(scope="division", scope_id=str(user.division_id))
+        if user.department_id:
+            filters |= Q(scope="department", scope_id=str(user.department_id))
+        
+        filters |= Q(scope="user", scope_id=str(user.id))
+        
+        return qs.filter(filters, is_active=True)
+    
+    def perform_create(self, serializer):
+        """Set the creator and updater when creating a template."""
+        serializer.save(
+            created_by=self.request.user,
+            updated_by=self.request.user
+        )
+    
+    def perform_update(self, serializer):
+        """Set the updater when updating a template."""
+        serializer.save(updated_by=self.request.user)

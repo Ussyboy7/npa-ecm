@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from organization.models import Department, Directorate, Division, Role
 
-from .models import User, ExecutiveSignature, DocumentSeal
+from .models import User, ExecutiveSignature, DocumentSeal, SignatureTemplate, UserSignaturePreferences
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -159,6 +159,54 @@ class ExecutiveSignatureSerializer(serializers.ModelSerializer):
     
     def get_has_signature(self, obj):
         return bool(obj.signature_image)
+
+
+class SignatureTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for signature templates."""
+    
+    class Meta:
+        model = SignatureTemplate
+        fields = [
+            "id",
+            "name",
+            "description",
+            "template_type",
+            "format",
+            "style",
+            "default_apply",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class UserSignaturePreferencesSerializer(serializers.ModelSerializer):
+    """Serializer for user signature preferences."""
+    
+    default_template = SignatureTemplateSerializer(read_only=True)
+    default_template_id = serializers.PrimaryKeyRelatedField(
+        source="default_template",
+        queryset=SignatureTemplate.objects.filter(is_active=True),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    user = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = UserSignaturePreferences
+        fields = [
+            "id",
+            "user",
+            "default_template",
+            "default_template_id",
+            "template_overrides",
+            "auto_apply_for_minutes",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "user", "created_at", "updated_at"]
 
 
 class ExecutiveSignatureUploadSerializer(serializers.Serializer):

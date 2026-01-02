@@ -1,4 +1,4 @@
-import { logError, logInfo } from '@/lib/client-logger';
+import { logError, logInfo, logWarn } from '@/lib/client-logger';
 import { apiFetch, hasTokens } from './api-client';
 import type { User } from './npa-structure';
 
@@ -95,6 +95,16 @@ export interface DocumentRecord {
       completed_signatures?: number;
     };
   };
+  case_links?: Array<{
+    id: string;
+    case: {
+      id: string;
+      caseNumber: string;
+      title: string;
+      status: string;
+    };
+    notes?: string;
+  }>;
 }
 
 export interface DocumentCollection {
@@ -157,112 +167,134 @@ const unwrapResults = <T,>(payload: ApiPayload): T[] => {
   return [];
 };
 
-const mapDocumentPermission = (data: any): DocumentPermission => ({
+const mapDocumentPermission = (data: Record<string, unknown>): DocumentPermission => ({
   id: data.id ? String(data.id) : undefined,
-  access: data.access ?? 'read',
-  divisionIds: (data.division_ids ?? data.divisions ?? []).map(String),
-  departmentIds: (data.department_ids ?? data.departments ?? []).map(String),
+  access: (data.access as PermissionAccess) ?? 'read',
+  divisionIds: Array.isArray(data.division_ids) ? data.division_ids.map(String) : (Array.isArray(data.divisions) ? data.divisions.map(String) : []),
+  departmentIds: Array.isArray(data.department_ids) ? data.department_ids.map(String) : (Array.isArray(data.departments) ? data.departments.map(String) : []),
   gradeLevels: Array.isArray(data.grade_levels) ? data.grade_levels.map(String) : [],
-  userIds: (data.user_ids ?? data.users ?? []).map(String),
-  createdAt: data.created_at ?? undefined,
-  updatedAt: data.updated_at ?? undefined,
+  userIds: Array.isArray(data.user_ids) ? data.user_ids.map(String) : (Array.isArray(data.users) ? data.users.map(String) : []),
+  createdAt: data.created_at ? String(data.created_at) : undefined,
+  updatedAt: data.updated_at ? String(data.updated_at) : undefined,
 });
 
-const mapDocumentVersion = (data: any): DocumentVersion => ({
-  id: String(data.id),
-  documentId: String(data.document ?? data.document_id),
-  versionNumber: data.version_number ?? 1,
-  fileName: data.file_name ?? 'file',
-  fileType: data.file_type ?? 'application/octet-stream',
-  fileSize: data.file_size ?? 0,
-  fileUrl: data.file_url ?? undefined,
-  contentHtml: data.content_html ?? undefined,
-  contentJson: data.content_json ?? undefined,
-  contentText: data.content_text ?? undefined,
-  ocrText: data.ocr_text ?? undefined,
-  summary: data.summary ?? undefined,
-  uploadedBy: data.uploaded_by?.id ? String(data.uploaded_by.id) : String(data.uploaded_by ?? ''),
-  uploadedAt: data.uploaded_at ?? new Date().toISOString(),
-  notes: data.notes ?? undefined,
-});
+const mapDocumentVersion = (data: Record<string, unknown>): DocumentVersion => {
+  const uploadedBy = data.uploaded_by as Record<string, unknown> | undefined;
+  return {
+    id: String(data.id),
+    documentId: String(data.document ?? data.document_id),
+    versionNumber: typeof data.version_number === 'number' ? data.version_number : 1,
+    fileName: typeof data.file_name === 'string' ? data.file_name : 'file',
+    fileType: typeof data.file_type === 'string' ? data.file_type : 'application/octet-stream',
+    fileSize: typeof data.file_size === 'number' ? data.file_size : 0,
+    fileUrl: typeof data.file_url === 'string' ? data.file_url : undefined,
+    contentHtml: typeof data.content_html === 'string' ? data.content_html : undefined,
+    contentJson: data.content_json,
+    contentText: typeof data.content_text === 'string' ? data.content_text : undefined,
+    ocrText: typeof data.ocr_text === 'string' ? data.ocr_text : undefined,
+    summary: typeof data.summary === 'string' ? data.summary : undefined,
+    uploadedBy: (uploadedBy && 'id' in uploadedBy) ? String(uploadedBy.id) : String(data.uploaded_by ?? ''),
+    uploadedAt: typeof data.uploaded_at === 'string' ? data.uploaded_at : new Date().toISOString(),
+    notes: typeof data.notes === 'string' ? data.notes : undefined,
+  };
+};
 
-const mapActiveEditors = (editors: any[]): DocumentCollaborator[] =>
-  editors.map((editor) => ({
-    userId: String(editor.user?.id ?? editor.user ?? editor.user_id ?? ''),
-    startedAt: editor.started_at ?? editor.startedAt ?? undefined,
-  }));
+const mapActiveEditors = (editors: unknown[]): DocumentCollaborator[] =>
+  editors.map((editor) => {
+    const editorObj = editor as Record<string, unknown>;
+    return {
+      userId: String(
+        (editorObj.user && typeof editorObj.user === 'object' && 'id' in editorObj.user)
+          ? (editorObj.user as { id: unknown }).id
+          : editorObj.user ?? editorObj.user_id ?? ''
+      ),
+      startedAt: typeof editorObj.started_at === 'string' ? editorObj.started_at : (typeof editorObj.startedAt === 'string' ? editorObj.startedAt : undefined),
+    };
+  });
 
-const mapDocument = (item: any): DocumentRecord => ({
-  id: String(item.id),
-  title: item.title ?? 'Untitled Document',
-  description: item.description ?? undefined,
-  documentType: item.document_type ?? 'other',
-  referenceNumber: item.reference_number ?? undefined,
-  status: item.status ?? 'draft',
-  sensitivity: item.sensitivity ?? 'internal',
-  authorId: item.author?.id ? String(item.author.id) : String(item.author ?? ''),
-  divisionId: item.division ?? item.division_id ?? undefined,
-  departmentId: item.department ?? item.department_id ?? undefined,
-  tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
-  versions: Array.isArray(item.versions) ? item.versions.map(mapDocumentVersion) : [],
-  permissions: Array.isArray(item.permissions) ? item.permissions.map(mapDocumentPermission) : [],
-  createdAt: item.created_at ?? new Date().toISOString(),
-  updatedAt: item.updated_at ?? new Date().toISOString(),
-  workspaceIds: Array.isArray(item.workspaces)
-    ? item.workspaces.map((workspace: any) => String(workspace.id ?? workspace))
-    : Array.isArray(item.workspace_ids)
-      ? item.workspace_ids.map(String)
-      : [],
-  activeEditors: Array.isArray(item.active_editors)
-    ? mapActiveEditors(item.active_editors)
-    : Array.isArray(item.activeEditors)
-      ? mapActiveEditors(item.activeEditors)
-      : [],
-  form_document: item.form_document ? {
-    id: String(item.form_document.id),
-    template: item.form_document.template ? {
-      id: String(item.form_document.template.id),
-      name: item.form_document.template.name,
-      slug: item.form_document.template.slug,
+const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
+  const author = item.author as Record<string, unknown> | undefined;
+  const formDoc = item.form_document as Record<string, unknown> | undefined;
+  const formTemplate = formDoc?.template as Record<string, unknown> | undefined;
+  const formWorkflow = formDoc?.signature_workflow as Record<string, unknown> | undefined;
+  
+  return {
+    id: String(item.id),
+    title: typeof item.title === 'string' ? item.title : 'Untitled Document',
+    description: typeof item.description === 'string' ? item.description : undefined,
+    documentType: (item.document_type as DocumentType) ?? 'other',
+    referenceNumber: typeof item.reference_number === 'string' ? item.reference_number : undefined,
+    status: (item.status as DocumentStatus) ?? 'draft',
+    sensitivity: (item.sensitivity as DocumentSensitivity) ?? 'internal',
+    authorId: (author && 'id' in author) ? String(author.id) : String(item.author ?? ''),
+    divisionId: typeof item.division === 'string' ? item.division : (typeof item.division_id === 'string' ? item.division_id : undefined),
+    departmentId: typeof item.department === 'string' ? item.department : (typeof item.department_id === 'string' ? item.department_id : undefined),
+    tags: Array.isArray(item.tags) ? item.tags.map(String) : [],
+    versions: Array.isArray(item.versions) ? item.versions.map(mapDocumentVersion) : [],
+    permissions: Array.isArray(item.permissions) ? item.permissions.map(mapDocumentPermission) : [],
+    createdAt: typeof item.created_at === 'string' ? item.created_at : new Date().toISOString(),
+    updatedAt: typeof item.updated_at === 'string' ? item.updated_at : new Date().toISOString(),
+    workspaceIds: Array.isArray(item.workspaces)
+      ? item.workspaces.map((workspace: Record<string, unknown>) => String(workspace.id ?? workspace))
+      : Array.isArray(item.workspace_ids)
+        ? item.workspace_ids.map(String)
+        : [],
+    activeEditors: Array.isArray(item.active_editors)
+      ? mapActiveEditors(item.active_editors)
+      : Array.isArray(item.activeEditors)
+        ? mapActiveEditors(item.activeEditors)
+        : [],
+    form_document: formDoc ? {
+      id: String(formDoc.id),
+      template: formTemplate ? {
+        id: String(formTemplate.id),
+        name: String(formTemplate.name),
+        slug: String(formTemplate.slug),
+      } : undefined,
+      status: typeof formDoc.status === 'string' ? formDoc.status : undefined,
+      signature_workflow: formWorkflow ? {
+        id: String(formWorkflow.id),
+        status: String(formWorkflow.status),
+        total_signatures: typeof formWorkflow.total_signatures === 'number' ? formWorkflow.total_signatures : undefined,
+        completed_signatures: typeof formWorkflow.completed_signatures === 'number' ? formWorkflow.completed_signatures : undefined,
+      } : undefined,
     } : undefined,
-    status: item.form_document.status,
-    signature_workflow: item.form_document.signature_workflow ? {
-      id: String(item.form_document.signature_workflow.id),
-      status: item.form_document.signature_workflow.status,
-      total_signatures: item.form_document.signature_workflow.total_signatures,
-      completed_signatures: item.form_document.signature_workflow.completed_signatures,
-    } : undefined,
-  } : undefined,
-});
+  };
+};
 
-const mapCollection = (item: any): DocumentCollection => ({
+const mapCollection = (item: Record<string, unknown>): DocumentCollection => {
+  const owner = item.owner as Record<string, unknown> | undefined;
+  return {
+    id: String(item.id),
+    name: typeof item.name === 'string' ? item.name : 'Collection',
+    description: typeof item.description === 'string' ? item.description : undefined,
+    ownerId: String(item.owner_id ?? (owner && 'id' in owner ? owner.id : item.owner) ?? ''),
+    documentIds: Array.isArray(item.document_ids) 
+      ? item.document_ids.map(String)
+      : (item.documents ? unwrapResults<Record<string, unknown>>(item.documents).map((d: Record<string, unknown>) => String(d.id ?? d)) : []),
+    documents: item.documents ? unwrapResults<Record<string, unknown>>(item.documents).map(mapDocument) : undefined,
+    documentCount: typeof item.document_count === 'number' ? item.document_count : (item.documents ? unwrapResults<Record<string, unknown>>(item.documents).length : 0),
+    memberIds: Array.isArray(item.member_ids)
+      ? item.member_ids.map(String)
+      : Array.isArray(item.members)
+        ? item.members.map((member: Record<string, unknown>) => String(member.id ?? member))
+        : [],
+    members: item.members ? unwrapResults<Record<string, unknown>>(item.members).map((m: Record<string, unknown>) => m as User) : undefined,
+    isPublic: typeof item.is_public === 'boolean' ? item.is_public : false,
+    createdAt: typeof item.created_at === 'string' ? item.created_at : '',
+    updatedAt: typeof item.updated_at === 'string' ? item.updated_at : '',
+  };
+};
+
+const mapWorkspace = (item: Record<string, unknown>): DocumentWorkspace => ({
   id: String(item.id),
-  name: item.name ?? 'Collection',
-  description: item.description ?? undefined,
-  ownerId: String(item.owner_id ?? (item.owner?.id ?? item.owner) ?? ''),
-  documentIds: (item.document_ids ?? (item.documents ? unwrapResults<any>(item.documents).map((d: any) => d.id ?? d) : [])).map(String),
-  documents: item.documents ? unwrapResults<any>(item.documents).map(mapDocument) : undefined,
-  documentCount: item.document_count ?? (item.documents ? unwrapResults<any>(item.documents).length : 0),
+  name: typeof item.name === 'string' ? item.name : 'Workspace',
+  description: typeof item.description === 'string' ? item.description : undefined,
+  color: typeof item.color === 'string' ? item.color : '#2563eb',
   memberIds: Array.isArray(item.member_ids)
     ? item.member_ids.map(String)
     : Array.isArray(item.members)
-      ? item.members.map((member: any) => String(member.id ?? member))
-      : [],
-  members: item.members ? unwrapResults<any>(item.members) : undefined,
-  isPublic: item.is_public ?? false,
-  createdAt: item.created_at ?? '',
-  updatedAt: item.updated_at ?? '',
-});
-
-const mapWorkspace = (item: any): DocumentWorkspace => ({
-  id: String(item.id),
-  name: item.name ?? 'Workspace',
-  description: item.description ?? undefined,
-  color: item.color ?? '#2563eb',
-  memberIds: Array.isArray(item.member_ids)
-    ? item.member_ids.map(String)
-    : Array.isArray(item.members)
-      ? item.members.map((member: any) => String(member.id ?? member))
+      ? item.members.map((member: Record<string, unknown>) => String(member.id ?? member))
       : [],
 });
 
@@ -292,31 +324,31 @@ const buildDocumentQueryString = (params: DocumentQueryParams) => {
 
 export const queryDocuments = async (params: DocumentQueryParams = {}): Promise<PaginatedDocuments> => {
   if (!hasTokens()) {
-    console.warn('[DMS] No tokens available, returning empty results');
+    logWarn('[DMS] No tokens available, returning empty results');
     return { results: [], count: 0, next: null, previous: null };
   }
 
   const query = buildDocumentQueryString(params);
   const url = query ? `/dms/documents/?${query}` : '/dms/documents/';
-  console.log('[DMS] Fetching documents from:', url);
+  logInfo('[DMS] Fetching documents from:', url);
   
   try {
-    console.log('[DMS] Starting apiFetch...');
+    logInfo('[DMS] Starting apiFetch...');
     const payload = await Promise.race([
-      apiFetch<any>(url),
+      apiFetch<Record<string, unknown>>(url),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
       )
-    ]) as any;
+    ]) as Record<string, unknown> | { count?: number; next?: string | null; previous?: string | null; results?: unknown[] };
     
-    console.log('[DMS] Received payload:', { hasResults: !!payload, isArray: Array.isArray(payload), count: payload?.count });
+    logInfo('[DMS] Received payload:', { hasResults: !!payload, isArray: Array.isArray(payload), count: payload?.count });
 
-    const results = unwrapResults<any>(payload).map(mapDocument);
+    const results = unwrapResults<Record<string, unknown>>(payload).map(mapDocument);
     const count = typeof payload?.count === 'number' ? payload.count : results.length;
     const next = typeof payload?.next === 'string' ? payload.next : null;
     const previous = typeof payload?.previous === 'string' ? payload.previous : null;
 
-    console.log('[DMS] Mapped results:', { resultsCount: results.length, count, hasNext: !!next });
+    logInfo('[DMS] Mapped results:', { resultsCount: results.length, count, hasNext: !!next });
     return {
       results,
       count,
@@ -324,8 +356,8 @@ export const queryDocuments = async (params: DocumentQueryParams = {}): Promise<
       previous,
     };
   } catch (error) {
-    console.error('[DMS] Error in queryDocuments:', error);
-    console.error('[DMS] Error details:', { 
+    logError('[DMS] Error in queryDocuments:', error);
+    logError('[DMS] Error details:', { 
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined
     });
@@ -350,16 +382,16 @@ export const fetchDocumentById = async (id: string): Promise<DocumentRecord> => 
   }
 
   try {
-    const payload = await apiFetch(`/dms/documents/${id}/`);
+    const payload = await apiFetch<Record<string, unknown>>(`/dms/documents/${id}/`);
     const document = mapDocument(payload);
     updateDocumentsCache(document);
     return document;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // For 404 errors (document not found), create a custom error that won't be logged as critically
-    if (error?.status === 404) {
-      const notFoundError = new Error(error.message || 'Document not found');
-      (notFoundError as any).status = 404;
-      (notFoundError as any).isNotFound = true;
+    if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
+      const notFoundError = new Error(('message' in error && typeof error.message === 'string') ? error.message : 'Document not found');
+      (notFoundError as { status?: number; isNotFound?: boolean }).status = 404;
+      (notFoundError as { status?: number; isNotFound?: boolean }).isNotFound = true;
       throw notFoundError;
     }
     // Re-throw other errors as-is
@@ -374,7 +406,7 @@ export const fetchWorkspaces = async (): Promise<DocumentWorkspace[]> => {
   }
 
   const payload = await apiFetch<ApiPayload>('/dms/workspaces/');
-  workspacesCache = unwrapResults<any>(payload).map(mapWorkspace);
+  workspacesCache = unwrapResults<Record<string, unknown>>(payload).map(mapWorkspace);
   return workspacesCache;
 };
 
@@ -388,7 +420,7 @@ export const fetchCollections = async (): Promise<DocumentCollection[]> => {
   }
 
   const payload = await apiFetch<ApiPayload>('/dms/collections/');
-  collectionsCache = unwrapResults<any>(payload).map(mapCollection);
+  collectionsCache = unwrapResults<Record<string, unknown>>(payload).map(mapCollection);
   return collectionsCache;
 };
 
@@ -397,7 +429,7 @@ export const fetchCollectionById = async (id: string): Promise<DocumentCollectio
     throw new Error('Authentication required');
   }
 
-  const data = await apiFetch<any>(`/dms/collections/${id}/`);
+  const data = await apiFetch<Record<string, unknown>>(`/dms/collections/${id}/`);
   return mapCollection(data);
 };
 
@@ -414,7 +446,7 @@ export const createCollection = async (input: CreateDocumentCollectionInput): Pr
     is_public: input.isPublic ?? false,
   };
 
-  const data = await apiFetch<any>('/dms/collections/', {
+  const data = await apiFetch<Record<string, unknown>>('/dms/collections/', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -439,7 +471,7 @@ export const updateCollection = async (
   if (input.memberIds !== undefined) payload.member_ids = input.memberIds;
   if (input.isPublic !== undefined) payload.is_public = input.isPublic;
 
-  const data = await apiFetch<any>(`/dms/collections/${id}/`, {
+  const data = await apiFetch<Record<string, unknown>>(`/dms/collections/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -578,7 +610,7 @@ export const createDocument = async (
   }
 
   const documentPayload = buildDocumentPayload(documentInput);
-  const created = await apiFetch('/dms/documents/', {
+  const created = await apiFetch<Record<string, unknown>>('/dms/documents/', {
     method: 'POST',
     body: JSON.stringify(documentPayload),
   });
@@ -645,8 +677,8 @@ export const replaceDocumentVersion = async (
   }
 
   // Fetch the document to get updated version
-  const version = await apiFetch<any>(`/dms/versions/${versionId}/`);
-  return fetchDocumentById(version.document);
+  const version = await apiFetch<Record<string, unknown>>(`/dms/versions/${versionId}/`);
+  return fetchDocumentById(String(version.document));
 };
 
 export const updateDocumentMetadata = async (
@@ -669,7 +701,7 @@ export const updateDocumentMetadata = async (
   if (updates.tags !== undefined) payload.tags = updates.tags;
   if (updates.workspaceIds !== undefined) payload.workspace_ids = updates.workspaceIds;
 
-  const updated = await apiFetch(`/dms/documents/${documentId}/`, {
+  const updated = await apiFetch<Record<string, unknown>>(`/dms/documents/${documentId}/`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -804,24 +836,27 @@ export const getDocumentComments = async (documentId: string, versionId?: string
   if (versionId) params.append('version', versionId);
   
   const payload = await apiFetch<ApiPayload>(`/dms/comments/?${params.toString()}`);
-  const results = unwrapResults<any>(payload);
+  const results = unwrapResults<Record<string, unknown>>(payload);
   
-  return results.map((item: any) => ({
-    id: String(item.id),
-    documentId: String(item.document ?? item.document_id ?? documentId),
-    authorId: String(item.author?.id ?? item.author_id ?? item.author ?? ''),
-    content: item.content ?? '',
-    createdAt: item.created_at ?? new Date().toISOString(),
-    resolved: item.resolved ?? false,
-    parentId: item.parent ? String(item.parent) : item.parent_id ? String(item.parent_id) : null,
-    versionId: item.version ? String(item.version) : item.version_id ? String(item.version_id) : null,
-  }));
+  return results.map((item: Record<string, unknown>) => {
+    const author = item.author as Record<string, unknown> | undefined;
+    return {
+      id: String(item.id),
+      documentId: String(item.document ?? item.document_id ?? documentId),
+      authorId: String((author && 'id' in author) ? author.id : item.author_id ?? item.author ?? ''),
+      content: typeof item.content === 'string' ? item.content : '',
+      createdAt: typeof item.created_at === 'string' ? item.created_at : new Date().toISOString(),
+      resolved: typeof item.resolved === 'boolean' ? item.resolved : false,
+      parentId: item.parent ? String(item.parent) : (item.parent_id ? String(item.parent_id) : null),
+      versionId: item.version ? String(item.version) : (item.version_id ? String(item.version_id) : null),
+    };
+  });
 };
 
 export const addDocumentComment = async (payload: CreateDocumentCommentPayload): Promise<DocumentComment> => {
   if (!hasTokens()) throw new Error('Authentication required');
   
-  const body: any = {
+  const body: Record<string, unknown> = {
     document: payload.documentId,
     author_id: payload.authorId,
     content: payload.content,
@@ -830,40 +865,42 @@ export const addDocumentComment = async (payload: CreateDocumentCommentPayload):
   if (payload.versionId) body.version = payload.versionId;
   if (payload.parentId) body.parent = payload.parentId;
   
-  const response = await apiFetch<any>('/dms/comments/', {
+  const response = await apiFetch<Record<string, unknown>>('/dms/comments/', {
     method: 'POST',
     body: JSON.stringify(body),
   });
   
+  const author = response.author as Record<string, unknown> | undefined;
   return {
     id: String(response.id),
     documentId: String(response.document ?? payload.documentId),
-    authorId: String(response.author?.id ?? response.author_id ?? payload.authorId),
-    content: response.content ?? payload.content,
-    createdAt: response.created_at ?? new Date().toISOString(),
-    resolved: response.resolved ?? false,
-    parentId: response.parent ? String(response.parent) : response.parent_id ? String(response.parent_id) : payload.parentId ?? null,
-    versionId: response.version ? String(response.version) : response.version_id ? String(response.version_id) : payload.versionId ?? null,
+    authorId: String((author && 'id' in author) ? author.id : response.author_id ?? payload.authorId),
+    content: typeof response.content === 'string' ? response.content : payload.content,
+    createdAt: typeof response.created_at === 'string' ? response.created_at : new Date().toISOString(),
+    resolved: typeof response.resolved === 'boolean' ? response.resolved : false,
+    parentId: response.parent ? String(response.parent) : (response.parent_id ? String(response.parent_id) : payload.parentId ?? null),
+    versionId: response.version ? String(response.version) : (response.version_id ? String(response.version_id) : payload.versionId ?? null),
   };
 };
 
 export const resolveDocumentComment = async (commentId: string, resolved: boolean): Promise<DocumentComment | null> => {
   if (!hasTokens()) throw new Error('Authentication required');
   
-  const response = await apiFetch<any>(`/dms/comments/${commentId}/`, {
+  const response = await apiFetch<Record<string, unknown>>(`/dms/comments/${commentId}/`, {
     method: 'PATCH',
     body: JSON.stringify({ resolved }),
   });
   
+  const author = response.author as Record<string, unknown> | undefined;
   return {
     id: String(response.id),
     documentId: String(response.document ?? response.document_id ?? ''),
-    authorId: String(response.author?.id ?? response.author_id ?? response.author ?? ''),
-    content: response.content ?? '',
-    createdAt: response.created_at ?? new Date().toISOString(),
-    resolved: response.resolved ?? resolved,
-    parentId: response.parent ? String(response.parent) : response.parent_id ? String(response.parent_id) : null,
-    versionId: response.version ? String(response.version) : response.version_id ? String(response.version_id) : null,
+    authorId: String((author && 'id' in author) ? author.id : response.author_id ?? response.author ?? ''),
+    content: typeof response.content === 'string' ? response.content : '',
+    createdAt: typeof response.created_at === 'string' ? response.created_at : new Date().toISOString(),
+    resolved: typeof response.resolved === 'boolean' ? response.resolved : resolved,
+    parentId: response.parent ? String(response.parent) : (response.parent_id ? String(response.parent_id) : null),
+    versionId: response.version ? String(response.version) : (response.version_id ? String(response.version_id) : null),
   };
 };
 
@@ -894,15 +931,18 @@ export const getDocumentDiscussions = async (documentId: string): Promise<Docume
   if (!hasTokens()) return [];
   
   const payload = await apiFetch<ApiPayload>(`/dms/discussions/?document=${documentId}`);
-  const results = unwrapResults<any>(payload);
+  const results = unwrapResults<Record<string, unknown>>(payload);
   
-  return results.map((item: any) => ({
-    id: String(item.id),
-    documentId: String(item.document ?? item.document_id ?? documentId),
-    authorId: String(item.author?.id ?? item.author_id ?? item.author ?? ''),
-    message: item.message ?? '',
-    createdAt: item.created_at ?? new Date().toISOString(),
-  }));
+  return results.map((item: Record<string, unknown>) => {
+    const author = item.author as Record<string, unknown> | undefined;
+    return {
+      id: String(item.id),
+      documentId: String(item.document ?? item.document_id ?? documentId),
+      authorId: String((author && 'id' in author) ? author.id : item.author_id ?? item.author ?? ''),
+      message: typeof item.message === 'string' ? item.message : '',
+      createdAt: typeof item.created_at === 'string' ? item.created_at : new Date().toISOString(),
+    };
+  });
 };
 
 export const addDocumentDiscussion = async (payload: CreateDiscussionPayload): Promise<DocumentDiscussion> => {
@@ -914,17 +954,18 @@ export const addDocumentDiscussion = async (payload: CreateDiscussionPayload): P
     message: payload.message,
   };
   
-  const response = await apiFetch<any>('/dms/discussions/', {
+  const response = await apiFetch<Record<string, unknown>>('/dms/discussions/', {
     method: 'POST',
     body: JSON.stringify(body),
   });
   
+  const author = response.author as Record<string, unknown> | undefined;
   return {
     id: String(response.id),
     documentId: String(response.document ?? payload.documentId),
-    authorId: String(response.author?.id ?? response.author_id ?? payload.authorId),
-    message: response.message ?? payload.message,
-    createdAt: response.created_at ?? new Date().toISOString(),
+    authorId: String((author && 'id' in author) ? author.id : response.author_id ?? payload.authorId),
+    message: typeof response.message === 'string' ? response.message : payload.message,
+    createdAt: typeof response.created_at === 'string' ? response.created_at : new Date().toISOString(),
   };
 };
 
@@ -941,20 +982,34 @@ export interface EditorSession {
 export const getActiveEditorSessions = async (documentId: string): Promise<EditorSession[]> => {
   if (!hasTokens()) return [];
   
+  // Validate documentId is a valid UUID before making the API call
+  if (!documentId || documentId === 'undefined' || documentId.trim() === '') {
+    logWarn('getActiveEditorSessions called with invalid documentId:', documentId);
+    return [];
+  }
+  
+  // Basic UUID format validation (UUIDs are 36 characters with dashes)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(documentId)) {
+    logWarn('getActiveEditorSessions called with non-UUID documentId:', documentId);
+    return [];
+  }
+  
   try {
     const payload = await apiFetch<ApiPayload>(`/dms/editor-sessions/?document=${documentId}&is_active=true`);
-    const results = unwrapResults<any>(payload);
+    const results = unwrapResults<Record<string, unknown>>(payload);
     
     logInfo('getActiveEditorSessions API response:', { payload, results, documentId });
     
-    const sessions = results.map((item: any) => {
+    const sessions = results.map((item: Record<string, unknown>) => {
+      const user = item.user as Record<string, unknown> | undefined;
       const session = {
         id: String(item.id),
         documentId: String(item.document ?? item.document_id ?? documentId),
-        userId: String(item.user?.id ?? item.user_id ?? item.user ?? ''),
-        since: item.since ?? item.created_at ?? new Date().toISOString(),
-        note: item.note ?? undefined,
-        isActive: item.is_active ?? true,
+        userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? ''),
+        since: typeof item.since === 'string' ? item.since : (typeof item.created_at === 'string' ? item.created_at : new Date().toISOString()),
+        note: typeof item.note === 'string' ? item.note : undefined,
+        isActive: typeof item.is_active === 'boolean' ? item.is_active : true,
       };
       logInfo('Mapped editor session:', session, 'from item:', item);
       return session;
@@ -973,17 +1028,18 @@ export const getEditorSessionForUser = async (documentId: string, userId: string
   
   try {
     const payload = await apiFetch<ApiPayload>(`/dms/editor-sessions/?document=${documentId}&user=${userId}`);
-    const results = unwrapResults<any>(payload);
+    const results = unwrapResults<Record<string, unknown>>(payload);
     
     if (results.length > 0) {
-      const item = results[0];
+      const item = results[0] as Record<string, unknown>;
+      const user = item.user as Record<string, unknown> | undefined;
       return {
         id: String(item.id),
         documentId: String(item.document ?? item.document_id ?? documentId),
-        userId: String(item.user?.id ?? item.user_id ?? item.user ?? userId),
-        since: item.since ?? item.created_at ?? new Date().toISOString(),
-        note: item.note ?? undefined,
-        isActive: item.is_active ?? true,
+        userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? userId),
+        since: typeof item.since === 'string' ? item.since : (typeof item.created_at === 'string' ? item.created_at : new Date().toISOString()),
+        note: typeof item.note === 'string' ? item.note : undefined,
+        isActive: typeof item.is_active === 'boolean' ? item.is_active : true,
       };
     }
     return null;
@@ -996,34 +1052,52 @@ export const getEditorSessionForUser = async (documentId: string, userId: string
 export const createEditorSession = async (documentId: string, userId: string, note?: string): Promise<EditorSession> => {
   if (!hasTokens()) throw new Error('Authentication required');
   
-  const body: any = { 
+  const body: Record<string, unknown> = { 
     document: documentId,
     user_id: userId,
   };
-  if (note) body.note = note;
+  if (note) {
+    body.note = note;
+  }
   
-  const response = await apiFetch<any>('/dms/editor-sessions/', {
+  const response = await apiFetch<Record<string, unknown>>('/dms/editor-sessions/', {
     method: 'POST',
     body: JSON.stringify(body),
   });
   
+  const user = response.user as Record<string, unknown> | undefined;
   return {
     id: String(response.id),
     documentId: String(response.document ?? response.document_id ?? documentId),
-    userId: String(response.user?.id ?? response.user_id ?? response.user ?? userId),
-    since: response.since ?? response.created_at ?? new Date().toISOString(),
-    note: response.note ?? note ?? undefined,
-    isActive: response.is_active ?? true,
+    userId: String((user && 'id' in user) ? user.id : response.user_id ?? response.user ?? userId),
+    since: typeof response.since === 'string' ? response.since : (typeof response.created_at === 'string' ? response.created_at : new Date().toISOString()),
+    note: typeof response.note === 'string' ? response.note : (note ?? undefined),
+    isActive: typeof response.is_active === 'boolean' ? response.is_active : true,
   };
 };
 
 export const endEditorSession = async (sessionId: string): Promise<void> => {
   if (!hasTokens()) throw new Error('Authentication required');
   
-  await apiFetch(`/dms/editor-sessions/${sessionId}/`, {
-    method: 'PATCH',
-    body: JSON.stringify({ is_active: false }),
-  });
+  try {
+    await apiFetch(`/dms/editor-sessions/${sessionId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: false }),
+    });
+  } catch (error: unknown) {
+    // Handle permission errors gracefully - session might not belong to current user
+    // This can happen if user was switched or session was reassigned
+    if (error && typeof error === 'object' && (
+      ('status' in error && error.status === 403) ||
+      ('message' in error && typeof error.message === 'string' && error.message.includes('only modify your own'))
+    )) {
+      logWarn('Cannot end editor session - does not belong to current user', { sessionId, error });
+      // Silently fail - this is expected in some cases (user switch, session reassignment)
+      return;
+    }
+    // Re-throw other errors
+    throw error;
+  }
 };
 
 // Document Access Logs API
@@ -1047,16 +1121,19 @@ export const getDocumentAccessLogs = async (documentId: string): Promise<Documen
   if (!hasTokens()) return [];
   
   const payload = await apiFetch<ApiPayload>(`/dms/access-logs/?document=${documentId}`);
-  const results = unwrapResults<any>(payload);
+  const results = unwrapResults<Record<string, unknown>>(payload);
   
-  return results.map((item: any) => ({
-    id: String(item.id),
-    documentId: String(item.document ?? item.document_id ?? documentId),
-    userId: String(item.user?.id ?? item.user_id ?? item.user ?? ''),
-    action: item.action ?? 'view',
-    sensitivity: item.sensitivity ?? 'internal',
-    timestamp: item.timestamp ?? new Date().toISOString(),
-  }));
+  return results.map((item: Record<string, unknown>) => {
+    const user = item.user as Record<string, unknown> | undefined;
+    return {
+      id: String(item.id),
+      documentId: String(item.document ?? item.document_id ?? documentId),
+      userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? ''),
+      action: (item.action as 'view' | 'download' | 'attempted-download') ?? 'view',
+      sensitivity: typeof item.sensitivity === 'string' ? item.sensitivity : 'internal',
+      timestamp: typeof item.timestamp === 'string' ? item.timestamp : new Date().toISOString(),
+    };
+  });
 };
 
 export const logDocumentAccess = async (payload: CreateAccessLogPayload): Promise<DocumentAccessLog> => {
@@ -1069,21 +1146,152 @@ export const logDocumentAccess = async (payload: CreateAccessLogPayload): Promis
     sensitivity: payload.sensitivity,
   };
   
-  const response = await apiFetch<any>('/dms/access-logs/', {
+  const response = await apiFetch<Record<string, unknown>>('/dms/access-logs/', {
     method: 'POST',
     body: JSON.stringify(body),
   });
   
+  const user = response.user as Record<string, unknown> | undefined;
   return {
     id: String(response.id),
     documentId: String(response.document ?? response.document_id ?? payload.documentId),
-    userId: String(response.user?.id ?? response.user_id ?? payload.userId),
-    action: response.action ?? payload.action,
-    sensitivity: response.sensitivity ?? payload.sensitivity,
-    timestamp: response.timestamp ?? new Date().toISOString(),
+    userId: String((user && 'id' in user) ? user.id : response.user_id ?? payload.userId),
+    action: (response.action as 'view' | 'download' | 'attempted-download') ?? payload.action,
+    sensitivity: typeof response.sensitivity === 'string' ? response.sensitivity : payload.sensitivity,
+    timestamp: typeof response.timestamp === 'string' ? response.timestamp : new Date().toISOString(),
   };
 };
 export const getAccessLogsForDocument = async () => [] as never[];
+
+/**
+ * Get recent documents accessed by the current user (last 30 days)
+ */
+export const getRecentDocuments = async (userId: string, limit: number = 50): Promise<DocumentRecord[]> => {
+  if (!hasTokens()) return [];
+  
+  try {
+    // Get access logs for the user (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    // Query with user parameter (backend now supports filtering by user)
+    const payload = await apiFetch<ApiPayload>(`/dms/access-logs/?user=${userId}&action=view&ordering=-timestamp`);
+    const logs = unwrapResults<Record<string, unknown>>(payload);
+    
+    // Get unique document IDs from recent logs (last 30 days)
+    const documentIds = Array.from(new Set(
+      logs
+        .filter((log: Record<string, unknown>) => {
+          const timestamp = typeof log.timestamp === 'string' ? log.timestamp : (typeof log.created_at === 'string' ? log.created_at : '');
+          const logDate = new Date(timestamp);
+          return !isNaN(logDate.getTime()) && logDate >= thirtyDaysAgo;
+        })
+        .map((log: Record<string, unknown>) => String(log.document ?? log.document_id ?? ''))
+        .filter(Boolean)
+    )).slice(0, limit);
+    
+    if (documentIds.length === 0) return [];
+    
+    // Fetch documents
+    const documents = await Promise.all(
+      documentIds.map(async (docId) => {
+        try {
+          return await fetchDocumentById(docId);
+        } catch {
+          return null;
+        }
+      })
+    );
+    
+    return documents.filter((doc): doc is DocumentRecord => doc !== null);
+  } catch (error) {
+    logError('Failed to get recent documents', error);
+    // If querying by user fails, return empty array (backend may need update)
+    return [];
+  }
+};
+
+/**
+ * Get documents shared with the current user (explicit permissions)
+ */
+export const getSharedDocuments = async (
+  userId: string,
+  params: Omit<DocumentQueryParams, 'authorId'> = {}
+): Promise<PaginatedDocuments> => {
+  if (!hasTokens()) {
+    return { results: [], count: 0, next: null, previous: null };
+  }
+  
+  try {
+    // Use queryDocumentsExtended but filter client-side for shared documents
+    // The backend visibility logic already includes permissions__users
+    // We'll fetch all accessible documents and filter for those with explicit user permissions
+    const allDocs = await queryDocumentsExtended({
+      ...params,
+      pageSize: params.pageSize ?? 100, // Get more to filter
+    });
+    
+    // Filter for documents where user has explicit permission (not just author)
+    const sharedDocs = allDocs.results.filter((doc) => {
+      // Exclude documents authored by the user
+      if (doc.authorId === userId) return false;
+      
+      // Check if user has explicit permission
+      return doc.permissions.some((perm) => perm.userIds.includes(userId));
+    });
+    
+    return {
+      results: sharedDocs,
+      count: sharedDocs.length,
+      next: null,
+      previous: null,
+    };
+  } catch (error) {
+    logError('Failed to get shared documents', error);
+    return { results: [], count: 0, next: null, previous: null };
+  }
+};
+
+/**
+ * Get documents shared by the current user (documents with permissions created by user)
+ */
+export const getDocumentsSharedByUser = async (
+  userId: string,
+  params: Omit<DocumentQueryParams, 'authorId'> = {}
+): Promise<PaginatedDocuments> => {
+  if (!hasTokens()) {
+    return { results: [], count: 0, next: null, previous: null };
+  }
+  
+  try {
+    // Get all documents authored by the user
+    const userDocs = await queryDocumentsExtended({
+      ...params,
+      authorId: userId,
+    });
+    
+    // Filter for documents that have been shared (have permissions with users/divisions/departments)
+    const sharedDocs = userDocs.results.filter((doc) => {
+      // Document must have at least one permission that's not just the author
+      return doc.permissions.some((perm) => 
+        perm.userIds.length > 0 || 
+        perm.divisionIds.length > 0 || 
+        perm.departmentIds.length > 0
+      );
+    });
+    
+    return {
+      results: sharedDocs,
+      count: sharedDocs.length,
+      next: null,
+      previous: null,
+    };
+  } catch (error) {
+    logError('Failed to get documents shared by user', error);
+    return { results: [], count: 0, next: null, previous: null };
+  }
+};
+
 export const isSensitiveAccessAllowed = (document: DocumentRecord, user: User | null) => {
   if (!user) return document.sensitivity === 'public';
   return userHasPermission(user, document);
@@ -1190,7 +1398,7 @@ const buildExtendedDocumentQueryString = (params: ExtendedDocumentQueryParams) =
  */
 export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams = {}): Promise<PaginatedDocuments> => {
   if (!hasTokens()) {
-    console.warn('[DMS] No tokens available, returning empty results');
+    logWarn('[DMS] No tokens available, returning empty results');
     return { results: [], count: 0, next: null, previous: null };
   }
 
@@ -1199,20 +1407,20 @@ export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams
   
   try {
     const payload = await Promise.race([
-      apiFetch<any>(url),
+      apiFetch<Record<string, unknown>>(url),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
       )
-    ]) as any;
+    ]) as Record<string, unknown> | { count?: number; next?: string | null; previous?: string | null; results?: unknown[] };
 
-    const results = unwrapResults<any>(payload).map(mapDocument);
+    const results = unwrapResults<Record<string, unknown>>(payload).map(mapDocument);
     const count = typeof payload?.count === 'number' ? payload.count : results.length;
     const next = typeof payload?.next === 'string' ? payload.next : null;
     const previous = typeof payload?.previous === 'string' ? payload.previous : null;
 
     return { results, count, next, previous };
   } catch (error) {
-    console.error('[DMS] Error in queryDocumentsExtended:', error);
+    logError('[DMS] Error in queryDocumentsExtended:', error);
     throw error;
   }
 };
@@ -1232,10 +1440,10 @@ export const getDocumentStats = async (): Promise<DocumentStats> => {
   try {
     // Fetch all documents with minimal fields to get counts
     const [allResponse, draftResponse, publishedResponse, archivedResponse] = await Promise.all([
-      apiFetch<any>('/dms/documents/?page_size=1'),
-      apiFetch<any>('/dms/documents/?status=draft&page_size=1'),
-      apiFetch<any>('/dms/documents/?status=published&page_size=1'),
-      apiFetch<any>('/dms/documents/?status=archived&page_size=1'),
+      apiFetch<Record<string, unknown>>('/dms/documents/?page_size=1'),
+      apiFetch<Record<string, unknown>>('/dms/documents/?status=draft&page_size=1'),
+      apiFetch<Record<string, unknown>>('/dms/documents/?status=published&page_size=1'),
+      apiFetch<Record<string, unknown>>('/dms/documents/?status=archived&page_size=1'),
     ]);
 
     return {
@@ -1257,6 +1465,8 @@ export const getDocumentStats = async (): Promise<DocumentStats> => {
 export interface OCRResult {
   ocr_text: string;
   characters: number;
+  method?: string;
+  message?: string;
 }
 
 export interface SummaryResult {
@@ -1265,7 +1475,7 @@ export interface SummaryResult {
 }
 
 /**
- * Run OCR on a specific document version
+ * Run OCR on a specific document version (or extract text from HTML content)
  */
 export const runOCROnVersion = async (versionId: string): Promise<OCRResult> => {
   if (!hasTokens()) throw new Error('Authentication required');
@@ -1298,17 +1508,17 @@ export interface DocumentEditorWebSocket {
   connect: () => void;
   disconnect: () => void;
   sendCursorPosition: (position: { line: number; column: number }, selection?: { start: number; end: number }) => void;
-  sendContentChange: (changes: any[], version?: number) => void;
+  sendContentChange: (changes: unknown[], version?: number) => void;
   sendTypingStart: () => void;
   sendTypingStop: () => void;
   requestSync: () => void;
   onUserJoined: (callback: (data: { user_id: string; username: string }) => void) => void;
   onUserLeft: (callback: (data: { user_id: string; username: string }) => void) => void;
-  onCursorUpdate: (callback: (data: { user_id: string; username: string; position: any; selection?: any }) => void) => void;
-  onContentUpdate: (callback: (data: { user_id: string; changes: any[]; version?: number }) => void) => void;
+  onCursorUpdate: (callback: (data: { user_id: string; username: string; position: unknown; selection?: unknown }) => void) => void;
+  onContentUpdate: (callback: (data: { user_id: string; changes: unknown[]; version?: number }) => void) => void;
   onTypingIndicator: (callback: (data: { user_id: string; username: string; is_typing: boolean }) => void) => void;
   onActiveEditors: (callback: (editors: { user_id: string; username: string; since?: string }[]) => void) => void;
-  onSyncResponse: (callback: (state: any) => void) => void;
+  onSyncResponse: (callback: (state: Record<string, unknown>) => void) => void;
 }
 
 /**
@@ -1319,19 +1529,19 @@ export const createDocumentEditorWebSocket = (
   token: string
 ): DocumentEditorWebSocket => {
   let ws: WebSocket | null = null;
-  const callbacks: Record<string, ((data: any) => void)[]> = {};
+  const callbacks: Record<string, ((data: Record<string, unknown>) => void)[]> = {};
   
-  const emit = (event: string, data: any) => {
+  const emit = (event: string, data: Record<string, unknown>) => {
     const handlers = callbacks[event] || [];
     handlers.forEach(handler => handler(data));
   };
   
-  const on = (event: string, callback: (data: any) => void) => {
+  const on = (event: string, callback: (data: Record<string, unknown>) => void) => {
     if (!callbacks[event]) callbacks[event] = [];
     callbacks[event].push(callback);
   };
   
-  const send = (data: any) => {
+  const send = (data: Record<string, unknown>) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(data));
     }
@@ -1346,7 +1556,7 @@ export const createDocumentEditorWebSocket = (
       ws = new WebSocket(url);
       
       ws.onopen = () => {
-        console.log('[DMS WebSocket] Connected to document', documentId);
+        logInfo('[DMS WebSocket] Connected to document', documentId);
       };
       
       ws.onmessage = (event) => {
@@ -1354,16 +1564,16 @@ export const createDocumentEditorWebSocket = (
           const data = JSON.parse(event.data);
           emit(data.type, data);
         } catch (e) {
-          console.error('[DMS WebSocket] Failed to parse message:', e);
+          logError('[DMS WebSocket] Failed to parse message:', e);
         }
       };
       
       ws.onclose = () => {
-        console.log('[DMS WebSocket] Disconnected');
+        logInfo('[DMS WebSocket] Disconnected');
       };
       
       ws.onerror = (error) => {
-        console.error('[DMS WebSocket] Error:', error);
+        logError('[DMS WebSocket] Error:', error);
       };
     },
     
@@ -1394,12 +1604,230 @@ export const createDocumentEditorWebSocket = (
       send({ type: 'request_sync' });
     },
     
-    onUserJoined: (callback) => on('user_joined', callback),
-    onUserLeft: (callback) => on('user_left', callback),
-    onCursorUpdate: (callback) => on('cursor_update', callback),
-    onContentUpdate: (callback) => on('content_update', callback),
-    onTypingIndicator: (callback) => on('typing_indicator', callback),
-    onActiveEditors: (callback) => on('active_editors', callback),
+    onUserJoined: (callback) => on('user_joined', callback as (data: Record<string, unknown>) => void),
+    onUserLeft: (callback) => on('user_left', callback as (data: Record<string, unknown>) => void),
+    onCursorUpdate: (callback) => on('cursor_update', callback as (data: Record<string, unknown>) => void),
+    onContentUpdate: (callback) => on('content_update', callback as (data: Record<string, unknown>) => void),
+    onTypingIndicator: (callback) => on('typing_indicator', callback as (data: Record<string, unknown>) => void),
+    onActiveEditors: (callback) => on('active_editors', (data: Record<string, unknown>) => {
+      if (Array.isArray(data)) {
+        callback(data as { user_id: string; username: string; since?: string }[]);
+      }
+    }),
     onSyncResponse: (callback) => on('sync_response', callback),
   };
+};
+
+// ============================================================================
+// DOCUMENT TEMPLATES
+// ============================================================================
+
+export interface DocumentTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  documentType: DocumentType;
+  defaultStatus: DocumentStatus;
+  defaultSensitivity: DocumentRecord['sensitivity'];
+  defaultDivisionId?: string;
+  defaultDepartmentId?: string;
+  defaultTags: string[];
+  templateContent?: string;
+  templateMetadata: Record<string, unknown>;
+  isActive: boolean;
+  createdById?: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  usageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateDocumentTemplateInput {
+  name: string;
+  description?: string;
+  documentType: DocumentType;
+  defaultStatus?: DocumentStatus;
+  defaultSensitivity?: DocumentRecord['sensitivity'];
+  defaultDivisionId?: string;
+  defaultDepartmentId?: string;
+  defaultTags?: string[];
+  templateContent?: string;
+  templateMetadata?: Record<string, unknown>;
+  isActive?: boolean;
+}
+
+export interface CreateDocumentFromTemplateInput {
+  title: string;
+  description?: string;
+  documentType?: DocumentType;
+  status?: DocumentStatus;
+  sensitivity?: DocumentRecord['sensitivity'];
+  division?: string;
+  department?: string;
+  tags?: string[];
+  file?: {
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    fileUrl: string;
+  };
+}
+
+const mapTemplate = (apiTemplate: Record<string, unknown>): DocumentTemplate => {
+  const createdByObj = apiTemplate.created_by_obj as Record<string, unknown> | undefined;
+  return {
+    id: String(apiTemplate.id),
+    name: String(apiTemplate.name),
+    description: typeof apiTemplate.description === 'string' ? apiTemplate.description : undefined,
+    documentType: apiTemplate.document_type as DocumentType,
+    defaultStatus: apiTemplate.default_status as DocumentStatus,
+    defaultSensitivity: apiTemplate.default_sensitivity as DocumentRecord['sensitivity'],
+    defaultDivisionId: typeof apiTemplate.default_division === 'string' ? apiTemplate.default_division : undefined,
+    defaultDepartmentId: typeof apiTemplate.default_department === 'string' ? apiTemplate.default_department : undefined,
+    defaultTags: Array.isArray(apiTemplate.default_tags) ? apiTemplate.default_tags.map(String) : [],
+    templateContent: typeof apiTemplate.template_content === 'string' ? apiTemplate.template_content : undefined,
+    templateMetadata: (apiTemplate.template_metadata && typeof apiTemplate.template_metadata === 'object') ? apiTemplate.template_metadata as Record<string, unknown> : {},
+    isActive: typeof apiTemplate.is_active === 'boolean' ? apiTemplate.is_active : true,
+    createdById: typeof apiTemplate.created_by === 'string' ? apiTemplate.created_by : undefined,
+    createdBy: createdByObj ? {
+      id: String(createdByObj.id),
+      name: String(createdByObj.name || createdByObj.username || ''),
+      email: String(createdByObj.email || ''),
+    } : undefined,
+    usageCount: typeof apiTemplate.usage_count === 'number' ? apiTemplate.usage_count : 0,
+    createdAt: String(apiTemplate.created_at),
+    updatedAt: String(apiTemplate.updated_at),
+  };
+};
+
+export const getDocumentTemplates = async (params?: {
+  documentType?: DocumentType;
+  isActive?: boolean;
+  search?: string;
+}): Promise<DocumentTemplate[]> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const searchParams = new URLSearchParams();
+  if (params?.documentType) searchParams.append('document_type', params.documentType);
+  if (params?.isActive !== undefined) searchParams.append('is_active', String(params.isActive));
+  if (params?.search) searchParams.append('search', params.search);
+
+  const url = `/dms/templates/${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+  const response = await apiFetch<Record<string, unknown> | Record<string, unknown>[]>(url);
+  const results = Array.isArray(response) ? response : (Array.isArray(response.results) ? response.results : []);
+  return results.map((item: Record<string, unknown>) => mapTemplate(item));
+};
+
+export const getDocumentTemplateById = async (id: string): Promise<DocumentTemplate> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await apiFetch<Record<string, unknown>>(`/dms/templates/${id}/`);
+  return mapTemplate(response);
+};
+
+export const createDocumentTemplate = async (input: CreateDocumentTemplateInput): Promise<DocumentTemplate> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const payload = {
+    name: input.name,
+    description: input.description || '',
+    document_type: input.documentType,
+    default_status: input.defaultStatus || 'draft',
+    default_sensitivity: input.defaultSensitivity || 'internal',
+    default_division: input.defaultDivisionId || null,
+    default_department: input.defaultDepartmentId || null,
+    default_tags: input.defaultTags || [],
+    template_content: input.templateContent || '',
+    template_metadata: input.templateMetadata || {},
+    is_active: input.isActive !== undefined ? input.isActive : true,
+  };
+
+  const response = await apiFetch<Record<string, unknown>>('/dms/templates/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return mapTemplate(response);
+};
+
+export const updateDocumentTemplate = async (
+  id: string,
+  input: Partial<CreateDocumentTemplateInput>
+): Promise<DocumentTemplate> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const payload: Record<string, unknown> = {};
+  if (input.name !== undefined) payload.name = input.name;
+  if (input.description !== undefined) payload.description = input.description;
+  if (input.documentType !== undefined) payload.document_type = input.documentType;
+  if (input.defaultStatus !== undefined) payload.default_status = input.defaultStatus;
+  if (input.defaultSensitivity !== undefined) payload.default_sensitivity = input.defaultSensitivity;
+  if (input.defaultDivisionId !== undefined) payload.default_division = input.defaultDivisionId || null;
+  if (input.defaultDepartmentId !== undefined) payload.default_department = input.defaultDepartmentId || null;
+  if (input.defaultTags !== undefined) payload.default_tags = input.defaultTags;
+  if (input.templateContent !== undefined) payload.template_content = input.templateContent;
+  if (input.templateMetadata !== undefined) payload.template_metadata = input.templateMetadata;
+  if (input.isActive !== undefined) payload.is_active = input.isActive;
+
+  const response = await apiFetch<Record<string, unknown>>(`/dms/templates/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return mapTemplate(response);
+};
+
+export const deleteDocumentTemplate = async (id: string): Promise<void> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  await apiFetch(`/dms/templates/${id}/`, {
+    method: 'DELETE',
+  });
+};
+
+export const createDocumentFromTemplate = async (
+  templateId: string,
+  input: CreateDocumentFromTemplateInput
+): Promise<DocumentRecord> => {
+  if (!hasTokens()) {
+    throw new Error('Authentication required');
+  }
+
+  const payload: Record<string, unknown> = {
+    document: {
+      title: input.title,
+      description: input.description,
+      document_type: input.documentType,
+      status: input.status,
+      sensitivity: input.sensitivity,
+      division: input.division,
+      department: input.department,
+      tags: input.tags || [],
+    },
+  };
+
+  if (input.file) {
+    payload.file = input.file;
+  }
+
+  const response = await apiFetch<Record<string, unknown>>(`/dms/templates/${templateId}/create_document/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return mapDocument(response);
 };

@@ -2,6 +2,7 @@
 
 import { logError } from '@/lib/client-logger';
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { startTransition } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +12,7 @@ import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { generateId, generateReferenceNumber, getNextStepNumber, formatDateForAPI } from '@/lib/correspondence-helpers';
 import { saveDraft, getDraftByCorrespondence, deleteDraft } from '@/lib/storage';
-import type { Correspondence, Minute } from '@/lib/npa-structure';
+import type { Correspondence, Minute, User } from '@/lib/npa-structure';
 import { GRADE_LEVELS } from '@/lib/npa-structure';
 import {
   Select,
@@ -50,28 +51,44 @@ import {
   Eye,
   Image as ImageIcon,
   Trash2,
+  Hash,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useRouter } from 'next/navigation';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
-import { getForwardingOptions, filterUsersBySearch } from '@/lib/routing-utils';
+import { getForwardingOptions, filterUsersBySearch, getSuggestedApprovers } from '@/lib/routing-utils';
+import { RoutingSection } from './RoutingSection';
 import { 
-  loadUserSignature, 
-  ensureDefaultSignatureTemplates, 
-  loadUserSignaturePreferences, 
-  type StoredSignature, 
   type SignatureTemplate, 
   type UserSignaturePreferences 
 } from '@/lib/signature-storage';
+import { useSignature } from '@/hooks/use-signature';
+import { SignatureSection } from './SignatureSection';
+import { FileUploadArea } from './FileUploadArea';
+import { MemoCompositionSection } from './MemoCompositionSection';
+import { useFileUpload, type UploadedFile } from '@/hooks/use-file-upload';
+import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import React from 'react';
 import {
-  initializeTemplates,
   getTemplatesForUser,
   saveTemplate,
   deleteTemplate,
   type DocumentTemplate,
 } from '@/lib/template-storage';
+import {
+  DocumentRecord,
+  queryDocuments,
+} from '@/lib/dms-storage';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
+import { formatDate } from '@/lib/correspondence-helpers';
 
 interface TreatmentModalProps {
   correspondence: Correspondence;
@@ -79,22 +96,17 @@ interface TreatmentModalProps {
   onClose: () => void;
 }
 
-interface UploadedFile {
-  id: string;
-  file: File;
-  name: string;
-  size: number;
-  type: string;
-  preview?: string;
-}
+// UploadedFile type is now imported from use-file-upload hook
 
-export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentModalProps) => {
+const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentModalProps) => {
+  const router = useRouter();
   const { addCorrespondence, addMinute, updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const { currentUser: activeUser } = useCurrentUser();
   const { users, divisions, departments, offices, officeMemberships, directorates } = useOrganization();
   
   // Form state
   const [currentUser, setCurrentUser] = useState(activeUser ?? null);
+  const [responseType, setResponseType] = useState<'memo' | 'existing-document' | 'new-document'>('memo');
   const [memoSubject, setMemoSubject] = useState(`Re: ${correspondence.subject}`);
   const [memoSubjectError, setMemoSubjectError] = useState('');
   const [memoContent, setMemoContent] = useState('');
@@ -103,6 +115,20 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
   const [forwardToError, setForwardToError] = useState('');
   const [onBehalfOf, setOnBehalfOf] = useState('');
   const [purpose, setPurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
+  
+  // Routing state (like MinuteModal)
+  const [routeType, setRouteType] = useState<'person' | 'office'>('person');
+  const [targetOfficeId, setTargetOfficeId] = useState<string>('');
+  const [personSearchQuery, setPersonSearchQuery] = useState('');
+  const [officeSearchQuery, setOfficeSearchQuery] = useState('');
+  const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
+  const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
+  
+  // Document selection state (for existing document response type)
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [documentSearchQuery, setDocumentSearchQuery] = useState('');
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [documentLoading, setDocumentLoading] = useState(false);
   
   // UI state
   const [characterCount, setCharacterCount] = useState(0);
@@ -114,26 +140,35 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
   const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   const [attachmentsSectionOpen, setAttachmentsSectionOpen] = useState(false);
   
+  // Removed old filtering state - now using RoutingSection
+  
   // Templates state
   const [memoTemplates, setMemoTemplates] = useState<DocumentTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [newTemplateName, setNewTemplateName] = useState('');
   
-  // Signature state
-  const [userSignature, setUserSignature] = useState<StoredSignature | null>(null);
+  // Signature state - using shared hook
   const [applySignature, setApplySignature] = useState(false);
-  const [signatureTemplates, setSignatureTemplates] = useState<SignatureTemplate[]>([]);
+  const [applySignatureManuallySet, setApplySignatureManuallySet] = useState(false);
   const [selectedSignatureTemplateId, setSelectedSignatureTemplateId] = useState<string | null>(null);
-  const defaultUserSignaturePreferences: UserSignaturePreferences = {
-    templateOverrides: {},
-    autoApplyForMinutes: false,
-  };
-  const [userSignaturePreferences, setUserSignaturePreferences] = useState<UserSignaturePreferences>(defaultUserSignaturePreferences);
+  const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences } = useSignature({
+    userId: activeUser?.id,
+    autoLoad: true,
+  });
   
-  // File upload state
+  // Check if user is executive
+  const isExecutive = useMemo(() => {
+    if (!activeUser?.gradeLevel) return false;
+    const executiveGrades = ['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3'];
+    return executiveGrades.includes(activeUser.gradeLevel);
+  }, [activeUser?.gradeLevel]);
+  
+  // File upload state - managed locally, FileUploadArea handles UI
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Request cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
 
@@ -142,50 +177,141 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     [users],
   );
 
-  // Initialize templates and signature
+  // Initialize templates (signature is now handled by useSignature hook)
   useEffect(() => {
     if (activeUser) {
       setCurrentUser(activeUser);
       
-      // Load signature
-      const signature = loadUserSignature(activeUser.id);
-      if (signature) {
-        setUserSignature(signature);
-      }
-      
-      // Load signature templates
-      ensureDefaultSignatureTemplates();
-      const prefs = loadUserSignaturePreferences(activeUser.id);
-      setUserSignaturePreferences(prefs ?? defaultUserSignaturePreferences);
-      
       // Load memo templates
-      initializeTemplates();
-      const templates = getTemplatesForUser(activeUser, 'treatment');
-      setMemoTemplates(templates);
+      const loadTemplates = async () => {
+        try {
+          const templates = await getTemplatesForUser(activeUser, 'treatment');
+          setMemoTemplates(templates);
+        } catch (error) {
+          logError('Failed to load memo templates:', error);
+          setMemoTemplates([]);
+        }
+      };
+      loadTemplates();
     }
   }, [activeUser]);
+
+  // Cleanup: Cancel ongoing requests when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      // Cancel any ongoing requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    }
+    return () => {
+      // Cleanup on unmount
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [isOpen]);
 
   // Load draft when modal opens
   useEffect(() => {
     if (!isOpen || !currentUser) return;
 
-    const draft = getDraftByCorrespondence(correspondence.id, 'treatment');
-    if (draft) {
-      setMemoContent(draft.content);
-      setCharacterCount(draft.content.length);
-      if (draft.subject) setMemoSubject(draft.subject);
-      if (draft.forwardTo) setForwardTo(draft.forwardTo);
-      if (draft.onBehalfOf) setOnBehalfOf(draft.onBehalfOf);
-      setHasDraft(true);
-      setDraftId(draft.id);
-    } else {
-      resetForm();
-    }
+    getDraftByCorrespondence(correspondence.id, 'treatment').then((draft) => {
+      if (draft) {
+        setMemoContent(draft.content);
+        setCharacterCount(draft.content.length);
+        if (draft.subject) setMemoSubject(draft.subject);
+        if (draft.forwardTo) setForwardTo(draft.forwardTo);
+        if (draft.onBehalfOf) setOnBehalfOf(draft.onBehalfOf);
+        setHasDraft(true);
+        setDraftId(draft.id);
+        
+        // Show warning if draft had files (we can't restore File objects from localStorage)
+        if (draft.files && draft.files.length > 0) {
+          toast.warning(
+            `Draft had ${draft.files.length} file(s) attached. Please re-upload them.`,
+            {
+              description: `Files: ${draft.files.map(f => f.name).join(', ')}`,
+              duration: 5000,
+            }
+          );
+        }
+      } else {
+        resetForm();
+      }
+    }).catch((error) => {
+      logError('Failed to load draft', error);
+    });
   }, [isOpen, correspondence.id, currentUser]);
+
+  // Load documents - simple callback like LinkDocumentDialog
+  const loadDocuments = useCallback(
+    async (queryValue: string) => {
+      setDocumentLoading(true);
+      try {
+        const response = await queryDocuments({
+          page: 1,
+          pageSize: 50,
+          search: queryValue.trim() || undefined,
+          ordering: '-updated_at',
+        });
+        setDocuments(response.results);
+      } catch (error) {
+        logError('Failed to load documents', error);
+        setDocuments([]);
+      } finally {
+        setDocumentLoading(false);
+      }
+    },
+    [],
+  );
+
+  // Load documents with debounce - exactly like LinkDocumentDialog
+  useEffect(() => {
+    if (!isOpen || responseType !== 'existing-document') {
+      if (!isOpen) {
+        setDocuments([]);
+        setSelectedDocumentId(null);
+        setDocumentSearchQuery('');
+      }
+      return;
+    }
+    const handle = setTimeout(() => {
+      void loadDocuments(documentSearchQuery);
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [isOpen, responseType, documentSearchQuery, loadDocuments]);
+
+  // Auto-apply signature for approvals (like MinuteModal)
+  useEffect(() => {
+    if (purpose === 'approval') {
+      setApplySignature(true);
+      setApplySignatureManuallySet(false);
+      return;
+    }
+
+    if (!userSignature) {
+      setApplySignature(false);
+      setApplySignatureManuallySet(false);
+      return;
+    }
+
+    if (!applySignatureManuallySet) {
+      setApplySignature(userSignaturePreferences.autoApplyForMinutes ?? false);
+    }
+  }, [purpose, userSignature, userSignaturePreferences.autoApplyForMinutes, applySignatureManuallySet]);
+
+  useEffect(() => {
+    setApplySignatureManuallySet(false);
+  }, [purpose]);
 
   const resetForm = () => {
     setHasDraft(false);
     setDraftId(null);
+    setResponseType('memo');
+    setSelectedDocumentId(null);
+    setDocumentSearchQuery('');
     setMemoSubject(`Re: ${correspondence.subject}`);
     setMemoContent('');
     setCharacterCount(0);
@@ -197,6 +323,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     setForwardToError('');
     setUploadedFiles([]);
     setApplySignature(false);
+    setApplySignatureManuallySet(false);
     setSelectedTemplateId(null);
     setSelectedSignatureTemplateId(null);
   };
@@ -210,26 +337,82 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     });
   }, [currentUser, activeUsers, divisions]);
 
+  const getRelationshipLabel = (current: typeof currentUser, superior: typeof currentUser) => {
+    if (!current || !superior) return '';
+    const currentLevel = GRADE_LEVELS.find(g => g.code === current.gradeLevel)?.level || 0;
+    const superiorLevel = GRADE_LEVELS.find(g => g.code === superior.gradeLevel)?.level || 0;
+    const gradeDiff = superiorLevel - currentLevel;
+    if (gradeDiff === 1) return 'Your Direct Supervisor';
+    if (gradeDiff === 2) return 'Your Director';
+    if (gradeDiff >= 3) return 'Executive Level';
+    return 'Supervisor';
+  };
+
   const getBehalfOfOptions = () => {
     if (!currentUser) return [];
     const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map((g) => g.code);
     const currentGradeIndex = gradeOrder.indexOf(currentUser.gradeLevel);
     if (currentGradeIndex === 0) return [];
     const superiorGrade = gradeOrder[currentGradeIndex - 1];
-    return activeUsers.filter(
-      (user) => user.gradeLevel === superiorGrade && user.division === currentUser.division,
-    );
+    return activeUsers
+      .filter(
+        (user) => user.gradeLevel === superiorGrade && user.division === currentUser.division,
+      )
+      .map(user => ({
+        ...user,
+        relationship: getRelationshipLabel(currentUser, user),
+      }));
   };
 
   const behalfOfOptions = useMemo(() => getBehalfOfOptions(), [activeUsers, currentUser, divisions]);
 
-  const filteredForwardingOptions = useMemo(() => {
-    return filterUsersBySearch(forwardingOptions, searchQuery, {
-      includeDivision: true,
-      includeDepartment: true,
-      includeEmail: true,
+  // Get suggested approvers for routing (like MinuteModal)
+  const existingMinutes = useMemo(() => getMinutesByCorrespondenceId(correspondence.id), [correspondence.id, getMinutesByCorrespondenceId]);
+  
+  const approverList = useMemo(() => {
+    if (!currentUser) return [];
+    return getSuggestedApprovers({
+      currentUser,
+      direction: 'upward', // Treatment responses are always upward
+      correspondence,
+      existingMinutes,
+      offices,
+      officeMemberships,
+      activeUsers,
     });
-  }, [forwardingOptions, searchQuery]);
+  }, [currentUser, correspondence, existingMinutes, offices, officeMemberships, activeUsers]);
+
+  const assistantList: User[] = []; // Not used for treatment responses
+  
+  const suggestedNext = approverList[0]; // First suggested approver
+  
+  // Helper functions for RoutingSection
+  const getUserOfficeInfo = useCallback((userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return null;
+    
+    const membership = officeMemberships.find(
+      m => m.userId === userId && m.isPrimary && m.isActive
+    );
+    const office = membership ? offices.find(o => o.id === membership.officeId) : undefined;
+    const division = user.division ? divisions.find(d => d.id === user.division) : undefined;
+    
+    return {
+      office: office ? { name: office.name } : undefined,
+      division: division ? { name: division.name } : undefined,
+    };
+  }, [users, officeMemberships, offices, divisions]);
+  
+  // Office options for RoutingSection
+  const officeOptions = useMemo(() => {
+    return offices.filter(o => o.isActive).map(o => ({
+      id: o.id,
+      name: o.name,
+      officeType: o.officeType,
+      directorateId: o.directorateId ?? undefined,
+      divisionId: o.divisionId ?? undefined,
+    }));
+  }, [offices]);
 
   // Get relevant signature templates for treatment
   const relevantSignatureTemplates = useMemo(() => {
@@ -265,7 +448,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     Array.from(files).forEach((file) => {
       // Check file size
       if (file.size > MODAL_CONSTANTS.FILE_UPLOAD.MAX_SIZE) {
-        toast.error(`File "${file.name}" is too large. Maximum size is 10MB.`);
+        toast.error(`File "${file.name}" is too large. Maximum size is 30MB.`);
         return;
       }
       
@@ -350,10 +533,15 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
   };
 
   // Template handlers
-  const handleApplyTemplate = () => {
-    if (!selectedTemplateId) return;
-    const template = memoTemplates.find(t => t.id === selectedTemplateId);
-    if (template) {
+  const getTemplatePlainText = (template: DocumentTemplate): string => {
+    if (template.contentText && template.contentText.trim().length > 0) {
+      return template.contentText.trim();
+    }
+    if (!template.contentHtml) return '';
+    return template.contentHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
+  const handleApplyTemplate = (template: DocumentTemplate) => {
       // Replace placeholders - use contentHtml or contentText
       let content = template.contentText || template.contentHtml || '';
       content = content.replace(/\{correspondent\}/g, correspondence.senderName || '');
@@ -364,22 +552,21 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       setMemoContent(content);
       setCharacterCount(content.length);
       toast.success('Template applied');
-    }
   };
 
-  const handleSaveAsTemplate = () => {
-    if (!currentUser || !newTemplateName.trim() || !memoContent.trim()) {
+  const handleSaveAsTemplate = async (name: string, content: string) => {
+    if (!currentUser || !name.trim() || !content.trim()) {
       toast.error('Please enter a template name and content');
       return;
     }
     
-    const template = saveTemplate({
+    const template = await saveTemplate({
       id: generateId('template'),
       scope: 'user',
       scopeId: currentUser.id,
-      title: newTemplateName.trim(),
-      contentHtml: memoContent,
-      contentText: memoContent,
+      title: name.trim(),
+      contentHtml: content,
+      contentText: content,
       createdBy: currentUser.id,
       updatedBy: currentUser.id,
       templateType: 'treatment',
@@ -392,14 +579,54 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     toast.success('Template saved');
   };
 
-  const handleDeleteTemplate = (templateId: string) => {
-    deleteTemplate(templateId);
-    setMemoTemplates(prev => prev.filter(t => t.id !== templateId));
-    if (selectedTemplateId === templateId) {
-      setSelectedTemplateId(null);
+  const handleDeleteTemplate = async (templateId: string) => {
+    try {
+      await deleteTemplate(templateId);
+      setMemoTemplates(prev => prev.filter(t => t.id !== templateId));
+      if (selectedTemplateId === templateId) {
+        setSelectedTemplateId(null);
+      }
+      toast.success('Template deleted');
+    } catch (error) {
+      logError('Failed to delete template', error);
+      toast.error('Failed to delete template. Please try again.');
     }
-    toast.success('Template deleted');
   };
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    {
+      key: 'Escape',
+      action: () => {
+        if (isOpen && !showConfirmation) {
+          onClose();
+        }
+      },
+      description: 'Close modal',
+    },
+    {
+      key: 's',
+      ctrl: true,
+      action: () => {
+        if (isOpen && !showConfirmation) {
+          handleSaveDraft();
+        }
+      },
+      description: 'Save draft (Ctrl+S)',
+      preventDefault: true,
+    },
+    {
+      key: 'Enter',
+      ctrl: true,
+      action: () => {
+        if (isOpen && !showConfirmation && validateForm()) {
+          handleSubmit();
+        }
+      },
+      description: 'Submit (Ctrl+Enter)',
+      preventDefault: true,
+    },
+  ]);
 
   const validateForm = (): boolean => {
     setMemoSubjectError('');
@@ -408,7 +635,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
 
     const trimmedSubject = memoSubject.trim();
     if (!trimmedSubject) {
-      setMemoSubjectError('Memo subject is required');
+      setMemoSubjectError('Response subject is required');
       return false;
     }
     if (trimmedSubject.length < MODAL_CONSTANTS.MEMO_SUBJECT.MIN) {
@@ -420,28 +647,44 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       return false;
     }
 
-    const trimmedContent = memoContent.trim();
-    if (!trimmedContent) {
-      setMemoContentError('Memo content is required');
-      return false;
+    // Validate based on response type
+    if (responseType === 'memo') {
+      const trimmedContent = memoContent.trim();
+      if (!trimmedContent) {
+        setMemoContentError('Memo content is required');
+        return false;
+      }
+      if (trimmedContent.length < MODAL_CONSTANTS.MEMO_CONTENT.MIN) {
+        setMemoContentError(`Content must be at least ${MODAL_CONSTANTS.MEMO_CONTENT.MIN} characters`);
+        return false;
+      }
+      if (trimmedContent.length > MODAL_CONSTANTS.MEMO_CONTENT.MAX) {
+        setMemoContentError(`Content must not exceed ${MODAL_CONSTANTS.MEMO_CONTENT.MAX} characters`);
+        return false;
+      }
+    } else if (responseType === 'existing-document') {
+      if (!selectedDocumentId) {
+        toast.error('Please select a document to attach');
+        return false;
+      }
     }
-    if (trimmedContent.length < MODAL_CONSTANTS.MEMO_CONTENT.MIN) {
-      setMemoContentError(`Content must be at least ${MODAL_CONSTANTS.MEMO_CONTENT.MIN} characters`);
-      return false;
-    }
-    if (trimmedContent.length > MODAL_CONSTANTS.MEMO_CONTENT.MAX) {
-      setMemoContentError(`Content must not exceed ${MODAL_CONSTANTS.MEMO_CONTENT.MAX} characters`);
+
+    // Validate recipient - either person or office must be selected
+    if (!forwardTo && !targetOfficeId) {
+      setForwardToError('Please select a recipient (person or office)');
       return false;
     }
 
-    if (!forwardTo) {
-      setForwardToError('Please select a recipient');
-      return false;
-    }
-
-    if (applySignature && relevantSignatureTemplates.length > 0 && !selectedSignatureTemplateId) {
-      toast.error('Please select a signature template');
-      return false;
+    // Signature validation - only for approvals
+    if (purpose === 'approval') {
+      if (!userSignature) {
+        toast.error('A digital signature is required to approve. Upload your signature in Settings → Signature.');
+        return false;
+      }
+      if (applySignature && relevantSignatureTemplates.length > 0 && !selectedSignatureTemplateId) {
+        toast.error('Please select a signature template');
+        return false;
+      }
     }
 
     return true;
@@ -464,7 +707,45 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     }
 
     setIsSubmitting(true);
-    const recipient = findUserById(forwardTo);
+    // Create AbortController for request cancellation
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+    
+    // Determine recipient - use person if selected, otherwise use office primary member
+    let recipient = forwardTo ? findUserById(forwardTo) : null;
+    let recipientOfficeId = targetOfficeId || undefined;
+    
+    // If routing to office, try to get primary member
+    if (!recipient && targetOfficeId) {
+      const primaryMember = officeMemberships.find(
+        (m) => m.officeId === targetOfficeId && m.isPrimary && m.isActive,
+      );
+      if (primaryMember) {
+        recipient = findUserById(primaryMember.userId);
+      }
+    }
+    
+    // Fallback: use forwardTo if available
+    if (!recipient && forwardTo) {
+      recipient = findUserById(forwardTo);
+    }
+    
+    // Get recipient's office ID if routing to a person
+    if (recipient && !recipientOfficeId) {
+      const recipientMembership = officeMemberships.find(
+        (m) => m.userId === recipient.id && m.isPrimary && m.isActive,
+      );
+      if (recipientMembership) {
+        recipientOfficeId = recipientMembership.officeId;
+      }
+    }
+    
+    // Get current user's office ID
+    const currentUserMembership = officeMemberships.find(
+      (m) => m.userId === currentUser.id && m.isPrimary && m.isActive,
+    );
+    const currentUserOfficeId = currentUserMembership?.officeId;
+    
     const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) : null;
     const division = currentUser.division ? divisions.find((div) => div.id === currentUser.division) : undefined;
 
@@ -473,10 +754,16 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       const existingMinutes = getMinutesByCorrespondenceId(correspondence.id);
       const nextStep = getNextStepNumber(existingMinutes);
 
-      // Build minute text with signature if applicable
-      let minuteText = `[TREATMENT & RESPONSE]\n\nSubject: ${memoSubject.trim()}\n\n${memoContent.trim()}`;
+      // Build minute text based on response type
+      let minuteText = '';
+      if (responseType === 'memo') {
+        minuteText = `[TREATMENT & RESPONSE]\n\nSubject: ${memoSubject.trim()}\n\n${memoContent.trim()}`;
+      } else if (responseType === 'existing-document') {
+        const selectedDoc = documents.find(d => d.id === selectedDocumentId);
+        minuteText = `[RESPONSE WITH DOCUMENT]\n\nResponse sent with document: ${selectedDoc?.title || 'Document'}\n\n${memoContent.trim() || 'See attached document for details.'}`;
+      }
       
-      if (applySignature && selectedSignatureTemplateId) {
+      if (purpose === 'approval' && applySignature && selectedSignatureTemplateId) {
         const signatureTemplate = relevantSignatureTemplates.find(t => t.id === selectedSignatureTemplateId);
         if (signatureTemplate) {
           minuteText += `\n\n---\n${signatureTemplate.name}`;
@@ -484,6 +771,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
       }
 
       const minuteResponse = await apiFetch('/correspondence/minutes/', {
+        signal,
         method: 'POST',
         body: JSON.stringify({
           correspondence: correspondence.id,
@@ -493,58 +781,112 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
           minute_text: minuteText,
           direction: 'upward',
           step_number: nextStep,
+          from_office_id: currentUserOfficeId || undefined,
+          to_office_id: recipientOfficeId || targetOfficeId || undefined,
+          to_user_id: forwardTo || undefined,
           signature: applySignature && userSignature ? userSignature.imageData : null,
         }),
       });
 
-      // Upload attachments if any
-      if (uploadedFiles.length > 0) {
-        for (const uploadedFile of uploadedFiles) {
-          const formData = new FormData();
-          formData.append('file', uploadedFile.file);
-          formData.append('correspondence', correspondence.id);
-          
-          await apiFetch('/correspondence/attachments/', {
-            method: 'POST',
-            body: formData,
-            headers: {}, // Let browser set Content-Type for FormData
-          });
+      // Update original correspondence
+      const correspondenceUpdate: unknown = {
+        direction: 'upward',
+        status: 'in-progress',
+      };
+      
+      if (forwardTo) {
+        correspondenceUpdate.current_approver_id = forwardTo;
+      } else if (targetOfficeId) {
+        correspondenceUpdate.current_office = targetOfficeId;
+        const primaryMember = officeMemberships.find(
+          (m) => m.officeId === targetOfficeId && m.isPrimary && m.isActive,
+        );
+        if (primaryMember) {
+          correspondenceUpdate.current_approver_id = primaryMember.userId;
         }
       }
-
-      // Update original correspondence
+      
       await apiFetch(`/correspondence/items/${correspondence.id}/`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          direction: 'upward',
-          current_approver_id: forwardTo,
-          status: 'in-progress',
-        }),
+        body: JSON.stringify(correspondenceUpdate),
+        signal,
       });
 
-      // Create new response correspondence
-      await apiFetch('/correspondence/items/', {
+      // Create new response correspondence with body_html and attachments
+      const responseFormData = new FormData();
+      responseFormData.append('reference_number', generateReferenceNumber(division?.code || 'NPA'));
+      responseFormData.append('subject', memoSubject.trim());
+      
+      // Include content based on response type
+      if (responseType === 'memo') {
+        responseFormData.append('body_html', memoContent.trim());
+        responseFormData.append('summary', memoContent.trim().substring(0, 500));
+      } else {
+        // For document responses, use memo content as notes or default message
+        const notes = memoContent.trim() || `Response to ${correspondence.referenceNumber}`;
+        responseFormData.append('summary', notes.substring(0, 500));
+      }
+      responseFormData.append('source', 'internal');
+      responseFormData.append('received_date', formatDateForAPI(new Date()));
+      responseFormData.append('sender_name', actingFor ? `${currentUser.name} (on behalf of ${actingFor.name})` : currentUser.name);
+      responseFormData.append('sender_organization', division?.name ?? '');
+      responseFormData.append('status', 'pending');
+      responseFormData.append('priority', correspondence.priority);
+      if (recipient?.division) responseFormData.append('division', recipient.division);
+      else if (correspondence.divisionId) responseFormData.append('division', correspondence.divisionId);
+      if (recipient?.department) responseFormData.append('department', recipient.department);
+      else if (correspondence.departmentId) responseFormData.append('department', correspondence.departmentId);
+      // Set recipient - prefer person, fallback to office primary member
+      if (forwardTo) {
+        responseFormData.append('current_approver_id', forwardTo);
+      } else if (targetOfficeId) {
+        const primaryMember = officeMemberships.find(
+          (m) => m.officeId === targetOfficeId && m.isPrimary && m.isActive,
+        );
+        if (primaryMember) {
+          responseFormData.append('current_approver_id', primaryMember.userId);
+        }
+        responseFormData.append('current_office', targetOfficeId);
+      }
+      responseFormData.append('direction', 'upward');
+      responseFormData.append('parent_correspondence_id', correspondence.id);
+      
+      // Add attachments to response correspondence
+      if (uploadedFiles.length > 0) {
+        uploadedFiles.forEach((uploadedFile) => {
+          responseFormData.append('attachments', uploadedFile.file);
+        });
+      }
+
+      const responseCorrespondence = await apiFetch<{ id: string }>('/correspondence/items/', {
+        signal,
         method: 'POST',
-        body: JSON.stringify({
-          reference_number: generateReferenceNumber(division?.code || 'NPA'),
-          subject: memoSubject.trim(),
-          source: 'internal',
-          received_date: formatDateForAPI(new Date()),
-          sender_name: actingFor ? `${currentUser.name} (on behalf of ${actingFor.name})` : currentUser.name,
-          sender_organization: division?.name ?? '',
-          status: 'pending',
-          priority: correspondence.priority,
-          division: recipient?.division ?? correspondence.divisionId,
-          department: recipient?.department ?? correspondence.departmentId,
-          current_approver_id: forwardTo,
-          direction: 'upward',
-          parent_correspondence_id: correspondence.id,
-        }),
+        body: responseFormData,
+        headers: {}, // Let browser set Content-Type for FormData
       });
+
+      // Link document if existing document response type
+      if (responseType === 'existing-document' && selectedDocumentId) {
+        await apiFetch('/correspondence/document-links/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            correspondence: responseCorrespondence.id,
+            document: selectedDocumentId,
+            notes: memoContent.trim() || `Response to ${correspondence.referenceNumber}`,
+          }),
+        });
+      }
 
       // Close modal and show success immediately
       if (draftId) {
-        deleteDraft(draftId);
+        try {
+          await deleteDraft(draftId);
+        } catch (error) {
+          logError('Failed to delete draft', error);
+        }
       }
 
       setShowConfirmation(false);
@@ -567,35 +909,56 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
         logError('Background sync failed after treatment', error);
         // Don't show error to user - sync will happen on next page load
       });
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
+      // Don't show error if request was cancelled
+      if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+        setIsSubmitting(false);
+        setShowConfirmation(false);
+        return;
+      }
       logError('Failed to process treatment', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
+      // Clear AbortController after request completes
+      abortControllerRef.current = null;
     }
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!currentUser) {
       toast.error('Current user not found.');
       return;
     }
-    const draft = saveDraft({
-      id: draftId || generateId('draft'),
-      correspondenceId: correspondence.id,
-      type: 'treatment',
-      content: memoContent,
-      subject: memoSubject,
-      forwardTo,
-      onBehalfOf: onBehalfOf !== 'none' ? onBehalfOf : undefined,
-      timestamp: new Date().toISOString(),
-    });
+    
+    // Save file metadata (we can't save File objects to localStorage)
+    const fileMetadata = uploadedFiles.map(file => ({
+      id: file.id,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    }));
+    
+    try {
+      const draft = await saveDraft({
+        correspondenceId: correspondence.id,
+        type: 'treatment',
+        content: memoContent,
+        subject: memoSubject,
+        forwardTo,
+        onBehalfOf: onBehalfOf !== 'none' ? onBehalfOf : undefined,
+        files: fileMetadata.length > 0 ? fileMetadata : undefined,
+      });
 
-    setHasDraft(true);
-    setDraftId(draft.id);
-    toast.info('Draft saved');
+      setHasDraft(true);
+      setDraftId(draft.id);
+      toast.info(`Draft saved${fileMetadata.length > 0 ? ` with ${fileMetadata.length} file(s)` : ''}`);
+    } catch (error) {
+      logError('Failed to save draft', error);
+      toast.error('Failed to save draft. Please try again.');
+    }
   };
 
   if (!currentUser) return null;
@@ -604,14 +967,17 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
     ? divisions.find((division) => division.id === currentUser.division) ?? null
     : null;
   const selectedRecipient = forwardTo ? findUserById(forwardTo) ?? null : null;
+  const selectedOffice = targetOfficeId ? offices.find(o => o.id === targetOfficeId) : null;
   const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) ?? null : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <DialogContent 
+        className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
+            <FileText className="h-5 w-5 text-primary" aria-hidden="true" />
             Treat & Respond
             {hasDraft && (
               <Badge variant="secondary" className="ml-2 text-xs">Draft</Badge>
@@ -623,11 +989,12 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
             )}
           </DialogTitle>
           <DialogDescription>
-            Compose a formal response memo to this correspondence
+            Compose a response memo or attach an existing document to respond to this correspondence
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 mt-4">
+        <ScrollArea className="max-h-[calc(95vh-220px)] sm:max-h-[calc(90vh-220px)] pr-4">
+          <div className="space-y-6 py-2">
             {/* Original Correspondence Card */}
             <Card className="bg-muted/50">
               <CardContent className="p-4">
@@ -681,7 +1048,7 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                         <div className="flex flex-col min-w-0">
                           <span className="font-medium truncate">{user.name}</span>
                           <span className="text-xs text-muted-foreground truncate">
-                            {user.systemRole} - {user.gradeLevel}
+                            {user.systemRole} • {(user as User & { relationship?: string }).relationship || 'Supervisor'}
                           </span>
                         </div>
                       </SelectItem>
@@ -691,10 +1058,15 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
                 {actingFor && (
                   <Card className="bg-info/5 border-info/20">
                     <CardContent className="p-3">
-                      <p className="text-xs flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-info" />
-                        Acting on behalf of <strong>{actingFor.name}</strong> ({actingFor.systemRole})
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-xs flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-info" />
+                          <strong>Acting on behalf of:</strong> {actingFor.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground pl-6">
+                          {actingFor.systemRole} • {behalfOfOptions.find(o => o.id === actingFor.id)?.relationship || 'Supervisor'}
+                        </p>
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -703,448 +1075,356 @@ export const TreatmentModal = ({ correspondence, isOpen, onClose }: TreatmentMod
 
             <Separator />
 
-            {/* Memo Subject */}
-            <div className="space-y-2">
-              <Label htmlFor="subject" className="flex items-center justify-between">
-                <span>Memo Subject *</span>
-                <span className="text-xs text-muted-foreground font-normal">
-                  {memoSubject.length}/{MODAL_CONSTANTS.MEMO_SUBJECT.MAX}
-                </span>
-              </Label>
-              <Input
-                id="subject"
-                value={memoSubject}
-                onChange={(e) => {
-                  setMemoSubject(e.target.value);
-                  if (memoSubjectError) setMemoSubjectError('');
-                }}
-                placeholder="Re: Subject of response"
-                className={memoSubjectError ? 'border-destructive' : ''}
-                maxLength={MODAL_CONSTANTS.MEMO_SUBJECT.MAX}
-              />
-              {memoSubjectError && (
-                <p className="text-xs text-destructive">{memoSubjectError}</p>
-              )}
-            </div>
-
-            {/* Memo Content with Templates */}
-            <div className="space-y-3">
-              <Label className="flex items-center justify-between">
-                <span>Memo Content *</span>
-                <span className={`text-xs ${getCharacterCountColor(characterCount, MODAL_CONSTANTS.MEMO_CONTENT.MAX)}`}>
-                  {characterCount}/{MODAL_CONSTANTS.MEMO_CONTENT.MAX}
-                </span>
-              </Label>
-
-              {/* Collapsible Template Section */}
-              <Collapsible open={templateSectionOpen} onOpenChange={setTemplateSectionOpen}>
-                <CollapsibleTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full justify-between">
-                    <span className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      Response Templates
-                      {memoTemplates.length > 0 && (
-                        <Badge variant="secondary" className="text-xs">{memoTemplates.length}</Badge>
-                      )}
-                    </span>
-                    {templateSectionOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="pt-3 space-y-3">
-                  <div className="p-3 border border-border rounded-lg bg-muted/30 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select
-                        value={selectedTemplateId ?? 'none'}
-                        onValueChange={(v) => setSelectedTemplateId(v === 'none' ? null : v)}
-                      >
-                        <SelectTrigger className="w-full sm:w-[200px] h-8">
-                          <SelectValue placeholder="Choose a template" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">No template</SelectItem>
-                          {memoTemplates.map(template => (
-                            <SelectItem key={template.id} value={template.id}>
-                              {template.title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleApplyTemplate}
-                        disabled={!selectedTemplateId}
-                      >
-                        Insert
-                      </Button>
-                      {selectedTemplateId && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteTemplate(selectedTemplateId)}
-                          className="text-destructive hover:text-destructive/80"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-
-                    <Separator />
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Input
-                        value={newTemplateName}
-                        onChange={(e) => setNewTemplateName(e.target.value)}
-                        placeholder="Template name"
-                        className="h-8 w-full sm:w-[200px]"
-                      />
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleSaveAsTemplate}
-                        disabled={!newTemplateName.trim() || !memoContent.trim()}
-                      >
-                        <Save className="h-3 w-3 mr-1" />
-                        Save Current
-                      </Button>
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-
-              {/* Suggested Covering Note */}
-              {showSuggestedNote && uploadedFiles.length > 0 && !memoContent.trim() && (
-                <Card className="bg-info/5 border-info/30">
-                  <CardContent className="p-3">
-                    <div className="flex items-start gap-3">
-                      <AlertCircle className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <p className="text-sm text-foreground">
-                          <strong>Suggested covering note:</strong>
-                        </p>
-                        <p className="text-sm text-muted-foreground italic">
-                          "{suggestedCoveringNote}"
-                        </p>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="default"
-                            onClick={handleUseSuggestedNote}
-                          >
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Use This
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={handleDismissSuggestedNote}
-                          >
-                            Dismiss
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Textarea
-                id="content"
-                placeholder="Compose your response memo here...
-
-You can use placeholders like {correspondent}, {subject}, {reference}, {date} in templates."
-                value={memoContent}
-                onChange={(e) => handleContentChange(e.target.value)}
-                className={`min-h-[200px] resize-none ${memoContentError ? 'border-destructive' : ''}`}
-                maxLength={MODAL_CONSTANTS.MEMO_CONTENT.MAX}
-              />
-              {memoContentError && (
-                <p className="text-xs text-destructive">{memoContentError}</p>
-              )}
-              {characterCount > MODAL_CONSTANTS.MEMO_CONTENT.MAX * 0.9 && characterCount < MODAL_CONSTANTS.MEMO_CONTENT.MAX && (
-                <p className="text-xs text-warning">Approaching character limit</p>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Attachments Section */}
-            <Collapsible open={attachmentsSectionOpen} onOpenChange={setAttachmentsSectionOpen}>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full justify-between">
-                  <span className="flex items-center gap-2">
-                    <Paperclip className="h-4 w-4" />
-                    Attachments
-                    {uploadedFiles.length > 0 && (
-                      <Badge variant="secondary" className="text-xs">{uploadedFiles.length}</Badge>
-                    )}
-                  </span>
-                  {attachmentsSectionOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-3 space-y-3">
-                {/* Upload Area */}
-                <div
-                  className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center transition-colors ${
-                    isDragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-                  }`}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept={MODAL_CONSTANTS.FILE_UPLOAD.ALLOWED_TYPES.join(',')}
-                    onChange={(e) => handleFileSelect(e.target.files)}
-                    className="hidden"
-                  />
-                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Drag & drop files here, or{' '}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-primary hover:underline"
-                    >
-                      browse
-                    </button>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    PDF, Word, Images • Max 10MB each
-                  </p>
-                </div>
-
-                {/* Uploaded Files List */}
-                {uploadedFiles.length > 0 && (
-                  <div className="space-y-2">
-                    {uploadedFiles.map((file) => (
-                      <div
-                        key={file.id}
-                        className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background"
-                      >
-                        {file.preview ? (
-                          <img
-                            src={file.preview}
-                            alt={file.name}
-                            className="h-10 w-10 rounded object-cover"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded bg-muted flex items-center justify-center">
-                            <File className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <p className="text-sm font-medium truncate">{file.name}</p>
-                          <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleRemoveFile(file.id)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CollapsibleContent>
-            </Collapsible>
-
-            <Separator />
-
-            {/* Forward To Section */}
+            {/* Response Type Selection */}
             <div className="space-y-3">
               <Label className="flex items-center gap-2">
-                <Send className="h-4 w-4" />
-                Forward Response To *
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                Response Type *
               </Label>
-
-              {/* Search Input */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by name, division, department..."
-                  className="pl-9"
-                />
-              </div>
-
-              {/* Purpose Selection */}
-              <div className="flex flex-wrap gap-2">
-                {(['action', 'approval', 'comment', 'information'] as const).map((p) => (
-                  <Badge
-                    key={p}
-                    variant={purpose === p ? 'default' : 'outline'}
-                    className="cursor-pointer capitalize"
-                    onClick={() => setPurpose(p)}
-                  >
-                    {p === 'action' ? 'For Action' :
-                     p === 'approval' ? 'For Approval' :
-                     p === 'comment' ? 'For Comment' : 'For Information'}
-                  </Badge>
-                ))}
-              </div>
-
-              {/* Recipients List */}
-              <ScrollArea className="h-[200px] sm:h-[250px] border border-border rounded-lg">
-                <div className="p-2 space-y-1 min-w-0">
-                  {filteredForwardingOptions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No recipients found
-                    </p>
-                  ) : (
-                    filteredForwardingOptions.map((user) => (
-                      <div
-                        key={user.id}
-                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
-                          forwardTo === user.id
-                            ? 'bg-primary/10 border border-primary/30'
-                            : 'hover:bg-muted/50'
-                        }`}
-                        onClick={() => {
-                          setForwardTo(user.id);
-                          if (forwardToError) setForwardToError('');
-                        }}
-                      >
-                        <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                          <UserIcon className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <p className="text-sm font-medium truncate">{user.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {user.systemRole} • {user.division || 'No division'}
-                          </p>
-                        </div>
-                        {forwardTo === user.id && (
-                          <CheckCircle className="h-4 w-4 text-primary" />
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </ScrollArea>
-
-              {forwardToError && (
-                <p className="text-xs text-destructive">{forwardToError}</p>
-              )}
-
-              {/* Selected Recipient Card */}
-              {selectedRecipient && (
-                <Card className="border-primary/30 bg-primary/5 overflow-hidden">
-                  <CardContent className="p-3">
-                    <div className="flex items-center justify-between gap-2 min-w-0">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                          <UserIcon className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <p className="text-sm font-medium truncate">{selectedRecipient.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {selectedRecipient.systemRole} • {purpose === 'action' ? 'For Action' :
-                             purpose === 'approval' ? 'For Approval' :
-                             purpose === 'comment' ? 'For Comment' : 'For Information'}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 flex-shrink-0"
-                        onClick={() => setForwardTo('')}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Digital Signature Section */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4" />
-                  Digital Signature
-                </Label>
-                <Switch
-                  checked={applySignature}
-                  onCheckedChange={setApplySignature}
-                  disabled={!userSignature}
-                />
-              </div>
-
-              {!userSignature ? (
-                <Card className="border-dashed">
-                  <CardContent className="p-4 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      No signature on file.{' '}
-                      <a href="/settings" className="text-primary hover:underline">
-                        Upload one in Settings
-                      </a>
-                    </p>
-                  </CardContent>
-                </Card>
-              ) : applySignature ? (
+              <RadioGroup value={responseType} onValueChange={(v: Record<string, unknown>) => {
+                setResponseType(v);
+                // Reset document selection when switching away from existing-document
+                if (v !== 'existing-document') {
+                  setSelectedDocumentId(null);
+                  setDocumentSearchQuery('');
+                }
+                // Reset memo content and errors when switching to document
+                if (v === 'existing-document') {
+                  setMemoContent('');
+                  setCharacterCount(0);
+                  setMemoContentError('');
+                } else if (v === 'memo') {
+                  // Clear document-related errors when switching to memo
+                  // Keep memo content if user was typing
+                }
+              }}>
                 <div className="space-y-3">
-                  <div className="flex items-center gap-4 p-3 border border-border rounded-lg">
-                    <div className="p-2 border rounded bg-white">
-                      <img
-                        src={userSignature.imageData}
-                        alt="Your signature"
-                        className="max-h-16 object-contain"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">Signature on File</p>
+                  {/* Memo Option */}
+                  <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                    <RadioGroupItem value="memo" id="response-memo" className="mt-1" />
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor="response-memo" className="font-medium cursor-pointer flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-blue-500" />
+                        Memo Response
+                      </Label>
                       <p className="text-xs text-muted-foreground">
-                        Uploaded {new Date(userSignature.uploadedAt).toLocaleDateString()}
+                        Compose a formal response memo with text content.
                       </p>
                     </div>
                   </div>
 
-                  {relevantSignatureTemplates.length > 0 && (
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Signature Template</Label>
-                      <Select
-                        value={selectedSignatureTemplateId ?? undefined}
-                        onValueChange={setSelectedSignatureTemplateId}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select template" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {relevantSignatureTemplates.map(template => (
-                            <SelectItem key={template.id} value={template.id}>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{template.name}</span>
-                                <span className="text-xs text-muted-foreground">{template.description}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                  {/* Existing Document Option */}
+                  <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                    <RadioGroupItem value="existing-document" id="response-document" className="mt-1" />
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor="response-document" className="font-medium cursor-pointer flex items-center gap-2">
+                        <LinkIcon className="h-4 w-4 text-purple-500" />
+                        Attach Existing Document
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Attach an existing DMS document to your response.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <Separator />
+
+            {/* Document Selection Section - Only for existing document */}
+            {responseType === 'existing-document' && (
+              <div className="space-y-2">
+                <Label htmlFor="document-search">Select Document <span className="text-destructive">*</span></Label>
+                
+                {/* Selected Document Preview */}
+                {selectedDocumentId && (() => {
+                  const selectedDoc = documents.find(d => d.id === selectedDocumentId);
+                  if (!selectedDoc) return null;
+                  return (
+                    <Card className="border-primary/30 bg-primary/5 overflow-hidden mb-2">
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <FileText className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="flex-1 min-w-0 overflow-hidden">
+                              <p className="text-sm font-medium truncate">{selectedDoc.title}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {selectedDoc.referenceNumber && (
+                                  <>
+                                    <Hash className="h-3 w-3 inline mr-1" />
+                                    {selectedDoc.referenceNumber} •{' '}
+                                  </>
+                                )}
+                                {formatDate(selectedDoc.updatedAt)}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 flex-shrink-0"
+                            onClick={() => setSelectedDocumentId(null)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+                
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="document-search"
+                    value={documentSearchQuery}
+                    onChange={(e) => setDocumentSearchQuery(e.target.value)}
+                    placeholder="Search documents by title, reference number, or status..."
+                    className="pl-9"
+                  />
+                </div>
+                <ScrollArea className="h-48 border rounded-md p-2">
+                  {documentLoading ? (
+                    <div className="flex flex-col items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground">Searching documents...</p>
+                    </div>
+                  ) : documents.length > 0 ? (
+                    <div className="space-y-1">
+                      {documents.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className={`flex items-center gap-2 p-2 rounded-md hover:bg-muted cursor-pointer transition-all ${
+                            selectedDocumentId === doc.id 
+                              ? 'bg-primary/5 border-2 border-primary shadow-sm' 
+                              : 'border border-transparent hover:border-border'
+                          }`}
+                          onClick={() => setSelectedDocumentId(doc.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedDocumentId(doc.id);
+                            }
+                          }}
+                        >
+                          <Checkbox
+                            checked={selectedDocumentId === doc.id}
+                            onCheckedChange={(checked) => {
+                              setSelectedDocumentId(checked ? doc.id : null);
+                            }}
+                            className="flex-shrink-0"
+                          />
+                          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{doc.title}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {doc.referenceNumber && (
+                                <>
+                                  <Hash className="h-3 w-3 inline mr-1" />
+                                  {doc.referenceNumber} •{' '}
+                                </>
+                              )}
+                              {formatDate(doc.updatedAt)}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="text-xs shrink-0">
+                            {doc.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <FileText className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                      <p className="text-sm text-muted-foreground font-medium mb-1">
+                        {documentSearchQuery.trim() ? 'No documents found' : 'No documents available'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {documentSearchQuery.trim() 
+                          ? `No documents match "${documentSearchQuery}". Try different search terms.`
+                          : 'No documents found. Create a document in DMS to attach it to your response.'}
+                      </p>
                     </div>
                   )}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Toggle on to include your digital signature
-                </p>
-              )}
-            </div>
-        </div>
+                </ScrollArea>
+              </div>
+            )}
 
-        <DialogFooter className="border-t pt-4 mt-4">
+            {/* Optional Notes for Document Response */}
+            {responseType === 'existing-document' && (
+              <div className="space-y-2">
+                <Label htmlFor="response-notes">Notes (Optional)</Label>
+                <Textarea
+                  id="response-notes"
+                  value={memoContent}
+                  onChange={(e) => {
+                    setMemoContent(e.target.value);
+                    setCharacterCount(e.target.value.length);
+                  }}
+                  placeholder="Add any additional notes or instructions..."
+                  rows={3}
+                  maxLength={1000}
+                />
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Optional notes to accompany the document</span>
+                  <span className={getCharacterCountColor(characterCount, 1000)}>
+                    {characterCount} / 1000
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Memo Composition Section - Only for memo response type */}
+            {responseType === 'memo' && (
+              <>
+                <MemoCompositionSection
+              memoSubject={memoSubject}
+              onMemoSubjectChange={(subject) => {
+                setMemoSubject(subject);
+                if (memoSubjectError) setMemoSubjectError('');
+              }}
+              memoSubjectError={memoSubjectError}
+              memoContent={memoContent}
+              onMemoContentChange={handleContentChange}
+              memoContentError={memoContentError}
+              characterCount={characterCount}
+              templates={memoTemplates}
+              selectedTemplateId={selectedTemplateId}
+              onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
+              onTemplateApply={handleApplyTemplate}
+              onTemplateSave={handleSaveAsTemplate}
+              onTemplateDelete={handleDeleteTemplate}
+              newTemplateName={newTemplateName}
+              onNewTemplateNameChange={setNewTemplateName}
+              templateSectionOpen={templateSectionOpen}
+              onTemplateSectionOpenChange={setTemplateSectionOpen}
+              getTemplatePlainText={getTemplatePlainText}
+              canDeleteTemplate={(template) => template.scope === 'user' && template.createdBy === currentUser?.id}
+              showSuggestedNote={showSuggestedNote}
+              suggestedCoveringNote={suggestedCoveringNote}
+              onUseSuggestedNote={handleUseSuggestedNote}
+              onDismissSuggestedNote={handleDismissSuggestedNote}
+              hasFiles={uploadedFiles.length > 0}
+            />
+              </>
+            )}
+
+            <Separator />
+
+            {/* Attachments Section - Only for Memo Response */}
+            {responseType === 'memo' && (
+              <Collapsible open={attachmentsSectionOpen} onOpenChange={setAttachmentsSectionOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-between">
+                    <span className="flex items-center gap-2">
+                      <Paperclip className="h-4 w-4" />
+                      Attachments
+                      {uploadedFiles.length > 0 && (
+                        <Badge variant="secondary" className="text-xs">{uploadedFiles.length}</Badge>
+                      )}
+                    </span>
+                    {attachmentsSectionOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3 space-y-3">
+                  {/* File Upload Area - Using shared component */}
+                  <FileUploadArea
+                    files={uploadedFiles}
+                    onFilesChange={(files) => {
+                      // Use startTransition to defer state update until after render
+                      startTransition(() => {
+                        // Update local state
+                        setUploadedFiles(files);
+                        // Show suggested note if no content
+                        if (files.length > 0 && !memoContent.trim()) {
+                          setShowSuggestedNote(true);
+                        }
+                      });
+                    }}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            <Separator />
+
+            {/* Route To - Using RoutingSection component (like MinuteModal) */}
+            <RoutingSection
+              routeType={routeType}
+              onRouteTypeChange={(v) => {
+                setRouteType(v);
+                if (v === 'office') {
+                  setForwardTo('');
+                  setForwardToError('');
+                  setPersonSearchQuery('');
+                } else {
+                  setTargetOfficeId('');
+                  setOfficeSearchQuery('');
+                  setOfficeFilterDirectorate('all');
+                  setOfficeFilterDivision('all');
+                }
+              }}
+              forwardTo={forwardTo}
+              onForwardToChange={setForwardTo}
+              forwardToError={forwardToError}
+              personSearchQuery={personSearchQuery}
+              onPersonSearchQueryChange={setPersonSearchQuery}
+              targetOfficeId={targetOfficeId}
+              onTargetOfficeIdChange={(v) => {
+                setTargetOfficeId(v);
+                setForwardTo('');
+              }}
+              officeSearchQuery={officeSearchQuery}
+              onOfficeSearchQueryChange={setOfficeSearchQuery}
+              officeFilterDirectorate={officeFilterDirectorate}
+              onOfficeFilterDirectorateChange={(v) => {
+                setOfficeFilterDirectorate(v);
+                setOfficeFilterDivision('all');
+              }}
+              officeFilterDivision={officeFilterDivision}
+              onOfficeFilterDivisionChange={setOfficeFilterDivision}
+              purpose={purpose}
+              onPurposeChange={setPurpose}
+              offices={officeOptions}
+              directorates={directorates}
+              divisions={divisions}
+              users={activeUsers}
+              assistantList={assistantList}
+              approverList={approverList}
+              suggestedNext={suggestedNext}
+              findUserById={findUserById}
+              getUserOfficeInfo={getUserOfficeInfo}
+            />
+
+            <Separator />
+
+            {/* Signature Section - Only for Approvals (like MinuteModal) */}
+            {purpose === 'approval' && (
+              <SignatureSection
+                signature={userSignature}
+                currentUser={currentUser}
+                actionType="minute"
+                isExecutive={isExecutive}
+                applySignature={applySignature}
+                onApplySignatureChange={(checked) => {
+                  setApplySignatureManuallySet(true);
+                  setApplySignature(checked);
+                }}
+                signatureTemplates={relevantSignatureTemplates}
+                selectedTemplateId={selectedSignatureTemplateId}
+                onTemplateChange={setSelectedSignatureTemplateId}
+                showTemplateSelector={true}
+              />
+            )}
+          </div>
+        </ScrollArea>
+
+        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <Button variant="outline" onClick={handleSaveDraft} disabled={isSubmitting}>
             <Save className="h-4 w-4 mr-2" />
             Save Draft
@@ -1171,7 +1451,7 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
         onConfirm={handleConfirm}
         type="treatment"
         data={{
-          currentUserName: currentUser.name,
+          currentUserName: currentUser?.name || '',
           recipientName: selectedRecipient?.name || '',
           subject: memoSubject,
           content: memoContent,
@@ -1183,3 +1463,14 @@ You can use placeholders like {correspondent}, {subject}, {reference}, {date} in
     </Dialog>
   );
 };
+
+// Wrap with error boundary and memo
+const TreatmentModalWithErrorBoundary = React.memo((props: TreatmentModalProps) => (
+  <ModalErrorBoundary onClose={props.onClose}>
+    <TreatmentModalComponent {...props} />
+  </ModalErrorBoundary>
+));
+
+TreatmentModalWithErrorBoundary.displayName = 'TreatmentModal';
+
+export { TreatmentModalWithErrorBoundary as TreatmentModal };

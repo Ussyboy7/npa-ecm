@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,35 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { sanitizeHtml } from '@/lib/sanitize-html';
 import {
   ArrowLeft,
   Send,
@@ -31,6 +60,15 @@ import {
   Tag,
   Phone,
   ExternalLink,
+  RefreshCw,
+  MoreVertical,
+  Users,
+  Copy,
+  Trash2,
+  Share2,
+  ChevronDown,
+  ChevronUp,
+  FolderTree,
 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
@@ -55,78 +93,161 @@ const OutboxDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [documentPreviewLoading, setDocumentPreviewLoading] = useState(false);
-  const [wordHtml, setWordHtml] = useState<string | null>(null);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState(0);
+  const [attachmentPreviews, setAttachmentPreviews] = useState<Map<number, { pdfUrl?: string; wordHtml?: string; error?: string }>>(new Map());
+  const [relatedCorrespondence, setRelatedCorrespondence] = useState<Correspondence[]>([]);
+  const [caseLinks, setCaseLinks] = useState<Array<{ id: string; caseNumber: string; title: string }>>([]);
+  const [expandRoutingHistory, setExpandRoutingHistory] = useState(false);
+  const [previewErrors, setPreviewErrors] = useState<Map<number, string>>(new Map());
+  const [resendDialogOpen, setResendDialogOpen] = useState(false);
+  const [resendCustomMessage, setResendCustomMessage] = useState('');
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState('');
 
-  useEffect(() => {
+  // Load attachment preview helper - defined before loadData so it can be used
+  const loadAttachmentPreview = useCallback(async (index: number, attachment: CorrespondenceAttachment) => {
+    if (!attachment?.fileUrl) return;
+
+    const fileName = attachment.fileName || '';
+    const isPDF = attachment.fileType === 'application/pdf';
+    const isWord = fileName.toLowerCase().endsWith('.docx') || fileName.toLowerCase().endsWith('.doc');
+
+    if (!isPDF && !isWord) {
+      setPreviewErrors((prev) => new Map(prev).set(index, 'Preview not available for this file type'));
+      return;
+    }
+
+    setDocumentPreviewLoading(true);
+    try {
+      const response = await fetch(attachment.fileUrl);
+      if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`);
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      if (isPDF) {
+        setAttachmentPreviews((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(index, { pdfUrl: blobUrl });
+          return newMap;
+        });
+      } else if (isWord) {
+        try {
+          const arrayBuffer = await blob.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          const sanitized = sanitizeHtml(result.value);
+          setAttachmentPreviews((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(index, { wordHtml: sanitized });
+            return newMap;
+          });
+        } catch (mammothErr) {
+          throw new Error('Failed to convert Word document');
+        }
+      }
+      setPreviewErrors((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(index);
+        return newMap;
+      });
+    } catch (err: Record<string, unknown>) {
+      const errorMsg = err?.message || 'Failed to load preview';
+      setPreviewErrors((prev) => new Map(prev).set(index, errorMsg));
+      setAttachmentPreviews((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(index);
+        return newMap;
+      });
+    } finally {
+      setDocumentPreviewLoading(false);
+    }
+  }, []);
+
+  // Extract loadData as useCallback so it can be called for refresh
+  const loadData = useCallback(async () => {
     if (!id) return;
 
-    const loadData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        // Fetch correspondence
-        const corrResponse = await apiFetch<any>(`/correspondence/items/${id}/`);
-        const mappedCorr = mapApiCorrespondence(corrResponse);
-        setCorrespondence(mappedCorr);
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch correspondence
+      const corrResponse = await apiFetch<Record<string, unknown>>(`/correspondence/items/${id}/`);
+      const mappedCorr = mapApiCorrespondence(corrResponse);
+      setCorrespondence(mappedCorr);
 
-        // Fetch minutes
-        const minutesResponse = await apiFetch<any>(`/correspondence/minutes/?correspondence=${id}`);
-        const minutesData = Array.isArray(minutesResponse) ? minutesResponse : minutesResponse.results || [];
-        setMinutes(minutesData.map(mapApiMinute));
+      // Fetch minutes
+      const minutesResponse = await apiFetch<Record<string, unknown>>(`/correspondence/minutes/?correspondence=${id}`);
+      const minutesData = Array.isArray(minutesResponse) ? minutesResponse : minutesResponse.results || [];
+      setMinutes(minutesData.map(mapApiMinute));
 
-        // Load linked documents
-        if (mappedCorr.linkedDocumentIds && mappedCorr.linkedDocumentIds.length > 0) {
-          const docs = await Promise.all(
-            mappedCorr.linkedDocumentIds.map(async (docId) => {
-              try {
-                return await fetchDocumentById(docId);
-              } catch {
-                return null;
-              }
-            })
-          );
-          setLinkedDocuments(docs.filter((doc): doc is DocumentRecord => Boolean(doc)));
-        }
-
-        // Load document preview if attachment exists
-        const firstAttachment = mappedCorr.attachments?.[0];
-        if (firstAttachment?.fileUrl) {
-          const fileName = firstAttachment.fileName || '';
-          const isPDF = firstAttachment.fileType === 'application/pdf';
-          const isWord = fileName.toLowerCase().endsWith('.docx') || fileName.toLowerCase().endsWith('.doc');
-
-          if (isPDF || isWord) {
-            setDocumentPreviewLoading(true);
+      // Load linked documents
+      if (mappedCorr.linkedDocumentIds && mappedCorr.linkedDocumentIds.length > 0) {
+        const docs = await Promise.all(
+          mappedCorr.linkedDocumentIds.map(async (docId) => {
             try {
-              const response = await fetch(firstAttachment.fileUrl);
-              const blob = await response.blob();
-              const blobUrl = URL.createObjectURL(blob);
-
-              if (isPDF) {
-                setPdfBlobUrl(blobUrl);
-              } else if (isWord) {
-                const arrayBuffer = await blob.arrayBuffer();
-                const result = await mammoth.convertToHtml({ arrayBuffer });
-                setWordHtml(result.value);
-              }
-            } catch (err) {
-              console.error('Failed to load document preview:', err);
-            } finally {
-              setDocumentPreviewLoading(false);
+              return await fetchDocumentById(docId);
+            } catch {
+              return null;
             }
-          }
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to load outbox item');
-        toast.error('Failed to load outbox item');
-      } finally {
-        setLoading(false);
+          })
+        );
+        setLinkedDocuments(docs.filter((doc): doc is DocumentRecord => Boolean(doc)));
       }
-    };
 
+      // Load document previews for all attachments (lazy load on demand)
+      // Reset preview state
+      setAttachmentPreviews(new Map());
+      setPreviewErrors(new Map());
+      setSelectedAttachmentIndex(0);
+
+      // Load first attachment preview immediately
+      const firstAttachment = mappedCorr.attachments?.[0];
+      if (firstAttachment?.fileUrl) {
+        await loadAttachmentPreview(0, firstAttachment);
+      }
+
+      // Fetch related correspondence (if any)
+      try {
+        // Check if this correspondence references others or is referenced
+        const relatedResponse = await apiFetch<unknown[]>(`/correspondence/items/?linked_documents=${mappedCorr.linkedDocumentIds?.[0] || ''}`).catch(() => []);
+        if (Array.isArray(relatedResponse)) {
+          const related = relatedResponse
+            .filter((item: Record<string, unknown>) => item.id !== mappedCorr.id)
+            .map(mapApiCorrespondence)
+            .slice(0, 5); // Limit to 5 related items
+          setRelatedCorrespondence(related);
+        }
+      } catch (err) {
+        logError('Failed to load related correspondence:', err);
+      }
+
+      // Fetch case links
+      try {
+        const caseLinksResponse = await apiFetch<unknown[]>(`/cases/case-correspondence-links/?correspondence=${id}`).catch(() => []);
+        if (Array.isArray(caseLinksResponse)) {
+          const links = caseLinksResponse.map((link: Record<string, unknown>) => ({
+            id: link.case?.id || link.case_id,
+            caseNumber: link.case?.case_number || link.case_number || 'N/A',
+            title: link.case?.title || 'Untitled Case',
+          })).filter((link: Record<string, unknown>) => link.id);
+          setCaseLinks(links);
+        }
+      } catch (err) {
+        logError('Failed to load case links:', err);
+      }
+    } catch (err: Record<string, unknown>) {
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to load outbox item';
+      setError(errorMessage);
+      toast.error(`Failed to load outbox item: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [id, loadAttachmentPreview]);
+
+  useEffect(() => {
     void loadData();
-  }, [id]);
+  }, [loadData]);
 
   const calculateDaysPending = () => {
     if (!correspondence) return 0;
@@ -177,13 +298,19 @@ const OutboxDetailPage = () => {
         <div className="p-6">
           <Card>
             <CardContent className="py-12 text-center">
-              <Send className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">Outbox Item Not Found</h3>
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+              <h3 className="text-lg font-semibold mb-2">Failed to Load Outbox Item</h3>
               <p className="text-muted-foreground mb-4">{error || 'The requested outbox item could not be found.'}</p>
-              <Button onClick={() => router.push('/correspondence/outbox')} variant="outline">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Outbox
-              </Button>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => router.push('/correspondence/outbox')} variant="outline">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Outbox
+                </Button>
+                <Button onClick={() => void loadData()} variant="default" disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Retry
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -266,37 +393,287 @@ const OutboxDetailPage = () => {
     }
   };
 
+  const handleResendReminder = async () => {
+    if (!correspondence || !correspondence.currentApproverId) {
+      toast.error('No current approver to send reminder to');
+      return;
+    }
+    setResendDialogOpen(true);
+  };
+
+  const confirmResendReminder = async () => {
+    if (!correspondence || !correspondence.currentApproverId) return;
+
+    setResending(true);
+    try {
+      const payload: unknown = {};
+      if (resendCustomMessage.trim()) {
+        payload.custom_message = resendCustomMessage.trim();
+      }
+
+      await apiFetch(`/correspondence/items/${id}/resend-reminder/`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      toast.success('Reminder sent successfully', {
+        description: `Sent to ${correspondence.currentApproverName || 'current approver'}`,
+      });
+      setResendDialogOpen(false);
+      setResendCustomMessage('');
+      await loadData();
+    } catch (err: Record<string, unknown>) {
+      if (err?.status === 404 || err?.response?.status === 404) {
+        toast.info('Resend functionality is not yet available on the backend');
+      } else {
+        const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to send reminder';
+        toast.error(`Failed to send reminder: ${errorMessage}`);
+      }
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleWithdraw = () => {
+    if (!correspondence || correspondence.status !== 'pending') {
+      toast.error('Only pending correspondence can be withdrawn');
+      return;
+    }
+    setWithdrawDialogOpen(true);
+  };
+
+  const confirmWithdraw = async () => {
+    if (!correspondence || !withdrawReason.trim()) {
+      toast.error('Please provide a reason for withdrawal');
+      return;
+    }
+
+    try {
+      await apiFetch(`/correspondence/items/${id}/withdraw/`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: withdrawReason.trim() }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      toast.success('Correspondence withdrawn successfully');
+      setWithdrawDialogOpen(false);
+      setWithdrawReason('');
+      await loadData();
+      setTimeout(() => {
+        router.push('/correspondence/outbox');
+      }, 1500);
+    } catch (err: Record<string, unknown>) {
+      if (err?.status === 404 || err?.response?.status === 404) {
+        toast.info('Withdraw functionality is not yet available on the backend');
+      } else {
+        const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to withdraw correspondence';
+        toast.error(`Failed to withdraw: ${errorMessage}`);
+      }
+    }
+  };
+
+  // Action handlers
+  const handleDuplicate = async () => {
+    if (!correspondence) return;
+    try {
+      router.push(`/correspondence/register?duplicate=${id}`);
+      toast.info('Opening duplicate form...');
+    } catch (err) {
+      toast.error('Failed to duplicate correspondence');
+    }
+  };
+
+  const handleShare = () => {
+    if (!correspondence) return;
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+      toast.success('Link copied to clipboard');
+    }).catch(() => {
+      toast.error('Failed to copy link');
+    });
+  };
+
+  const handleExport = () => {
+    if (!correspondence) return;
+    const exportData = {
+      referenceNumber: correspondence.referenceNumber,
+      subject: correspondence.subject,
+      status: correspondence.status,
+      priority: correspondence.priority,
+      direction: correspondence.direction,
+      createdDate: correspondence.createdAt,
+      updatedDate: correspondence.updatedAt,
+      attachments: correspondence.attachments?.map(a => a.fileName) || [],
+      minutes: minutes.map(m => ({
+        user: m.userName,
+        action: m.actionType,
+        timestamp: m.timestamp,
+        text: m.minuteText,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${correspondence.referenceNumber}-export.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Exported successfully');
+  };
+
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => router.push('/correspondence/outbox')}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-                <Mail className="h-8 w-8 text-primary" />
-                Outbox Item
-              </h1>
-              <p className="text-muted-foreground mt-1">Pending dispatch correspondence</p>
+      <div className="flex flex-col min-h-screen">
+        {/* Header - Reorganized to match Document Detail pattern */}
+        <div className="border-b border-border bg-background px-3 md:px-6 py-2 md:py-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="flex-shrink-0"
+                onClick={() => router.push('/correspondence/outbox')}
+                aria-label="Back to outbox"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div className="min-w-0 flex-1">
+                {/* Breadcrumb */}
+                <Breadcrumb className="hidden md:flex mb-1">
+                  <BreadcrumbList>
+                    <BreadcrumbItem>
+                      <BreadcrumbLink href="/correspondence/outbox">Outbox</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage className="truncate max-w-[200px]">
+                        {correspondence.referenceNumber || 'Outbox Item'}
+                      </BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </BreadcrumbList>
+                </Breadcrumb>
+                {/* Title and badges */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-base md:text-xl font-bold text-foreground truncate">
+                    {correspondence.referenceNumber || 'Outbox Item'}
+                  </h1>
+                  {getStatusBadge()}
+                  <Badge variant="outline" className="capitalize flex-shrink-0">
+                    {correspondence.priority}
+                  </Badge>
+                  <Badge variant="outline" className="flex-shrink-0">
+                    {correspondence.direction === 'downward' ? (
+                      <>
+                        <ArrowDown className="h-3 w-3 mr-1" />
+                        Downward
+                      </>
+                    ) : (
+                      <>
+                        <ArrowUp className="h-3 w-3 mr-1" />
+                        Upward
+                      </>
+                    )}
+                  </Badge>
+                </div>
+                <p className="text-xs md:text-sm text-muted-foreground truncate mt-1">
+                  {correspondence.subject}
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {getStatusBadge()}
-            <Button variant="outline" size="sm" onClick={() => router.push(`/correspondence/${id}`)}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => window.print()}>
-              <Printer className="h-4 w-4 mr-2" />
-              Print
-            </Button>
+            {/* Desktop action buttons */}
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => void loadData()}
+                disabled={loading}
+                title="Refresh"
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" title="More actions">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => router.push(`/correspondence/register?edit=${id}`)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit & Dispatch
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push(`/correspondence/${id}`)}>
+                    <Route className="h-4 w-4 mr-2" />
+                    View Full Details
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleShare}>
+                    <Share2 className="h-4 w-4 mr-2" />
+                    Share
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDuplicate}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Duplicate
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExport}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => window.print()}>
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print
+                  </DropdownMenuItem>
+                  {correspondence.status === 'pending' && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleWithdraw} className="text-destructive">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Withdraw
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            {/* Mobile action menu */}
+            <div className="md:hidden flex items-center gap-1 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void loadData()}
+                disabled={loading}
+              >
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => router.push(`/correspondence/register?edit=${id}`)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit & Dispatch
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push(`/correspondence/${id}`)}>
+                    <Route className="h-4 w-4 mr-2" />
+                    View Details
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="p-6 space-y-6">
+          <div className="grid gap-6 lg:grid-cols-3">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Status & Timeline */}
@@ -430,92 +807,373 @@ const OutboxDetailPage = () => {
               </CardContent>
             </Card>
 
-            {/* Document Preview */}
-            {correspondence.attachments && correspondence.attachments.length > 0 && (
+            {/* Distribution List */}
+            {correspondence.distribution && correspondence.distribution.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Eye className="h-5 w-5" />
-                    Document Preview
+                    <Users className="h-5 w-5" />
+                    Distribution List
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {documentPreviewLoading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    </div>
-                  ) : pdfBlobUrl ? (
-                    <ScrollArea className="h-[600px] w-full rounded-md border">
-                      <iframe src={pdfBlobUrl} className="w-full h-full min-h-[600px]" title="PDF Preview" />
-                    </ScrollArea>
-                  ) : wordHtml ? (
-                    <ScrollArea className="h-[600px] w-full rounded-md border p-4">
-                      <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: wordHtml }} />
-                    </ScrollArea>
-                  ) : (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>Preview not available for this file type</p>
-                    </div>
-                  )}
-                  <div className="mt-4 flex gap-2">
-                    {correspondence.attachments.map((attachment) => (
-                      <Button
-                        key={attachment.id}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download {attachment.fileName}
-                      </Button>
+                  <div className="space-y-2">
+                    {correspondence.distribution.map((dist) => (
+                      <div key={dist.id} className="flex items-center justify-between p-2 border rounded-lg">
+                        <div>
+                          <p className="font-medium">{dist.name || `${dist.type} distribution`}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{dist.type}</p>
+                        </div>
+                        <Badge variant="outline">{dist.type}</Badge>
+                      </div>
                     ))}
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            {/* Routing History */}
-            {minutes.length > 0 && (
+            {/* Tags */}
+            {correspondence.tags && correspondence.tags.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Route className="h-5 w-5" />
-                    Routing History
+                    <Tag className="h-5 w-5" />
+                    Tags
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ScrollArea className="h-[320px]">
-                    <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {Array.isArray(correspondence.tags)
+                      ? correspondence.tags.map((tag, idx) => (
+                          <Badge key={idx} variant="secondary">
+                            {tag}
+                          </Badge>
+                        ))
+                      : typeof correspondence.tags === 'string' && (
+                          <Badge variant="secondary">{correspondence.tags}</Badge>
+                        )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Document Preview - Enhanced with tabs for multiple attachments */}
+            {correspondence.attachments && correspondence.attachments.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Eye className="h-5 w-5" />
+                    Document Preview
+                    {correspondence.attachments.length > 1 && (
+                      <Badge variant="secondary" className="ml-2">
+                        {correspondence.attachments.length} files
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {correspondence.attachments.length > 1 ? (
+                    <Tabs value={selectedAttachmentIndex.toString()} onValueChange={(val) => {
+                      const idx = parseInt(val, 10);
+                      setSelectedAttachmentIndex(idx);
+                      const attachment = correspondence.attachments?.[idx];
+                      if (attachment && !attachmentPreviews.has(idx)) {
+                        void loadAttachmentPreview(idx, attachment);
+                      }
+                    }}>
+                      <TabsList className="mb-4">
+                        {correspondence.attachments.map((att, idx) => (
+                          <TabsTrigger key={att.id} value={idx.toString()} className="truncate max-w-[150px]">
+                            {att.fileName || `File ${idx + 1}`}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      {correspondence.attachments.map((attachment, idx) => {
+                        const preview = attachmentPreviews.get(idx);
+                        const error = previewErrors.get(idx);
+                        const isLoading = documentPreviewLoading && selectedAttachmentIndex === idx;
+                        return (
+                          <TabsContent key={attachment.id} value={idx.toString()} className="mt-0">
+                            {isLoading ? (
+                              <div className="flex items-center justify-center py-12 min-h-[400px]">
+                                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                <span className="ml-2 text-sm text-muted-foreground">Loading preview...</span>
+                              </div>
+                            ) : error ? (
+                              <div className="text-center py-12 min-h-[400px] flex flex-col items-center justify-center">
+                                <AlertCircle className="h-12 w-12 mx-auto mb-3 text-destructive" />
+                                <p className="text-muted-foreground mb-4">{error}</p>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download File
+                                </Button>
+                              </div>
+                            ) : preview?.pdfUrl ? (
+                              <ScrollArea className="h-[500px] sm:h-[600px] w-full rounded-md border">
+                                <iframe src={preview.pdfUrl} className="w-full h-full min-h-[500px] sm:min-h-[600px]" title={`PDF Preview: ${attachment.fileName}`} />
+                              </ScrollArea>
+                            ) : preview?.wordHtml ? (
+                              <ScrollArea className="h-[500px] sm:h-[600px] w-full rounded-md border p-4">
+                                <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: preview.wordHtml }} />
+                              </ScrollArea>
+                            ) : (
+                              <div className="text-center py-12 min-h-[400px] flex flex-col items-center justify-center">
+                                <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                                <p className="text-muted-foreground mb-4">Preview not available for this file type</p>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download File
+                                </Button>
+                              </div>
+                            )}
+                            <div className="mt-4">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full sm:w-auto"
+                                onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download {attachment.fileName}
+                              </Button>
+                            </div>
+                          </TabsContent>
+                        );
+                      })}
+                    </Tabs>
+                  ) : (
+                    // Single attachment - no tabs needed
+                    (() => {
+                      const attachment = correspondence.attachments[0];
+                      const preview = attachmentPreviews.get(0);
+                      const error = previewErrors.get(0);
+                      const isLoading = documentPreviewLoading && selectedAttachmentIndex === 0;
+                      return (
+                        <>
+                          {isLoading ? (
+                            <div className="flex items-center justify-center py-12 min-h-[400px]">
+                              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                              <span className="ml-2 text-sm text-muted-foreground">Loading preview...</span>
+                            </div>
+                          ) : error ? (
+                            <div className="text-center py-12 min-h-[400px] flex flex-col items-center justify-center">
+                              <AlertCircle className="h-12 w-12 mx-auto mb-3 text-destructive" />
+                              <p className="text-muted-foreground mb-4">{error}</p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download File
+                              </Button>
+                            </div>
+                          ) : preview?.pdfUrl ? (
+                            <ScrollArea className="h-[500px] sm:h-[600px] w-full rounded-md border">
+                              <iframe src={preview.pdfUrl} className="w-full h-full min-h-[500px] sm:min-h-[600px]" title={`PDF Preview: ${attachment.fileName}`} />
+                            </ScrollArea>
+                          ) : preview?.wordHtml ? (
+                            <ScrollArea className="h-[500px] sm:h-[600px] w-full rounded-md border p-4">
+                              <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: preview.wordHtml }} />
+                            </ScrollArea>
+                          ) : (
+                            <div className="text-center py-12 min-h-[400px] flex flex-col items-center justify-center">
+                              <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p className="text-muted-foreground mb-4">Preview not available for this file type</p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download File
+                              </Button>
+                            </div>
+                          )}
+                          <div className="mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Download {attachment.fileName}
+                            </Button>
+                          </div>
+                        </>
+                      );
+                    })()
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Routing History - Enhanced with visual timeline and workflow progress */}
+            {minutes.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <Route className="h-5 w-5" />
+                      Routing History & Workflow Progress
+                      <Badge variant="secondary">{minutes.length} step{minutes.length !== 1 ? 's' : ''}</Badge>
+                    </CardTitle>
+                    {minutes.length > 3 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setExpandRoutingHistory(!expandRoutingHistory)}
+                      >
+                        {expandRoutingHistory ? (
+                          <>
+                            <ChevronUp className="h-4 w-4 mr-2" />
+                            Show Less
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-4 w-4 mr-2" />
+                            Show All
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {/* Workflow Progress Indicator */}
+                  <div className="mb-6 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Workflow Progress</span>
+                      <span className="font-medium">
+                        {minutes.filter(m => m.actionType === 'approve').length} of {minutes.length} steps completed
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{
+                          width: `${(minutes.filter(m => m.actionType === 'approve').length / Math.max(minutes.length, 1)) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <div className="h-2 w-2 rounded-full bg-primary" />
+                        <span>Approved: {minutes.filter(m => m.actionType === 'approve').length}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="h-2 w-2 rounded-full bg-secondary" />
+                        <span>Routed: {minutes.filter(m => m.actionType === 'route').length}</span>
+                      </div>
+                      {minutes.filter(m => m.actionType === 'reject').length > 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="h-2 w-2 rounded-full bg-destructive" />
+                          <span>Rejected: {minutes.filter(m => m.actionType === 'reject').length}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Separator className="my-4" />
+                  <ScrollArea className={expandRoutingHistory ? 'h-auto max-h-[600px]' : 'h-[320px]'}>
+                    <div className="space-y-4 relative pl-8">
+                      {/* Timeline line */}
+                      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
                       {minutes.map((minute, index) => {
                         const user = organizationUsers.find((u) => u.id === minute.userId);
+                        const isLast = index === minutes.length - 1;
+                        const direction = minute.direction || 'upward';
                         return (
-                          <div key={minute.id} className="flex gap-3 p-3 border rounded-lg">
-                            <div className="flex-shrink-0">
-                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                <span className="text-xs font-semibold text-primary">{index + 1}</span>
+                          <div key={minute.id} className="relative flex gap-4">
+                            {/* Timeline dot */}
+                            <div className="absolute left-[-32px] top-1">
+                              <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                                minute.actionType === 'approve' ? 'bg-primary text-primary-foreground' :
+                                minute.actionType === 'reject' ? 'bg-destructive text-destructive-foreground' :
+                                'bg-secondary text-secondary-foreground'
+                              }`}>
+                                {minute.actionType === 'approve' ? (
+                                  <CheckCircle2 className="h-4 w-4" />
+                                ) : minute.actionType === 'reject' ? (
+                                  <XCircle className="h-4 w-4" />
+                                ) : (
+                                  <Route className="h-4 w-4" />
+                                )}
                               </div>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2 mb-1">
-                                <div>
-                                  <p className="font-medium">{user?.name || minute.userName || 'Unknown User'}</p>
+                            <div className="flex-1 min-w-0 bg-card border rounded-lg p-4">
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="font-medium">{user?.name || minute.userName || 'Unknown User'}</p>
+                                    <Badge variant={minute.actionType === 'approve' ? 'default' : minute.actionType === 'reject' ? 'destructive' : 'secondary'} className="capitalize">
+                                      {minute.actionType}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-xs">
+                                      {direction === 'downward' ? (
+                                        <>
+                                          <ArrowDown className="h-3 w-3 mr-1" />
+                                          Down
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ArrowUp className="h-3 w-3 mr-1" />
+                                          Up
+                                        </>
+                                      )}
+                                    </Badge>
+                                  </div>
                                   <p className="text-xs text-muted-foreground">
                                     {minute.timestamp ? formatDateTime(minute.timestamp) : 'N/A'}
                                   </p>
                                 </div>
-                                <Badge variant={minute.actionType === 'approve' ? 'default' : 'secondary'}>
-                                  {minute.actionType}
-                                </Badge>
                               </div>
                               {minute.minuteText && (
-                                <p className="text-sm text-muted-foreground mt-2">{minute.minuteText}</p>
-                              )}
-                              {minute.toOfficeName && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  → {minute.toOfficeName}
-                                  {minute.toUserName && ` (${minute.toUserName})`}
+                                <p className="text-sm text-muted-foreground mt-2 bg-muted/50 p-2 rounded">
+                                  {minute.minuteText}
                                 </p>
+                              )}
+                              {(minute.fromOfficeName || minute.toOfficeName) && (
+                                <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                                  {minute.fromOfficeName && (
+                                    <p>
+                                      <span className="font-medium">From:</span> {minute.fromOfficeName}
+                                      {minute.fromUserName && ` (${minute.fromUserName})`}
+                                    </p>
+                                  )}
+                                  {minute.toOfficeName && (
+                                    <p>
+                                      <span className="font-medium">To:</span> {minute.toOfficeName}
+                                      {minute.toUserName && ` (${minute.toUserName})`}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                              {/* Approval Chain Details */}
+                              {minute.actionType === 'approve' && (
+                                <div className="mt-2 flex items-center gap-2 text-xs">
+                                  <CheckCircle2 className="h-3 w-3 text-primary" />
+                                  <span className="text-muted-foreground">Approved at step {index + 1}</span>
+                                </div>
+                              )}
+                              {minute.actionType === 'reject' && (
+                                <div className="mt-2 flex items-center gap-2 text-xs">
+                                  <XCircle className="h-3 w-3 text-destructive" />
+                                  <span className="text-destructive">Rejected at step {index + 1}</span>
+                                </div>
+                              )}
+                              {!isLast && (
+                                <div className="mt-2 text-xs text-muted-foreground italic">
+                                  → Next: {minutes[index + 1]?.userName || 'Pending'}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -523,6 +1181,76 @@ const OutboxDetailPage = () => {
                       })}
                     </div>
                   </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Related Correspondence */}
+            {relatedCorrespondence.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Mail className="h-5 w-5" />
+                    Related Correspondence
+                    <Badge variant="secondary">{relatedCorrespondence.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {relatedCorrespondence.map((rel) => (
+                      <div key={rel.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{rel.referenceNumber || 'No Reference'}</p>
+                          <p className="text-sm text-muted-foreground truncate">{rel.subject}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-xs">{rel.status}</Badge>
+                            <Badge variant="outline" className="text-xs capitalize">{rel.priority}</Badge>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => router.push(`/correspondence/${rel.id}`)}
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Case Links */}
+            {caseLinks.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FolderTree className="h-5 w-5" />
+                    Linked Cases
+                    <Badge variant="secondary">{caseLinks.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {caseLinks.map((link) => (
+                      <div key={link.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{link.caseNumber}</p>
+                          <p className="text-sm text-muted-foreground truncate">{link.title}</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => router.push(`/cases/${link.id}`)}
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          View Case
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -569,7 +1297,7 @@ const OutboxDetailPage = () => {
               <CardContent className="space-y-2">
                 <Button
                   className="w-full"
-                  onClick={() => router.push(`/correspondence/${id}`)}
+                  onClick={() => router.push(`/correspondence/register?edit=${id}`)}
                 >
                   <Edit className="h-4 w-4 mr-2" />
                   Edit & Dispatch
@@ -582,6 +1310,21 @@ const OutboxDetailPage = () => {
                   <Route className="h-4 w-4 mr-2" />
                   View Full Details
                 </Button>
+                {correspondence.currentApproverId && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleResendReminder}
+                    disabled={resending}
+                  >
+                    {resending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-2" />
+                    )}
+                    Resend Reminder
+                  </Button>
+                )}
               </CardContent>
             </Card>
 
@@ -639,8 +1382,147 @@ const OutboxDetailPage = () => {
               </CardContent>
             </Card>
           </div>
+          </div>
         </div>
       </div>
+
+      {/* Resend Reminder Confirmation Dialog */}
+      <AlertDialog open={resendDialogOpen} onOpenChange={setResendDialogOpen}>
+        <AlertDialogContent className="max-w-2xl w-[95vw] sm:w-full">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-primary" />
+              Send Reminder
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Send a reminder notification to the current approver about this correspondence.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Recipient Information */}
+            <Card className="bg-muted/30">
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <UserIcon className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Recipient:</span>
+                  <span className="text-sm">{correspondence?.currentApproverName || 'Current Approver'}</span>
+                </div>
+                {correspondence?.currentOfficeName && (
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Office:</span>
+                    <span className="text-sm">{correspondence.currentOfficeName}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Reference:</span>
+                  <span className="text-sm">{correspondence?.referenceNumber}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Custom Message */}
+            <div className="space-y-2">
+              <Label htmlFor="resend-message">Custom Message (Optional)</Label>
+              <Textarea
+                id="resend-message"
+                placeholder="Add a custom message to include with the reminder..."
+                value={resendCustomMessage}
+                onChange={(e) => setResendCustomMessage(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                This message will be included in the reminder notification.
+              </p>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setResendCustomMessage('')}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmResendReminder} disabled={resending}>
+              {resending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Send Reminder
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Withdraw Confirmation Dialog */}
+      <AlertDialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+        <AlertDialogContent className="max-w-2xl w-[95vw] sm:w-full">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Withdraw Correspondence
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Withdrawing this correspondence will cancel it and prevent further routing. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Correspondence Info */}
+            <Card className="bg-muted/30">
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Reference:</span>
+                  <span className="text-sm">{correspondence?.referenceNumber}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Subject:</span>
+                  <span className="text-sm">{correspondence?.subject}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Days Pending:</span>
+                  <span className="text-sm">{daysPending} days</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Withdrawal Reason */}
+            <div className="space-y-2">
+              <Label htmlFor="withdraw-reason">
+                Reason for Withdrawal <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="withdraw-reason"
+                placeholder="Please provide a reason for withdrawing this correspondence..."
+                value={withdrawReason}
+                onChange={(e) => setWithdrawReason(e.target.value)}
+                rows={4}
+                className="resize-none"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                This reason will be recorded in the correspondence history.
+              </p>
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setWithdrawReason('')}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmWithdraw}
+              disabled={!withdrawReason.trim()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Confirm Withdrawal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 };

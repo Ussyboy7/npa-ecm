@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { 
   Mail, 
   Smartphone, 
@@ -125,7 +126,7 @@ export function TwoFactorVerificationModal({
       setStatus(data);
       setActiveTab(data.preferred_method);
     } catch (err) {
-      console.error("Failed to load 2FA status:", err);
+      logError("Failed to load 2FA status:", err);
       toast.error("Failed to load 2FA settings");
     } finally {
       setLoading(false);
@@ -155,7 +156,7 @@ export function TwoFactorVerificationModal({
       
       // Focus input
       setTimeout(() => emailInputRef.current?.focus(), 100);
-    } catch (err: any) {
+    } catch (err: Record<string, unknown>) {
       setError(err.message || "Failed to send verification code");
     } finally {
       setSending(false);
@@ -191,7 +192,7 @@ export function TwoFactorVerificationModal({
         setRemainingAttempts(response.remaining_attempts ?? null);
         setOtpCode("");
       }
-    } catch (err: any) {
+    } catch (err: Record<string, unknown>) {
       setError(err.message || "Verification failed");
     } finally {
       setVerifying(false);
@@ -232,7 +233,7 @@ export function TwoFactorVerificationModal({
         setError(response.error || "Invalid code");
         setTotpCode("");
       }
-    } catch (err: any) {
+    } catch (err: Record<string, unknown>) {
       setError(err.message || "Verification failed");
       setTotpCode("");
     } finally {
@@ -255,7 +256,7 @@ export function TwoFactorVerificationModal({
       
       setSetupData(response);
       setShowSetup(true);
-    } catch (err: any) {
+    } catch (err: Record<string, unknown>) {
       setError(err.message || "Failed to setup authenticator");
     } finally {
       setSending(false);
@@ -280,7 +281,7 @@ export function TwoFactorVerificationModal({
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />

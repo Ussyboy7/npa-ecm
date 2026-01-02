@@ -6,7 +6,54 @@ export interface RolePermission {
   id: string;
   label: string;
   description: string;
-  category: 'correspondence' | 'documents' | 'administration' | 'analytics' | 'workflow';
+  category: 'correspondence' | 'documents' | 'administration' | 'analytics' | 'workflow' | 'sidebar';
+}
+
+export interface SidebarVisibilityConfig {
+  // My Workspace
+  showDashboard?: boolean;
+  showMyInbox?: boolean;
+  showMyOutbox?: boolean;
+  showExecutiveApprovals?: boolean;
+  showMyTasksAlerts?: boolean;
+
+  // Offices & Registry
+  showOfficeInbox?: boolean;
+  showRegisterCorrespondence?: boolean;
+  showOfficeOutbox?: boolean;
+
+  // Case Management
+  showMyCases?: boolean;
+  showOfficeCases?: boolean;
+  showAllCases?: boolean;
+
+  // Documents & Records
+  showSearchDocuments?: boolean;
+  showContentCapture?: boolean;
+  showFormsLibrary?: boolean;
+  showVerifySeal?: boolean;
+  showRecordsArchives?: boolean;
+
+  // Analytics & Reports
+  showAnalyticsReports?: boolean;
+  showExecutiveDashboard?: boolean;
+  showPerformanceAnalytics?: boolean;
+  showReportsIntelligence?: boolean;
+
+  // Administration
+  showAdministration?: boolean;
+  showOrganizationOffices?: boolean;
+  showUsersRoles?: boolean;
+  showWorkflowSLA?: boolean;
+  showTemplates?: boolean;
+  showAuditCompliance?: boolean;
+
+  // Integration
+  showIntegrationHub?: boolean;
+
+  // System
+  showSettings?: boolean;
+  showHelpGuides?: boolean;
 }
 
 export const AVAILABLE_ROLE_PERMISSIONS: RolePermission[] = [
@@ -151,6 +198,50 @@ export const AVAILABLE_ROLE_PERMISSIONS: RolePermission[] = [
     description: 'Can access executive-level dashboard',
     category: 'analytics',
   },
+  
+  // Sidebar Visibility Permissions
+  {
+    id: 'sidebar_show_my_workspace',
+    label: 'Show My Workspace Section',
+    description: 'Show Dashboard, Inbox, Outbox, Approvals, Tasks',
+    category: 'sidebar',
+  },
+  {
+    id: 'sidebar_show_offices_registry',
+    label: 'Show Offices & Registry Section',
+    description: 'Show Office Inbox, Register Correspondence, Office Outbox',
+    category: 'sidebar',
+  },
+  {
+    id: 'sidebar_show_case_management',
+    label: 'Show Case Management Section',
+    description: 'Show Cases (My Cases, Office Cases, All Cases)',
+    category: 'sidebar',
+  },
+  {
+    id: 'sidebar_show_documents_records',
+    label: 'Show Documents & Records Section',
+    description: 'Show Search, Capture, Forms, Verify Seal, Records',
+    category: 'sidebar',
+  },
+  {
+    id: 'sidebar_show_analytics_reports',
+    label: 'Show Analytics & Reports Section',
+    description: 'Show Analytics, Executive Dashboard, Reports',
+    category: 'sidebar',
+  },
+  {
+    id: 'sidebar_show_administration',
+    label: 'Show Administration Section',
+    description: 'Show Organization, Users & Roles, Workflow, Templates, Audit',
+    category: 'sidebar',
+  },
+  {
+    id: 'sidebar_show_integration',
+    label: 'Show Integration Hub',
+    description: 'Show Integration Hub section',
+    category: 'sidebar',
+  },
 ];
 
 export const PERMISSION_PRESETS = [
@@ -220,30 +311,30 @@ export const PERMISSION_PRESETS = [
   },
   {
     name: 'Secretary',
-    description: 'Secretary permissions',
+    description: 'Secretary permissions - Can act on behalf of executives',
     permissions: {
       can_register_correspondence: true,
       can_minute_correspondence: true,
       can_treat_correspondence: true,
-      can_distribute: false,
-      can_archive: false,
+      can_distribute: true, // ✅ Updated: Can add distribution lists when acting on behalf of executives
+      can_archive: true, // ✅ Updated: Can archive completed correspondence on behalf of executives
       can_view_all_correspondence: true,
       can_view_registry: true,
       can_access_document_management: true,
       can_create_documents: true,
       can_edit_documents: true,
       can_delete_documents: false,
-      can_share_documents: false,
-      can_access_approvals: false,
-      can_approve: false,
-      can_reject: false,
+      can_share_documents: true, // ✅ Updated: Can share documents for operational efficiency
+      can_access_approvals: true, // ✅ Updated: Can access approvals to approve/reject on behalf of executives
+      can_approve: true, // ✅ Updated: Can approve documents on behalf of executives
+      can_reject: true, // ✅ Updated: Can reject documents on behalf of executives
       can_access_administration: false,
       can_manage_users: false,
       can_manage_roles: false,
       can_manage_org_structure: false,
-      can_access_analytics: false,
-      can_access_reports: false,
-      can_access_executive_dashboard: false,
+      can_access_analytics: true, // ✅ Updated: Read-only analytics access for supporting executive reporting
+      can_access_reports: true, // ✅ Updated: Can generate and view reports for executives
+      can_access_executive_dashboard: false, // Read-only analytics, not full executive dashboard
     },
   },
   {

@@ -175,8 +175,14 @@ export async function createSignatureWorkflow(data: {
   });
 }
 
-export async function getSignatureWorkflow(submissionId: string): Promise<FormSignatureWorkflow> {
-  return apiFetch<FormSignatureWorkflow>(`${BASE_PATH}/submissions/${submissionId}/signature_workflow/`);
+export async function getSignatureWorkflow(submissionIdOrWorkflowId: string, isWorkflowId: boolean = false): Promise<FormSignatureWorkflow> {
+  if (isWorkflowId) {
+    // Get workflow directly by ID
+    return apiFetch<FormSignatureWorkflow>(`${BASE_PATH}/signature-workflows/${submissionIdOrWorkflowId}/`);
+  } else {
+    // Get workflow via submission
+    return apiFetch<FormSignatureWorkflow>(`${BASE_PATH}/submissions/${submissionIdOrWorkflowId}/signature_workflow/`);
+  }
 }
 
 export async function getSignatureWorkflows(params?: {

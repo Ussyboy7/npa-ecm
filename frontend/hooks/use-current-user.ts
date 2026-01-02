@@ -1,7 +1,7 @@
 "use client";
 
 import { logWarn } from '@/lib/client-logger';
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
 import { apiFetch, hasOriginalTokens, hasTokens } from "@/lib/api-client";
@@ -11,7 +11,7 @@ const toOptionalString = (value: unknown): string | undefined => {
   return String(value);
 };
 
-const mapApiUserToUser = (data: any): User => {
+const mapApiUserToUser = (data: Record<string, unknown>): User => {
   const name = `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim();
   // system_role is now a ForeignKey (UUID), but backend returns system_role_name for display
   let roleName = data.system_role_name ?? (data.system_role?.name ?? "");
@@ -38,33 +38,105 @@ const mapApiUserToUser = (data: any): User => {
   };
 };
 
+// Singleton state for current user - only one fetch should happen regardless of how many components use the hook
+let globalUserState: {
+  user: User | null;
+  hydrated: boolean;
+  loading: boolean;
+} = {
+  user: null,
+  hydrated: false,
+  loading: false,
+};
+
+let globalFetchPromise: Promise<User | null> | null = null;
+let globalSubscribers = new Set<(user: User | null, hydrated: boolean) => void>();
+
 export const useCurrentUser = () => {
   const organization = useContext(OrganizationContext);
   const users = organization?.users ?? [];
-  const [remoteUser, setRemoteUser] = useState<User | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const [remoteUser, setRemoteUser] = useState<User | null>(globalUserState.user);
+  const [hydrated, setHydrated] = useState(globalUserState.hydrated);
 
-  const loadCurrentUser = useCallback(async () => {
-    if (!hasTokens()) {
-      setRemoteUser(null);
-      setHydrated(true);
-      return;
+  // Global fetch function that only runs once, then notifies all subscribers
+  const performGlobalFetch = useCallback(async (): Promise<User | null> => {
+    // If there's already a fetch in progress, wait for it
+    if (globalFetchPromise) {
+      try {
+        return await globalFetchPromise;
+      } catch {
+        // If the promise failed, continue with new fetch
+      }
     }
 
-    try {
-      const response = await apiFetch("/accounts/auth/me/");
-      setRemoteUser(mapApiUserToUser(response));
-    } catch (error) {
-      logWarn("Failed to hydrate current user from API", error);
-      setRemoteUser(null);
-    } finally {
-      setHydrated(true);
-    }
+    // Start new fetch
+    globalUserState.loading = true;
+    globalFetchPromise = (async () => {
+      if (!hasTokens()) {
+        globalUserState.user = null;
+        globalUserState.hydrated = true;
+        globalUserState.loading = false;
+        globalSubscribers.forEach(sub => sub(null, true));
+        return null;
+      }
+
+      try {
+        const response = await apiFetch("/accounts/auth/me/");
+        const user = mapApiUserToUser(response);
+        globalUserState.user = user;
+        globalUserState.hydrated = true;
+        globalUserState.loading = false;
+        
+        // Notify all subscribers
+        globalSubscribers.forEach(sub => sub(user, true));
+        
+        return user;
+      } catch (error) {
+        logWarn("Failed to hydrate current user from API", error);
+        globalUserState.user = null;
+        globalUserState.hydrated = true;
+        globalUserState.loading = false;
+        
+        // Notify all subscribers
+        globalSubscribers.forEach(sub => sub(null, true));
+        
+        return null;
+      } finally {
+        globalFetchPromise = null;
+      }
+    })();
+
+    return await globalFetchPromise;
   }, []);
 
+  // Subscribe to global user state
   useEffect(() => {
-    void loadCurrentUser();
-  }, [loadCurrentUser]);
+    // Add this component as a subscriber
+    const subscriber = (user: User | null, isHydrated: boolean) => {
+      setRemoteUser(user);
+      setHydrated(isHydrated);
+    };
+    globalSubscribers.add(subscriber);
+    
+    // If already hydrated, use cached value
+    if (globalUserState.hydrated) {
+      setRemoteUser(globalUserState.user);
+      setHydrated(true);
+    } else if (!globalUserState.loading) {
+      // If not loading and not hydrated, start fetch
+      void performGlobalFetch();
+    }
+
+    return () => {
+      // Remove this component as a subscriber
+      globalSubscribers.delete(subscriber);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount
+
+  const loadCurrentUser = useCallback(async () => {
+    await performGlobalFetch();
+  }, [performGlobalFetch]);
 
   const resolvedUser = useMemo(() => {
     if (!remoteUser) return null;

@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     AnalyticsExportView,
+    CaseStatisticsView,
     DivisionPerformanceSnapshotViewSet,
     EfficiencyAnalysisView,
     EnhancedDivisionPerformanceView,
@@ -44,4 +45,5 @@ urlpatterns = router.urls + [
     path("sla/", EnhancedSLAAnalyticsView.as_view(), name="analytics-sla"),
     path("division-performance/", EnhancedDivisionPerformanceView.as_view(), name="analytics-division-performance"),
     path("efficiency/", EfficiencyAnalysisView.as_view(), name="analytics-efficiency"),
+    path("cases/", CaseStatisticsView.as_view(), name="analytics-cases"),
 ]

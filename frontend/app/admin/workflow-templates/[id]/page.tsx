@@ -60,7 +60,7 @@ function WorkflowTemplateEditorPageContent() {
         is_active: data.is_active,
       });
     } catch (error) {
-      console.error("Error loading template:", error);
+      logError("Error loading template:", error);
       toast({
         title: "Error",
         description: "Failed to load workflow template",
@@ -92,7 +92,7 @@ function WorkflowTemplateEditorPageContent() {
         is_active: data.is_active,
       });
     } catch (error) {
-      console.error("Error loading template for clone:", error);
+      logError("Error loading template for clone:", error);
       toast({
         title: "Error",
         description: "Failed to load template for cloning",
@@ -150,7 +150,7 @@ function WorkflowTemplateEditorPageContent() {
         loadTemplate();
       }
     } catch (error) {
-      console.error("Error saving template:", error);
+      logError("Error saving template:", error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to save template",

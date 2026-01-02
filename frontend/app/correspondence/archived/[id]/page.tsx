@@ -64,12 +64,12 @@ const ArchiveDetailPage = () => {
       setError(null);
       try {
         // Fetch correspondence
-        const corrResponse = await apiFetch<any>(`/correspondence/items/${id}/`);
+        const corrResponse = await apiFetch<Record<string, unknown>>(`/correspondence/items/${id}/`);
         const mappedCorr = mapApiCorrespondence(corrResponse);
         setCorrespondence(mappedCorr);
 
         // Fetch minutes
-        const minutesResponse = await apiFetch<any>(`/correspondence/minutes/?correspondence=${id}`);
+        const minutesResponse = await apiFetch<Record<string, unknown>>(`/correspondence/minutes/?correspondence=${id}`);
         const minutesData = Array.isArray(minutesResponse) ? minutesResponse : minutesResponse.results || [];
         setMinutes(minutesData.map(mapApiMinute));
 
@@ -109,13 +109,13 @@ const ArchiveDetailPage = () => {
                 setWordHtml(result.value);
               }
             } catch (err) {
-              console.error('Failed to load document preview:', err);
+              logError('Failed to load document preview:', err);
             } finally {
               setDocumentPreviewLoading(false);
             }
           }
         }
-      } catch (err: any) {
+      } catch (err: Record<string, unknown>) {
         setError(err.message || 'Failed to load archive record');
         toast.error('Failed to load archive record');
       } finally {

@@ -13,7 +13,7 @@ export class ModalErrorHandler {
   /**
    * Extract error message from API error response
    */
-  static extractApiError(error: any): string {
+  static extractApiError(error: Record<string, unknown>): string {
     if (!error) return 'An unexpected error occurred';
 
     // Try different error response formats
@@ -74,7 +74,7 @@ export class ModalErrorHandler {
   /**
    * Check if error is a network error
    */
-  static isNetworkError(error: any): boolean {
+  static isNetworkError(error: Record<string, unknown>): boolean {
     return (
       error?.code === 'NETWORK_ERROR' ||
       error?.message?.toLowerCase().includes('network') ||
@@ -86,7 +86,7 @@ export class ModalErrorHandler {
   /**
    * Check if error is a permission error
    */
-  static isPermissionError(error: any): boolean {
+  static isPermissionError(error: Record<string, unknown>): boolean {
     return (
       error?.response?.status === 403 ||
       error?.response?.status === 401 ||
@@ -99,7 +99,7 @@ export class ModalErrorHandler {
   /**
    * Create error object from API error
    */
-  static createErrorFromApi(error: any): ModalError {
+  static createErrorFromApi(error: Record<string, unknown>): ModalError {
     if (this.isNetworkError(error)) {
       return {
         message: 'Network error. Please check your connection and try again.',

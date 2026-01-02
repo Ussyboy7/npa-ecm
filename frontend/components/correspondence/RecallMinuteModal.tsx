@@ -30,12 +30,17 @@ export const RecallMinuteModal = ({
 
   if (!minute) return null;
 
-  const handleSubmit = async () => {
-    if (!minute.canBeRecalled) {
-      toast.error('This minute cannot be recalled.');
-      return;
-    }
+  // Log minute status for debugging
+  if (minute.isRecalled || minute.recalledAt) {
+    logWarn('[RecallMinuteModal] Minute is already recalled:', {
+      id: minute.id,
+      isRecalled: minute.isRecalled,
+      recalledAt: minute.recalledAt,
+      canBeRecalled: minute.canBeRecalled,
+    });
+  }
 
+  const handleSubmit = async () => {
     // Validate character limit
     if (recallReason.length > MODAL_CONSTANTS.RECALL_REASON.MAX) {
       toast.error(`Reason cannot exceed ${MODAL_CONSTANTS.RECALL_REASON.MAX} characters.`);
@@ -55,10 +60,19 @@ export const RecallMinuteModal = ({
       onSuccess();
       onClose();
       setRecallReason('');
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError('Failed to recall minute', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
-      toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
+      const errorMessage = ModalErrorHandler.getUserFriendlyMessage(modalError);
+      
+      // If backend says it's already recalled, close modal and refresh parent data
+      if (errorMessage.toLowerCase().includes('already been recalled')) {
+        onSuccess(); // Refresh parent data to sync state
+        onClose(); // Close modal so UI can update
+        setRecallReason('');
+        return;
+      }
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -66,7 +80,7 @@ export const RecallMinuteModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="max-w-[500px] w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-warning" />
@@ -119,7 +133,7 @@ export const RecallMinuteModal = ({
           <Button 
             variant="destructive" 
             onClick={handleSubmit} 
-            disabled={isSubmitting || !minute.canBeRecalled}
+            disabled={isSubmitting || !minute.canBeRecalled || minute.isRecalled || !!minute.recalledAt}
             aria-label="Confirm recall minute"
           >
             {isSubmitting ? (

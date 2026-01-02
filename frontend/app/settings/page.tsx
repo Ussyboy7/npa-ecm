@@ -264,7 +264,7 @@ export default function SettingsPage() {
   }, [currentUser]);
 
   // Helper to convert backend snake_case to frontend camelCase
-  const convertBackendToFrontend = (backend: any): NotificationPreferencesType | null => {
+  const convertBackendToFrontend = (backend: Record<string, unknown>): NotificationPreferencesType | null => {
     if (!backend) return null;
     return {
       id: backend.id,
@@ -300,7 +300,7 @@ export default function SettingsPage() {
   };
 
   // Helper to convert frontend camelCase to backend snake_case
-  const convertFrontendToBackend = (frontend: NotificationPreferencesType): any => {
+  const convertFrontendToBackend = (frontend: NotificationPreferencesType): Record<string, unknown> => {
     return {
       in_app_enabled: frontend.inAppEnabled,
       in_app_urgent_only: frontend.inAppUrgentOnly,
@@ -342,7 +342,7 @@ export default function SettingsPage() {
       try {
         const prefs = await getNotificationPreferences();
         if (prefs) {
-          const converted = convertBackendToFrontend(prefs as any);
+          const converted = convertBackendToFrontend(prefs as Record<string, unknown>);
           if (converted) {
             setNotificationPrefs(converted);
           }
@@ -360,25 +360,42 @@ export default function SettingsPage() {
 
   // Load signature data
   useEffect(() => {
-    const defaults = ensureDefaultSignatureTemplates();
-    setSignatureTemplates(defaults);
-
-    if (currentUser?.id) {
-      const storedSignature = loadUserSignature(currentUser.id);
-      if (storedSignature) {
-        setSignature(storedSignature);
+    const loadSignatureData = async () => {
+      try {
+        const defaults = await ensureDefaultSignatureTemplates();
+        setSignatureTemplates(defaults);
+      } catch (error) {
+        logError('Failed to load signature templates', error);
+        setSignatureTemplates(DEFAULT_SIGNATURE_TEMPLATES);
       }
-      const prefs = loadUserSignaturePreferences(currentUser.id) ?? defaultPreferences;
-      const normalizedPrefs: UserSignaturePreferences = {
-        templateOverrides: { ...(prefs.templateOverrides ?? {}) },
-        autoApplyForMinutes: prefs.autoApplyForMinutes ?? false,
-      };
-      setSignaturePreferences(normalizedPrefs);
-      setInitialPreferences({
-        templateOverrides: { ...normalizedPrefs.templateOverrides },
-        autoApplyForMinutes: normalizedPrefs.autoApplyForMinutes,
-      });
-    }
+
+      if (currentUser?.id) {
+        // Load signature from backend (deprecated localStorage function kept for compatibility)
+        const storedSignature = loadUserSignature(currentUser.id);
+        if (storedSignature) {
+          setSignature(storedSignature);
+        }
+        
+        try {
+          const prefs = await loadUserSignaturePreferences(currentUser.id);
+          const normalizedPrefs: UserSignaturePreferences = {
+            templateOverrides: { ...(prefs?.templateOverrides ?? {}) },
+            autoApplyForMinutes: prefs?.autoApplyForMinutes ?? false,
+          };
+          setSignaturePreferences(normalizedPrefs);
+          setInitialPreferences({
+            templateOverrides: { ...normalizedPrefs.templateOverrides },
+            autoApplyForMinutes: normalizedPrefs.autoApplyForMinutes,
+          });
+        } catch (error) {
+          logError('Failed to load signature preferences', error);
+          setSignaturePreferences(defaultPreferences);
+          setInitialPreferences(defaultPreferences);
+        }
+      }
+    };
+    
+    loadSignatureData();
   }, [currentUser?.id]);
 
   useEffect(() => {
@@ -561,7 +578,7 @@ export default function SettingsPage() {
       setOtpSent(true);
       setOtpCountdown(60); // 60 second countdown
       toast.success('OTP sent to your email');
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError('Failed to send OTP', error);
       toast.error(error?.detail || error?.message || 'Failed to send OTP. Please try again.');
     } finally {
@@ -607,7 +624,7 @@ export default function SettingsPage() {
       } else {
         toast.error('Verification failed. Please try again.');
       }
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError('Failed to enable 2FA', error);
       toast.error(error?.error || error?.detail || error?.message || 'Invalid code. Please try again.');
     } finally {
@@ -693,7 +710,7 @@ export default function SettingsPage() {
         confirmPassword: '',
       });
       setShowPasswordDialog(false);
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError('Failed to change password', error);
       const errorData = error?.response?.data || error?.data || {};
       const errorMessage = errorData.current_password || errorData.new_password || errorData.detail || 'Failed to change password';
@@ -1096,7 +1113,7 @@ export default function SettingsPage() {
                         setIsLoadingNotifications(true);
                         try {
                           const prefs = await getNotificationPreferences();
-                          if (prefs) setNotificationPrefs(convertBackendToFrontend(prefs as any));
+                          if (prefs) setNotificationPrefs(convertBackendToFrontend(prefs as Record<string, unknown>));
                         } catch (error) {
                           logError('Failed to reload preferences', error);
                         } finally {

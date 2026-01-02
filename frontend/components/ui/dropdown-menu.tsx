@@ -6,7 +6,16 @@ import { cn } from "@/lib/utils";
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 
-const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
+// Wrapper to prevent asChild from being passed to DOM elements
+const DropdownMenuTrigger = React.forwardRef<
+  React.ElementRef<typeof DropdownMenuPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
+>(({ asChild, ...props }, ref) => {
+  // Remove asChild from props if it's being passed to a DOM element
+  // Radix UI's Trigger handles asChild internally, so we just pass it through
+  return <DropdownMenuPrimitive.Trigger ref={ref} asChild={asChild} {...props} />;
+});
+DropdownMenuTrigger.displayName = DropdownMenuPrimitive.Trigger.displayName;
 
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 

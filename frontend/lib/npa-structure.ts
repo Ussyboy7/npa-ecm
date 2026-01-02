@@ -84,15 +84,17 @@ export type OfficeMembership = {
 
 export type DistributionRecipient = {
   id: string;
-  type: 'division' | 'department' | 'directorate';
+  type: 'division' | 'department' | 'directorate' | 'user';
   directorateId?: string;
   divisionId?: string;
   departmentId?: string;
+  userId?: string; // For user type
   name?: string;
   addedById?: string;
   addedByName?: string;
   addedAt?: string;
-  purpose?: 'information' | 'action' | 'comment';
+  purpose?: 'information' | 'action'; // Removed 'comment' - streamlined to 2 purposes
+  customMinuteText?: string; // Optional custom minute text for users with "For Action"
 };
 
 export type CorrespondenceAttachment = {
@@ -123,7 +125,9 @@ export type Correspondence = {
   status: 'pending' | 'in-progress' | 'completed' | 'archived';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   divisionId?: string;
+  divisionName?: string;
   departmentId?: string;
+  departmentName?: string;
   directorateId?: string;
   currentApproverId?: string;
   createdById?: string;
@@ -151,6 +155,22 @@ export type Correspondence = {
   workflowState?: 'sequential' | 'parallel' | 'merged' | 'waiting_merge';
   activeParallelBranches?: number;
   completedParallelBranches?: number;
+  // Routing concept metadata
+  flowType?: 'inward-internal' | 'inward-external' | 'outward-internal' | 'outward-external';
+  isInward?: boolean;
+  isOutward?: boolean;
+  isInternal?: boolean;
+  isExternal?: boolean;
+  routingMetadata?: {
+    flowType: string;
+    isInward: boolean;
+    isOutward: boolean;
+    isInternal: boolean;
+    isExternal: boolean;
+    should_appear_in_office_inbox: boolean;
+    should_appear_in_office_outbox: boolean;
+    description: string;
+  };
   createdAt?: string;
   updatedAt?: string;
 };
@@ -306,6 +326,84 @@ export const getGradeLevelByCode = (code?: string | null): GradeLevel | undefine
 export const getGradeLabel = (code?: string | null) => getGradeLevelByCode(code)?.name;
 
 export const getApprovalAuthority = (code?: string | null) => getGradeLevelByCode(code)?.approvalAuthority;
+
+// =============================================================================
+// CASE/FILE MANAGEMENT TYPES
+// =============================================================================
+
+export type CaseStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'archived';
+export type CaseType = 'complaint' | 'request' | 'inquiry' | 'project' | 'legal' | 'audit' | 'general';
+
+export type Case = {
+  id: string;
+  caseNumber: string;
+  title: string;
+  description?: string;
+  caseType: CaseType;
+  status: CaseStatus;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  divisionId?: string;
+  departmentId?: string;
+  owningOfficeId?: string;
+  currentOfficeId?: string;
+  createdById?: string;
+  assignedToId?: string;
+  openedAt: string;
+  resolvedAt?: string;
+  closedAt?: string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+  completionPackage?: {
+    id: string;
+    title: string;
+    fileUrl?: string;
+  };
+  completionPackageGeneratedAt?: string;
+  correspondenceCount?: number;
+  documentsCount?: number;
+  formsCount?: number;
+  activitiesCount?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CaseCorrespondenceLink = {
+  id: string;
+  caseId: string;
+  correspondenceId: string;
+  correspondence?: Correspondence;
+  isPrimary: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CaseDocumentLink = {
+  id: string;
+  caseId: string;
+  documentId: string;
+  documentTitle?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CaseFormLink = {
+  id: string;
+  caseId: string;
+  formDocumentId: string;
+  formTitle?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CaseDetail = Case & {
+  correspondence?: CaseCorrespondenceLink[];
+  documents?: CaseDocumentLink[];
+  forms?: CaseFormLink[];
+  activities?: Minute[];
+};
 
 export { updateOrganizationCache } from './organization-cache';
 export {

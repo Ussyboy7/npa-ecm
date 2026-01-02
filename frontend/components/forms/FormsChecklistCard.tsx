@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,7 +52,7 @@ export function FormsChecklistCard({ correspondenceId }: FormsChecklistCardProps
       setTemplates(Array.isArray(templatesData) ? templatesData : []);
       setSubmissions(Array.isArray(submissionsData) ? submissionsData : []);
     } catch (error) {
-      console.error("Error loading forms data:", error);
+      logError("Error loading forms data:", error);
       toast.error("Failed to load forms and checklists");
       setTemplates([]);
       setSubmissions([]);
@@ -126,7 +127,7 @@ export function FormsChecklistCard({ correspondenceId }: FormsChecklistCardProps
       setFormData({});
       loadData(); // Reload submissions
     } catch (error) {
-      console.error("Error submitting form:", error);
+      logError("Error submitting form:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to submit form";
       toast.error(errorMessage);
     } finally {
@@ -145,7 +146,7 @@ export function FormsChecklistCard({ correspondenceId }: FormsChecklistCardProps
       setViewingSubmission(null);
       loadData();
     } catch (error) {
-      console.error("Error submitting draft:", error);
+      logError("Error submitting draft:", error);
       toast.error("Failed to submit form");
     }
   };
@@ -299,7 +300,7 @@ export function FormsChecklistCard({ correspondenceId }: FormsChecklistCardProps
 
       {/* Form Submission Dialog */}
       <Dialog open={!!selectedTemplate} onOpenChange={(open) => !open && setSelectedTemplate(null)}>
-        <DialogContent className="max-w-4xl max-h-[95vh]">
+        <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[95vh] overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-xl">{selectedTemplate?.name}</DialogTitle>
             {selectedTemplate?.description && (
@@ -348,7 +349,7 @@ export function FormsChecklistCard({ correspondenceId }: FormsChecklistCardProps
         open={!!viewingSubmission}
         onOpenChange={(open) => !open && setViewingSubmission(null)}
       >
-        <DialogContent className="max-w-4xl max-h-[95vh]">
+        <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[95vh] overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-xl">
               {viewingSubmission?.template.name}

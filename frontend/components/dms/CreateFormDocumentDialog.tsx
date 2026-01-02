@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, startTransition } from "react";
+import { useState, useEffect, startTransition, useMemo } from "react";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,8 +12,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { getFormTemplates } from "@/lib/api/forms";
 import { createFormDocument } from "@/lib/api/dms-forms";
+import { queryDocuments } from "@/lib/dms-storage";
 import { toast } from "sonner";
-import { FileText, Loader2, FileCheck } from "lucide-react";
+import { FileText, Loader2, FileCheck, AlertTriangle } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { FormTemplate } from "@/lib/types/forms";
@@ -41,6 +43,53 @@ export function CreateFormDocumentDialog({
   const [referenceNumber, setReferenceNumber] = useState("");
   const [divisionId, setDivisionId] = useState<string | undefined>(currentUser?.division);
   const [departmentId, setDepartmentId] = useState<string | undefined>(currentUser?.department);
+  const [checkingReferenceNumber, setCheckingReferenceNumber] = useState(false);
+  const [referenceNumberExists, setReferenceNumberExists] = useState(false);
+  
+  // Filter departments based on selected division
+  const filteredDepartments = useMemo(() => {
+    if (!divisionId) return departments.filter((d) => d.isActive);
+    return departments.filter((d) => d.isActive && d.divisionId === divisionId);
+  }, [divisionId, departments]);
+  
+  // Clear department when division changes
+  useEffect(() => {
+    if (divisionId && departmentId) {
+      const dept = departments.find((d) => d.id === departmentId);
+      if (dept && dept.divisionId !== divisionId) {
+        setDepartmentId(undefined);
+      }
+    }
+  }, [divisionId, departmentId, departments]);
+  
+  // Check for duplicate reference numbers
+  useEffect(() => {
+    if (!referenceNumber.trim()) {
+      setReferenceNumberExists(false);
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setCheckingReferenceNumber(true);
+      try {
+        const result = await queryDocuments({ 
+          page: 1, 
+          pageSize: 100,
+          referenceNumber: referenceNumber.trim(),
+        });
+        const exists = result.documents.some((doc) => 
+          doc.referenceNumber?.toLowerCase() === referenceNumber.trim().toLowerCase()
+        );
+        setReferenceNumberExists(exists);
+      } catch (error) {
+        // Silently fail - duplicate check is optional
+      } finally {
+        setCheckingReferenceNumber(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [referenceNumber]);
 
   useEffect(() => {
     if (open) {
@@ -80,7 +129,7 @@ export function CreateFormDocumentDialog({
         setTitle(data[0].name);
       }
     } catch (error) {
-      console.error("Error loading templates:", error);
+      logError("Error loading templates:", error);
       toast.error("Failed to load form templates");
     } finally {
       setLoading(false);
@@ -99,7 +148,7 @@ export function CreateFormDocumentDialog({
     }
 
     try {
-      console.log('[FormDialog] Creating form document...', { selectedTemplateId, title, divisionId, departmentId });
+      logInfo('[FormDialog] Creating form document...', { selectedTemplateId, title, divisionId, departmentId });
       setCreating(true);
       
       const formDoc = await createFormDocument({
@@ -112,7 +161,7 @@ export function CreateFormDocumentDialog({
         status: "draft",
       });
 
-      console.log('[FormDialog] Form document created successfully:', formDoc);
+      logInfo('[FormDialog] Form document created successfully:', formDoc);
       toast.success("Form document created successfully");
       onComplete(formDoc.document.id);
       onOpenChange(false);
@@ -122,13 +171,13 @@ export function CreateFormDocumentDialog({
       setDescription("");
       setReferenceNumber("");
       setSelectedTemplateId("");
-    } catch (error: any) {
-      console.error("[FormDialog] Error creating form document:", error);
+    } catch (error: Record<string, unknown>) {
+      logError("[FormDialog] Error creating form document:", error);
       const errorMessage = error?.message || error?.error || "Failed to create form document";
-      console.error("[FormDialog] Error details:", { error, errorMessage, stack: error?.stack });
+      logError("[FormDialog] Error details:", { error, errorMessage, stack: error?.stack });
       toast.error(errorMessage);
     } finally {
-      console.log('[FormDialog] Finished creating form document');
+      logInfo('[FormDialog] Finished creating form document');
       setCreating(false);
     }
   };
@@ -137,7 +186,7 @@ export function CreateFormDocumentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5 text-primary" />
@@ -148,8 +197,8 @@ export function CreateFormDocumentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh] pr-4">
-          <div className="space-y-6">
+        <ScrollArea className="max-h-[calc(95vh-200px)] sm:max-h-[60vh] pr-2 sm:pr-4">
+          <div className="space-y-4 sm:space-y-6">
             {/* Template Selection */}
             <div className="space-y-2">
               <Label htmlFor="template" className="text-sm font-medium">
@@ -215,17 +264,33 @@ export function CreateFormDocumentDialog({
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Optional description"
                   rows={3}
+                  maxLength={2000}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {description.length}/2000 characters
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="reference" className="text-sm font-medium">Reference Number</Label>
-                <Input
-                  id="reference"
-                  value={referenceNumber}
-                  onChange={(e) => setReferenceNumber(e.target.value)}
-                  placeholder="Optional reference (e.g. NPA/MOPS/2024/045)"
-                />
+                <div className="relative">
+                  <Input
+                    id="reference"
+                    value={referenceNumber}
+                    onChange={(e) => setReferenceNumber(e.target.value)}
+                    placeholder="Optional reference (e.g. NPA/MOPS/2024/045)"
+                    className={referenceNumberExists ? "border-destructive" : ""}
+                    maxLength={100}
+                  />
+                  {checkingReferenceNumber && (
+                    <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                {referenceNumberExists && (
+                  <p className="text-xs text-destructive" role="alert">
+                    This reference number already exists. Please use a unique reference number.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -235,12 +300,25 @@ export function CreateFormDocumentDialog({
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-foreground">Organization</h3>
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="division" className="text-sm font-medium">Division</Label>
                   <Select 
                     value={divisionId || "__none__"} 
-                    onValueChange={(v) => setDivisionId(v === "__none__" ? undefined : v)}
+                    onValueChange={(v) => {
+                      setDivisionId(v === "__none__" ? undefined : v);
+                      // Clear department when division changes
+                      if (v === "__none__") {
+                        setDepartmentId(undefined);
+                      } else {
+                        if (departmentId) {
+                          const dept = departments.find((d) => d.id === departmentId);
+                          if (dept && dept.divisionId !== v) {
+                            setDepartmentId(undefined);
+                          }
+                        }
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select division" />
@@ -263,41 +341,47 @@ export function CreateFormDocumentDialog({
                   <Select
                     value={departmentId || "__none__"}
                     onValueChange={(v) => setDepartmentId(v === "__none__" ? undefined : v)}
+                    disabled={!divisionId}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
+                      <SelectValue placeholder={divisionId ? "Select department" : "Select division first"} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">None</SelectItem>
-                      {departments
-                        .filter((d) => d.isActive && (!divisionId || d.divisionId === divisionId))
-                        .map((department) => (
-                          <SelectItem key={department.id} value={department.id}>
-                            {department.name}
-                          </SelectItem>
-                        ))}
+                      {filteredDepartments.map((department) => (
+                        <SelectItem key={department.id} value={department.id}>
+                          {department.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  {!divisionId && (
+                    <p className="text-xs text-muted-foreground">
+                      Select a division first to choose a department
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </ScrollArea>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating}>
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={creating || !selectedTemplateId || !title.trim()}>
+          <Button onClick={handleCreate} disabled={creating || !selectedTemplateId || !title.trim()} className="w-full sm:w-auto">
             {creating ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Creating...
+                <span className="hidden sm:inline">Creating...</span>
+                <span className="sm:hidden">Creating...</span>
               </>
             ) : (
               <>
                 <FileText className="h-4 w-4 mr-2" />
-                Create Form
+                <span className="hidden sm:inline">Create Form</span>
+                <span className="sm:hidden">Create</span>
               </>
             )}
           </Button>

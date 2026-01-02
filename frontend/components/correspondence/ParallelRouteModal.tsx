@@ -249,7 +249,7 @@ export const ParallelRouteModal = ({
       setRecipients([]);
       setSearchQuery('');
       setMergeStrategy('all');
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError('Failed to create parallel route', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       const errorMessage = ModalErrorHandler.getUserFriendlyMessage(modalError);
@@ -292,7 +292,7 @@ export const ParallelRouteModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
+      <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
@@ -315,7 +315,7 @@ export const ParallelRouteModal = ({
             {/* Merge Strategy */}
             <div className="space-y-2">
               <Label>Merge Strategy *</Label>
-              <Select value={mergeStrategy} onValueChange={(v: any) => setMergeStrategy(v)}>
+              <Select value={mergeStrategy} onValueChange={(v: Record<string, unknown>) => setMergeStrategy(v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -459,7 +459,7 @@ export const ParallelRouteModal = ({
                             <Label className="text-xs">Purpose</Label>
                             <Select
                               value={recipient.purpose}
-                              onValueChange={(v: any) =>
+                              onValueChange={(v: Record<string, unknown>) =>
                                 updateRecipient(recipient.id, { purpose: v })
                               }
                             >

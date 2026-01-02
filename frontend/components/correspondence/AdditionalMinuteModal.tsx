@@ -153,7 +153,7 @@ export const AdditionalMinuteModal = ({
       toast.success(`${getMinuteTypeLabel(minuteType)} added successfully.`);
       onSuccess();
       onClose();
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError('Failed to add additional minute', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
@@ -166,7 +166,7 @@ export const AdditionalMinuteModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-[600px] w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5 text-primary" />
@@ -233,7 +233,7 @@ export const AdditionalMinuteModal = ({
             {/* Minute Type */}
             <div className="space-y-2">
               <Label htmlFor="minute-type">Type *</Label>
-              <Select value={minuteType} onValueChange={(v) => setMinuteType(v as any)}>
+              <Select value={minuteType} onValueChange={(v) => setMinuteType(v as 'instruction' | 'clarification' | 'addendum')}>
                 <SelectTrigger id="minute-type">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>

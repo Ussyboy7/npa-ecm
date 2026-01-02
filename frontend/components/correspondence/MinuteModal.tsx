@@ -1,5 +1,7 @@
-import { logError } from '@/lib/client-logger';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+"use client";
+
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -51,6 +53,7 @@ import {
   ChevronDown,
   ChevronUp,
   Shield,
+  Clock,
 } from 'lucide-react';
 import { 
   getDivisionById,
@@ -65,20 +68,28 @@ import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
 import { DistributionSelector } from './DistributionSelector';
-import { loadUserSignature, fetchUserSignature, saveUserSignature, ensureDefaultSignatureTemplates, loadUserSignaturePreferences, type StoredSignature, type SignatureTemplate, type UserSignaturePreferences } from '@/lib/signature-storage';
+import { RoutingSection } from './RoutingSection';
+import { ensureDefaultSignatureTemplates, type SignatureTemplate, type UserSignaturePreferences } from '@/lib/signature-storage';
+import { useSignature } from '@/hooks/use-signature';
+import { SignatureSection } from './SignatureSection';
 import {
-  initializeTemplates,
   getTemplatesForUser,
   createTemplate as createDocumentTemplate,
   deleteTemplate,
   type DocumentTemplate,
 } from '@/lib/template-storage';
+import { TemplateManager } from './TemplateManager';
+import { MinuteTextSection } from './MinuteTextSection';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
 import { apiFetch } from '@/lib/api-client';
 import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
-import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
+import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { fetchSLATargets, type SLATargets } from '@/lib/sla-client';
+import React from 'react';
 
 interface MinuteModalProps {
   correspondence: Correspondence;
@@ -87,7 +98,7 @@ interface MinuteModalProps {
   direction: 'downward' | 'upward';
 }
 
-export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initialDirection }: MinuteModalProps) => {
+const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: initialDirection }: MinuteModalProps) => {
   const { addMinute, updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [minuteText, setMinuteText] = useState('');
@@ -109,25 +120,31 @@ export const MinuteModal = ({ correspondence, isOpen, onClose, direction: initia
   const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>('all');
   const [officeFilterDivision, setOfficeFilterDivision] = useState<string>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userSignature, setUserSignature] = useState<StoredSignature | null>(null);
   // 2FA state for executive approvals
   const [show2FAModal, setShow2FAModal] = useState(false);
   const [twoFAVerificationToken, setTwoFAVerificationToken] = useState<string | null>(null);
   const [applySignature, setApplySignature] = useState(false);
   const [applySignatureManuallySet, setApplySignatureManuallySet] = useState(false);
-  const [signatureTemplates, setSignatureTemplates] = useState<SignatureTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  // Request cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
 const [minuteTemplates, setMinuteTemplates] = useState<DocumentTemplate[]>([]);
 const [selectedMinuteTemplateId, setSelectedMinuteTemplateId] = useState<string | null>(null);
 const [newTemplateName, setNewTemplateName] = useState('');
 const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
+  const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
   const defaultUserSignaturePreferences: UserSignaturePreferences = {
     templateOverrides: {},
     autoApplyForMinutes: false,
   };
-  const [userSignaturePreferences, setUserSignaturePreferences] = useState<UserSignaturePreferences>(defaultUserSignaturePreferences);
   const { currentUser: activeUser } = useCurrentUser();
   const { assistantAssignments, users: organizationUsers, offices, officeMemberships, directorates, divisions } = useOrganization();
+  
+  // Use shared signature hook (after activeUser is available)
+  const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences } = useSignature({
+    userId: activeUser?.id,
+    autoLoad: true,
+  });
 
   const allDirectoryUsers = organizationUsers;
   const activeDirectoryUsers = useMemo(
@@ -228,6 +245,30 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     [officeMemberships, currentUser?.id],
   );
 
+  // Fetch SLA targets on mount
+  useEffect(() => {
+    if (isOpen) {
+      fetchSLATargets()
+        .then(setSlaTargets)
+        .catch(() => {
+          // Use defaults if fetch fails
+          setSlaTargets({ urgent: 2, high: 3, medium: 5, low: 7 });
+        });
+    }
+  }, [isOpen]);
+
+  // Helper to get SLA days for a priority
+  const getSLADays = useCallback((priority: string): number | null => {
+    if (!slaTargets) return null;
+    switch (priority) {
+      case 'urgent': return slaTargets.urgent;
+      case 'high': return slaTargets.high;
+      case 'medium': return slaTargets.medium;
+      case 'low': return slaTargets.low;
+      default: return null;
+    }
+  }, [slaTargets]);
+
   useEffect(() => {
     if (!isOpen) return;
     const fallbackOfficeId =
@@ -244,20 +285,25 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     primaryOfficeMembership?.officeId,
   ]);
  
-  useEffect(() => {
-    initializeTemplates();
-  }, []);
+  // Templates are now loaded from backend - no initialization needed
 
   const refreshMinuteTemplates = useCallback(
     (userArg?: User) => {
-      initializeTemplates();
-      const targetUser = userArg ?? currentUser;
-      if (!targetUser) {
-        setMinuteTemplates([]);
-        return;
-      }
-      const templates = getTemplatesForUser(targetUser, 'minute');
-      setMinuteTemplates(templates);
+      const loadTemplates = async () => {
+        const targetUser = userArg ?? currentUser;
+        if (!targetUser) {
+          setMinuteTemplates([]);
+          return;
+        }
+        try {
+          const templates = await getTemplatesForUser(targetUser, 'minute');
+          setMinuteTemplates(templates);
+        } catch (error) {
+          logError('Failed to load minute templates', error);
+          setMinuteTemplates([]);
+        }
+      };
+      loadTemplates();
     },
     [currentUser],
   );
@@ -289,7 +335,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     const selectedUser = activeUser ?? organizationUsers.find((user) => user.active) ?? null;
     if (!selectedUser) return;
     setCurrentUser(selectedUser);
-    refreshMinuteTemplates(selectedUser);
+    refreshMinuteTemplates(selectedUser).catch((error) => {
+      logError('Failed to refresh templates', error);
+    });
   }, [activeUser, organizationUsers, refreshMinuteTemplates]);
 
   // Check if user is management level (MDCS, EDCS, MSS1, MSS2, MSS3)
@@ -308,100 +356,94 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
-      refreshMinuteTemplates(currentUser ?? undefined);
+      refreshMinuteTemplates(currentUser ?? undefined).catch((error) => {
+        logError('Failed to refresh templates', error);
+      });
 
       // Load draft if exists
-      const draft = getDraftByCorrespondence(correspondence.id, 'minute');
-      if (draft) {
-        setMinuteText(draft.content);
-        setCharacterCount(draft.content.length);
-        if (draft.forwardTo) setForwardTo(draft.forwardTo);
-        if (draft.actionType) setActionType(draft.actionType as 'minute' | 'approve');
-        setHasDraft(true);
-        setDraftId(draft.id);
-      } else {
-        setHasDraft(false);
-        setDraftId(null);
-        setMinuteText('');
-        setCharacterCount(0);
-        setForwardTo('');
-        setTargetOfficeId('');
-        setRouteType('person');
-        setSelectedDirection(initialDirection);
-        setPersonSearchQuery('');
-        setOfficeSearchQuery('');
-        setOfficeFilterDirectorate('all');
-        setOfficeFilterDivision('all');
-        setActionType('minute');
-        setApplySignature(false);
-        setNewTemplateName('');
-        setSelectedMinuteTemplateId(null);
-      }
+      getDraftByCorrespondence(correspondence.id, 'minute').then((draft) => {
+        if (draft) {
+          setMinuteText(draft.content);
+          setCharacterCount(draft.content.length);
+          if (draft.forwardTo) setForwardTo(draft.forwardTo);
+          if (draft.actionType) setActionType(draft.actionType as 'minute' | 'approve');
+          setHasDraft(true);
+          setDraftId(draft.id);
+        } else {
+          setHasDraft(false);
+          setDraftId(null);
+          setMinuteText('');
+          setCharacterCount(0);
+          setForwardTo('');
+          setTargetOfficeId('');
+          setRouteType('person');
+          setSelectedDirection(initialDirection);
+          setPersonSearchQuery('');
+          setOfficeSearchQuery('');
+          setOfficeFilterDirectorate('all');
+          setOfficeFilterDivision('all');
+          setActionType('minute');
+          setApplySignature(false);
+          setNewTemplateName('');
+          setSelectedMinuteTemplateId(null);
+        }
+      }).catch((error) => {
+        logError('Failed to load draft', error);
+      });
     }
   }, [isOpen, correspondence.id, initialDirection, refreshMinuteTemplates, currentUser]);
 
-  // Load signature from backend and localStorage
+  // Signature loading is now handled by useSignature hook
+
+  // Cleanup: Cancel ongoing requests when modal closes
   useEffect(() => {
-    if (!currentUser?.id) {
-      setUserSignature(null);
-      return;
-    }
-    
-    const loadSignature = async () => {
-      // First try localStorage (faster)
-      let signature = loadUserSignature(currentUser.id);
-      
-      // If not in localStorage, try fetching from backend
-      if (!signature) {
-        try {
-          signature = await fetchUserSignature();
-          // Save to localStorage for next time
-          if (signature) {
-            saveUserSignature(currentUser.id, signature);
+    if (!isOpen) {
+      // Cancel any ongoing requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
           }
-        } catch (error) {
-          // Silently fail - signature just won't be available
-          logError('Failed to fetch signature from backend', error);
-        }
+    }
+    return () => {
+      // Cleanup on unmount
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
-      
-      setUserSignature(signature);
     };
-    
-    loadSignature();
-  }, [currentUser?.id]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
-    refreshMinuteTemplates();
+    refreshMinuteTemplates().catch((error) => {
+      logError('Failed to refresh templates', error);
+    });
   }, [isOpen, refreshMinuteTemplates]);
 
   useEffect(() => {
+    // Only auto-apply signature for executive approvals
     if (actionType === 'approve') {
-      setApplySignature(true);
-      setApplySignatureManuallySet(false);
-      return;
-    }
-
-    if (!userSignature) {
+      if (!userSignature) {
+        setApplySignature(false);
+        setApplySignatureManuallySet(false);
+        return;
+      }
+      // For executive approvals, always apply signature (required for digital seal)
+      if (isExecutive && !applySignatureManuallySet) {
+        setApplySignature(true);
+        setApplySignatureManuallySet(false);
+      }
+    } else {
+      // For regular minutes, no signature needed
       setApplySignature(false);
       setApplySignatureManuallySet(false);
-      return;
     }
-
-    if (!applySignatureManuallySet) {
-      setApplySignature(userSignaturePreferences.autoApplyForMinutes ?? false);
-    }
-  }, [actionType, userSignature, userSignaturePreferences.autoApplyForMinutes, applySignatureManuallySet]);
+  }, [actionType, isExecutive, userSignature, applySignatureManuallySet]);
 
   useEffect(() => {
     setApplySignatureManuallySet(false);
   }, [actionType]);
 
-  useEffect(() => {
-    const defaults = ensureDefaultSignatureTemplates();
-    setSignatureTemplates(defaults);
-  }, [isOpen]);
+  // Signature templates are now loaded by useSignature hook
 
   useEffect(() => {
     const templateType = actionType === 'approve' ? 'approval' : 'minute';
@@ -426,17 +468,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     });
   }, [actionType, signatureTemplates, userSignaturePreferences]);
 
-  useEffect(() => {
-    if (currentUser?.id) {
-      const prefs = loadUserSignaturePreferences(currentUser.id) ?? defaultUserSignaturePreferences;
-      setUserSignaturePreferences({
-        templateOverrides: { ...(prefs.templateOverrides ?? {}) },
-        autoApplyForMinutes: prefs.autoApplyForMinutes ?? false,
-      });
-    } else {
-      setUserSignaturePreferences(defaultUserSignaturePreferences);
-    }
-  }, [currentUser?.id]);
+  // Signature preferences are now loaded by useSignature hook
 
   useEffect(() => {
     if (!isOpen) {
@@ -579,7 +611,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     toast.success('Template inserted into your minute.');
   };
 
-  const handleSaveMinuteTemplate = () => {
+  const handleSaveMinuteTemplate = async () => {
     if (!currentUser) {
       toast.error('Select a user context before saving templates.');
       return;
@@ -598,36 +630,45 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     }
 
     const contentHtml = convertTextToHtml(content);
-    const created = createDocumentTemplate({
-      scope: 'user',
-      scopeId: currentUser.id,
-      title: resolvedName.slice(0, 80),
-      description: actionType === 'approve' ? 'Approval minute template' : 'Minute template',
-      contentHtml,
-      contentText: content,
-      createdBy: currentUser.id,
-      updatedBy: currentUser.id,
-      isDefault: false,
-      templateType: 'minute',
-      actionType,
-    });
-
-    refreshMinuteTemplates();
-    setSelectedMinuteTemplateId(created.id);
-    setNewTemplateName('');
-    toast.success('Template saved for quick reuse.');
+    try {
+      const created = await createDocumentTemplate({
+        scope: 'user',
+        scopeId: currentUser.id,
+        title: resolvedName.slice(0, 80),
+        description: actionType === 'approve' ? 'Approval minute template' : 'Minute template',
+        contentHtml,
+        contentText: content,
+        createdBy: currentUser.id,
+        updatedBy: currentUser.id,
+        isDefault: false,
+        templateType: 'minute',
+        actionType,
+      });
+      await refreshMinuteTemplates();
+      setSelectedMinuteTemplateId(created.id);
+      setNewTemplateName('');
+      toast.success('Template saved for quick reuse.');
+    } catch (error) {
+      logError('Failed to save template', error);
+      toast.error('Failed to save template. Please try again.');
+    }
   };
 
-  const handleDeleteSelectedMinuteTemplate = () => {
+  const handleDeleteSelectedMinuteTemplate = async () => {
     if (!selectedMinuteTemplate || !canDeleteSelectedTemplate) {
       toast.error('Only custom templates can be removed.');
       return;
     }
 
-    deleteTemplate(selectedMinuteTemplate.id);
-    refreshMinuteTemplates();
-    setSelectedMinuteTemplateId(null);
-    toast.success('Template removed.');
+    try {
+      await deleteTemplate(selectedMinuteTemplate.id);
+      await refreshMinuteTemplates();
+      setSelectedMinuteTemplateId(null);
+      toast.success('Template removed.');
+    } catch (error) {
+      logError('Failed to delete template', error);
+      toast.error('Failed to delete template. Please try again.');
+    }
   };
 
   const validateForm = (): boolean => {
@@ -662,16 +703,23 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       return false;
     }
 
-    if (actionType === 'approve' && !userSignature) {
-      toast.error('A digital signature is required to approve. Upload your signature in Settings → Signature.');
-      return false;
-    }
-
-    if (applySignature) {
-      const availableTemplates = relevantTemplates;
-      if (availableTemplates.length > 0 && !selectedTemplateId) {
-        toast.error('Please select a signature template.');
+    // Only require signature for executive approvals
+    if (actionType === 'approve') {
+      if (!userSignature) {
+        toast.error('A digital signature is required to approve. Upload your signature in Settings → Signature.');
         return false;
+      }
+      // For executive approvals, signature is always required (applySignature should be true)
+      if (isExecutive && !applySignature) {
+        toast.error('Digital seal is required for executive approvals. Please enable signature application.');
+        return false;
+      }
+      if (applySignature) {
+        const availableTemplates = relevantTemplates;
+        if (availableTemplates.length > 0 && !selectedTemplateId) {
+          toast.error('Please select a signature template.');
+          return false;
+        }
       }
     }
 
@@ -702,6 +750,30 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     // Proceed to confirmation after 2FA
     setShowConfirmation(true);
   };
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    {
+      key: 'Escape',
+      action: () => {
+        if (isOpen && !showConfirmation && !show2FAModal) {
+          onClose();
+        }
+      },
+      description: 'Close modal',
+    },
+    {
+      key: 's',
+      ctrl: true,
+      action: () => {
+        if (isOpen && !showConfirmation) {
+          handleSaveDraft();
+        }
+      },
+      description: 'Save draft (Ctrl+S)',
+      preventDefault: true,
+    },
+  ]);
 
   const handleConfirm = async () => {
     if (!currentUser) {
@@ -781,6 +853,13 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     const existingDistribution = correspondence.distribution ?? [];
     let distributionWithAddedBy: DistributionRecipient[] = [];
 
+    logInfo('[MinuteModal] Distribution state', {
+      distribution,
+      canDistribute,
+      existingDistribution,
+      distributionLength: distribution.length,
+    });
+
     if (canDistribute && distribution.length > 0) {
       distributionWithAddedBy = distribution.map((recipient) => ({
         ...recipient,
@@ -788,6 +867,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         addedByName: recipient.addedByName || currentUser.name,
         addedAt: recipient.addedAt || new Date().toISOString(),
       }));
+      
+      logInfo('[MinuteModal] Distribution with added by', distributionWithAddedBy);
     }
 
     const newMinute: Minute = {
@@ -809,9 +890,16 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     }
 
     setIsSubmitting(true);
+    // Create AbortController for request cancellation
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+    
     try {
       const existingKeys = new Set(
         existingDistribution.map((entry) => {
+          if (entry.type === 'user') {
+            return `user:${entry.userId ?? entry.id}`;
+          }
           const targetId =
             entry.type === 'directorate'
               ? entry.directorateId ?? entry.id
@@ -822,17 +910,33 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         }),
       );
       const newDistributionEntries = distributionWithAddedBy.filter((entry) => {
-        const targetId =
-          entry.type === 'directorate'
-            ? entry.directorateId ?? entry.id
-            : entry.type === 'division'
-            ? entry.divisionId ?? entry.id
-            : entry.departmentId ?? entry.id;
-        return !existingKeys.has(`${entry.type}:${targetId}`);
+        let key: string;
+        if (entry.type === 'user') {
+          key = `user:${entry.userId ?? entry.id}`;
+        } else {
+          const targetId =
+            entry.type === 'directorate'
+              ? entry.directorateId ?? entry.id
+              : entry.type === 'division'
+              ? entry.divisionId ?? entry.id
+              : entry.departmentId ?? entry.id;
+          key = `${entry.type}:${targetId}`;
+        }
+        const isNew = !existingKeys.has(key);
+        if (!isNew) {
+          logInfo('[MinuteModal] Skipping existing distribution entry', { key });
+        }
+        return isNew;
+      });
+      
+      logInfo('[MinuteModal] New distribution entries to create', {
+        newDistributionEntries,
+        count: newDistributionEntries.length,
       });
 
       // Create minute via API
-      await apiFetch('/correspondence/minutes/', {
+      const minuteResponse = await apiFetch<Record<string, unknown>>('/correspondence/minutes/', {
+        signal,
         method: 'POST',
         body: JSON.stringify({
           correspondence: correspondence.id,
@@ -850,6 +954,13 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           requires_response: purpose === 'action' || purpose === 'approval',
         }),
       });
+      
+      const createdMinuteId = minuteResponse?.id;
+      
+      logInfo('[MinuteModal] Minute created', {
+        minuteId: createdMinuteId,
+        distributionEntriesToCreate: newDistributionEntries.length,
+      });
 
       // Update correspondence via API
       // Prevent setting current_approver to the current user
@@ -860,7 +971,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         return;
       }
       
-      const correspondenceUpdatePayload: any = {
+      const correspondenceUpdatePayload: unknown = {
         status: 'in-progress',
         direction: finalDirection,
       };
@@ -876,36 +987,151 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         correspondenceUpdatePayload.current_office = finalOfficeId;
       }
       // Update correspondence - this is critical for routing
-      const updateResponse = await apiFetch<any>(`/correspondence/items/${correspondence.id}/`, {
+      const updateResponse = await apiFetch<Record<string, unknown>>(`/correspondence/items/${correspondence.id}/`, {
         method: 'PATCH',
         body: JSON.stringify(correspondenceUpdatePayload),
+        signal,
       });
       
       // Verify the update was successful
       const expectedOfficeId = recipientOfficeId || targetOfficeId;
       if (!updateResponse) {
-        console.warn('Correspondence update failed - no response received');
+        logWarn('Correspondence update failed - no response received');
       } else {
         const actualApproverId = updateResponse.current_approver_id || updateResponse.current_approver;
         const actualOfficeId = updateResponse.current_office_id || updateResponse.current_office;
         
         if (actualApproverId !== forwardTo) {
-          console.warn('Correspondence update may not have applied correctly. Current approver:', actualApproverId, 'Expected:', forwardTo);
+          logWarn('Correspondence update may not have applied correctly', { actualApproverId, expected: forwardTo });
         }
         
         if (expectedOfficeId && actualOfficeId !== expectedOfficeId) {
-          console.warn('Correspondence office may not have been set correctly. Current office:', actualOfficeId, 'Expected:', expectedOfficeId);
+          logWarn('Correspondence office may not have been set correctly', { actualOfficeId, expected: expectedOfficeId });
         }
       }
 
-      if (canDistribute && newDistributionEntries.length > 0) {
-        await Promise.all(
-          newDistributionEntries.map((recipient) =>
-            apiFetch('/correspondence/distribution/', {
-              method: 'POST',
-              body: JSON.stringify({
+          // Handle distribution and parallel routing
+          if (canDistribute && newDistributionEntries.length > 0) {
+            try {
+              // Separate "For Action" users (parallel routing) from other distribution
+              const actionUsers = newDistributionEntries.filter(
+                (r) => r.type === 'user' && r.purpose === 'action'
+              );
+              const otherDistribution = newDistributionEntries.filter(
+                (r) => !(r.type === 'user' && r.purpose === 'action')
+              );
+
+              // Create a map to track which parallel minute belongs to which recipient (defined outside if block for scope)
+              const recipientToMinuteMap = new Map<string, string>();
+              
+              // Create parallel minutes for "For Action" users
+              const parallelMinuteIds: string[] = [];
+              if (actionUsers.length > 0) {
+                logInfo('[MinuteModal] Creating parallel minutes for action users', actionUsers);
+                
+                // Generate parallel group ID for grouping parallel branches (UUID format)
+                // Use a simple UUID v4 generator
+                const generateUUID = () => {
+                  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                    const r = Math.random() * 16 | 0;
+                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                  });
+                };
+                const parallelGroupId = generateUUID();
+            
+            const parallelMinutes = await Promise.all(
+              actionUsers.map(async (recipient) => {
+                // Get recipient user's office info
+                const recipientUserId = recipient.userId || recipient.id;
+                const recipientOfficeInfo = getUserOfficeInfo(recipientUserId);
+                const recipientOfficeId = recipientOfficeInfo?.office?.id;
+                
+                const parallelMinutePayload = {
+                  correspondence: correspondence.id,
+                  user_id: currentUser.id, // Creator of the minute
+                  grade_level: currentUser.gradeLevel,
+                  action_type: actionType,
+                  minute_text: recipient.customMinuteText?.trim() || minuteText.trim(),
+                  direction: finalDirection,
+                  step_number: nextStep,
+                  from_office_id: currentUserOfficeId || undefined,
+                  to_office_id: recipientOfficeId || undefined,
+                  to_user_id: recipientUserId, // Recipient user
+                  purpose: 'action',
+                  requires_response: true,
+                  routing_type: 'parallel',
+                  parallel_group_id: parallelGroupId,
+                  is_parallel_branch: true,
+                  parent_minute_id: createdMinuteId,
+                };
+                
+                logInfo('[MinuteModal] Creating parallel minute', {
+                  ...parallelMinutePayload,
+                  recipientUserId,
+                  recipientOfficeId,
+                });
+                
+                const parallelMinuteResponse = await apiFetch<Record<string, unknown>>('/correspondence/minutes/', {
+                  signal,
+                  method: 'POST',
+                  body: JSON.stringify(parallelMinutePayload),
+                });
+                
+                const minuteId = parallelMinuteResponse?.id;
+                if (minuteId && recipientUserId) {
+                  recipientToMinuteMap.set(recipientUserId, minuteId);
+                }
+                
+                return minuteId;
+              }),
+            );
+            
+            parallelMinuteIds.push(...parallelMinutes.filter(Boolean));
+            logInfo('[MinuteModal] Parallel minutes created', {
+              minuteIds: parallelMinuteIds,
+              recipientMap: Object.fromEntries(recipientToMinuteMap),
+            });
+            
+            // Update correspondence workflow_state to "parallel" if we created parallel branches
+            if (parallelMinuteIds.length > 0) {
+              try {
+                await apiFetch(`/correspondence/items/${correspondence.id}/`, {
+                  signal,
+                  method: 'PATCH',
+                  body: JSON.stringify({
+                    workflow_state: 'parallel',
+                    active_parallel_branches: parallelMinuteIds.length,
+                  }),
+                });
+                logInfo('[MinuteModal] Updated correspondence workflow_state to parallel');
+              } catch (error: unknown) {
+                logWarn('[MinuteModal] Failed to update workflow_state (non-critical)', error);
+                // Non-critical - backend might handle this automatically
+              }
+              
+              toast.success(`Created ${parallelMinuteIds.length} parallel routing branch(es).`);
+            }
+          }
+
+          // Create distribution entries (for all recipients, including action users)
+          const distributionResults = await Promise.all(
+            newDistributionEntries.map(async (recipient, index) => {
+              // For action users, link to their parallel minute using the map
+              let linkedMinuteId = createdMinuteId;
+              if (recipient.type === 'user' && recipient.purpose === 'action' && recipient.userId) {
+                const parallelMinuteId = recipientToMinuteMap.get(recipient.userId);
+                if (parallelMinuteId) {
+                  linkedMinuteId = parallelMinuteId;
+                } else {
+                  logWarn('[MinuteModal] Could not find parallel minute for user', { userId: recipient.userId });
+                }
+              }
+              
+              const distributionPayload = {
                 correspondence: correspondence.id,
                 recipient_type: recipient.type,
+                user: recipient.type === 'user' ? (recipient.userId || recipient.id) : null,
                 directorate:
                   recipient.type === 'directorate'
                     ? recipient.directorateId ?? recipient.id
@@ -920,16 +1146,58 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                     : recipient.departmentId ?? null,
                 purpose: recipient.purpose ?? 'information',
                 added_by_id: recipient.addedById ?? currentUser.id,
-              }),
+                minute_id: linkedMinuteId || undefined,  // Link distribution to the minute
+              };
+              
+              logInfo('[MinuteModal] Creating distribution', {
+                payload: distributionPayload,
+                minuteId: linkedMinuteId,
+                recipient,
+              });
+              
+              return apiFetch('/correspondence/distribution/', {
+                method: 'POST',
+                body: JSON.stringify(distributionPayload),
+              });
             }),
-          ),
-        );
+          );
+          
+          logInfo('[MinuteModal] Distribution created successfully', distributionResults);
+          if (distributionResults.length > 0) {
+            const actionCount = actionUsers.length;
+            const infoCount = otherDistribution.length;
+            let message = `Distribution added: ${distributionResults.length} recipient(s) notified.`;
+            if (actionCount > 0) {
+              message += ` ${actionCount} parallel routing branch(es) created.`;
+            }
+            toast.success(message);
+          }
+        } catch (error: unknown) {
+          logError('[MinuteModal] Failed to create distribution/parallel routing', error);
+          const errorMessage = (error instanceof Error ? error.message : null) || 
+                               (typeof error === 'object' && error !== null && 'detail' in error ? String(error.detail) : null) || 
+                               'Unknown error';
+          const errorResponse = typeof error === 'object' && error !== null && 'response' in error ? error.response : undefined;
+          logError('[MinuteModal] Distribution error details', {
+            error,
+            message: errorMessage,
+            response: errorResponse,
+          });
+          // Don't fail the entire minute creation if distribution fails
+          toast.error(`Minute created, but failed to add distribution recipients: ${errorMessage}. Please add them manually.`, {
+            duration: 5000,
+          });
+        }
       }
 
       await syncFromApi();
 
       if (draftId) {
-        deleteDraft(draftId);
+        try {
+          await deleteDraft(draftId);
+        } catch (error) {
+          logError('Failed to delete draft', error);
+        }
       }
 
       setShowConfirmation(false);
@@ -963,7 +1231,11 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           ? `Forwarded to ${forwardUser?.name ?? 'selected user'}`
           : `Routed to ${officeOptions.find((office) => office.id === targetOfficeId)?.name ?? 'office'} inbox`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      // Don't show error if request was cancelled
+      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
+        return;
+      }
       logError('Failed to record minute', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
@@ -973,23 +1245,26 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     }
   };
 
-  const handleSaveDraft = () => {
-    const draft = saveDraft({
-      id: draftId || generateId('draft'),
-      correspondenceId: correspondence.id,
-      type: 'minute',
-      content: minuteText,
-      forwardTo,
-      actionType,
-      timestamp: new Date().toISOString(),
-    });
-    
-    setHasDraft(true);
-    setDraftId(draft.id);
-    
-    toast.info('Draft saved', {
-      description: 'You can continue editing later',
-    });
+  const handleSaveDraft = async () => {
+    try {
+      const draft = await saveDraft({
+        correspondenceId: correspondence.id,
+        type: 'minute',
+        content: minuteText,
+        forwardTo,
+        actionType,
+      });
+      
+      setHasDraft(true);
+      setDraftId(draft.id);
+      
+      toast.info('Draft saved', {
+        description: 'You can continue editing later',
+      });
+    } catch (error) {
+      logError('Failed to save draft', error);
+      toast.error('Failed to save draft');
+    }
   };
 
   const division = correspondence.divisionId ? getDivisionById(correspondence.divisionId) : null;
@@ -1037,13 +1312,15 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent 
+        className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" />
+            <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
             Minute Correspondence
             {hasDraft && (
-              <Badge variant="secondary" className="ml-2 text-xs">
+              <Badge variant="secondary" className="ml-2 text-xs" aria-label="Draft loaded">
                 Draft Loaded
               </Badge>
             )}
@@ -1053,7 +1330,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 mt-4">
+        <ScrollArea className="max-h-[calc(95vh-220px)] sm:max-h-[calc(90vh-220px)] pr-4">
+          <div className="space-y-6 py-2">
           {/* Document Summary */}
           <Card className="bg-muted/50">
             <CardContent className="p-4">
@@ -1069,13 +1347,24 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                     <span>{division?.name}</span>
                   </div>
                 </div>
-                <Badge variant={
-                  correspondence.priority === 'urgent' ? 'destructive' :
-                  correspondence.priority === 'high' ? 'default' :
-                  'secondary'
-                }>
-                  {correspondence.priority}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={
+                    correspondence.priority === 'urgent' ? 'destructive' :
+                    correspondence.priority === 'high' ? 'default' :
+                    'secondary'
+                  }>
+                    {correspondence.priority}
+                  </Badge>
+                  {(() => {
+                    const slaDays = getSLADays(correspondence.priority);
+                    return slaDays !== null ? (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>{slaDays} hour{slaDays !== 1 ? 's' : ''}</span>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1120,7 +1409,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 Direction {!isMD && '*'}
               </Label>
               {canChooseDirection ? (
-                <RadioGroup value={selectedDirection} onValueChange={(v: any) => {
+                <RadioGroup value={selectedDirection} onValueChange={(v: Record<string, unknown>) => {
                   setSelectedDirection(v);
                   setForwardTo(''); // Reset forward to when direction changes
                 }}>
@@ -1147,732 +1436,148 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               )}
             </div>
 
-            {/* Action Type */}
-            <div className="space-y-2">
+            {/* Action Type - Clear Separation */}
+            <div className="space-y-3">
               <Label className="flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                Action Type
+                Action Type *
               </Label>
-              <RadioGroup value={actionType} onValueChange={(v: any) => setActionType(v)}>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="minute" id="minute-only" />
-                  <Label htmlFor="minute-only" className="font-normal cursor-pointer">
-                    Minute only
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="approve" id="approve-forward" />
-                  <Label htmlFor="approve-forward" className="font-normal cursor-pointer flex items-center gap-1">
-                    Approve & Forward
-                    {actionType === 'approve' && !userSignature && (
-                      <AlertCircle className="h-3 w-3 text-destructive" />
-                    )}
-                  </Label>
+              <RadioGroup value={actionType} onValueChange={(v: Record<string, unknown>) => setActionType(v)}>
+                <div className="space-y-3">
+                  {/* Minute Option */}
+                  <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
+                    <RadioGroupItem value="minute" id="minute-only" className="mt-1" />
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor="minute-only" className="font-medium cursor-pointer flex items-center gap-2">
+                        <MessageSquare className="h-4 w-4 text-blue-500" />
+                        Add Minute
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Add a comment, instruction, or routing note. For workflow communication.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Approval Option */}
+                  <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
+                    actionType === 'approve' 
+                      ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
+                      : 'border-border hover:bg-muted/50'
+                  }`}>
+                    <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-emerald-600" />
+                        Executive Approval
+                        {actionType === 'approve' && !userSignature && (
+                          <AlertCircle className="h-3 w-3 text-destructive" />
+                        )}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        <strong className="text-emerald-600 dark:text-emerald-400">Formal approval with digital seal.</strong> Requires signature. 
+                        {isExecutive && ' This will apply a digital executive seal to the document.'}
+                      </p>
+                      {actionType === 'approve' && !userSignature && (
+                        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Digital signature required for approval
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </RadioGroup>
             </div>
           </div>
 
-          {/* Your Minute */}
-          <div className="space-y-3">
-            <Label htmlFor="minute" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-muted-foreground" />
-              Your Minute *
-            </Label>
+          {/* Minute Text Section - Using shared component */}
+          <MinuteTextSection
+            minuteText={minuteText}
+            minuteTextError={minuteTextError}
+            characterCount={characterCount}
+            actionType={actionType}
+            onTextChange={handleTextChange}
+            templates={filteredMinuteTemplates}
+            selectedTemplateId={selectedMinuteTemplateId}
+            onTemplateSelect={(templateId) => setSelectedMinuteTemplateId(templateId)}
+            onTemplateApply={handleApplyMinuteTemplate}
+            onTemplateSave={handleSaveMinuteTemplate}
+            onTemplateDelete={handleDeleteSelectedMinuteTemplate}
+            newTemplateName={newTemplateName}
+            onNewTemplateNameChange={setNewTemplateName}
+            templateSectionOpen={templateSectionOpen}
+            onTemplateSectionOpenChange={setTemplateSectionOpen}
+            getTemplatePlainText={getTemplatePlainText}
+            canDeleteTemplate={(template) => template.scope === 'user' && template.createdBy === currentUser?.id}
+          />
 
-            {/* Collapsible Template Section */}
-            <Collapsible open={templateSectionOpen} onOpenChange={setTemplateSectionOpen}>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full justify-between">
-                  <span className="flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Minute Templates
-                    {filteredMinuteTemplates.length > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {filteredMinuteTemplates.length}
-                      </Badge>
-                    )}
-                  </span>
-                  {templateSectionOpen ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-3 space-y-3">
-                <div className="p-3 border border-border rounded-lg bg-muted/30 space-y-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Select
-                      value={selectedMinuteTemplateId ?? 'none'}
-                      onValueChange={(value) => setSelectedMinuteTemplateId(value === 'none' ? null : value)}
-                    >
-                      <SelectTrigger className="w-[200px] h-8">
-                        <SelectValue placeholder="Choose a template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No template</SelectItem>
-                        {filteredMinuteTemplates.map(template => (
-                          <SelectItem key={template.id} value={template.id}>
-                            {template.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleApplyMinuteTemplate}
-                      disabled={!selectedMinuteTemplate}
-                    >
-                      Insert
-                    </Button>
-                    {canDeleteSelectedTemplate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleDeleteSelectedMinuteTemplate}
-                        className="text-destructive hover:text-destructive/80"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
+          {/* Route To - Using extracted RoutingSection component */}
+          <RoutingSection
+            routeType={routeType}
+            onRouteTypeChange={(v) => {
+              setRouteType(v);
+              if (v === 'office') {
+                setForwardTo('');
+                setForwardToError('');
+                setPersonSearchQuery('');
+              } else {
+                setTargetOfficeId('');
+                setOfficeSearchQuery('');
+                setOfficeFilterDirectorate('all');
+                setOfficeFilterDivision('all');
+              }
+            }}
+            forwardTo={forwardTo}
+            onForwardToChange={setForwardTo}
+            forwardToError={forwardToError}
+            personSearchQuery={personSearchQuery}
+            onPersonSearchQueryChange={setPersonSearchQuery}
+            targetOfficeId={targetOfficeId}
+            onTargetOfficeIdChange={(v) => {
+              setTargetOfficeId(v);
+              setForwardTo('');
+            }}
+            officeSearchQuery={officeSearchQuery}
+            onOfficeSearchQueryChange={setOfficeSearchQuery}
+            officeFilterDirectorate={officeFilterDirectorate}
+            onOfficeFilterDirectorateChange={(v) => {
+              setOfficeFilterDirectorate(v);
+              setOfficeFilterDivision('all');
+            }}
+            officeFilterDivision={officeFilterDivision}
+            onOfficeFilterDivisionChange={setOfficeFilterDivision}
+            purpose={purpose}
+            onPurposeChange={setPurpose}
+            offices={officeOptions}
+            directorates={directorates}
+            divisions={divisions}
+            users={activeDirectoryUsers}
+            assistantList={assistantList}
+            approverList={approverList}
+            suggestedNext={suggestedNext}
+            findUserById={findUserById}
+            getUserOfficeInfo={getUserOfficeInfo}
+          />
 
-                  {selectedMinuteTemplate && (
-                    <div className="rounded-md border border-dashed p-2 text-xs bg-background">
-                      <p className="font-medium text-foreground mb-1">{selectedMinuteTemplate.title}</p>
-                      <p className="text-muted-foreground line-clamp-2">
-                        {getTemplatePlainText(selectedMinuteTemplate)}
-                      </p>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      value={newTemplateName}
-                      onChange={(e) => setNewTemplateName(e.target.value)}
-                      placeholder="Save current as template..."
-                      className="flex-1 min-w-[150px] h-8"
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSaveMinuteTemplate}
-                      disabled={!minuteText.trim()}
-                    >
-                      <Save className="h-3 w-3 mr-1" />
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-            <Textarea
-              id="minute"
-              placeholder="Enter your comments, instructions, or recommendations..."
-              value={minuteText}
-              onChange={(e) => handleTextChange(e.target.value)}
-              className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''}`}
-              maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
-              aria-label="Minute text"
-              aria-required="true"
-              aria-invalid={!!minuteTextError}
-              aria-describedby="minute-text-help minute-text-error"
+          {/* Signature Section - Only for Executive Approvals */}
+          {actionType === 'approve' && (
+            <SignatureSection
+              signature={userSignature}
+              currentUser={currentUser}
+              actionType={actionType}
+              isExecutive={isExecutive}
+              applySignature={applySignature}
+              onApplySignatureChange={(checked) => {
+                setApplySignatureManuallySet(true);
+                setApplySignature(checked);
+              }}
+              signatureTemplates={signatureTemplates}
+              selectedTemplateId={selectedTemplateId}
+              onTemplateChange={setSelectedTemplateId}
+              templatePreview={templatePreview}
+              showTemplateSelector={true}
+              disabled={isSubmitting}
             />
-            <div className="flex justify-between text-xs">
-              {minuteTextError ? (
-                <span className="text-destructive flex items-center gap-1" id="minute-text-error" role="alert">
-                  <AlertCircle className="h-3 w-3" />
-                  {minuteTextError}
-                </span>
-              ) : (
-                <span className="text-muted-foreground">Use @ to mention others</span>
-              )}
-              <span className={
-                characterCount > MODAL_CONSTANTS.MINUTE_TEXT.MAX 
-                  ? 'text-destructive' 
-                  : characterCount > MODAL_CONSTANTS.MINUTE_TEXT.MAX * 0.9 
-                    ? 'text-warning' 
-                    : 'text-muted-foreground'
-              }>
-                {characterCount} / {MODAL_CONSTANTS.MINUTE_TEXT.MAX}
-              </span>
-            </div>
-          </div>
-
-          {/* Route To - Distribution Style */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Send className="h-4 w-4 text-muted-foreground" />
-                <Label className="text-sm font-semibold">Route To *</Label>
-                <Badge variant={(forwardTo || targetOfficeId) ? 'default' : 'outline'} className="text-xs">
-                  {forwardTo ? '1 person' : targetOfficeId ? '1 office' : '0 recipients'}
-                </Badge>
-              </div>
-              {forwardToError && (
-                <span className="text-xs text-destructive flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {forwardToError}
-                </span>
-              )}
-            </div>
-
-            {/* Selection Form - Grid Layout like Distribution */}
-            <div className="space-y-3 p-4 border border-border rounded-lg bg-muted/30">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Route Type Column */}
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Route Type</Label>
-                  <Select 
-                    value={routeType} 
-                    onValueChange={(v: 'person' | 'office') => {
-                      setRouteType(v);
-                      if (v === 'office') {
-                        setForwardTo('');
-                        setForwardToError('');
-                        setPersonSearchQuery('');
-                      } else {
-                        setTargetOfficeId('');
-                        setOfficeSearchQuery('');
-                        setOfficeFilterDirectorate('all');
-                        setOfficeFilterDivision('all');
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="person">
-                        <div className="flex items-center gap-2">
-                          <UserIcon className="h-4 w-4" />
-                          Person
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="office">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4" />
-                          Office
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Person or Office Column */}
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    {routeType === 'office' ? (
-                      <><Building2 className="h-3 w-3" /> Office</>
-                    ) : (
-                      <><UserIcon className="h-3 w-3" /> Person</>
-                    )}
-                  </Label>
-                  {routeType === 'office' ? (
-                    /* Office Selector - with filters in form area */
-                    <div className="space-y-2">
-                      {/* Filter Row */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <Select 
-                          value={officeFilterDirectorate} 
-                          onValueChange={(v) => {
-                            setOfficeFilterDirectorate(v);
-                            setOfficeFilterDivision('all');
-                          }}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Directorate" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Directorates</SelectItem>
-                            {directorates.map(d => (
-                              <SelectItem key={d.id} value={d.id}>
-                                {d.shortName || d.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select 
-                          value={officeFilterDivision} 
-                          onValueChange={setOfficeFilterDivision}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Division" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Divisions</SelectItem>
-                            {filteredOfficeDivisions.map(d => (
-                              <SelectItem key={d.id} value={d.id}>
-                                {d.shortName || d.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {/* Office Dropdown */}
-                      <Select value={targetOfficeId} onValueChange={(v) => {
-                        setTargetOfficeId(v);
-                        setForwardTo('');
-                        setForwardToError('');
-                      }}>
-                        <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
-                          <SelectValue placeholder="Select office" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[300px]">
-                          {filteredOfficeOptions.length === 0 ? (
-                            <div className="p-4 text-center text-sm text-muted-foreground">
-                              No offices found
-                            </div>
-                          ) : (
-                            filteredOfficeOptions.map(office => (
-                              <SelectItem key={office.id} value={office.id}>
-                                <div className="flex items-center justify-between gap-2 w-full">
-                                  <span>{office.name}</span>
-                                  <span className="text-[10px] text-muted-foreground uppercase">
-                                    {office.officeType}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                      {(officeFilterDirectorate !== 'all' || officeFilterDivision !== 'all') && (
-                        <p className="text-xs text-muted-foreground">
-                          Showing {filteredOfficeOptions.length} of {officeOptions.length} offices
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    /* Person Selector */
-                    <Select value={forwardTo} onValueChange={(v) => {
-                      setForwardTo(v);
-                      setForwardToError('');
-                    }}>
-                      <SelectTrigger className={`h-9 ${forwardToError ? 'border-destructive' : ''}`}>
-                        <SelectValue placeholder="Select person" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
-                        {/* Search Input */}
-                        <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
-                          <div className="relative">
-                            <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                              placeholder="Search by name, role..."
-                              value={personSearchQuery}
-                              onChange={(e) => setPersonSearchQuery(e.target.value)}
-                              className="pl-8 h-8"
-                              onClick={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => e.stopPropagation()}
-                            />
-                          </div>
-                        </div>
-                      
-                      {assistantList.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-primary">
-                            Assistants ({assistantList.length})
-                          </div>
-                          {assistantList.map((user) => {
-                            const userInfo = getUserOfficeInfo(user.id);
-                            return (
-                              <SelectItem key={user.id} value={user.id}>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{user.name}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {user.systemRole}
-                                    {userInfo?.office && ` • ${userInfo.office.name}`}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                          <Separator className="my-1" />
-                        </>
-                      )}
-
-                      {filteredNext && !personSearchQuery.trim() && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-success">
-                            Suggested Next
-                          </div>
-                          <SelectItem value={filteredNext.id}>
-                            <div className="flex items-center gap-2">
-                              <CheckCircle className="h-3 w-3 text-success shrink-0" />
-                              <div className="flex flex-col">
-                                <span className="font-medium">{filteredNext.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {filteredNext.systemRole} • {filteredNext.gradeLevel}
-                                </span>
-                              </div>
-                            </div>
-                          </SelectItem>
-                          <Separator className="my-1" />
-                        </>
-                      )}
-
-                      {approverList.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                            All Recipients ({approverList.length})
-                          </div>
-                          {approverList.slice(0, 30).map(user => {
-                            const userInfo = getUserOfficeInfo(user.id);
-                            return (
-                              <SelectItem key={user.id} value={user.id}>
-                                <div className="flex flex-col">
-                                  <span>{user.name}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {user.systemRole}
-                                    {userInfo?.division && ` • ${userInfo.division.name}`}
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            );
-                          })}
-                        </>
-                      )}
-
-                      {approverList.length === 0 && !assistantList.length && !filteredNext && (
-                        <div className="p-4 text-center text-sm text-muted-foreground">
-                          No recipients available
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  )}
-                </div>
-
-                {/* Purpose Column */}
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <FileText className="h-3 w-3" /> Purpose
-                  </Label>
-                  <Select value={purpose} onValueChange={(v: any) => setPurpose(v)}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="action">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-warning" />
-                          For Action
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="information">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-info" />
-                          For Information
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="comment">
-                        <div className="flex items-center gap-2">
-                          <MessageSquare className="h-4 w-4 text-success" />
-                          For Comment
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="approval">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle className="h-4 w-4 text-primary" />
-                          For Approval
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Selected Recipient Card - Person */}
-            {forwardTo && (() => {
-              const recipientUser = findUserById(forwardTo);
-              const recipientInfo = getUserOfficeInfo(forwardTo);
-              return (
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Selected Recipient
-                  </Label>
-                  <Card className="border-primary/30 bg-primary/5">
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <UserIcon className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">{recipientUser?.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {recipientUser?.systemRole} • {recipientUser?.gradeLevel}
-                            </p>
-                            {recipientInfo && (
-                              <p className="text-xs text-muted-foreground truncate">
-                                {recipientInfo.office?.name}
-                                {recipientInfo.division && ` • ${recipientInfo.division.name}`}
-                              </p>
-                            )}
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={`text-xs gap-1 shrink-0 ${
-                              purpose === 'information' ? 'bg-info/10 text-info border-info/20' :
-                              purpose === 'action' ? 'bg-warning/10 text-warning border-warning/20' :
-                              purpose === 'comment' ? 'bg-success/10 text-success border-success/20' :
-                              'bg-primary/10 text-primary border-primary/20'
-                            }`}
-                          >
-                            {purpose === 'information' ? <FileText className="h-3 w-3" /> :
-                             purpose === 'action' ? <CheckCircle className="h-3 w-3" /> :
-                             purpose === 'comment' ? <MessageSquare className="h-3 w-3" /> :
-                             <CheckCircle className="h-3 w-3" />}
-                            {purpose === 'information' ? 'Info' : 
-                             purpose === 'action' ? 'Action' : 
-                             purpose === 'comment' ? 'Comment' : 'Approval'}
-                          </Badge>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 ml-2 text-muted-foreground hover:text-destructive"
-                          onClick={() => setForwardTo('')}
-                          aria-label="Remove recipient"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            })()}
-
-            {/* Selected Recipient Card - Office */}
-            {!forwardTo && targetOfficeId && (() => {
-              const selectedOffice = offices.find(o => o.id === targetOfficeId);
-              return (
-                <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">
-                    Selected Office
-                  </Label>
-                  <Card className="border-secondary/30 bg-secondary/5">
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="h-10 w-10 rounded-full bg-secondary/10 flex items-center justify-center">
-                            <Building2 className="h-5 w-5 text-secondary-foreground" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">{selectedOffice?.name}</p>
-                            <p className="text-xs text-muted-foreground uppercase">
-                              {selectedOffice?.officeType}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Will be routed to office inbox
-                            </p>
-                          </div>
-                          <Badge variant="outline" className="text-xs shrink-0">
-                            Office
-                          </Badge>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 ml-2 text-muted-foreground hover:text-destructive"
-                          onClick={() => setTargetOfficeId('')}
-                          aria-label="Remove office"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            })()}
-
-            {!forwardTo && !targetOfficeId && (
-              <Card className="border-dashed">
-                <CardContent className="p-4 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    No recipient selected. Choose a person or office to route this correspondence.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-
-          {/* Digital Seal (for Executive Approvals) */}
-          {actionType === 'approve' && isExecutive && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-emerald-600" />
-                  Digital Executive Seal
-                </Label>
-                <Badge variant="destructive" className="text-[10px]">Required</Badge>
-              </div>
-              {userSignature ? (
-                <Card>
-                  <CardContent className="p-4 bg-white">
-                    <div className="flex flex-col items-center justify-center space-y-3">
-                      <DigitalSealPreview
-                        officeName={userSignature.sealOfficeName || 'NIGERIAN PORTS AUTHORITY'}
-                        officeTitle={userSignature.sealOfficeTitle || `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`}
-                        serialPrefix={userSignature.sealPrefix || 'NPA'}
-                        signatureImage={userSignature.imageData}
-                        size={250}
-                        showQR={true}
-                      />
-                      <p className="text-xs text-muted-foreground text-center max-w-md">
-                        This digital seal will be automatically applied when you approve. Your signature is embedded in the seal.
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <ImageIcon className="h-3 w-3" />
-                        <span>Signature on file • Uploaded {new Date(userSignature.uploadedAt).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card className="border-dashed">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3 text-sm text-muted-foreground">
-                      <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
-                      <div>
-                        <p className="text-destructive font-medium">No signature on file.</p>
-                        <p>
-                          Please upload your signature in{' '}
-                          <Link href="/settings#signature" className="text-primary underline">
-                            Settings → Signature
-                          </Link>{' '}
-                          before approving correspondence.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {/* Digital Signature (for non-executive or non-approve actions) */}
-          {!(actionType === 'approve' && isExecutive) && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label>Digital Signature</Label>
-                {actionType === 'approve' && (
-                  <Badge variant="destructive" className="text-[10px]">Required</Badge>
-                )}
-              </div>
-              <Card className="border-dashed">
-                <CardContent className="p-4 space-y-4">
-                  {userSignature ? (
-                    <div className="space-y-3">
-                      <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="flex-1 space-y-1 text-sm">
-                          <p className="font-medium text-foreground">Signature on File</p>
-                          <p className="text-xs text-muted-foreground">
-                            Uploaded {new Date(userSignature.uploadedAt).toLocaleString()} {userSignature.fileName ? `• ${userSignature.fileName}` : ''}
-                          </p>
-                        </div>
-                        <div className="p-3 border rounded-lg bg-background self-start">
-                          <img
-                            src={userSignature.imageData}
-                            alt="Digital signature preview"
-                            className="max-h-24 object-contain"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">Signature Template</Label>
-                        {relevantTemplates.length > 0 ? (
-                          <Select
-                            value={selectedTemplateId ?? undefined}
-                            onValueChange={(value) => setSelectedTemplateId(value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select template" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {relevantTemplates.map(template => (
-                                <SelectItem key={template.id} value={template.id}>
-                                  <div className="flex flex-col text-xs">
-                                    <span className="font-medium text-foreground text-sm">{template.name}</span>
-                                    <span className="text-muted-foreground">{template.description}</span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <div className="p-3 border border-dashed rounded bg-muted/30 text-xs text-muted-foreground">
-                            No templates available for this action.
-                          </div>
-                        )}
-                      </div>
-
-                      {selectedTemplate && applySignature && (
-                        <div className="space-y-2">
-                          <Label className="text-xs text-muted-foreground">Template Preview</Label>
-                          <div className="p-3 border border-dashed rounded bg-muted/20">
-                            <div className="flex items-center justify-between mb-2 text-xs text-muted-foreground">
-                              <span className="font-medium text-foreground">{selectedTemplate.name}</span>
-                              <Badge variant="outline" className="text-[10px] uppercase">{selectedTemplate.style}</Badge>
-                            </div>
-                            <p className="text-xs whitespace-pre-wrap font-mono text-muted-foreground">
-                              {templatePreview}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-3 text-sm text-muted-foreground">
-                      <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
-                      <div>
-                        <p className="text-destructive font-medium">No signature on file.</p>
-                        <p>
-                          Please upload your signature in{' '}
-                          <Link href="/settings#signature" className="text-primary underline">
-                            Settings → Signature
-                          </Link>{' '}
-                          before approving correspondence.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <ImageIcon className="h-4 w-4" />
-                      <span>
-                        {actionType === 'approve'
-                          ? 'A digital signature will be applied automatically for this approval.'
-                          : 'Apply your signature to this minute for acknowledgement.'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={applySignature && !!userSignature}
-                        onCheckedChange={(checked) => {
-                          if (actionType === 'approve') return;
-                          setApplySignatureManuallySet(true);
-                          setApplySignature(checked && !!userSignature);
-                        }}
-                        disabled={!userSignature || actionType === 'approve'}
-                      />
-                      <span className="text-xs">
-                        {actionType === 'approve' ? 'Required' : applySignature && userSignature ? 'Will be applied' : 'Not applied'}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
           )}
 
           {/* Distribution (CC) - Only for Management Level */}
@@ -1908,25 +1613,41 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                         </>
                       )}
                     </Badge>
-                    <Badge variant="outline">
-                      {actionType === 'approve' ? 'Approve & Forward' : 'Minute Only'}
+                    <Badge variant={actionType === 'approve' ? 'default' : 'outline'} className={
+                      actionType === 'approve' ? 'bg-emerald-600 text-white border-emerald-600' : ''
+                    }>
+                      {actionType === 'approve' ? (
+                        <>
+                          <Shield className="h-3 w-3 mr-1" />
+                          Executive Approval
+                        </>
+                      ) : (
+                        'Minute Only'
+                      )}
                     </Badge>
-                    {applySignature && userSignature && (
+                    {actionType === 'approve' && applySignature && userSignature && (
                       <Badge variant="outline" className="gap-1">
                         <ImageIcon className="h-3 w-3" />
-                        Signature Applied
+                        Digital Seal
                       </Badge>
                     )}
                   </div>
                   <p className="text-muted-foreground">
-                    <strong>{currentUser?.name}</strong> will minute and forward to{' '}
+                    <strong>{currentUser?.name}</strong> will{' '}
+                    {actionType === 'approve' ? (
+                      <>
+                        <strong className="text-emerald-600">approve with digital seal</strong> and forward to{' '}
+                      </>
+                    ) : (
+                      'minute and forward to '
+                    )}
                     <strong>
                       {forwardTo 
                         ? findUserById(forwardTo)?.name 
                         : offices.find(o => o.id === targetOfficeId)?.name + ' (Office Inbox)'}
                     </strong>
                   </p>
-                  {applySignature && userSignature && selectedTemplate && (
+                  {actionType === 'approve' && applySignature && userSignature && selectedTemplate && (
                     <p className="text-xs text-muted-foreground">
                       Signature template: {selectedTemplate.name}
                     </p>
@@ -1941,7 +1662,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               </CardContent>
             </Card>
           )}
-        </div>
+          </div>
+        </ScrollArea>
 
         <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <Button 
@@ -1993,6 +1715,31 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             actionType,
             content: minuteText,
             direction: isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection),
+            distribution: distribution.length > 0 ? distribution.map((recipient) => {
+              // Use the name from the recipient (should already be set by DistributionSelector)
+              // Fallback to lookup if name is missing
+              let recipientName = recipient.name;
+              if (!recipientName) {
+                if (recipient.type === 'directorate' && recipient.directorateId) {
+                  recipientName = directorates.find(d => d.id === recipient.directorateId)?.name || 'Directorate';
+                } else if (recipient.type === 'division' && recipient.divisionId) {
+                  recipientName = divisions.find(d => d.id === recipient.divisionId)?.name || 'Division';
+                } else if (recipient.type === 'department' && recipient.departmentId) {
+                  recipientName = 'Department';
+                } else {
+                  recipientName = recipient.type.charAt(0).toUpperCase() + recipient.type.slice(1);
+                }
+              }
+              return {
+                id: recipient.id,
+                type: recipient.type,
+                name: recipientName,
+                directorateId: recipient.directorateId,
+                divisionId: recipient.divisionId,
+                departmentId: recipient.departmentId,
+                purpose: recipient.purpose || 'information',
+              };
+            }) : undefined,
           }}
         />
 
@@ -2009,3 +1756,15 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     </Dialog>
   );
 };
+
+// Wrap with error boundary and memo
+const MinuteModalWithErrorBoundary = React.memo((props: MinuteModalProps) => (
+  <ModalErrorBoundary onClose={props.onClose}>
+    <MinuteModalComponent {...props} />
+  </ModalErrorBoundary>
+));
+
+MinuteModalWithErrorBoundary.displayName = 'MinuteModal';
+
+// Named export (primary)
+export { MinuteModalWithErrorBoundary as MinuteModal };

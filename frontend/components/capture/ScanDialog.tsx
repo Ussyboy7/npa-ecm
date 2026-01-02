@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -19,7 +19,7 @@ interface ScanDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB
 const SCAN_ALLOWED_TYPES = [
   'application/pdf',
   'image/png',
@@ -36,13 +36,23 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [scanMode, setScanMode] = useState<'manual' | 'scanner'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup on unmount or dialog close
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`File exceeds maximum size of 10MB`);
+      toast.error(`File exceeds maximum size of 30MB`);
       return;
     }
 
@@ -65,6 +75,15 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
       toast.error('Please select a file to scan');
       return;
     }
+
+
+    // Cancel previous scan if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     setIsScanning(true);
     setScanProgress(0);
@@ -122,7 +141,10 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
         router.push(`/dms/${document.id}`);
       }, 1000);
 
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       logError('Scan failed', error);
       toast.error(error?.message || 'Failed to scan document');
       setIsScanning(false);
@@ -131,18 +153,23 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
   }, [scannedFile, scanMode, router, onOpenChange]);
 
   const handleClose = useCallback(() => {
-    if (!isScanning) {
-      setScannedFile(null);
-      setDocumentId(null);
-      setScanProgress(0);
-      setScanMode('manual');
-      onOpenChange(false);
+    if (isScanning) {
+      // Cancel scan if in progress
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setIsScanning(false);
     }
+    setScannedFile(null);
+    setDocumentId(null);
+    setScanProgress(0);
+    setScanMode('manual');
+    onOpenChange(false);
   }, [isScanning, onOpenChange]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Scan className="h-5 w-5" />
@@ -209,14 +236,14 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                       <p className="text-sm font-medium mb-1">Click to select or drag and drop</p>
                       <p className="text-xs text-muted-foreground mb-3">
-                        PDF, PNG, JPG, TIFF (max 10MB)
+                        PDF, PNG, JPG, TIFF (max 30MB)
                       </p>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={isScanning}
+                        aria-label="Select file to scan"
                       >
                         Select File
                       </Button>
@@ -248,10 +275,18 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isScanning}>
-            Cancel
+          <Button 
+            variant="outline" 
+            onClick={handleClose} 
+            disabled={isScanning}
+            aria-label={isScanning ? 'Cancel scan' : 'Close dialog'}
+          >
+            {isScanning ? 'Cancel' : 'Close'}
           </Button>
-          <Button onClick={handleScan} disabled={!scannedFile || isScanning || scanMode === 'scanner'}>
+          <Button 
+            onClick={handleScan} 
+            aria-label="Scan document"
+          >
             {isScanning ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

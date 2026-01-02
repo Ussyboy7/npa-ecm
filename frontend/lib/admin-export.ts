@@ -7,7 +7,7 @@ export interface ExportOptions {
   format?: 'csv' | 'xlsx';
 }
 
-export function exportToCSV<T extends Record<string, any>>(
+export function exportToCSV<T extends Record<string, unknown>>(
   data: T[],
   columns: { key: keyof T; label: string }[],
   options: ExportOptions = {}
@@ -50,7 +50,7 @@ export function exportToCSV<T extends Record<string, any>>(
   URL.revokeObjectURL(url);
 }
 
-export function exportToExcel<T extends Record<string, any>>(
+export function exportToExcel<T extends Record<string, unknown>>(
   data: T[],
   columns: { key: keyof T; label: string }[],
   options: ExportOptions = {}

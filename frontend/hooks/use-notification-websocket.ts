@@ -1,10 +1,11 @@
 "use client";
 
 import { logError, logInfo, logWarn } from '@/lib/client-logger';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useCurrentUser } from './use-current-user';
+import type { User } from '@/lib/npa-structure';
 import { getStoredAccessToken } from '@/lib/api-client';
-import { getUnreadNotificationCount, type Notification } from '@/lib/notifications-storage';
+import { type Notification } from '@/lib/notifications-storage';
 import {
   NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS,
   NOTIFICATION_WS_PING_INTERVAL_MS,
@@ -21,144 +22,121 @@ const WS_DISABLED =
   typeof process !== 'undefined' &&
   process.env.NEXT_PUBLIC_NOTIFICATIONS_WS_DISABLED === 'true';
 
-export const useNotificationWebSocket = (options: UseNotificationWebSocketOptions = {}) => {
-  const { enabled = true, onNotification, onUnreadCountChange } = options;
-  const isWsEnabled = enabled && !WS_DISABLED;
-  const { currentUser } = useCurrentUser();
-  const [isConnected, setIsConnected] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS;
-  const reconnectDelay = NOTIFICATION_WS_RECONNECT_DELAY_MS;
+// Global WebSocket connection singleton to prevent multiple connections
+// This ensures only one WebSocket connection exists across all hook instances
+class WebSocketManager {
+  private ws: WebSocket | null = null;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private pingInterval: NodeJS.Timeout | null = null;
+  private reconnectAttempts = 0;
+  private maxAttemptsReached = false;
+  private isConnecting = false;
+  private subscribers = new Set<{
+    onNotification?: (notification: Notification) => void;
+    onUnreadCountChange?: (count: number) => void;
+  }>();
+  private unreadCount = 0;
+  private isConnected = false;
+  private currentUser: User | null = null;
+  private enabled = true;
 
-  const getWebSocketUrl = useCallback(() => {
-    // Get base URL from environment or window location
-    let baseUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (!baseUrl && typeof window !== 'undefined') {
-      // Fallback to current window location
-      baseUrl = `${window.location.protocol}//${window.location.host}`;
-    }
-    baseUrl = baseUrl || 'http://localhost:8002';
-    
-    // Determine protocol - use wss for https, ws for http
-    let protocol = 'ws';
-    if (baseUrl.startsWith('https://') || (typeof window !== 'undefined' && window.location.protocol === 'https:')) {
-      protocol = 'wss';
-    }
-    
-    // Extract host and port from baseUrl
-    // Remove protocol if present
-    let host = baseUrl.replace(/^https?:\/\//, '');
-    
-    // Remove /api or /api/v1 suffix if present
-    host = host.replace(/\/api(\/v\d+)?\/?$/, '');
-    
-    // Get just the host:port part (before any path)
-    host = host.split('/')[0];
-    
-    // Ensure we have a valid host
-    if (!host || host === '') {
-      host = typeof window !== 'undefined' ? window.location.host : 'localhost:8002';
-    }
-
-    // WebSocket URL format: ws://host:port/ws/notifications/
-    // For staging server (172.16.0.46:4646), ensure port is included
-    if (host.includes('172.16.0.46')) {
-      if (!host.includes(':')) {
-        host = '172.16.0.46:4646';
-      } else if (host === '172.16.0.46') {
-        host = '172.16.0.46:4646';
+  private getWebSocketUrl(): string {
+    try {
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+      if (wsUrl) {
+        let cleanUrl = wsUrl.endsWith('/') ? wsUrl.slice(0, -1) : wsUrl;
+        if (cleanUrl.endsWith('/ws/notifications')) {
+          return `${cleanUrl}/`;
+        } else if (cleanUrl.endsWith('/ws')) {
+          return `${cleanUrl}/notifications/`;
+        } else {
+          return `${cleanUrl}/ws/notifications/`;
+        }
       }
-    }
 
-    // Construct WebSocket URL - ensure protocol:// is always present
-    const wsUrl = `${protocol}://${host}/ws/notifications/`;
-    
-    // Validate the URL format
-    if (!wsUrl.match(/^wss?:\/\/.+/)) {
-      logError('Invalid WebSocket URL constructed:', wsUrl);
-      // Fallback to window location if available
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+      if (apiUrl) {
+        const protocol = apiUrl.startsWith('https://') ? 'wss' : 'ws';
+        let host = apiUrl.replace(/^https?:\/\//, '').replace(/\/api(\/v\d+)?\/?$/, '').split('/')[0];
+        if (host) {
+          return `${protocol}://${host}/ws/notifications/`;
+        }
+      }
+
       if (typeof window !== 'undefined') {
-        const fallbackProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        return `${fallbackProtocol}://${window.location.host}/ws/notifications/`;
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        return `${protocol}://${window.location.host}/ws/notifications/`;
       }
-      return 'ws://localhost:8002/ws/notifications/';
-    }
-    
-    return wsUrl;
-  }, []);
 
-  const connect = useCallback(() => {
-    if (!isWsEnabled || !currentUser || wsRef.current?.readyState === WebSocket.OPEN) {
+      throw new Error('WebSocket URL cannot be determined');
+    } catch (error) {
+      logError('Error constructing WebSocket URL:', error);
+      throw error;
+    }
+  }
+
+  connect(user: Record<string, unknown>) {
+    if (!this.enabled || !user || this.maxAttemptsReached || this.isConnecting) {
       return;
     }
 
+    if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+
+    this.currentUser = user;
+    this.isConnecting = true;
+
     try {
-      let url = getWebSocketUrl();
-      // Add JWT token to query string for authentication
+      let url = this.getWebSocketUrl();
       const token = getStoredAccessToken();
       if (token) {
         const separator = url.includes('?') ? '&' : '?';
         url = `${url}${separator}token=${encodeURIComponent(token)}`;
       }
+
+      const maskedUrl = url.replace(/token=[^&]+/, 'token=***');
+      logInfo('Attempting WebSocket connection', { url: maskedUrl, hasToken: !!token });
+
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
         logInfo('WebSocket connected for notifications');
-        setIsConnected(true);
-        reconnectAttemptsRef.current = 0;
-
-        // Send authentication token if available
-        const token = getStoredAccessToken();
-        if (token) {
-          // Note: WebSocket authentication is handled by Django Channels AuthMiddlewareStack
-          // Token should be sent via query parameter or cookie
-        }
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+        this.maxAttemptsReached = false;
+        this.isConnecting = false;
 
         // Request initial unread count
         ws.send(JSON.stringify({ type: 'get_unread_count' }));
+
+        // Start ping interval to keep connection alive
+        this.pingInterval = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, NOTIFICATION_WS_PING_INTERVAL_MS);
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-
-          switch (data.type) {
-            case 'notification':
-              if (data.notification && onNotification) {
-                onNotification(data.notification as Notification);
-              }
-              // Refresh unread count
-              getUnreadNotificationCount()
-                .then(setUnreadCount)
-                .catch(() => {
-                  // Silently handle errors - set count to 0 if fetch fails
-                  setUnreadCount(0);
-                });
-              break;
-
-            case 'unread_count':
-              setUnreadCount(data.count || 0);
-              if (onUnreadCountChange) {
-                onUnreadCountChange(data.count || 0);
-              }
-              break;
-
-            case 'notification_updated':
-              // Handle notification update
-              if (onNotification && data.notification) {
-                onNotification(data.notification as Notification);
-              }
-              break;
-
-            case 'pong':
-              // Response to ping - connection is alive
-              break;
-
-            default:
-              logInfo('Unknown WebSocket message type:', data.type);
+          
+          if (data.type === 'unread_count') {
+            this.unreadCount = typeof data.count === 'number' ? data.count : 0;
+            this.subscribers.forEach(sub => {
+              sub.onUnreadCountChange?.(this.unreadCount);
+            });
+          } else if (data.type === 'notification' && data.notification) {
+            this.subscribers.forEach(sub => {
+              sub.onNotification?.(data.notification);
+            });
+          } else if (data.type === 'notification_updated' && data.notification) {
+            this.subscribers.forEach(sub => {
+              sub.onNotification?.(data.notification);
+            });
+          } else if (data.type === 'pong') {
+            // Response to ping - connection is alive
           }
         } catch (error) {
           logError('Error parsing WebSocket message:', error);
@@ -166,100 +144,186 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
       };
 
       ws.onerror = (error) => {
-        logWarn('Notifications WebSocket error; falling back to polling.', error);
-        setIsConnected(false);
+        logWarn('Notifications WebSocket error; falling back to polling.', { error });
+        this.isConnected = false;
+        this.isConnecting = false;
       };
 
-      ws.onclose = () => {
-        logInfo('WebSocket disconnected');
-        setIsConnected(false);
-        wsRef.current = null;
+      ws.onclose = (event) => {
+        logInfo('WebSocket disconnected', {
+          code: event.code,
+          reason: event.reason || 'No reason provided',
+          wasClean: event.wasClean,
+        });
+        this.isConnected = false;
+        this.ws = null;
+        this.isConnecting = false;
 
-        // Attempt to reconnect
-        if (isWsEnabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
-          reconnectAttemptsRef.current += 1;
-          const delay = reconnectDelay * reconnectAttemptsRef.current;
-          logInfo(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+        // Clear ping interval
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+          this.pingInterval = null;
+        }
+
+        if (this.enabled && this.reconnectAttempts < NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS && !this.maxAttemptsReached) {
+          this.reconnectAttempts += 1;
+          const delay = NOTIFICATION_WS_RECONNECT_DELAY_MS * this.reconnectAttempts;
+          logInfo(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS})`);
           
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+          this.reconnectTimeout = setTimeout(() => {
+            if (!this.maxAttemptsReached && this.reconnectAttempts <= NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS) {
+              this.connect(this.currentUser);
+            }
           }, delay);
-        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+        } else if (this.reconnectAttempts >= NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS && !this.maxAttemptsReached) {
+          this.maxAttemptsReached = true;
           logWarn('Max WebSocket reconnection attempts reached; continuing with polling only.');
+          this.subscribers.forEach(sub => {
+            sub.onUnreadCountChange?.(-1);
+          });
         }
       };
 
-      wsRef.current = ws;
+      this.ws = ws;
     } catch (error) {
       logWarn('Failed to create WebSocket connection; continuing with polling only.', error);
-      setIsConnected(false);
+      this.isConnected = false;
+      this.isConnecting = false;
     }
-  }, [isWsEnabled, currentUser, getWebSocketUrl, onNotification, onUnreadCountChange, maxReconnectAttempts, reconnectDelay]);
+  }
 
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
+  disconnect() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
     }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
     }
-    setIsConnected(false);
-  }, []);
+    if (this.ws) {
+      if (this.ws.readyState !== WebSocket.CLOSED && this.ws.readyState !== WebSocket.CLOSING) {
+        this.ws.close();
+      }
+      this.ws = null;
+    }
+    this.isConnected = false;
+    this.isConnecting = false;
+  }
 
-  const sendMessage = useCallback((message: any) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
+  subscribe(callbacks: { onNotification?: (notification: Notification) => void; onUnreadCountChange?: (count: number) => void }) {
+    this.subscribers.add(callbacks);
+    // Immediately send current unread count to new subscriber
+    if (this.isConnected) {
+      callbacks.onUnreadCountChange?.(this.unreadCount);
+    }
+    return () => {
+      this.subscribers.delete(callbacks);
+    };
+  }
+
+  sendMessage(message: Record<string, unknown>) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
     } else {
       logWarn('WebSocket is not connected');
     }
-  }, []);
+  }
 
-  const markAsRead = useCallback((notificationId: string) => {
-    sendMessage({ type: 'mark_read', notification_id: notificationId });
-  }, [sendMessage]);
+  getIsConnected() {
+    return this.isConnected;
+  }
 
-  // Ping to keep connection alive
+  getUnreadCount() {
+    return this.unreadCount;
+  }
+
+  setEnabled(enabled: boolean) {
+    this.enabled = enabled;
+    if (!enabled) {
+      this.disconnect();
+    }
+  }
+}
+
+// Global singleton instance
+const wsManager = new WebSocketManager();
+
+export const useNotificationWebSocket = (options: UseNotificationWebSocketOptions = {}) => {
+  const { enabled = true, onNotification, onUnreadCountChange } = options;
+  const isWsEnabled = enabled && !WS_DISABLED;
+  const { currentUser } = useCurrentUser();
+  const [isConnected, setIsConnected] = useState(wsManager.getIsConnected());
+  const [unreadCount, setUnreadCount] = useState(wsManager.getUnreadCount());
+
+  // Update enabled state
   useEffect(() => {
-    if (!isConnected) return;
+    wsManager.setEnabled(isWsEnabled);
+  }, [isWsEnabled]);
 
-    const pingInterval = setInterval(() => {
-      sendMessage({ type: 'ping' });
-    }, NOTIFICATION_WS_PING_INTERVAL_MS);
+  // Subscribe to WebSocket manager for updates
+  useEffect(() => {
+    const unsubscribe = wsManager.subscribe({
+      onNotification,
+      onUnreadCountChange: (count) => {
+        setUnreadCount(count);
+        onUnreadCountChange?.(count);
+      },
+    });
 
-    return () => clearInterval(pingInterval);
-  }, [isConnected, sendMessage]);
+    // Update local state from manager
+    setIsConnected(wsManager.getIsConnected());
+    setUnreadCount(wsManager.getUnreadCount());
 
-  // Initial connection and cleanup
+    return unsubscribe;
+  }, [onNotification, onUnreadCountChange]);
+
+  // Connect/disconnect based on user and enabled state
   useEffect(() => {
     if (!isWsEnabled) {
-      if (enabled && WS_DISABLED) {
-        logInfo('Notifications WebSocket disabled via NEXT_PUBLIC_NOTIFICATIONS_WS_DISABLED');
-      }
       return;
     }
 
     if (currentUser) {
-      connect();
+      wsManager.connect(currentUser);
+    } else {
+      wsManager.disconnect();
     }
+  }, [isWsEnabled, currentUser]);
 
-    return () => {
-      disconnect();
-    };
-  }, [isWsEnabled, enabled, currentUser, connect, disconnect]);
-
-  // Load initial unread count
+  // Poll for connection state updates (less frequent than before)
   useEffect(() => {
+    const interval = setInterval(() => {
+      const newConnected = wsManager.getIsConnected();
+      const newCount = wsManager.getUnreadCount();
+      if (newConnected !== isConnected) {
+        setIsConnected(newConnected);
+      }
+      if (newCount !== unreadCount) {
+        setUnreadCount(newCount);
+      }
+    }, 2000); // Check every 2 seconds instead of 1
+
+    return () => clearInterval(interval);
+  }, [isConnected, unreadCount]);
+
+  const connect = useCallback(() => {
     if (currentUser) {
-      getUnreadNotificationCount()
-        .then(setUnreadCount)
-        .catch(() => {
-          // Silently handle errors - set count to 0 if fetch fails
-          setUnreadCount(0);
-        });
+      wsManager.connect(currentUser);
     }
   }, [currentUser]);
+
+  const disconnect = useCallback(() => {
+    wsManager.disconnect();
+  }, []);
+
+  const sendMessage = useCallback((message: Record<string, unknown>) => {
+    wsManager.sendMessage(message);
+  }, []);
+
+  const markAsRead = useCallback((notificationId: string) => {
+    wsManager.sendMessage({ type: 'mark_read', notification_id: notificationId });
+  }, []);
 
   return {
     isConnected,

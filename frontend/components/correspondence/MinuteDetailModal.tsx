@@ -1,12 +1,19 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon, Shield } from "lucide-react";
-import { Minute } from "@/lib/npa-structure";
+import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon, Shield, Paperclip, Download, Eye, ExternalLink, Loader2, Users } from "lucide-react";
+import { Minute, CorrespondenceAttachment } from "@/lib/npa-structure";
 import { SealBadge } from '@/components/seals/SealBadge';
-import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
+import { useState, useEffect } from "react";
+import { apiFetch, getStoredAccessToken } from "@/lib/api-client";
+import { useRouter } from "next/navigation";
+import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
+import mammoth from "mammoth";
+import { logError } from "@/lib/client-logger";
 
 interface MinuteDetailModalProps {
   minute: Minute | null;
@@ -17,11 +24,214 @@ interface MinuteDetailModalProps {
 }
 
 export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, showDelegationInfo = false }: MinuteDetailModalProps) => {
+  const router = useRouter();
+  const [responseCorrespondence, setResponseCorrespondence] = useState<Record<string, unknown>>(null);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<CorrespondenceAttachment | null>(null);
+  const [viewAttachment, setViewAttachment] = useState<CorrespondenceAttachment | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [viewPdfBlobUrl, setViewPdfBlobUrl] = useState<string | null>(null);
+  const [wordHtml, setWordHtml] = useState<string | null>(null);
+  const [wordError, setWordError] = useState<string | null>(null);
+  const [distribution, setDistribution] = useState<unknown[]>([]);
+  const [loadingDistribution, setLoadingDistribution] = useState(false);
+
+  // Load distribution entries for this minute
+  useEffect(() => {
+    if (open && minute?.id) {
+      setLoadingDistribution(true);
+      apiFetch(`/correspondence/distribution/?minute=${minute.id}`)
+        .then((response: Record<string, unknown>) => {
+          const results = Array.isArray(response) ? response : response.results || [];
+          // Filter only active distribution entries
+          const activeDistribution = results.filter((dist: Record<string, unknown>) => dist.is_active !== false);
+          setDistribution(activeDistribution);
+        })
+        .catch((error) => {
+          logError('Failed to load distribution:', error);
+          setDistribution([]);
+        })
+        .finally(() => {
+          setLoadingDistribution(false);
+        });
+    } else {
+      setDistribution([]);
+    }
+  }, [open, minute?.id]);
+
+  // Load response correspondence for treatment minutes
+  useEffect(() => {
+    if (open && minute && minute.actionType === 'treat' && minute.correspondenceId) {
+      setLoadingAttachments(true);
+      // Find response correspondence that has this correspondence as parent
+      apiFetch(`/correspondence/items/?parent_correspondence=${minute.correspondenceId}`)
+        .then((response: Record<string, unknown>) => {
+          const results = Array.isArray(response) ? response : response.results || [];
+          // Find the one created around the same time as the minute (within 5 seconds)
+          const minuteTime = new Date(minute.timestamp).getTime();
+          const matching = results.find((corr: Record<string, unknown>) => {
+            const corrTime = new Date(corr.created_at || corr.createdAt).getTime();
+            return Math.abs(corrTime - minuteTime) < 5000; // 5 seconds tolerance
+          });
+          if (matching) {
+            // Map the API response to the proper format, including attachments
+            const mappedCorrespondence = mapApiCorrespondence(matching);
+            logInfo('[MinuteDetailModal] Mapped response correspondence:', {
+              id: mappedCorrespondence.id,
+              attachmentsCount: mappedCorrespondence.attachments?.length || 0,
+              attachments: mappedCorrespondence.attachments,
+            });
+            setResponseCorrespondence(mappedCorrespondence);
+          } else {
+            logInfo('[MinuteDetailModal] No matching response correspondence found');
+          }
+        })
+        .catch((error) => {
+          logError('Failed to load response correspondence:', error);
+        })
+        .finally(() => {
+          setLoadingAttachments(false);
+        });
+    } else {
+      setResponseCorrespondence(null);
+    }
+  }, [open, minute]);
+
+  // Generate PDF blob URL for preview
+  useEffect(() => {
+    if (previewAttachment && previewAttachment.fileType === 'application/pdf' && previewAttachment.fileUrl) {
+      setLoadingAttachments(true);
+      fetch(previewAttachment.fileUrl, { credentials: 'include' })
+        .then((response) => response.blob())
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          setPdfBlobUrl(url);
+          setLoadingAttachments(false);
+        })
+        .catch((error) => {
+          logError('Failed to load PDF:', error);
+          setLoadingAttachments(false);
+        });
+
+      return () => {
+        if (pdfBlobUrl) {
+          URL.revokeObjectURL(pdfBlobUrl);
+        }
+      };
+    } else {
+      setPdfBlobUrl(null);
+    }
+  }, [previewAttachment]);
+
+  // Generate PDF blob URL or Word HTML for view modal
+  useEffect(() => {
+    if (!viewAttachment || !viewAttachment.fileUrl) {
+      setViewPdfBlobUrl(null);
+      setWordHtml(null);
+      return;
+    }
+
+    const isPDF = viewAttachment.fileType === 'application/pdf' || viewAttachment.fileName?.toLowerCase().endsWith('.pdf');
+    const isWordDocx = viewAttachment.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                       viewAttachment.fileName?.toLowerCase().endsWith('.docx');
+    const isWordDoc = viewAttachment.fileType === 'application/msword' || 
+                     viewAttachment.fileName?.toLowerCase().endsWith('.doc');
+
+    if (isPDF) {
+      setLoadingAttachments(true);
+      const token = getStoredAccessToken();
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      fetch(viewAttachment.fileUrl, { 
+        credentials: 'include',
+        headers,
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to load PDF: ${response.status} ${response.statusText}`);
+          }
+          return response.blob();
+        })
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          setViewPdfBlobUrl(url);
+          setWordHtml(null);
+          setLoadingAttachments(false);
+        })
+        .catch((error) => {
+          logError('Failed to load PDF:', error);
+          setLoadingAttachments(false);
+        });
+
+      return () => {
+        if (viewPdfBlobUrl) {
+          URL.revokeObjectURL(viewPdfBlobUrl);
+        }
+      };
+    } else if (isWordDocx) {
+      setLoadingAttachments(true);
+      const token = getStoredAccessToken();
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      fetch(viewAttachment.fileUrl, {
+        credentials: 'include',
+        headers,
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to load Word document: ${response.status} ${response.statusText}`);
+          }
+          return response.blob();
+        })
+        .then((blob) => {
+          return blob.arrayBuffer();
+        })
+        .then((arrayBuffer) => {
+          return mammoth.convertToHtml({ arrayBuffer });
+        })
+        .then((result) => {
+          setWordHtml(result.value);
+          setWordError(null);
+          setViewPdfBlobUrl(null);
+          setLoadingAttachments(false);
+        })
+        .catch((error) => {
+          logError('Error converting Word document:', error);
+          setWordError(error.message || 'Failed to convert Word document');
+          setWordHtml(null);
+          setLoadingAttachments(false);
+        });
+    } else {
+      setViewPdfBlobUrl(null);
+      setWordHtml(null);
+      setWordError(null);
+    }
+  }, [viewAttachment]);
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleDownload = (attachment: CorrespondenceAttachment) => {
+    if (attachment.fileUrl) {
+      window.open(attachment.fileUrl, '_blank');
+    }
+  };
+
   if (!minute) return null;
 
   // Debug logging
   if (open) {
-    console.log('[MinuteDetailModal] Minute data:', {
+    logInfo('[MinuteDetailModal] Minute data:', {
       id: minute.id,
       actionType: minute.actionType,
       hasSealData: !!minute.sealData,
@@ -43,7 +253,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-primary" />
@@ -258,35 +468,73 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 </>
               )}
 
+              {/* Distribution (CC) Section */}
+              {distribution.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <Users className="h-4 w-4 text-primary" />
+                      Distribution (CC)
+                    </h4>
+                    {loadingDistribution ? (
+                      <div className="flex items-center justify-center py-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground ml-2">Loading distribution...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {distribution.map((dist: Record<string, unknown>) => {
+                          const recipientName = 
+                            dist.user_name ||
+                            dist.directorate_name ||
+                            dist.division_name ||
+                            dist.department_name ||
+                            'Unknown';
+                          const recipientType = dist.recipient_type || 'division';
+                          const purpose = dist.purpose || 'information';
+                          
+                          return (
+                            <div
+                              key={dist.id}
+                              className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border"
+                            >
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <Badge variant="outline" className="text-xs">
+                                  {recipientName}
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  {recipientType.charAt(0).toUpperCase() + recipientType.slice(1)}
+                                </Badge>
+                                {purpose && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {purpose.charAt(0).toUpperCase() + purpose.slice(1)}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Show seal for executive approvals (signature is embedded in seal) */}
               {minute.sealData ? (
                 <>
                   <Separator />
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <h4 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                       <Shield className="h-4 w-4 text-emerald-600" />
                       Digital Executive Seal
                     </h4>
-                    {/* Seal Preview and Badge Side by Side */}
-                    <div className="flex items-start gap-4">
-                      {/* Seal Preview - Generate dynamically like in preview */}
-                      <div className="flex-shrink-0">
-                        <DigitalSealPreview
-                          officeName={minute.sealData.officeName}
-                          officeTitle={minute.sealData.officeTitle}
-                          serialNumber={minute.sealData.serialNumber}
-                          signatureImage={minute.sealData.signatureImageUrl}
-                          timestamp={minute.sealData.sealedAt}
-                          size={120}
-                          showQR={true}
-                          verificationBaseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
-                        />
-                      </div>
-                      {/* Seal Badge and Info */}
-                      <div className="flex-1 space-y-2">
-                        <SealBadge sealData={minute.sealData} showDetails size="md" />
+                    <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                      <SealBadge sealData={minute.sealData} showDetails size="md" />
+                      <div className="flex-1">
                         <p className="text-xs text-muted-foreground">
-                          The digital signature is embedded within this seal.
+                          The digital signature is embedded within this seal. Click the badge to view full seal details.
                         </p>
                       </div>
                     </div>
@@ -330,10 +578,266 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                   </div>
                 </>
               ) : null}
+
+              {/* Attachments Section - For Treatment Minutes */}
+              {minute.actionType === 'treat' && (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <Paperclip className="h-4 w-4 text-primary" />
+                      Attached Documents
+                    </h4>
+                    {loadingAttachments ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground ml-2">Loading attachments...</span>
+                      </div>
+                    ) : responseCorrespondence?.attachments && responseCorrespondence.attachments.length > 0 ? (
+                      <div className="space-y-2">
+                        {responseCorrespondence.attachments.map((attachment: CorrespondenceAttachment) => (
+                          <div
+                            key={attachment.id}
+                            className="flex items-center gap-3 p-3 border border-border rounded-lg bg-background hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="h-10 w-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                              {attachment.fileType?.startsWith('image/') ? (
+                                <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                              ) : attachment.fileType === 'application/pdf' ? (
+                                <FileText className="h-5 w-5 text-red-600" />
+                              ) : (
+                                <FileText className="h-5 w-5 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0 overflow-hidden">
+                              <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(attachment.fileSize)} • {attachment.fileType || 'Unknown type'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => setViewAttachment(attachment)}
+                                title="View Document"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {(attachment.fileType?.startsWith('image/') || attachment.fileType === 'application/pdf') && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  onClick={() => setPreviewAttachment(attachment)}
+                                  title="Quick Preview"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleDownload(attachment)}
+                                title="Download"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        {responseCorrespondence.id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full mt-2"
+                            onClick={() => router.push(`/correspondence/${responseCorrespondence.id}`)}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            View Response Correspondence
+                          </Button>
+                        )}
+                      </div>
+                    ) : responseCorrespondence ? (
+                      <div className="p-3 rounded-lg bg-muted/30 border border-border border-dashed text-center">
+                        <p className="text-sm text-muted-foreground">No attachments found</p>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-lg bg-muted/30 border border-border border-dashed text-center">
+                        <p className="text-sm text-muted-foreground">Loading response correspondence...</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </ScrollArea>
       </DialogContent>
+
+      {/* Attachment Preview Modal (Quick Preview) */}
+      <Dialog open={!!previewAttachment} onOpenChange={() => setPreviewAttachment(null)}>
+        <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="h-5 w-5" />
+              {previewAttachment?.fileName}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <ScrollArea className="flex-1 mt-4">
+            <div className="min-h-[400px]">
+              {loadingAttachments ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : previewAttachment && previewAttachment.fileType?.startsWith('image/') && previewAttachment.fileUrl ? (
+                <div className="flex items-center justify-center p-4">
+                  <img 
+                    src={previewAttachment.fileUrl} 
+                    alt={previewAttachment.fileName}
+                    className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                  />
+                </div>
+              ) : previewAttachment && previewAttachment.fileType === 'application/pdf' && pdfBlobUrl ? (
+                <iframe
+                  src={pdfBlobUrl}
+                  className="w-full h-[70vh] border-0 rounded-lg"
+                  title={`PDF Preview: ${previewAttachment.fileName}`}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <FileText className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                  <p className="text-sm text-muted-foreground">
+                    Preview not available for this file type
+                  </p>
+                  {previewAttachment?.fileUrl && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => handleDownload(previewAttachment)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download to View
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* Document View Modal (Full Document View) */}
+      <Dialog open={!!viewAttachment} onOpenChange={() => setViewAttachment(null)}>
+        <DialogContent className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="space-y-1 px-6 pt-6 flex-shrink-0">
+            <DialogTitle className="text-lg font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Document View
+            </DialogTitle>
+            <DialogDescription>
+              {viewAttachment?.fileName} • {formatFileSize(viewAttachment?.fileSize)} • {viewAttachment?.fileType || 'Unknown type'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 border-t border-b overflow-y-auto px-6" style={{ height: 'calc(90vh - 200px)', maxHeight: 'calc(90vh - 200px)' }}>
+            {loadingAttachments ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-3 text-sm text-muted-foreground">Loading document...</span>
+              </div>
+            ) : viewAttachment && viewAttachment.fileType?.startsWith('image/') && viewAttachment.fileUrl ? (
+              <div className="flex items-center justify-center p-4 py-8">
+                <img 
+                  src={viewAttachment.fileUrl} 
+                  alt={viewAttachment.fileName}
+                  className="max-w-full max-h-[calc(90vh-250px)] object-contain rounded-lg shadow-lg"
+                />
+              </div>
+            ) : viewAttachment && viewAttachment.fileType === 'application/pdf' && viewPdfBlobUrl ? (
+              <div className="w-full h-full min-h-[600px] py-4">
+                <iframe
+                  src={viewPdfBlobUrl}
+                  className="w-full h-full border-0 rounded-lg"
+                  title={`PDF Document: ${viewAttachment.fileName}`}
+                />
+              </div>
+            ) : viewAttachment && wordError ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FileText className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                <p className="text-lg font-medium mb-2 text-destructive">Error loading Word document</p>
+                <p className="text-sm text-muted-foreground mb-4">{wordError}</p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleDownload(viewAttachment)}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download to View
+                </Button>
+              </div>
+            ) : viewAttachment && wordHtml ? (
+              <div className="w-full py-4">
+                <div className="prose prose-base dark:prose-invert max-w-none p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 250px)' }}>
+                  <div dangerouslySetInnerHTML={{ __html: wordHtml }} />
+                </div>
+              </div>
+            ) : viewAttachment && viewAttachment.fileUrl ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FileText className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                <p className="text-sm text-muted-foreground mb-2">
+                  Document preview not available for this file type
+                </p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  {viewAttachment.fileType || 'Unknown file type'}
+                </p>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleDownload(viewAttachment)}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download to View
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FileText className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+                <p className="text-sm text-muted-foreground">
+                  Unable to load document
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="px-6 pb-6 flex-shrink-0">
+            <div className="flex items-center justify-between w-full">
+              <div className="text-xs text-muted-foreground">
+                {viewAttachment?.fileName}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => handleDownload(viewAttachment!)}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => setViewAttachment(null)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };

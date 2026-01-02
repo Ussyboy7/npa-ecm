@@ -53,7 +53,24 @@ class SearchViewSet(viewsets.ViewSet):
         search_type = serializer.validated_data.get("search_type", "documents")
 
         # Perform search
-        if search_type == "documents":
+        if search_type == "cases":
+            results = SearchService.search_cases(
+                query, filters, limit, offset, user=request.user
+            )
+            # Serialize cases
+            from correspondence.serializers import CaseSerializer
+
+            serialized = CaseSerializer(results["results"], many=True, context={"request": request}).data
+            # Add snippet information if available
+            for i, case in enumerate(results["results"]):
+                if hasattr(case, '_search_snippet'):
+                    serialized[i]["search_snippet"] = getattr(case, '_search_snippet', None)
+                    serialized[i]["match_field"] = getattr(case, '_match_field', None)
+                # Add type field for frontend
+                serialized[i]["_type"] = "case"
+            
+            results["results"] = serialized
+        elif search_type == "documents":
             results = SearchService.full_text_search_documents(
                 query, filters, limit, offset, user=request.user
             )
@@ -89,15 +106,18 @@ class SearchViewSet(viewsets.ViewSet):
             
             results["results"] = serialized
         else:
-            # Search both
+            # Search all (documents, correspondence, and cases)
             doc_results = SearchService.full_text_search_documents(
                 query, filters, limit, offset, user=request.user
             )
             corr_results = SearchService.search_correspondence(
                 query, filters, limit, offset
             )
+            case_results = SearchService.search_cases(
+                query, filters, limit, offset, user=request.user
+            )
 
-            from correspondence.serializers import CorrespondenceSerializer
+            from correspondence.serializers import CorrespondenceSerializer, CaseSerializer
             from dms.serializers import DocumentSerializer
 
             # Serialize documents with snippets
@@ -121,6 +141,17 @@ class SearchViewSet(viewsets.ViewSet):
                 # Add type field for frontend
                 corr_serialized[i]["_type"] = "correspondence"
 
+            # Serialize cases with snippets
+            case_serialized = CaseSerializer(
+                case_results["results"], many=True, context={"request": request}
+            ).data
+            for i, case in enumerate(case_results["results"]):
+                if hasattr(case, '_search_snippet'):
+                    case_serialized[i]["search_snippet"] = getattr(case, '_search_snippet', None)
+                    case_serialized[i]["match_field"] = getattr(case, '_match_field', None)
+                # Add type field for frontend
+                case_serialized[i]["_type"] = "case"
+
             results = {
                 "documents": {
                     "results": doc_serialized,
@@ -130,7 +161,11 @@ class SearchViewSet(viewsets.ViewSet):
                     "results": corr_serialized,
                     "total_count": corr_results["total_count"],
                 },
-                "total_count": doc_results["total_count"] + corr_results["total_count"],
+                "cases": {
+                    "results": case_serialized,
+                    "total_count": case_results["total_count"],
+                },
+                "total_count": doc_results["total_count"] + corr_results["total_count"] + case_results["total_count"],
             }
 
         # Save to search history

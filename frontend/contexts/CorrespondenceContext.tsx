@@ -1,5 +1,5 @@
 import { logError, logInfo } from '@/lib/client-logger';
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { Correspondence, Minute } from '@/lib/npa-structure';
 import {
   loadCorrespondence,
@@ -43,7 +43,7 @@ const normalizeId = (value: unknown): string | undefined => {
   return String(value);
 };
 
-export const mapApiCorrespondence = (item: any): Correspondence => ({
+export const mapApiCorrespondence = (item: Record<string, unknown>): Correspondence => ({
   id: String(item.id),
   referenceNumber: item.reference_number ?? '',
   subject: item.subject ?? '',
@@ -61,7 +61,9 @@ export const mapApiCorrespondence = (item: any): Correspondence => ({
   status: item.status ?? 'pending',
   priority: item.priority ?? 'medium',
   divisionId: normalizeId(item.division ?? item.division_id),
+  divisionName: item.division_name ?? (typeof item.division === 'object' && item.division ? item.division.name : undefined),
   departmentId: normalizeId(item.department ?? item.department_id),
+  departmentName: item.department_name ?? (typeof item.department === 'object' && item.department ? item.department.name : undefined),
   currentApproverId: normalizeId(item.current_approver ?? item.current_approver_id),
   createdById: normalizeId(item.created_by ?? item.created_by_id),
   currentApproverName:
@@ -90,7 +92,7 @@ export const mapApiCorrespondence = (item: any): Correspondence => ({
     item.current_office_name ??
     (typeof item.current_office === 'object' && item.current_office ? item.current_office.name : undefined),
   attachments: Array.isArray(item.attachments)
-    ? item.attachments.map((attachment: any) => ({
+    ? item.attachments.map((attachment: Record<string, unknown>) => ({
         id: normalizeId(attachment.id) ?? `${item.id}-att-${Math.random().toString(36).slice(2)}`,
         fileName: attachment.file_name ?? 'Attachment',
         fileType: attachment.file_type ?? undefined,
@@ -101,7 +103,7 @@ export const mapApiCorrespondence = (item: any): Correspondence => ({
       }))
     : [],
   distribution: Array.isArray(item.distribution)
-    ? item.distribution.map((recipient: any) => {
+    ? item.distribution.map((recipient: Record<string, unknown>) => {
         const recipientType = recipient.recipient_type ?? 'division';
         return {
           id: normalizeId(recipient.id) ?? `${item.id}-dist-${Math.random().toString(36).slice(2)}`,
@@ -110,11 +112,15 @@ export const mapApiCorrespondence = (item: any): Correspondence => ({
               ? 'directorate'
               : recipientType === 'department'
               ? 'department'
+              : recipientType === 'user'
+              ? 'user'
               : 'division',
+          userId: recipientType === 'user' ? normalizeId(recipient.user ?? recipient.user_id) : undefined,
           directorateId: normalizeId(recipient.directorate),
           divisionId: normalizeId(recipient.division),
           departmentId: normalizeId(recipient.department),
           name:
+            recipient.user_name ??
             recipient.directorate_name ??
             recipient.division_name ??
             recipient.department_name ??
@@ -135,7 +141,7 @@ export const mapApiCorrespondence = (item: any): Correspondence => ({
     : [],
   archiveLevel: item.archive_level ?? undefined,
   linkedDocumentIds: Array.isArray(item.linked_documents)
-    ? item.linked_documents.map((doc: any) => (typeof doc === 'string' ? doc : doc.id))
+    ? item.linked_documents.map((doc: Record<string, unknown>) => (typeof doc === 'string' ? doc : doc.id))
     : [],
   createdAt: item.created_at ?? undefined,
   updatedAt: item.updated_at ?? undefined,
@@ -148,9 +154,20 @@ export const mapApiCorrespondence = (item: any): Correspondence => ({
       }
     : null,
   completionSummaryGeneratedAt: item.completion_summary_generated_at ?? undefined,
+  // Routing concept metadata
+  flowType: item.flow_type ?? undefined,
+  isInward: item.is_inward ?? undefined,
+  isOutward: item.is_outward ?? undefined,
+  isInternal: item.is_internal ?? undefined,
+  isExternal: item.is_external ?? undefined,
+  routingMetadata: item.routing_metadata ?? undefined,
+  // Parallel routing fields
+  workflowState: item.workflow_state ?? undefined,
+  activeParallelBranches: typeof item.active_parallel_branches === 'number' ? item.active_parallel_branches : undefined,
+  completedParallelBranches: typeof item.completed_parallel_branches === 'number' ? item.completed_parallel_branches : undefined,
 });
 
-const mapApiMinute = (item: any): Minute => {
+const mapApiMinute = (item: Record<string, unknown>): Minute => {
   // Extract user system role name (not UUID)
   let userSystemRole: string | undefined = undefined;
   if (typeof item.user === 'object' && item.user) {
@@ -259,7 +276,7 @@ const mapApiMinute = (item: any): Minute => {
   };
 };
 
-const mapApiDelegation = (item: any): Delegation => ({
+const mapApiDelegation = (item: Record<string, unknown>): Delegation => ({
   id: String(item.id),
   correspondenceId: item.correspondence ? String(item.correspondence) : '',
   principalId: normalizeId(item.principal ?? item.principal_id) ?? '',
@@ -378,9 +395,9 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         apiFetch('/correspondence/delegations/?page_size=100'),
       ]);
 
-      const correspondenceList = unwrapResults<any>(correspondenceRaw).map(mapApiCorrespondence);
-      const minutesList = unwrapResults<any>(minutesRaw).map(mapApiMinute);
-      const delegationsList = unwrapResults<any>(delegationsRaw)
+      const correspondenceList = unwrapResults<Record<string, unknown>>(correspondenceRaw).map(mapApiCorrespondence);
+      const minutesList = unwrapResults<Record<string, unknown>>(minutesRaw).map(mapApiMinute);
+      const delegationsList = unwrapResults<Record<string, unknown>>(delegationsRaw)
         .map(mapApiDelegation)
         .filter((delegation) => delegation.correspondenceId);
 
@@ -398,17 +415,26 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     }
   }, [hydrated, currentUser]);
 
+  // Track if we've synced for the current user to prevent duplicate syncs
+  const syncedUserIdRef = useRef<string | null>(null);
+  
   useEffect(() => {
+    if (!hydrated || !currentUser || !hasTokens()) return;
+    
+    // Only sync if user changed or hasn't synced yet
+    if (syncedUserIdRef.current === currentUser.id) return;
+    
     let ignore = false;
     const run = async () => {
       if (ignore) return;
+      syncedUserIdRef.current = currentUser.id;
       await syncFromApi();
     };
     void run();
     return () => {
       ignore = true;
     };
-  }, [syncFromApi]);
+  }, [hydrated, currentUser?.id, syncFromApi]);
 
   const refreshData = () => {
     const loadedCorrespondence = loadCorrespondence() ?? [];

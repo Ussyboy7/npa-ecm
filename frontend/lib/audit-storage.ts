@@ -3,6 +3,7 @@
  */
 
 import { apiFetch, hasTokens } from './api-client';
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 
 export interface ActivityLog {
   id: string;
@@ -20,14 +21,14 @@ export interface ActivityLog {
   objectRepr?: string;
   module?: string;
   description: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   success: boolean;
   errorMessage?: string;
   timestamp: string;
 }
 
 // Map API response (snake_case) to frontend interface (camelCase)
-const mapApiLog = (log: any): ActivityLog => ({
+const mapApiLog = (log: Record<string, unknown>): ActivityLog => ({
   id: String(log.id),
   user: log.user ? String(log.user) : undefined,
   userName: log.user_name ?? undefined,
@@ -50,7 +51,7 @@ const mapApiLog = (log: any): ActivityLog => ({
 });
 
 // Unwrap paginated results
-const unwrapResults = (data: any): any[] => {
+const unwrapResults = (data: Record<string, unknown>): unknown[] => {
   if (Array.isArray(data)) return data;
   if (data && typeof data === 'object' && 'results' in data) {
     return Array.isArray(data.results) ? data.results : [];
@@ -77,6 +78,8 @@ export const getActivityLogs = async (params?: {
   severity?: string;
   success?: boolean;
   search?: string;
+  from_date?: string;
+  to_date?: string;
   page?: number;
   pageSize?: number;
   ordering?: string;
@@ -92,6 +95,8 @@ export const getActivityLogs = async (params?: {
   if (params?.severity) queryParams.append('severity', params.severity);
   if (params?.success !== undefined) queryParams.append('success', String(params.success));
   if (params?.search) queryParams.append('search', params.search);
+  if (params?.from_date) queryParams.append('from_date', params.from_date);
+  if (params?.to_date) queryParams.append('to_date', params.to_date);
   if (params?.page) queryParams.append('page', String(params.page));
   if (params?.pageSize) queryParams.append('page_size', String(params.pageSize));
   if (params?.ordering) queryParams.append('ordering', params.ordering);
@@ -99,7 +104,7 @@ export const getActivityLogs = async (params?: {
   const query = queryParams.toString();
   const endpoint = `/audit/logs${query ? `?${query}` : ''}`;
   try {
-    const response = await apiFetch(endpoint) as any;
+    const response = await apiFetch<Record<string, unknown> | { results: unknown[]; count?: number; next?: string | null; previous?: string | null }>(endpoint);
     
     // Handle paginated response
     if (response && typeof response === 'object' && 'results' in response) {
@@ -121,7 +126,7 @@ export const getActivityLogs = async (params?: {
     };
   } catch (error) {
     // Silently fail - audit logs are not critical for functionality
-    console.warn('Failed to fetch audit logs:', error);
+    logWarn('Failed to fetch audit logs:', error);
     return { results: [], count: 0, next: null, previous: null };
   }
 };

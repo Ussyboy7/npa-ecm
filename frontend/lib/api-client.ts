@@ -1,6 +1,7 @@
 "use client";
 
 import { logError, logWarn } from '@/lib/client-logger';
+import { AuthenticationError, AuthenticationExpiredError } from './auth-errors';
 const ACCESS_TOKEN_KEY = "npa_ecm_access_token";
 const REFRESH_TOKEN_KEY = "npa_ecm_refresh_token";
 const ACCESS_TOKEN_EXP_KEY = "npa_ecm_access_exp";
@@ -18,6 +19,7 @@ const isBrowser = () => typeof window !== "undefined";
 type FetchOptions = RequestInit & {
   skipAuth?: boolean;
   responseType?: "json" | "text" | "blob";
+  signal?: AbortSignal;
 };
 
 export const getStoredAccessToken = () => {
@@ -44,6 +46,11 @@ export const storeTokens = (accessToken: string, refreshToken: string, expiresIn
   const effectiveExpires = typeof expiresInSeconds === "number" ? expiresInSeconds : 60 * 60;
   const expiresAt = Date.now() + effectiveExpires * 1000 - 30 * 1000; // refresh a little early
   localStorage.setItem(ACCESS_TOKEN_EXP_KEY, `${expiresAt}`);
+  
+  // Set cookie for middleware to check authentication
+  // Cookie expires when token expires (or 7 days max)
+  const cookieMaxAge = Math.min(effectiveExpires, 7 * 24 * 60 * 60); // Max 7 days
+  document.cookie = `npa_ecm_authenticated=true; path=/; max-age=${cookieMaxAge}; samesite=lax`;
 };
 
 export const clearTokens = () => {
@@ -51,6 +58,9 @@ export const clearTokens = () => {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(ACCESS_TOKEN_EXP_KEY);
+  
+  // Clear authentication cookie
+  document.cookie = 'npa_ecm_authenticated=; path=/; max-age=0; samesite=lax';
 };
 
 const storeOriginalTokenValues = (accessToken: string, refreshToken: string, expiresInSeconds?: number) => {
@@ -142,13 +152,14 @@ const ensureAccessToken = async (): Promise<string | null> => {
 };
 
 export const apiFetch = async <T = unknown>(path: string, options: FetchOptions = {}): Promise<T> => {
-  const { skipAuth, headers, responseType = "json", ...rest } = options;
+  const { skipAuth, headers, responseType = "json", signal, ...rest } = options;
   const requestHeaders = new Headers(headers);
 
   if (!skipAuth) {
     const token = await ensureAccessToken();
     if (!token) {
-      throw new Error("Authentication required");
+      clearTokens();
+      throw new AuthenticationError("Authentication required");
     }
     requestHeaders.set("Authorization", `Bearer ${token}`);
   }
@@ -157,13 +168,33 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
     requestHeaders.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${getBaseUrl()}${path}`, {
-    ...rest,
-    headers: requestHeaders,
-    credentials: "include",
-  });
+  // Check if request was aborted before making the fetch
+  if (signal?.aborted) {
+    throw new DOMException('The operation was aborted.', 'AbortError');
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${getBaseUrl()}${path}`, {
+      ...rest,
+      headers: requestHeaders,
+      credentials: "include",
+      signal, // Pass AbortSignal to fetch
+    });
+  } catch (fetchError) {
+    // Handle network errors (connection refused, CORS, etc.)
+    if (fetchError instanceof TypeError && fetchError.message.includes('fetch')) {
+      throw new Error(`Failed to fetch: Network error - ${fetchError.message}`);
+    }
+    throw fetchError;
+  }
 
   if (response.status === 401 && !skipAuth) {
+    // Check if aborted before retry
+    if (signal?.aborted) {
+      throw new DOMException('The operation was aborted.', 'AbortError');
+    }
+    
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       requestHeaders.set("Authorization", `Bearer ${refreshed}`);
@@ -171,7 +202,15 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
         ...rest,
         headers: requestHeaders,
         credentials: "include",
+        signal, // Pass AbortSignal to retry fetch
       });
+      
+      // If retry also returns 401, authentication has expired
+      if (retryResponse.status === 401) {
+        clearTokens();
+        throw new AuthenticationExpiredError("Authentication expired");
+      }
+      
       if (!retryResponse.ok) {
         throw new Error(`API request failed: ${retryResponse.status}`);
       }
@@ -182,7 +221,7 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
     }
 
     clearTokens();
-    throw new Error("Authentication expired");
+    throw new AuthenticationExpiredError("Authentication expired");
   }
 
   if (!response.ok) {
@@ -235,8 +274,8 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
       }
     }
 
-    const error = new Error(errorMessage);
-    (error as any).status = response.status;
+    const error = new Error(errorMessage) as Error & { status?: number };
+    error.status = response.status;
     throw error;
   }
 
@@ -303,7 +342,10 @@ export const logout = async () => {
 
 export const hasTokens = () => {
   if (!isBrowser()) return false;
-  return Boolean(localStorage.getItem(ACCESS_TOKEN_KEY) && localStorage.getItem(REFRESH_TOKEN_KEY));
+  // Check if we have a valid (non-expired) access token, or at least a refresh token
+  const accessToken = getStoredAccessToken();
+  const refreshToken = getStoredRefreshToken();
+  return Boolean(accessToken || refreshToken);
 };
 
 export const buildQueryString = (params: Record<string, string | number | boolean | undefined>) => {

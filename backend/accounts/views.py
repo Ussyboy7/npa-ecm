@@ -21,13 +21,15 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from audit.services import AuditService
-from .models import User, ExecutiveSignature, DocumentSeal, SealOTP
+from .models import User, ExecutiveSignature, DocumentSeal, SealOTP, SignatureTemplate, UserSignaturePreferences
 from .serializers import (
     UserSerializer, 
     ExecutiveSignatureSerializer,
     ExecutiveSignatureUploadSerializer,
     DocumentSealSerializer,
     SealVerificationSerializer,
+    SignatureTemplateSerializer,
+    UserSignaturePreferencesSerializer,
 )
 
 # For TOTP
@@ -850,8 +852,10 @@ class SealVerificationView(APIView):
             
             if seal.document:
                 response_data["document_title"] = seal.document.title
+                response_data["document_id"] = str(seal.document.id)
             if seal.correspondence:
                 response_data["correspondence_subject"] = seal.correspondence.subject
+                response_data["correspondence_id"] = str(seal.correspondence.id)
             
             return Response(response_data)
             
@@ -913,6 +917,7 @@ class ApplySealView(APIView):
                 user=request.user,
                 document=document,
                 correspondence=correspondence,
+                request=request,  # Pass request to detect correct frontend URL
             )
             
             # Audit log
@@ -1322,3 +1327,55 @@ class UpdatePreferred2FAView(APIView):
             "preferred_method": method,
             "message": f"Preferred 2FA method updated to {'Email OTP' if method == 'email' else 'Authenticator App'}",
         })
+
+
+class SignatureTemplateViewSet(viewsets.ModelViewSet):
+    """API endpoint for signature templates."""
+    
+    queryset = SignatureTemplate.objects.filter(is_active=True)
+    serializer_class = SignatureTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ["template_type", "style", "default_apply", "is_active"]
+    search_fields = ["name", "description"]
+    ordering_fields = ["name", "created_at"]
+    ordering = ["template_type", "name"]
+    
+    def get_queryset(self):
+        """Return active templates."""
+        return super().get_queryset().filter(is_active=True)
+
+
+class UserSignaturePreferencesViewSet(viewsets.ModelViewSet):
+    """API endpoint for user signature preferences."""
+    
+    queryset = UserSignaturePreferences.objects.select_related("user", "default_template")
+    serializer_class = UserSignaturePreferencesSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    
+    def get_queryset(self):
+        """Users can only access their own preferences."""
+        return super().get_queryset().filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        """Set the user to the current user."""
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=["get", "patch"])
+    def my_preferences(self, request):
+        """Get or update current user's preferences."""
+        preferences, created = UserSignaturePreferences.objects.get_or_create(
+            user=request.user
+        )
+        
+        if request.method == "GET":
+            serializer = self.get_serializer(preferences)
+            return Response(serializer.data)
+        
+        # PATCH
+        serializer = self.get_serializer(preferences, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Check, Clock, Circle, AlertTriangle, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Correspondence, Minute, User, Office, OfficeMembership } from "@/lib/npa-structure";
 
@@ -276,7 +276,6 @@ export function WorkflowProgressIndicator({
           {/* Connection Line */}
           <div className="absolute left-[15px] top-[20px] bottom-[20px] w-0.5 bg-muted" />
           
-          <TooltipProvider>
             <div className="space-y-3">
               {steps.map((step, index) => (
                 <div key={step.id} className="flex items-start gap-3 relative">
@@ -377,7 +376,6 @@ export function WorkflowProgressIndicator({
                 </div>
               ))}
             </div>
-          </TooltipProvider>
         </div>
 
         {/* Status Summary - compact */}

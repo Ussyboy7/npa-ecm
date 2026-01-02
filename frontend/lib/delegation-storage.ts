@@ -1,85 +1,99 @@
-import { logError } from '@/lib/client-logger';
-// Delegation management functions
+import { logError, logWarn } from '@/lib/client-logger';
+import * as delegationApi from '@/lib/api/delegations';
 
-export type Delegation = {
-  id: string;
-  correspondenceId: string;
-  executiveId?: string; // Legacy, use principalId instead
-  principalId: string | number; // The principal (executive) who delegates
-  assistantId: string | number;
-  assistantType?: 'TA' | 'PA';
-  delegationNotes?: string;
-  delegatedAt: string;
-  status: 'active' | 'completed' | 'revoked';
-  completedAt?: string;
-  duration?: string; // 'until_completed', '24h', '3d', '1w', '2w', 'custom'
-  expiresAt?: string; // ISO date string
-};
+// Re-export the type
+export type Delegation = delegationApi.Delegation;
 
-const STORAGE_KEY = 'npa-delegations';
-
-export const loadDelegations = (): Delegation[] => {
+/**
+ * Load all delegations from backend
+ * @deprecated Use getCorrespondenceDelegations from @/lib/api/delegations directly
+ */
+export const loadDelegations = async (): Promise<Delegation[]> => {
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
+    return await delegationApi.getCorrespondenceDelegations();
   } catch (error) {
-    logError('Error loading delegations:', error);
+    logError('Error loading delegations from backend:', error);
     return [];
   }
 };
 
+/**
+ * @deprecated Not needed - backend handles saving automatically
+ */
 export const saveDelegations = (delegations: Delegation[]): void => {
+  // No-op - backend handles persistence
+  logWarn('saveDelegations is deprecated - backend handles persistence automatically');
+};
+
+/**
+ * Add a new delegation (creates in backend)
+ */
+export const addDelegation = async (delegation: Omit<Delegation, 'id' | 'delegatedAt' | 'status'>): Promise<Delegation> => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(delegations));
+    return await delegationApi.createCorrespondenceDelegation(delegation);
   } catch (error) {
-    logError('Error saving delegations:', error);
+    logError('Error creating delegation:', error);
+    throw error;
   }
 };
 
-export const addDelegation = (delegation: Delegation): Delegation => {
-  const delegations = loadDelegations();
-  
-  // Revoke any existing active delegations for the same correspondence
-  const updated = delegations.map(d => 
-    d.correspondenceId === delegation.correspondenceId && d.status === 'active'
-      ? { ...d, status: 'revoked' as const }
-      : d
-  );
-  
-  updated.push(delegation);
-  saveDelegations(updated);
-  return delegation;
+/**
+ * Update a delegation
+ */
+export const updateDelegation = async (id: string, updates: Partial<Delegation>): Promise<Delegation | null> => {
+  try {
+    return await delegationApi.updateCorrespondenceDelegation(id, updates);
+  } catch (error) {
+    logError(`Error updating delegation ${id}:`, error);
+    return null;
+  }
 };
 
-export const updateDelegation = (id: string, updates: Partial<Delegation>): Delegation | null => {
-  const delegations = loadDelegations();
-  const index = delegations.findIndex(d => d.id === id);
-  
-  if (index === -1) return null;
-  
-  const updated = { ...delegations[index], ...updates };
-  delegations[index] = updated;
-  saveDelegations(delegations);
-  return updated;
+/**
+ * Get delegation for a specific correspondence
+ */
+export const getDelegationByCorrespondence = async (correspondenceId: string): Promise<Delegation | undefined> => {
+  try {
+    const delegation = await delegationApi.getDelegationByCorrespondence(correspondenceId);
+    return delegation || undefined;
+  } catch (error) {
+    logError(`Error loading delegation for correspondence ${correspondenceId}:`, error);
+    return undefined;
+  }
 };
 
-export const getDelegationByCorrespondence = (correspondenceId: string): Delegation | undefined => {
-  const delegations = loadDelegations();
-  return delegations.find(d => d.correspondenceId === correspondenceId && d.status === 'active');
+/**
+ * Get delegations by assistant
+ */
+export const getDelegationsByAssistant = async (assistantId: string): Promise<Delegation[]> => {
+  try {
+    return await delegationApi.getDelegationsByAssistant(assistantId);
+  } catch (error) {
+    logError(`Error loading delegations for assistant ${assistantId}:`, error);
+    return [];
+  }
 };
 
-export const getDelegationsByAssistant = (assistantId: string): Delegation[] => {
-  const delegations = loadDelegations();
-  return delegations.filter(d => d.assistantId === assistantId && d.status === 'active');
+/**
+ * Complete a delegation
+ */
+export const completeDelegation = async (id: string): Promise<Delegation | null> => {
+  try {
+    return await delegationApi.completeDelegation(id);
+  } catch (error) {
+    logError(`Error completing delegation ${id}:`, error);
+    return null;
+  }
 };
 
-export const completeDelegation = (id: string): Delegation | null => {
-  return updateDelegation(id, {
-    status: 'completed',
-    completedAt: new Date().toISOString(),
-  });
-};
-
-export const revokeDelegation = (id: string): Delegation | null => {
-  return updateDelegation(id, { status: 'revoked' });
+/**
+ * Revoke a delegation
+ */
+export const revokeDelegation = async (id: string): Promise<Delegation | null> => {
+  try {
+    return await delegationApi.revokeDelegation(id);
+  } catch (error) {
+    logError(`Error revoking delegation ${id}:`, error);
+    return null;
+  }
 };

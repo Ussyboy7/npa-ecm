@@ -162,7 +162,7 @@ export const CompletionSummaryModal = ({
 
       setShowConfirmation(false);
       onOpenChange(false);
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError('Failed to archive correspondence', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
@@ -464,7 +464,7 @@ export const CompletionSummaryModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5 text-success" />
@@ -763,7 +763,7 @@ export const CompletionSummaryModal = ({
   );
 };
 
-function generateAutoSummary(correspondence: Correspondence, minutes: Minute[], users: any[]): string {
+function generateAutoSummary(correspondence: Correspondence, minutes: Minute[], users: unknown[]): string {
   const routingPath = minutes.map(m => {
     const user = users.find(u => u.id === m.userId);
     return `${user?.name || 'Unknown'} (${m.gradeLevel})`;

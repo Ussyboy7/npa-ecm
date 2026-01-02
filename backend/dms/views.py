@@ -34,6 +34,7 @@ from .models import (
     DocumentDiscussionMessage,
     DocumentEditorSession,
     DocumentPermission,
+    DocumentTemplate,
     DocumentVersion,
     DocumentWorkspace,
     FormDocument,
@@ -46,6 +47,7 @@ from .serializers import (
     DocumentEditorSessionSerializer,
     DocumentPermissionSerializer,
     DocumentSerializer,
+    DocumentTemplateSerializer,
     DocumentVersionSerializer,
     DocumentWorkspaceSerializer,
     FormDocumentSerializer,
@@ -99,6 +101,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         "division",
         "department",
         "author",  # Added author filter
+        "parent_document",  # Filter by parent document for thread navigation
     ]
     search_fields = ["title", "reference_number", "description", "tags"]
     ordering_fields = ["updated_at", "created_at", "title"]
@@ -130,58 +133,86 @@ class DocumentViewSet(viewsets.ModelViewSet):
         
         # If there's a search query, search across all fields including version content
         if search_query:
-            # Build comprehensive search filter that includes:
-            # - Base fields: title, reference_number, description, tags
-            # - Version content: content_text, ocr_text
+            # Build comprehensive search filter using icontains for partial word matching
+            # This supports searching with partial words (e.g., "en" matches "Enterprise", "R" matches "Request")
+            # icontains is case-insensitive and supports substring matching
             base_search = (
                 Q(title__icontains=search_query) |
                 Q(reference_number__icontains=search_query) |
-                Q(description__icontains=search_query) |
-                Q(tags__icontains=search_query)
+                Q(description__icontains=search_query)
             )
             
-            # Use PostgreSQL full-text search for base fields (much faster with GIN indexes)
-            from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+            # Note: tags is JSONField - icontains doesn't work directly on JSONField
+            # We skip tags search for now to avoid errors
+            # If needed, can implement JSONB text search separately
             
-            search_query_obj = SearchQuery(search_query, config="english")
-            
-            # Use search_vector field if available (fastest - uses GIN index)
-            if hasattr(queryset.model, '_meta') and 'search_vector' in [f.name for f in queryset.model._meta.get_fields()]:
-                queryset = queryset.filter(search_vector=search_query_obj)
-            else:
-                # Build SearchVector on the fly (still faster than icontains)
-                search_vector = (
-                    SearchVector("title", weight="A", config="english") +
-                    SearchVector("reference_number", weight="A", config="english") +
-                    SearchVector("description", weight="B", config="english") +
-                    SearchVector("tags", weight="C", config="english")
-                )
-                queryset = queryset.annotate(
-                    search=search_vector,
-                    rank=SearchRank(search_vector, search_query_obj)
-                ).filter(search=search_query_obj).order_by("-rank", "-updated_at")
-            
-            # Also search in version content (use icontains as fallback - slower but necessary)
-            # TODO: Add search_vector to DocumentVersion for better performance
+            # Also search in version content (use icontains - supports partial words)
             version_search = (
                 Q(versions__content_text__icontains=search_query) |
                 Q(versions__ocr_text__icontains=search_query)
             )
             
-            # Combine: documents matching base search OR version content
-            queryset = queryset.filter(
-                Q(pk__in=queryset.values_list('pk', flat=True)) | version_search
-            ).distinct()
+            # Combine: documents matching base fields OR version content
+            # Using icontains ensures partial word matching works (e.g., "R" matches "Request", "Re", "Rollout")
+            search_filter = base_search | version_search
+            
+            # Apply search filter FIRST - this will match any document with the search term in title, reference, description, or version content
+            # This must happen before other filters to ensure search works correctly
+            queryset = queryset.filter(search_filter)
             
             # Still need to apply other filters (status, type, etc.) from DjangoFilterBackend
-            # Temporarily remove SearchFilter to avoid double-filtering
+            # Temporarily remove SearchFilter to avoid double-filtering (we handle search manually above)
             from rest_framework.filters import SearchFilter
             original_backends = self.filter_backends
             self.filter_backends = [b for b in original_backends if not isinstance(b, SearchFilter)]
             try:
+                # Apply DjangoFilterBackend filters (status, type, etc.) but NOT SearchFilter
                 queryset = super().filter_queryset(queryset)
             finally:
                 self.filter_backends = original_backends
+            
+            # Apply distinct() after all filters to avoid duplicates from version joins
+            queryset = queryset.distinct()
+            
+            # For longer queries (3+ chars), optionally enhance with full-text search for better ranking
+            # But always include icontains results to ensure partial matches are found
+            if len(search_query.strip()) >= 3:
+                try:
+                    from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+                    search_query_obj = SearchQuery(search_query, config="english")
+                    
+                    # Try to get full-text search results for ranking
+                    if hasattr(queryset.model, '_meta') and 'search_vector' in [f.name for f in queryset.model._meta.get_fields()]:
+                        # If search_vector field exists, use it
+                        full_text_pks = list(queryset.filter(search_vector=search_query_obj).values_list('pk', flat=True))
+                    else:
+                        # Build SearchVector on the fly
+                        search_vector = (
+                            SearchVector("title", weight="A", config="english") +
+                            SearchVector("reference_number", weight="A", config="english") +
+                            SearchVector("description", weight="B", config="english") +
+                            SearchVector("tags", weight="C", config="english")
+                        )
+                        full_text_pks = list(
+                            queryset.annotate(
+                                search=search_vector,
+                                rank=SearchRank(search_vector, search_query_obj)
+                            ).filter(search=search_query_obj).values_list('pk', flat=True)
+                        )
+                    
+                    # Reorder results: full-text matches first (better ranking), then icontains matches
+                    if full_text_pks:
+                        from django.db.models import Case, When, IntegerField
+                        queryset = queryset.annotate(
+                            search_priority=Case(
+                                When(pk__in=full_text_pks, then=1),
+                                default=2,
+                                output_field=IntegerField()
+                            )
+                        ).order_by('search_priority', '-updated_at')
+                except Exception:
+                    # If full-text search fails, just use icontains results (already filtered above)
+                    pass
         else:
             # No search query, just apply standard filters
             queryset = super().filter_queryset(queryset)
@@ -718,40 +749,106 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="run-ocr")
     def run_ocr(self, request, pk=None):
-        """Run OCR on a specific version."""
+        """Run OCR on a specific version, or extract text from HTML content."""
         version = self.get_object()
         
+        # If version has HTML content, extract text directly
+        # Check both content_html and content_text fields
+        has_html_content = (version.content_html and version.content_html.strip()) or (version.content_text and version.content_text.strip())
+        if has_html_content:
+            try:
+                from django.utils.html import strip_tags
+                # Extract plain text from HTML or use content_text if available
+                source_text = version.content_html if version.content_html else version.content_text
+                if version.content_html:
+                    extracted_text = strip_tags(version.content_html)
+                    # Clean up whitespace
+                    extracted_text = ' '.join(extracted_text.split())
+                else:
+                    # Use content_text directly
+                    extracted_text = version.content_text.strip()
+                
+                if extracted_text:
+                    version.ocr_text = extracted_text
+                    version.save(update_fields=["ocr_text"])
+                    return Response({
+                        "ocr_text": extracted_text,
+                        "characters": len(extracted_text),
+                        "method": "html_extraction",
+                    })
+                else:
+                    return Response({
+                        "ocr_text": "",
+                        "message": "No text could be extracted from HTML content",
+                        "method": "html_extraction",
+                    })
+            except Exception as e:
+                logger.error(f"HTML text extraction failed: {e}")
+                raise ValidationError({"detail": f"Text extraction failed: {str(e)}"})
+        
+        # For file-based versions, use OCR
         if not version.file_url:
-            raise ValidationError({"detail": "Version has no file to process"})
+            raise ValidationError({"detail": "Version has no file or HTML content to process"})
         
         # Get file path
         file_url = version.file_url
+        logger.info(f"OCR request for version {version.id}: file_url={file_url}, file_type={version.file_type}")
+        
         if file_url.startswith('/media/'):
             file_path = os.path.join(settings.MEDIA_ROOT, file_url.replace('/media/', ''))
         elif file_url.startswith('http'):
             raise ValidationError({"detail": "Cannot process remote files for OCR"})
+        elif file_url.startswith('data:'):
+            raise ValidationError({"detail": "File is still in data URL format. Please wait for file processing to complete."})
         else:
             file_path = os.path.join(settings.MEDIA_ROOT, file_url)
         
+        logger.info(f"Resolved file path: {file_path}, exists: {os.path.exists(file_path)}")
+        
         if not os.path.exists(file_path):
-            raise ValidationError({"detail": "File not found on disk"})
+            logger.error(f"File not found: {file_path} (resolved from {file_url})")
+            raise ValidationError({"detail": f"File not found on disk: {file_path}. The file may have been moved or deleted."})
         
         try:
+            logger.info(f"Attempting OCR extraction for {version.file_type} at {file_path}")
             ocr_text = OCRService.extract_text(file_path, version.file_type)
             if ocr_text:
+                logger.info(f"OCR successful: extracted {len(ocr_text)} characters")
                 version.ocr_text = ocr_text
                 version.save(update_fields=["ocr_text"])
                 return Response({
                     "ocr_text": ocr_text,
                     "characters": len(ocr_text),
+                    "method": "ocr",
                 })
             else:
+                logger.warning(f"OCR returned no text for {file_path}")
+                # Check if python-docx is installed for Word documents
+                if version.file_type in OCRService.SUPPORTED_DOCX_TYPES:
+                    try:
+                        from docx import Document as DocxDocument
+                    except ImportError:
+                        return Response({
+                            "ocr_text": "",
+                            "message": "python-docx library is not installed. Please install it to extract text from Word documents.",
+                            "method": "ocr",
+                        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                
                 return Response({
                     "ocr_text": "",
-                    "message": "No text could be extracted from the document",
+                    "message": "No text could be extracted from the document. The document may be empty, corrupted, or in an unsupported format.",
+                    "method": "ocr",
                 })
+        except ImportError as e:
+            error_msg = str(e)
+            if 'docx' in error_msg.lower():
+                logger.error("python-docx library not installed")
+                raise ValidationError({"detail": "python-docx library is not installed. Please install it to extract text from Word documents."})
+            else:
+                logger.error(f"Import error during OCR: {e}")
+                raise ValidationError({"detail": f"Required library not installed: {error_msg}"})
         except Exception as e:
-            logger.error(f"OCR failed: {e}")
+            logger.error(f"OCR failed for {file_path}: {e}", exc_info=True)
             raise ValidationError({"detail": f"OCR processing failed: {str(e)}"})
 
 
@@ -1038,7 +1135,7 @@ class DocumentAccessLogViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, v
     serializer_class = DocumentAccessLogSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ["document", "action", "sensitivity"]
+    filterset_fields = ["document", "action", "sensitivity", "user"]
     ordering_fields = ["timestamp"]
     ordering = ["-timestamp"]
 
@@ -1228,3 +1325,94 @@ class DocumentCollectionViewSet(viewsets.ModelViewSet):
             "message": f"Removed {len(documents)} document(s) from collection",
             "document_count": collection.documents.count(),
         })
+
+
+class DocumentTemplateViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing document templates."""
+    queryset = DocumentTemplate.objects.filter(is_active=True).select_related("created_by", "default_division", "default_department")
+    serializer_class = DocumentTemplateSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["document_type", "is_active", "created_by"]
+    search_fields = ["name", "description"]
+    ordering_fields = ["name", "usage_count", "created_at"]
+    ordering = ["-usage_count", "name"]
+
+    def get_queryset(self):
+        """Filter templates based on user permissions."""
+        qs = super().get_queryset()
+        user = self.request.user
+        
+        # Superusers can see all templates
+        if user.is_superuser:
+            return qs
+        
+        # Regular users can see active templates
+        return qs.filter(is_active=True)
+
+    def perform_create(self, serializer):
+        """Set the creator when creating a template."""
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def create_document(self, request, pk=None):
+        """Create a document from this template."""
+        template = self.get_object()
+        
+        # Get document data from request
+        document_data = request.data.get("document", {})
+        file_data = request.data.get("file", {})
+        
+        # Merge template defaults with provided data
+        doc_data = {
+            "title": document_data.get("title", ""),
+            "description": document_data.get("description", template.description or ""),
+            "document_type": document_data.get("document_type", template.document_type),
+            "status": document_data.get("status", template.default_status),
+            "sensitivity": document_data.get("sensitivity", template.default_sensitivity),
+            "division": document_data.get("division", template.default_division.id if template.default_division else None),
+            "department": document_data.get("department", template.default_department.id if template.default_department else None),
+            "tags": document_data.get("tags", template.default_tags or []),
+            "author_id": request.user.id,
+        }
+        
+        # Create document
+        document_serializer = DocumentSerializer(data=doc_data)
+        document_serializer.is_valid(raise_exception=True)
+        document = document_serializer.save()
+        
+        # If template has content, create initial version
+        if template.template_content:
+            import re
+            # Strip HTML tags to get plain text
+            content_text = re.sub(r'<[^>]+>', '', template.template_content)
+            
+            version_data = {
+                "document": document.id,
+                "file_name": f"{document.title}.html",
+                "file_type": "text/html",
+                "file_size": len(template.template_content.encode("utf-8")),
+                "content_html": template.template_content,
+                "content_text": content_text,
+                "uploaded_by_id": request.user.id,
+            }
+            version_serializer = DocumentVersionSerializer(data=version_data)
+            version_serializer.is_valid(raise_exception=True)
+            version_serializer.save()
+        
+        # Increment template usage
+        template.increment_usage()
+        
+        # Log activity
+        AuditService.log_document_activity(
+            user=request.user,
+            action="document_created_from_template",
+            document=document,
+            request=request,
+            description=f"Created document from template: {template.name}",
+        )
+        
+        return Response(
+            DocumentSerializer(document, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )

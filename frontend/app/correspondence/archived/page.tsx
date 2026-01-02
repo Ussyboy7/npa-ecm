@@ -137,7 +137,7 @@ const ArchivedCorrespondence = () => {
         params.append('sort_by', sortBy);
         params.append('sort_order', sortOrder);
 
-        const response = await apiFetch<any>(`/correspondence/items/archive-records/?${params.toString()}`);
+        const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/archive-records/?${params.toString()}`);
         if (ignore) return;
 
         const results = Array.isArray(response.results) ? response.results : [];

@@ -82,7 +82,7 @@ docker-compose -f docker-compose.prod.yml up -d
 
 4. **Create superuser**
 ```bash
-docker exec -it dms-backend-dev python manage.py createsuperuser
+docker exec -it ecm-backend-local python manage.py createsuperuser
 ```
 
 5. **Access the applications**

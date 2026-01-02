@@ -36,7 +36,7 @@ export default function FormTemplateEditorPage() {
     category: "general" as FormTemplate["category"],
     is_active: true,
     structure: {
-      fields: [] as any[],
+      fields: [] as unknown[],
     },
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -61,7 +61,7 @@ export default function FormTemplateEditorPage() {
         structure: data.structure || { fields: [] },
       });
     } catch (error) {
-      console.error("Error loading template:", error);
+      logError("Error loading template:", error);
       toast.error("Failed to load form template");
       router.push("/admin/form-templates");
     } finally {
@@ -126,7 +126,7 @@ export default function FormTemplateEditorPage() {
         loadTemplate();
       }
     } catch (error) {
-      console.error("Error saving template:", error);
+      logError("Error saving template:", error);
       toast.error(error instanceof Error ? error.message : "Failed to save template");
     } finally {
       setSaving(false);

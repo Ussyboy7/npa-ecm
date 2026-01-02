@@ -29,10 +29,10 @@ interface OrgNode {
 }
 
 interface OrganizationChartProps {
-  directorates: any[];
-  divisions: any[];
-  departments: any[];
-  users: any[];
+  directorates: unknown[];
+  divisions: unknown[];
+  departments: unknown[];
+  users: unknown[];
 }
 
 export function OrganizationChart({

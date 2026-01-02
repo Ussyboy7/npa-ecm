@@ -49,9 +49,9 @@ import {
 
 export interface RichTextEditorProps {
   value?: string;
-  onChange?: (html: string, json: any) => void;
+  onChange?: (html: string, json: Record<string, unknown>) => void;
   defaultHtml?: string;
-  defaultJson?: any;
+  defaultJson?: Record<string, unknown>;
   editable?: boolean;
   className?: string;
   placeholder?: string;
@@ -134,6 +134,15 @@ export const RichTextEditor = ({
       editor.commands.setContent(defaultHtml);
     }
   }, [editor, value, defaultHtml, defaultJson]);
+
+  // Cleanup editor on unmount
+  useEffect(() => {
+    return () => {
+      if (editor) {
+        editor.destroy();
+      }
+    };
+  }, [editor]);
 
   const tokenList = useMemo(() => tokens ?? [], [tokens]);
 

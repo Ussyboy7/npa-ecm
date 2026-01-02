@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from "react";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import QRCode from "qrcode";
 
 interface DigitalSealPreviewProps {
@@ -16,7 +17,12 @@ interface DigitalSealPreviewProps {
   verificationBaseUrl?: string;
 }
 
-export const DigitalSealPreview = ({
+export interface DigitalSealPreviewHandle {
+  getCanvas: () => HTMLCanvasElement | null;
+  download: (filename?: string) => void;
+}
+
+export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSealPreviewProps>(({
   officeName = "NIGERIAN PORTS AUTHORITY",
   officeTitle = "OFFICE OF THE MANAGING DIRECTOR",
   serialPrefix = "NPA-MD",
@@ -27,7 +33,7 @@ export const DigitalSealPreview = ({
   size = 350,
   showQR = true,
   verificationBaseUrl,
-}: DigitalSealPreviewProps) => {
+}, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [imagesReady, setImagesReady] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -40,6 +46,23 @@ export const DigitalSealPreview = ({
     if (serialNumber) return serialNumber;
     return `${serialPrefix}-${Math.random().toString(36).substring(2, 12).toUpperCase()}`;
   }, [serialNumber, serialPrefix]);
+
+  // Expose canvas and download method via ref
+  useImperativeHandle(ref, () => ({
+    getCanvas: () => canvasRef.current,
+    download: (filename?: string) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const url = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || `seal-${serialPrefix}-${new Date().toISOString().split('T')[0]}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
+  }), [serialPrefix]);
 
   const dateTime = useMemo(() => {
     if (timestamp) return timestamp;
@@ -91,7 +114,7 @@ export const DigitalSealPreview = ({
         };
         qrImg.src = dataUrl;
       } catch (err) {
-        console.error('Failed to generate QR code:', err);
+        logError('Failed to generate QR code:', err);
       }
     };
     
@@ -116,17 +139,17 @@ export const DigitalSealPreview = ({
         if (!cancelled) {
           logoRef.current = logo;
           setImagesReady(true);
-          console.log('Logo loaded successfully:', src);
+          logInfo('Logo loaded successfully:', src);
         }
       };
       logo.onerror = () => {
         if (!cancelled) {
           if (fallbackSrc) {
             // Try fallback
-            console.log('Logo failed, trying fallback:', fallbackSrc);
+            logInfo('Logo failed, trying fallback:', fallbackSrc);
             tryLoadLogo(fallbackSrc);
           } else {
-            console.warn('Failed to load NPA logo - using placeholder');
+            logWarn('Failed to load NPA logo - using placeholder');
             setImagesReady(true); // Continue with placeholder
           }
         }
@@ -145,16 +168,30 @@ export const DigitalSealPreview = ({
 
   // Load signature image - only when it changes
   useEffect(() => {
-    if (!signatureImage) return;
+    if (!signatureImage) {
+      signatureRef.current = null;
+      return;
+    }
     
     let cancelled = false;
     
     const sig = new Image();
-    sig.crossOrigin = "anonymous";
+    // Only set crossOrigin for external URLs
+    if (signatureImage.startsWith('http')) {
+      sig.crossOrigin = "anonymous";
+    }
     sig.onload = () => {
       if (!cancelled) {
         signatureRef.current = sig;
         setImagesReady(prev => true);
+        logInfo('Signature loaded successfully:', signatureImage);
+      }
+    };
+    sig.onerror = (error) => {
+      if (!cancelled) {
+        logWarn('Failed to load signature image:', signatureImage, error);
+        signatureRef.current = null;
+        setImagesReady(prev => true); // Continue without signature
       }
     };
     sig.src = signatureImage;
@@ -400,6 +437,10 @@ export const DigitalSealPreview = ({
       </div>
     </div>
   );
-};
+});
 
+DigitalSealPreview.displayName = "DigitalSealPreview";
+
+// Export both named and default for compatibility
+export { DigitalSealPreview };
 export default DigitalSealPreview;

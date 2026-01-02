@@ -3229,7 +3229,7 @@
     },
     {
       "id": "office-dir-md",
-      "name": "Managing Director Office Office",
+      "name": "Managing Director Office",
       "code": "OFF_MD",
       "officeType": "md",
       "directorateId": "dir-md",

@@ -222,7 +222,7 @@ const normalizeId = (value: unknown): string | undefined => {
   return String(value);
 };
 
-const mapApiUserToUser = (user: any): User => {
+const mapApiUserToUser = (user: Record<string, unknown>): User => {
   const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim();
   // system_role is now a ForeignKey (UUID), but we need the name for display
   // Backend returns system_role_name for the role name
@@ -261,7 +261,7 @@ const mapApiUserToUser = (user: any): User => {
   };
 };
 
-const mapApiDirectorate = (item: any): Directorate => ({
+const mapApiDirectorate = (item: Record<string, unknown>): Directorate => ({
   id: String(item.id),
   name: item.name ?? 'Directorate',
   code: item.code ?? `DIR-${String(item.id).slice(0, 6).toUpperCase()}`,
@@ -271,7 +271,7 @@ const mapApiDirectorate = (item: any): Directorate => ({
   isActive: item.is_active ?? true,
 });
 
-const mapApiDivision = (item: any): Division => ({
+const mapApiDivision = (item: Record<string, unknown>): Division => ({
   id: String(item.id),
   name: item.name ?? 'Division',
   code: item.code ?? `DIV-${String(item.id).slice(0, 6).toUpperCase()}`,
@@ -284,7 +284,7 @@ const mapApiDivision = (item: any): Division => ({
   isActive: item.is_active ?? true,
 });
 
-const mapApiDepartment = (item: any): Department => ({
+const mapApiDepartment = (item: Record<string, unknown>): Department => ({
   id: String(item.id),
   name: item.name ?? 'Department',
   code: item.code ?? `DEPT-${String(item.id).slice(0, 6).toUpperCase()}`,
@@ -297,7 +297,7 @@ const mapApiDepartment = (item: any): Department => ({
   isActive: item.is_active ?? true,
 });
 
-const mapApiDelegation = (item: any): AssistantAssignment => {
+const mapApiDelegation = (item: Record<string, unknown>): AssistantAssignment => {
   const permissions: string[] = [];
   if (item.can_minute) permissions.push('minute');
   if (item.can_forward) permissions.push('forward');
@@ -313,7 +313,7 @@ const mapApiDelegation = (item: any): AssistantAssignment => {
   };
 };
 
-const mapApiRole = (item: any): Role => ({
+const mapApiRole = (item: Record<string, unknown>): Role => ({
   id: String(item.id),
   name: item.name ?? 'Role',
   description: item.description ?? '',
@@ -324,7 +324,7 @@ const mapApiRole = (item: any): Role => ({
   updatedAt: item.updated_at,
 });
 
-const mapApiOffice = (item: any): Office => ({
+const mapApiOffice = (item: Record<string, unknown>): Office => ({
   id: String(item.id),
   name: item.name ?? 'Office',
   code: item.code ?? `OFF-${String(item.id).slice(0, 6).toUpperCase()}`,
@@ -339,7 +339,7 @@ const mapApiOffice = (item: any): Office => ({
   allowLateralRouting: item.allow_lateral_routing ?? true,
 });
 
-const mapApiOfficeMembership = (item: any): OfficeMembership => ({
+const mapApiOfficeMembership = (item: Record<string, unknown>): OfficeMembership => ({
   id: String(item.id),
   officeId: normalizeId(item.office ?? item.office_id) ?? '',
   officeName: item.office_name ?? item.office?.name ?? '',
@@ -494,14 +494,14 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setIsSyncing(true);
     try {
       // Fetch all users with pagination
-      let allUsers: any[] = [];
+      let allUsers: unknown[] = [];
       let page = 1;
       let hasMore = true;
       const requestedPageSize = 1000;
       
       while (hasMore) {
         const usersResponse = await apiFetch(`/accounts/users/?is_active=true&page_size=${requestedPageSize}&page=${page}&ordering=username`);
-        const pageUsers = unwrapResults<any>(usersResponse);
+        const pageUsers = unwrapResults<Record<string, unknown>>(usersResponse);
         allUsers = [...allUsers, ...pageUsers];
         
         logInfo(`Fetched page ${page}:`, { 
@@ -555,13 +555,13 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         apiFetch('/organization/office-memberships/?ordering=office__name&page_size=500'),
       ]);
 
-      const apiDirectorates = unwrapResults<any>(directoratesRaw).map(mapApiDirectorate);
-      const apiDivisions = unwrapResults<any>(divisionsRaw).map(mapApiDivision);
-      const apiDepartments = unwrapResults<any>(departmentsRaw).map(mapApiDepartment);
-      const apiDelegations = unwrapResults<any>(delegationsRaw).map(mapApiDelegation);
-      const apiRoles = unwrapResults<any>(rolesRaw).map(mapApiRole);
-      const apiOffices = unwrapResults<any>(officesRaw).map(mapApiOffice);
-      const apiOfficeMemberships = unwrapResults<any>(officeMembershipsRaw).map(mapApiOfficeMembership);
+      const apiDirectorates = unwrapResults<Record<string, unknown>>(directoratesRaw).map(mapApiDirectorate);
+      const apiDivisions = unwrapResults<Record<string, unknown>>(divisionsRaw).map(mapApiDivision);
+      const apiDepartments = unwrapResults<Record<string, unknown>>(departmentsRaw).map(mapApiDepartment);
+      const apiDelegations = unwrapResults<Record<string, unknown>>(delegationsRaw).map(mapApiDelegation);
+      const apiRoles = unwrapResults<Record<string, unknown>>(rolesRaw).map(mapApiRole);
+      const apiOffices = unwrapResults<Record<string, unknown>>(officesRaw).map(mapApiOffice);
+      const apiOfficeMemberships = unwrapResults<Record<string, unknown>>(officeMembershipsRaw).map(mapApiOfficeMembership);
 
       const sortedDirectorates = sortByName(apiDirectorates);
       const sortedDivisions = sortByName(apiDivisions);
@@ -607,9 +607,15 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     }
   }, [hydrated, currentUser, hasSynced, refreshOrganizationData]);
 
+  // Reset sync flag when user changes (but only once per user ID)
+  const lastUserIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (hydrated && currentUser && hasTokens()) {
-      setHasSynced(false);
+      // Only reset if user ID actually changed
+      if (lastUserIdRef.current !== currentUser.id) {
+        lastUserIdRef.current = currentUser.id;
+        setHasSynced(false);
+      }
     }
   }, [currentUser?.id, hydrated]);
 

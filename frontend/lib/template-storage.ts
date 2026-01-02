@@ -1,6 +1,9 @@
 import { nanoid } from 'nanoid';
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { getFromStorage, saveToStorage } from './storage';
 import type { User } from './npa-structure';
+import * as templateApi from './api/templates';
+import { hasTokens } from './api-client';
 
 export type TemplateScope = 'organization' | 'directorate' | 'division' | 'department' | 'user';
 
@@ -244,34 +247,85 @@ export const initializeTemplates = () => {
   seedTemplates();
 };
 
-export const loadTemplates = (): DocumentTemplate[] => {
-  const storage = ensureStorage();
-  return storage.templates;
-};
-
-export const saveTemplate = (template: DocumentTemplate) => {
-  const storage = ensureStorage();
-  const index = storage.templates.findIndex((t) => t.id === template.id);
-  if (index >= 0) {
-    storage.templates[index] = {
-      ...template,
-      contentText: deriveContentText(template.contentHtml, template.contentText),
-    };
-  } else {
-    storage.templates.push({
-      ...template,
-      contentText: deriveContentText(template.contentHtml, template.contentText),
-    });
+export const loadTemplates = async (): Promise<DocumentTemplate[]> => {
+  // Use backend only - no localStorage fallback
+  if (!hasTokens()) {
+    throw new Error('Authentication required to load templates');
   }
-  persist(storage);
-  return template;
+
+  try {
+    const backendTemplates = await templateApi.getTemplates({ isActive: true });
+    return backendTemplates;
+  } catch (error) {
+    logError('Failed to load templates from backend:', error);
+    throw error;
+  }
 };
 
-export const createTemplate = (data: Omit<DocumentTemplate, 'id' | 'createdAt' | 'updatedAt'>) => {
+export const saveTemplate = async (template: DocumentTemplate): Promise<DocumentTemplate> => {
+  const updatedTemplate = {
+    ...template,
+    contentText: deriveContentText(template.contentHtml, template.contentText),
+  };
+
+  // Use backend only - no localStorage fallback
+  if (!hasTokens()) {
+    throw new Error('Authentication required to save templates');
+  }
+
+  try {
+    if (template.id && template.id.startsWith('temp_')) {
+      // New template - create in backend
+      const created = await templateApi.createTemplate({
+        scope: template.scope,
+        scopeId: template.scopeId,
+        title: template.title,
+        description: template.description,
+        contentHtml: template.contentHtml,
+        contentText: updatedTemplate.contentText,
+        templateType: template.templateType,
+        actionType: template.actionType,
+        isDefault: template.isDefault,
+      });
+      return created;
+    } else {
+      // Existing template - update in backend
+      try {
+        const updated = await templateApi.updateTemplate(template.id, {
+          title: template.title,
+          description: template.description,
+          contentHtml: template.contentHtml,
+          contentText: updatedTemplate.contentText,
+          isDefault: template.isDefault,
+        });
+        return updated;
+      } catch (error) {
+        // If update fails (template might not exist in backend), create it
+        const created = await templateApi.createTemplate({
+          scope: template.scope,
+          scopeId: template.scopeId,
+          title: template.title,
+          description: template.description,
+          contentHtml: template.contentHtml,
+          contentText: updatedTemplate.contentText,
+          templateType: template.templateType,
+          actionType: template.actionType,
+          isDefault: template.isDefault,
+        });
+        return created;
+      }
+    }
+  } catch (error) {
+    logError('Failed to save template to backend:', error);
+    throw error;
+  }
+};
+
+export const createTemplate = async (data: Omit<DocumentTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<DocumentTemplate> => {
   const now = new Date().toISOString();
   const template: DocumentTemplate = {
     ...data,
-    id: nanoid(),
+    id: `temp_${nanoid()}`, // Temporary ID for new templates
     createdAt: now,
     updatedAt: now,
     contentText: deriveContentText(data.contentHtml, data.contentText),
@@ -279,14 +333,27 @@ export const createTemplate = (data: Omit<DocumentTemplate, 'id' | 'createdAt' |
   return saveTemplate(template);
 };
 
-export const deleteTemplate = (id: string) => {
-  const storage = ensureStorage();
-  storage.templates = storage.templates.filter((template) => template.id !== id);
-  persist(storage);
+export const deleteTemplate = async (id: string): Promise<void> => {
+  // Use backend only - no localStorage fallback
+  if (!hasTokens()) {
+    throw new Error('Authentication required to delete templates');
+  }
+
+  if (id.startsWith('temp_')) {
+    // Temporary template that was never saved - nothing to delete
+    return;
+  }
+
+  try {
+    await templateApi.deleteTemplate(id);
+  } catch (error) {
+    logError('Failed to delete template from backend:', error);
+    throw error;
+  }
 };
 
-export const getTemplatesByScope = (scope: TemplateScope, scopeId?: string | null, templateType: TemplateType = 'document') => {
-  const templates = loadTemplates();
+export const getTemplatesByScope = async (scope: TemplateScope, scopeId?: string | null, templateType: TemplateType = 'document'): Promise<DocumentTemplate[]> => {
+  const templates = await loadTemplates();
   return templates.filter((template) => {
     if (template.scope !== scope) return false;
     if (template.templateType !== templateType) return false;
@@ -295,8 +362,8 @@ export const getTemplatesByScope = (scope: TemplateScope, scopeId?: string | nul
   });
 };
 
-export const getTemplatesForUser = (user: User, templateType: TemplateType = 'document') => {
-  const templates = loadTemplates();
+export const getTemplatesForUser = async (user: User, templateType: TemplateType = 'document'): Promise<DocumentTemplate[]> => {
+  const templates = await loadTemplates();
   const matches = templates.filter((template) => {
     if (template.templateType !== templateType) return false;
     switch (template.scope) {
@@ -319,8 +386,8 @@ export const getTemplatesForUser = (user: User, templateType: TemplateType = 'do
   return matches.sort((a, b) => orderedScopes.indexOf(a.scope) - orderedScopes.indexOf(b.scope));
 };
 
-export const getDefaultTemplateForUser = (user: User, templateType: TemplateType = 'document') => {
-  const templates = getTemplatesForUser(user, templateType);
+export const getDefaultTemplateForUser = async (user: User, templateType: TemplateType = 'document'): Promise<DocumentTemplate | undefined> => {
+  const templates = await getTemplatesForUser(user, templateType);
   const department = templates.find((template) => template.scope === 'department' && template.isDefault);
   if (department) return department;
   const division = templates.find((template) => template.scope === 'division' && template.isDefault);

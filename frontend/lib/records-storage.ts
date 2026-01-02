@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from './api-client';
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { logError } from './client-logger';
 
 export interface RetentionPolicy {
@@ -92,6 +93,7 @@ export interface RetentionSchedule {
 export const getRetentionPolicies = async (params?: {
   is_active?: boolean;
   applies_to?: string;
+  signal?: AbortSignal;
 }): Promise<RetentionPolicy[]> => {
   try {
     const queryParams = new URLSearchParams();
@@ -103,7 +105,9 @@ export const getRetentionPolicies = async (params?: {
     }
     const query = queryParams.toString();
     const url = `/records/policies/${query ? `?${query}` : ''}`;
-    const response = await apiFetch<any>(url);
+    const response = await apiFetch<Record<string, unknown>>(url, {
+      signal: params?.signal,
+    });
     
     // Handle paginated response (DRF returns {count, next, previous, results: [...]})
     if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
@@ -114,7 +118,7 @@ export const getRetentionPolicies = async (params?: {
       return response;
     }
     // Fallback to empty array if response is not in expected format
-    console.warn('Unexpected response format from getRetentionPolicies:', response);
+    logWarn('Unexpected response format from getRetentionPolicies:', response);
     return [];
   } catch (error) {
     logError('Failed to get retention policies', error);
@@ -207,7 +211,7 @@ export const getLegalHolds = async (params?: {
       queryParams.append('is_active', String(params.is_active));
     }
     const query = queryParams.toString();
-    const response = await apiFetch<any>(
+    const response = await apiFetch<Record<string, unknown>>(
       `/records/legal-holds/${query ? `?${query}` : ''}`
     );
     
@@ -289,7 +293,7 @@ export const getDispositions = async (params?: {
       queryParams.append('record_type', params.record_type);
     }
     const query = queryParams.toString();
-    const response = await apiFetch<any>(
+    const response = await apiFetch<Record<string, unknown>>(
       `/records/dispositions/${query ? `?${query}` : ''}`
     );
     
@@ -357,7 +361,7 @@ export const getRetentionSchedules = async (params?: {
       queryParams.append('record_id', params.record_id);
     }
     const query = queryParams.toString();
-    const response = await apiFetch<any>(
+    const response = await apiFetch<Record<string, unknown>>(
       `/records/schedules/${query ? `?${query}` : ''}`
     );
     

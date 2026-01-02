@@ -38,7 +38,7 @@ export const AdvancedSearchFilters = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const ANY_VALUE = '__any__';
 
-  const updateFilter = (key: keyof SearchFilters, value: any) => {
+  const updateFilter = (key: keyof SearchFilters, value: SearchFilters[keyof SearchFilters]) => {
     onFiltersChange({ ...filters, [key]: value });
   };
 

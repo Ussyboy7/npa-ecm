@@ -2,7 +2,7 @@
  * File utility functions for validation, type detection, and formatting
  */
 
-export const MAX_FILE_SIZE_MB = 10;
+export const MAX_FILE_SIZE_MB = 30;
 
 export const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -105,4 +105,18 @@ export const getFileTypeLabel = (file: File | { name: string; type?: string }): 
   if (extension === 'html') return 'HTML Document';
   return 'Unknown File Type';
 };
+
+/**
+ * Converts a File to a data URL (base64 encoded)
+ */
+export const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('Failed to read file as data URL'));
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 

@@ -81,6 +81,15 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
     )
     tags = models.JSONField(default=list, blank=True)
     workspaces = models.ManyToManyField(DocumentWorkspace, blank=True, related_name="documents")
+    # Parent document for document threading (response documents)
+    parent_document = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="response_documents",
+        help_text="Parent document this is responding to (for document threads)",
+    )
     
     # Full-text search vector (updated via signals or management command)
     search_vector = SearchVectorField(null=True, editable=False)
@@ -357,6 +366,89 @@ class FormDocument(UUIDModel, TimeStampedModel):
 
     def get_signature_workflow(self):
         """Get the active signature workflow for this form."""
+        return self.signature_workflow
+
+
+class DocumentTemplate(UUIDModel, TimeStampedModel):
+    """Template for creating documents with predefined metadata and structure."""
+
+    name = models.CharField(max_length=255, help_text="Template name")
+    description = models.TextField(blank=True, help_text="Template description")
+    document_type = models.CharField(
+        max_length=32,
+        choices=Document.DocumentType.choices,
+        help_text="Default document type for this template",
+    )
+    default_status = models.CharField(
+        max_length=32,
+        choices=Document.DocumentStatus.choices,
+        default=Document.DocumentStatus.DRAFT,
+        help_text="Default status for documents created from this template",
+    )
+    default_sensitivity = models.CharField(
+        max_length=32,
+        choices=Document.Sensitivity.choices,
+        default=Document.Sensitivity.INTERNAL,
+        help_text="Default sensitivity level for documents created from this template",
+    )
+    default_division = models.ForeignKey(
+        "organization.Division",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Default division for documents created from this template",
+    )
+    default_department = models.ForeignKey(
+        "organization.Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Default department for documents created from this template",
+    )
+    default_tags = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Default tags to apply to documents created from this template",
+    )
+    template_content = models.TextField(
+        blank=True,
+        help_text="Template content/structure (can be HTML, markdown, or plain text)",
+    )
+    template_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional template metadata (custom fields, placeholders, etc.)",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this template is active and available for use",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="document_templates_created",
+        help_text="User who created this template",
+    )
+    usage_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of times this template has been used",
+    )
+
+    class Meta:
+        ordering = ["name"]
+        indexes = [
+            models.Index(fields=["is_active", "document_type"]),
+            models.Index(fields=["created_by"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def increment_usage(self):
+        """Increment the usage count for this template."""
+        self.usage_count = models.F("usage_count") + 1
+        self.save(update_fields=["usage_count"])
         if self.signature_workflow:
             return self.signature_workflow
         # Try to get from template if workflow exists

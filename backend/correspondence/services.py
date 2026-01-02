@@ -28,11 +28,346 @@ import logging
 from accounts.models import User
 
 logger = logging.getLogger(__name__)
-from correspondence.models import Correspondence
+from audit.services import AuditService
+from correspondence.models import (
+    Case,
+    Correspondence,
+    CorrespondenceAttachment,
+    CorrespondenceDocumentLink,
+)
 from dms.models import Document, DocumentPermission, DocumentVersion
 from notifications.models import Notification
 from notifications.services import NotificationService
 from organization.models import Office, OfficeMembership
+
+
+class CorrespondenceDocumentService:
+    """Service for automatically creating DMS documents from correspondence."""
+
+    # Map correspondence document types to DMS document types
+    DOCUMENT_TYPE_MAP = {
+        Correspondence.DocumentType.LETTER: Document.DocumentType.LETTER,
+        Correspondence.DocumentType.REQUEST: Document.DocumentType.LETTER,
+        Correspondence.DocumentType.COMPLAINT: Document.DocumentType.LETTER,
+        Correspondence.DocumentType.INQUIRY: Document.DocumentType.LETTER,
+        Correspondence.DocumentType.REPORT: Document.DocumentType.REPORT,
+        Correspondence.DocumentType.DIRECTIVE: Document.DocumentType.POLICY,
+        Correspondence.DocumentType.OTHER: Document.DocumentType.OTHER,
+    }
+
+    @classmethod
+    @transaction.atomic
+    def create_document_from_correspondence(
+        cls,
+        correspondence: Correspondence,
+        attachments: List[CorrespondenceAttachment] | None = None,
+    ) -> Document:
+        """
+        Automatically create a DMS Document from a Correspondence.
+        
+        Args:
+            correspondence: The correspondence to create a document from
+            attachments: Optional list of attachments to create DocumentVersions from
+            
+        Returns:
+            The created DMS Document
+        """
+        # Check if document already exists
+        existing_link = CorrespondenceDocumentLink.objects.filter(
+            correspondence=correspondence
+        ).select_related('document').first()
+        
+        if existing_link:
+            return existing_link.document
+
+        # Map document type
+        dms_document_type = cls.DOCUMENT_TYPE_MAP.get(
+            correspondence.document_type,
+            Document.DocumentType.OTHER
+        )
+
+        # Determine sensitivity based on priority
+        sensitivity = Document.Sensitivity.INTERNAL
+        if correspondence.priority == Correspondence.Priority.URGENT:
+            sensitivity = Document.Sensitivity.CONFIDENTIAL
+        elif correspondence.priority == Correspondence.Priority.HIGH:
+            sensitivity = Document.Sensitivity.INTERNAL
+
+        # Get parent document if this is a response
+        parent_document = None
+        if correspondence.parent_correspondence:
+            parent_link = CorrespondenceDocumentLink.objects.filter(
+                correspondence=correspondence.parent_correspondence
+            ).select_related('document').first()
+            if parent_link:
+                parent_document = parent_link.document
+
+        # Create DMS Document
+        document = Document.objects.create(
+            title=correspondence.subject,
+            description=correspondence.summary or f"Correspondence: {correspondence.reference_number}",
+            document_type=dms_document_type,
+            reference_number=correspondence.reference_number or "",
+            status=Document.DocumentStatus.DRAFT,  # Will be published when correspondence is completed
+            sensitivity=sensitivity,
+            author=correspondence.created_by,
+            division=correspondence.division,
+            department=correspondence.department,
+            tags=correspondence.tags or [],
+            parent_document=parent_document,  # Link to parent document for threading
+        )
+
+        # Link correspondence to document
+        CorrespondenceDocumentLink.objects.create(
+            correspondence=correspondence,
+            document=document,
+            notes="Auto-created from correspondence registration",
+        )
+
+        # Create DocumentVersions from attachments
+        if attachments is None:
+            attachments = list(correspondence.attachments.all())
+        
+        if attachments:
+            # Create versions from attachments
+            for attachment in attachments:
+                cls._create_document_version_from_attachment(document, attachment)
+        elif correspondence.body_html:
+            # If no attachments but has body_html, create a version from the body
+            cls._create_document_version_from_body(document, correspondence)
+
+        # Log activity
+        from audit.models import ActivityLog
+        AuditService.log_document_activity(
+            user=correspondence.created_by,
+            action=ActivityLog.ActionType.DOCUMENT_CREATED,
+            document=document,
+            request=None,
+            description=f"Auto-created from correspondence: {correspondence.reference_number}",
+        )
+
+        return document
+
+    @classmethod
+    def _create_document_version_from_attachment(
+        cls,
+        document: Document,
+        attachment: CorrespondenceAttachment,
+    ) -> DocumentVersion:
+        """Create a DocumentVersion from a CorrespondenceAttachment."""
+        # Get next version number
+        latest_version = document.versions.order_by("-version_number").first()
+        version_number = (latest_version.version_number + 1) if latest_version else 1
+
+        # Extract text from file if possible (for search)
+        content_text = ""
+        content_html = ""
+        
+        # Try to extract text from attachment
+        # This is a placeholder - actual text extraction would use OCR or file parsing
+        if attachment.file_type and 'text' in attachment.file_type.lower():
+            # For text files, we could read and extract content
+            # For now, we'll leave it empty and let OCR handle it later
+            pass
+
+        # Create DocumentVersion
+        document_version = DocumentVersion.objects.create(
+            document=document,
+            version_number=version_number,
+            file_name=attachment.file_name,
+            file_type=attachment.file_type or 'application/octet-stream',
+            file_size=attachment.file_size or 0,
+            file_url=attachment.file_url,
+            content_text=content_text,
+            content_html=content_html,
+            summary=f"Original attachment: {attachment.file_name}",
+            uploaded_by=document.author,
+            notes=f"Auto-created from correspondence attachment",
+        )
+
+        return document_version
+
+    @classmethod
+    def _create_document_version_from_body(
+        cls,
+        document: Document,
+        correspondence: Correspondence,
+    ) -> DocumentVersion:
+        """Create a DocumentVersion from correspondence body_html."""
+        from django.utils.html import strip_tags
+        
+        # Get next version number
+        latest_version = document.versions.order_by("-version_number").first()
+        version_number = (latest_version.version_number + 1) if latest_version else 1
+
+        # Extract text from HTML
+        content_text = strip_tags(correspondence.body_html) if correspondence.body_html else ""
+        content_html = correspondence.body_html or ""
+
+        # Create DocumentVersion
+        document_version = DocumentVersion.objects.create(
+            document=document,
+            version_number=version_number,
+            file_name=f"{correspondence.reference_number or 'correspondence'}.html",
+            file_type="text/html",
+            file_size=len(content_html.encode('utf-8')) if content_html else 0,
+            file_url="",  # No file URL for HTML body
+            content_text=content_text,
+            content_html=content_html,
+            summary="Correspondence body content",
+            uploaded_by=document.author,
+            notes="Auto-created from correspondence body",
+        )
+
+        return document_version
+
+    @classmethod
+    def update_document_status_on_completion(cls, correspondence: Correspondence) -> None:
+        """
+        Update DMS document status to PUBLISHED when correspondence is completed.
+        
+        Args:
+            correspondence: The completed correspondence
+        """
+        # Get linked document
+        link = CorrespondenceDocumentLink.objects.filter(
+            correspondence=correspondence
+        ).select_related('document').first()
+        
+        if link and link.document:
+            link.document.status = Document.DocumentStatus.PUBLISHED
+            link.document.save(update_fields=['status'])
+            
+            # Log activity
+            from audit.models import ActivityLog
+            AuditService.log_document_activity(
+                user=correspondence.current_approver or correspondence.created_by,
+                action=ActivityLog.ActionType.DOCUMENT_UPDATED,
+                document=link.document,
+                request=None,
+                description=f"Document published - correspondence {correspondence.reference_number} completed",
+            )
+
+    @classmethod
+    def get_workflow_history_for_document(cls, document: Document) -> List:
+        """
+        Get workflow history (minutes) for a DMS document linked to correspondence.
+        
+        Args:
+            document: The DMS document
+            
+        Returns:
+            List of minutes/workflow actions for the linked correspondence
+        """
+        from correspondence.models import Minute
+        
+        # Get linked correspondence
+        link = CorrespondenceDocumentLink.objects.filter(
+            document=document
+        ).select_related('correspondence').first()
+        
+        if not link:
+            return []
+        
+        # Get all minutes for the correspondence, ordered chronologically
+        minutes = Minute.objects.filter(
+            correspondence=link.correspondence
+        ).select_related(
+            'user', 'from_office', 'to_office', 'to_user'
+        ).order_by('timestamp', 'step_number')
+        
+        return list(minutes)
+
+    @classmethod
+    def grant_document_access_for_minute(cls, minute) -> None:
+        """
+        Automatically grant document access to minute recipients.
+        
+        When a minute is created routing to a user/office, automatically grant
+        READ access to the linked document so recipients can access the document
+        they're minuted on.
+        
+        Args:
+            minute: The Minute instance that was just created
+        """
+        from correspondence.models import Minute as MinuteModel
+        
+        # Get the linked document
+        link = CorrespondenceDocumentLink.objects.filter(
+            correspondence=minute.correspondence
+        ).select_related('document').first()
+        
+        if not link:
+            # No document linked to this correspondence
+            return
+        
+        document = link.document
+        
+        # Get recipients who should get access
+        recipients = []
+        
+        # If minute is routed to a specific user
+        if minute.to_user:
+            recipients.append(minute.to_user)
+        
+        # If minute is routed to an office, grant access to all active office members
+        if minute.to_office:
+            from organization.models import OfficeMembership
+            office_members = OfficeMembership.objects.filter(
+                office=minute.to_office,
+                is_active=True
+            ).select_related('user').values_list('user', flat=True)
+            
+            from accounts.models import User
+            for user_id in office_members:
+                try:
+                    user = User.objects.get(id=user_id)
+                    if user not in recipients:
+                        recipients.append(user)
+                except User.DoesNotExist:
+                    continue
+        
+        # If no specific recipients, skip
+        if not recipients:
+            return
+        
+        # Grant READ access to all recipients
+        # Find or create a permission for this document
+        # Use get_or_create but handle the case where multiple permissions might exist
+        permission = DocumentPermission.objects.filter(
+            document=document,
+            access=DocumentPermission.AccessLevel.READ
+        ).first()
+        
+        if not permission:
+            # Create new permission
+            permission = DocumentPermission.objects.create(
+                document=document,
+                access=DocumentPermission.AccessLevel.READ,
+                note=f'Auto-granted access via minute routing (Step {minute.step_number})'
+            )
+            created = True
+        else:
+            created = False
+        
+        # Add recipients to the permission
+        added_count = 0
+        for recipient in recipients:
+            if recipient not in permission.users.all():
+                permission.users.add(recipient)
+                added_count += 1
+        
+        # Log the action
+        if created:
+            logger.info(
+                f"Auto-granted document access: {document.title} (ID: {document.id}) "
+                f"to {len(recipients)} recipient(s) via minute {minute.id}"
+            )
+        elif added_count > 0:
+            logger.info(
+                f"Updated document access: {document.title} (ID: {document.id}) "
+                f"added {added_count} recipient(s) via minute {minute.id}"
+            )
 
 
 class CompletionPackageService:
@@ -1220,4 +1555,654 @@ class ExecutiveApprovalPDFService:
                         os.unlink(temp_file)
                 except Exception as e:
                     logger.warning(f"Failed to clean up temp file {temp_file}: {e}")
+
+
+class CaseService:
+    """Service for managing Cases - unified case/file management."""
+    
+    # Correspondence document types that should auto-create cases
+    CASE_TRIGGERING_TYPES = [
+        Correspondence.DocumentType.COMPLAINT,
+        Correspondence.DocumentType.REQUEST,
+        Correspondence.DocumentType.INQUIRY,
+    ]
+    
+    # Map correspondence document types to case types
+    CASE_TYPE_MAP = {
+        Correspondence.DocumentType.COMPLAINT: "complaint",
+        Correspondence.DocumentType.REQUEST: "request",
+        Correspondence.DocumentType.INQUIRY: "inquiry",
+        Correspondence.DocumentType.REPORT: "project",
+        Correspondence.DocumentType.DIRECTIVE: "general",
+        Correspondence.DocumentType.LETTER: "general",
+        Correspondence.DocumentType.OTHER: "general",
+    }
+    
+    @classmethod
+    def generate_case_number(cls) -> str:
+        """Generate a unique case number."""
+        from datetime import datetime
+        year = datetime.now().year
+        # Format: CASE/YYYY/XXX (e.g., CASE/2025/001)
+        last_case = Case.objects.filter(
+            case_number__startswith=f"CASE/{year}/"
+        ).order_by('-case_number').first()
+        
+        if last_case:
+            try:
+                last_num = int(last_case.case_number.split('/')[-1])
+                next_num = last_num + 1
+            except (ValueError, IndexError):
+                next_num = 1
+        else:
+            next_num = 1
+        
+        return f"CASE/{year}/{next_num:03d}"
+    
+    @classmethod
+    @transaction.atomic
+    def create_case_from_correspondence(
+        cls,
+        correspondence: Correspondence,
+        created_by: User | None = None,
+    ) -> "Case":
+        """
+        Auto-create a Case from a Correspondence if it matches trigger criteria.
+        
+        Args:
+            correspondence: The correspondence to create a case from
+            created_by: User who triggered the case creation
+            
+        Returns:
+            The created Case, or None if case should not be created
+        """
+        from correspondence.models import Case, CaseCorrespondenceLink
+        
+        # Check if correspondence type should trigger a case
+        if correspondence.document_type not in cls.CASE_TRIGGERING_TYPES:
+            return None
+        
+        # Check if case already exists for this correspondence
+        if correspondence.case:
+            return correspondence.case
+        
+        # Check if case already exists via link
+        existing_link = CaseCorrespondenceLink.objects.filter(
+            correspondence=correspondence,
+            is_primary=True
+        ).select_related('case').first()
+        
+        if existing_link:
+            correspondence.case = existing_link.case
+            correspondence.save(update_fields=['case'])
+            return existing_link.case
+        
+        # Determine case type
+        case_type = cls.CASE_TYPE_MAP.get(
+            correspondence.document_type,
+            "general"
+        )
+        
+        # Generate case number
+        case_number = cls.generate_case_number()
+        
+        # Create case
+        case = Case.objects.create(
+            case_number=case_number,
+            title=correspondence.subject,
+            description=correspondence.summary or correspondence.body_html[:500] if correspondence.body_html else "",
+            case_type=case_type,
+            status=Case.Status.OPEN,
+            priority=correspondence.priority,
+            division=correspondence.division,
+            department=correspondence.department,
+            owning_office=correspondence.owning_office,
+            current_office=correspondence.current_office,
+            created_by=created_by or correspondence.created_by,
+            assigned_to=correspondence.current_approver,
+            tags=correspondence.tags or [],
+        )
+        
+        # Link correspondence to case
+        CaseCorrespondenceLink.objects.create(
+            case=case,
+            correspondence=correspondence,
+            is_primary=True,
+        )
+        
+        # Update correspondence to reference case
+        correspondence.case = case
+        correspondence.save(update_fields=['case'])
+        
+        # Link the DMS document (if exists) to the case
+        from correspondence.models import CorrespondenceDocumentLink
+        doc_link = CorrespondenceDocumentLink.objects.filter(
+            correspondence=correspondence
+        ).select_related('document').first()
+        
+        if doc_link:
+            from correspondence.models import CaseDocumentLink
+            CaseDocumentLink.objects.get_or_create(
+                case=case,
+                document=doc_link.document,
+            )
+        
+        # Log activity
+        AuditService.log_activity(
+            user=created_by or correspondence.created_by,
+            action="case_created",
+            object_type="case",
+            object_id=str(case.id),
+            description=f"Case {case.case_number} created from correspondence {correspondence.reference_number}",
+            module="correspondence",
+        )
+        
+        # Send notifications
+        # Notify assigned user if different from creator
+        if case.assigned_to and case.assigned_to != (created_by or correspondence.created_by):
+            NotificationService.create_notification(
+                recipient=case.assigned_to,
+                title=f"New Case Assigned: {case.case_number}",
+                message=f"Case '{case.title}' has been assigned to you. Created from correspondence {correspondence.reference_number}.",
+                notification_type=Notification.NotificationType.SYSTEM,
+                priority=Notification.Priority.HIGH if case.priority == "urgent" else Notification.Priority.NORMAL,
+                sender=created_by or correspondence.created_by,
+                module="case_management",
+                related_object_type="case",
+                related_object_id=str(case.id),
+                action_url=f"/cases/{case.id}",
+                action_required=True,
+            )
+        
+        # Notify case creator
+        creator = created_by or correspondence.created_by
+        if creator:
+            NotificationService.create_notification(
+                recipient=creator,
+                title=f"Case Created: {case.case_number}",
+                message=f"Case '{case.title}' has been created successfully from correspondence {correspondence.reference_number}.",
+                notification_type=Notification.NotificationType.SYSTEM,
+                priority=Notification.Priority.NORMAL,
+                module="case_management",
+                related_object_type="case",
+                related_object_id=str(case.id),
+                action_url=f"/cases/{case.id}",
+                action_required=False,
+            )
+        
+        logger.info(f"Created case {case.case_number} from correspondence {correspondence.reference_number}")
+        return case
+    
+    @classmethod
+    @transaction.atomic
+    def link_document_to_case(cls, case: "Case", document: Document, notes: str = "") -> "CaseDocumentLink":
+        """Link a DMS document to a case."""
+        from correspondence.models import CaseDocumentLink
+        link, created = CaseDocumentLink.objects.get_or_create(
+            case=case,
+            document=document,
+            defaults={"notes": notes},
+        )
+        if not created and notes:
+            link.notes = notes
+            link.save(update_fields=['notes'])
+        
+        # Send notification to case assigned user
+        if case.assigned_to:
+            NotificationService.create_notification(
+                recipient=case.assigned_to,
+                title=f"New Document Linked to Case: {case.case_number}",
+                message=f"Document '{document.title}' has been linked to case '{case.title}'.",
+                notification_type=Notification.NotificationType.SYSTEM,
+                priority=Notification.Priority.NORMAL,
+                module="case_management",
+                related_object_type="case",
+                related_object_id=str(case.id),
+                action_url=f"/cases/{case.id}",
+                action_required=False,
+            )
+        
+        return link
+    
+    @classmethod
+    @transaction.atomic
+    def link_form_to_case(cls, case: "Case", form_document, notes: str = "") -> "CaseFormLink":
+        """Link a form document to a case."""
+        from correspondence.models import CaseFormLink
+        link, created = CaseFormLink.objects.get_or_create(
+            case=case,
+            form_document=form_document,
+            defaults={"notes": notes},
+        )
+        if not created and notes:
+            link.notes = notes
+            link.save(update_fields=['notes'])
+        
+        # Send notification to case assigned user
+        if case.assigned_to:
+            form_name = form_document.template.name if hasattr(form_document, 'template') and form_document.template else "Form"
+            NotificationService.create_notification(
+                recipient=case.assigned_to,
+                title=f"New Form Linked to Case: {case.case_number}",
+                message=f"Form '{form_name}' has been linked to case '{case.title}'.",
+                notification_type=Notification.NotificationType.SYSTEM,
+                priority=Notification.Priority.NORMAL,
+                module="case_management",
+                related_object_type="case",
+                related_object_id=str(case.id),
+                action_url=f"/cases/{case.id}",
+                action_required=False,
+            )
+        
+        return link
+    
+    @classmethod
+    @transaction.atomic
+    def link_correspondence_to_case(
+        cls,
+        case: "Case",
+        correspondence: Correspondence,
+        is_primary: bool = False,
+        notes: str = "",
+    ) -> "CaseCorrespondenceLink":
+        """Link a correspondence to a case."""
+        from correspondence.models import CaseCorrespondenceLink
+        link, created = CaseCorrespondenceLink.objects.get_or_create(
+            case=case,
+            correspondence=correspondence,
+            defaults={"is_primary": is_primary, "notes": notes},
+        )
+        if not created:
+            if is_primary:
+                link.is_primary = True
+            if notes:
+                link.notes = notes
+            link.save(update_fields=['is_primary', 'notes'])
+        
+        # Update correspondence to reference case
+        correspondence.case = case
+        correspondence.save(update_fields=['case'])
+        
+        # Send notification to case assigned user
+        if case.assigned_to:
+            NotificationService.create_notification(
+                recipient=case.assigned_to,
+                title=f"New Correspondence Linked to Case: {case.case_number}",
+                message=f"Correspondence '{correspondence.subject}' ({correspondence.reference_number}) has been linked to case '{case.title}'.",
+                notification_type=Notification.NotificationType.SYSTEM,
+                priority=Notification.Priority.NORMAL,
+                module="case_management",
+                related_object_type="case",
+                related_object_id=str(case.id),
+                action_url=f"/cases/{case.id}",
+                action_required=False,
+            )
+        
+        return link
+    
+    @classmethod
+    @transaction.atomic
+    def update_case_status(cls, case: "Case", new_status: str, updated_by: User | None = None) -> "Case":
+        """Update case status and handle lifecycle transitions."""
+        from django.utils import timezone
+        
+        old_status = case.status
+        case.status = new_status
+        
+        # Handle status-specific logic
+        if new_status == Case.Status.RESOLVED and not case.resolved_at:
+            case.resolved_at = timezone.now()
+        elif new_status == Case.Status.CLOSED and not case.closed_at:
+            case.closed_at = timezone.now()
+            # Auto-generate completion package
+            cls.generate_case_completion_package(case, updated_by)
+        
+        case.save(update_fields=['status', 'resolved_at', 'closed_at'])
+        
+        # Log activity
+        AuditService.log_activity(
+            user=updated_by,
+            action="case_status_updated",
+            object_type="case",
+            object_id=str(case.id),
+            description=f"Case {case.case_number} status changed from {old_status} to {new_status}",
+            module="correspondence",
+        )
+        
+        # Send notifications for status changes
+        if updated_by:
+            # Notify assigned user if different from updater
+            if case.assigned_to and case.assigned_to != updated_by:
+                NotificationService.create_notification(
+                    recipient=case.assigned_to,
+                    title=f"Case Status Updated: {case.case_number}",
+                    message=f"Case '{case.title}' status changed from {old_status.replace('_', ' ').title()} to {new_status.replace('_', ' ').title()}.",
+                    notification_type=Notification.NotificationType.SYSTEM,
+                    priority=Notification.Priority.HIGH if case.priority == "urgent" else Notification.Priority.NORMAL,
+                    sender=updated_by,
+                    module="case_management",
+                    related_object_type="case",
+                    related_object_id=str(case.id),
+                    action_url=f"/cases/{case.id}",
+                    action_required=(new_status in [Case.Status.IN_PROGRESS, Case.Status.OPEN]),
+                )
+            
+            # Notify case creator if different from updater and assigned user
+            if case.created_by and case.created_by != updated_by and case.created_by != case.assigned_to:
+                NotificationService.create_notification(
+                    recipient=case.created_by,
+                    title=f"Case Status Updated: {case.case_number}",
+                    message=f"Case '{case.title}' status changed from {old_status.replace('_', ' ').title()} to {new_status.replace('_', ' ').title()}.",
+                    notification_type=Notification.NotificationType.SYSTEM,
+                    priority=Notification.Priority.NORMAL,
+                    sender=updated_by,
+                    module="case_management",
+                    related_object_type="case",
+                    related_object_id=str(case.id),
+                    action_url=f"/cases/{case.id}",
+                    action_required=False,
+                )
+        
+        return case
+    
+    @classmethod
+    @transaction.atomic
+    def generate_case_completion_package(cls, case: "Case", triggered_by: User | None = None) -> Document:
+        """Generate completion package for a closed case."""
+        from correspondence.models import CaseDocumentLink, CaseCorrespondenceLink, CaseFormLink
+        
+        # Check if completion package already exists
+        if case.completion_package:
+            return case.completion_package
+        
+        # Get all related items
+        correspondence_list = case.get_related_correspondence()
+        documents = case.get_related_documents()
+        forms = case.get_related_forms()
+        activities = case.get_all_activities()
+        
+        # Build comprehensive case summary
+        context = {
+            "case": case,
+            "correspondence": correspondence_list,
+            "documents": documents,
+            "forms": forms,
+            "activities": activities,
+            "triggered_by": triggered_by,
+        }
+        
+        # Generate PDF (similar to CompletionPackageService but for cases)
+        pdf_bytes = cls._build_case_summary_pdf(context)
+        
+        # Create DMS document for completion package
+        completion_doc = Document.objects.create(
+            title=f"Case Completion Package - {case.case_number}",
+            description=f"Complete case file for {case.title}",
+            document_type=Document.DocumentType.REPORT,
+            status=Document.DocumentStatus.PUBLISHED,
+            sensitivity=Document.Sensitivity.INTERNAL,
+            author=triggered_by or case.created_by,
+            division=case.division,
+            department=case.department,
+        )
+        
+        # Store PDF as document version
+        from django.core.files.base import ContentFile
+        pdf_file = ContentFile(pdf_bytes)
+        pdf_file.name = f"case_completion_{case.case_number}_{timezone.now().strftime('%Y%m%d')}.pdf"
+        
+        DocumentVersion.objects.create(
+            document=completion_doc,
+            version_number=1,
+            file_name=pdf_file.name,
+            file_type="application/pdf",
+            file_size=len(pdf_bytes),
+            file_url=default_storage.save(f"completion_packages/{pdf_file.name}", pdf_file),
+            summary=f"Case completion package for {case.case_number}",
+            uploaded_by=triggered_by or case.created_by,
+        )
+        
+        # Link completion package to case
+        case.completion_package = completion_doc
+        case.completion_package_generated_at = timezone.now()
+        case.save(update_fields=['completion_package', 'completion_package_generated_at'])
+        
+        # Link completion package document to case
+        CaseDocumentLink.objects.create(
+            case=case,
+            document=completion_doc,
+            notes="Auto-generated case completion package",
+        )
+        
+        logger.info(f"Generated completion package for case {case.case_number}")
+        return completion_doc
+    
+    @classmethod
+    def _build_case_summary_pdf(cls, context: dict) -> bytes:
+        """Build PDF summary for case completion package."""
+        from reportlab.lib.pagesizes import LETTER
+        from reportlab.lib.units import inch
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_LEFT, TA_CENTER
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.lib import colors
+        from django.utils import timezone
+        
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=LETTER, topMargin=0.75*inch, bottomMargin=0.75*inch)
+        story = []
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#1a1a1a'),
+            spaceAfter=12,
+            alignment=TA_CENTER,
+        )
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#2563eb'),
+            spaceAfter=8,
+            spaceBefore=12,
+        )
+        
+        case = context['case']
+        
+        # Title
+        story.append(Paragraph(f"Case Completion Package", title_style))
+        story.append(Paragraph(f"{case.case_number}", title_style))
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Case Information
+        story.append(Paragraph("Case Information", heading_style))
+        case_info = [
+            ["Case Number:", case.case_number],
+            ["Title:", case.title],
+            ["Type:", case.get_case_type_display()],
+            ["Status:", case.get_status_display()],
+            ["Priority:", case.get_priority_display()],
+            ["Opened:", case.opened_at.strftime('%B %d, %Y') if case.opened_at else "N/A"],
+            ["Resolved:", case.resolved_at.strftime('%B %d, %Y') if case.resolved_at else "N/A"],
+            ["Closed:", case.closed_at.strftime('%B %d, %Y') if case.closed_at else "N/A"],
+        ]
+        if case.description:
+            case_info.append(["Description:", case.description])
+        
+        case_table = Table(case_info, colWidths=[2*inch, 4.5*inch])
+        case_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ]))
+        story.append(case_table)
+        story.append(Spacer(1, 0.2*inch))
+        
+        # Related Correspondence
+        if context['correspondence']:
+            story.append(Paragraph("Related Correspondence", heading_style))
+            for corr in context['correspondence']:
+                story.append(Paragraph(f"• {corr.reference_number}: {corr.subject}", styles['Normal']))
+            story.append(Spacer(1, 0.2*inch))
+        
+        # Related Documents
+        if context['documents']:
+            story.append(Paragraph("Related Documents", heading_style))
+            for doc in context['documents']:
+                story.append(Paragraph(f"• {doc.title} ({doc.get_document_type_display()})", styles['Normal']))
+            story.append(Spacer(1, 0.2*inch))
+        
+        # Related Forms
+        if context['forms']:
+            story.append(Paragraph("Related Forms", heading_style))
+            for form in context['forms']:
+                story.append(Paragraph(f"• {form.document.title} ({form.get_status_display()})", styles['Normal']))
+            story.append(Spacer(1, 0.2*inch))
+        
+        # Activities Timeline
+        if context['activities']:
+            story.append(Paragraph("Activity Timeline", heading_style))
+            for activity in context['activities']:
+                activity_date = activity.timestamp.strftime('%B %d, %Y, %H:%M')
+                story.append(Paragraph(
+                    f"• [{activity_date}] {activity.get_action_type_display()}: {activity.minute_text[:100]}...",
+                    styles['Normal']
+                ))
+            story.append(Spacer(1, 0.2*inch))
+        
+        # Footer
+        story.append(Spacer(1, 0.3*inch))
+        generated_str = timezone.now().strftime('%B %d, %Y, %H:%M')
+        story.append(Paragraph(f"<i>Generated on {generated_str}</i>", styles['Italic']))
+        
+        # Build PDF
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue()
+    
+    @classmethod
+    def create_case_sla(cls, case: "Case") -> "CaseSLA":
+        """Create or get existing SLA for a case."""
+        from correspondence.models import CaseSLA
+        from analytics.services import AnalyticsService
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Check if SLA already exists
+        if hasattr(case, 'sla'):
+            return case.sla
+        
+        # Get SLA target hours based on case priority
+        sla_targets = AnalyticsService.get_sla_targets()
+        target_hours = sla_targets.get(case.priority, 120)  # Default to 120 hours (5 days) if priority not found
+        
+        # Calculate target date from case opened_at (convert hours to timedelta)
+        opened_at = case.opened_at or timezone.now()
+        target_date = opened_at + timedelta(hours=target_hours)
+        
+        # Store target_days in the model (convert hours to days for storage)
+        target_days = target_hours / 24
+        
+        # Create SLA
+        sla = CaseSLA.objects.create(
+            case=case,
+            target_days=target_days,
+            target_date=target_date,
+            warning_threshold_percent=75,
+            critical_threshold_percent=90,
+        )
+        
+        logger.info(f"Created SLA for case {case.case_number}: {target_hours} hours ({target_days} days), target date: {target_date}")
+        return sla
+    
+    @classmethod
+    def check_case_sla(cls, case: "Case") -> dict:
+        """Check and return SLA status for a case."""
+        from correspondence.models import CaseSLA
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Get or create SLA
+        if not hasattr(case, 'sla'):
+            sla = cls.create_case_sla(case)
+        else:
+            sla = case.sla
+        
+        # Check status
+        status = sla.check_status()
+        
+        # Calculate time remaining
+        now = timezone.now()
+        if sla.target_date > now:
+            time_remaining = sla.target_date - now
+            days_remaining = time_remaining.days
+            hours_remaining = time_remaining.seconds // 3600
+        else:
+            time_remaining = now - sla.target_date
+            days_remaining = -time_remaining.days
+            hours_remaining = -(time_remaining.seconds // 3600)
+        
+        # Calculate percentage elapsed
+        if case.opened_at:
+            elapsed = (now - case.opened_at).total_seconds()
+            total = (sla.target_date - case.opened_at).total_seconds()
+            percent_elapsed = (elapsed / total) * 100 if total > 0 else 0
+        else:
+            percent_elapsed = 0
+        
+        return {
+            "status": status,
+            "target_days": sla.target_days,
+            "target_date": sla.target_date.isoformat() if sla.target_date else None,
+            "days_remaining": days_remaining,
+            "hours_remaining": hours_remaining,
+            "percent_elapsed": round(percent_elapsed, 2),
+            "breached": sla.breached,
+            "breached_at": sla.breached_at.isoformat() if sla.breached_at else None,
+            "warning_threshold": sla.warning_threshold_percent,
+            "critical_threshold": sla.critical_threshold_percent,
+        }
+    
+    @classmethod
+    def evaluate_workflow_rules(cls, case: "Case", event_type: str, context: dict) -> None:
+        """
+        Evaluate workflow rules for a case event.
+        
+        This method is called when case events occur (e.g., status changes) to
+        evaluate and trigger any applicable workflow rules.
+        
+        Args:
+            case: The case instance
+            event_type: Type of event (e.g., "status_change", "created", "assigned")
+            context: Additional context data for the event (e.g., {"old_status": "...", "new_status": "..."})
+        
+        Note:
+            This is a stub implementation. Full workflow rules engine integration
+            will be implemented when the workflow module is complete.
+        """
+        # Log the workflow event for future implementation
+        logger.debug(
+            f"Workflow rule evaluation for case {case.case_number}: "
+            f"event_type={event_type}, context={context}"
+        )
+        
+        # TODO: Implement full workflow rules engine integration
+        # This will evaluate rules from the workflow.WorkflowRule model
+        # and trigger appropriate actions (notifications, status changes, etc.)
+        
+        # For now, this is a no-op to prevent errors
+        # Future implementation will:
+        # 1. Query active workflow rules for this case type/division
+        # 2. Evaluate rule conditions against case state and context
+        # 3. Execute matching rule actions (notifications, status updates, etc.)
+        pass
 

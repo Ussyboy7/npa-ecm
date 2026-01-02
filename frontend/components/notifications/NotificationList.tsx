@@ -1,7 +1,7 @@
 "use client";
 
-import { logError } from '@/lib/client-logger';
-import { useCallback, useState } from 'react';
+import { logError, logInfo } from '@/lib/client-logger';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import {
   type Notification,
 } from '@/lib/notifications-storage';
 import { formatDateTime } from '@/lib/correspondence-helpers';
-import { Check, CheckCheck, Archive, ExternalLink, Settings } from 'lucide-react';
+import { Check, CheckCheck, Archive, ExternalLink, Settings, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -23,58 +23,44 @@ import { NOTIFICATION_POLL_INTERVAL_MS } from '@/lib/constants';
 
 interface NotificationListProps {
   onClose?: () => void;
+  isOpen?: boolean;
+  isConnected?: boolean;
 }
 
-export const NotificationList = ({ onClose }: NotificationListProps) => {
+export const NotificationList = ({ onClose, isOpen = false, isConnected = false }: NotificationListProps) => {
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [markingRead, setMarkingRead] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState<string | null>(null);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const loadNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch unread notifications explicitly
-      const unreadData = await getNotifications({ status: 'unread' });
-      console.log('[NotificationList] Unread notifications:', unreadData);
-      
-      // Also fetch all notifications to show read ones
+      // Fetch recent notifications (limit to 50 for dropdown performance)
+      // The dropdown is for quick access, full list is available on notifications page
       const allData = await getNotifications();
-      console.log('[NotificationList] All notifications:', allData);
+      logInfo('[NotificationList] Loaded notifications:', { count: allData.length });
       
-      // Combine and deduplicate, prioritizing unread
-      const notificationMap = new Map<string, Notification>();
+      // Filter out archived and sort by created date (newest first)
+      // Limit to 50 most recent for dropdown performance
+      const filtered = allData
+        .filter((n) => n.status !== 'archived')
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 50); // Limit to 50 most recent
       
-      // Add unread notifications first
-      unreadData.forEach((n) => {
-        if (n.status !== 'archived') {
-          notificationMap.set(n.id, n);
-        }
-      });
-      
-      // Add all other non-archived notifications
-      allData.forEach((n) => {
-        if (n.status !== 'archived' && !notificationMap.has(n.id)) {
-          notificationMap.set(n.id, n);
-        }
-      });
-      
-      // Sort by created date (newest first)
-      const sorted = Array.from(notificationMap.values()).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      
-      console.log('[NotificationList] Final notifications to display:', sorted);
-      setNotifications(sorted);
+      setNotifications(filtered);
     } catch (error) {
-      console.error('[NotificationList] Error loading notifications:', error);
       logError('Failed to load notifications', error);
-      // On error, try to at least fetch unread notifications
+      toast.error('Failed to load notifications');
+      // On error, try to at least fetch unread notifications as fallback
       try {
         const unreadData = await getNotifications({ status: 'unread' });
-        console.log('[NotificationList] Fallback unread notifications:', unreadData);
-        setNotifications(unreadData.filter((n) => n.status !== 'archived'));
+        logInfo('[NotificationList] Fallback: loaded unread notifications', { count: unreadData.length });
+        setNotifications(unreadData.filter((n) => n.status !== 'archived').slice(0, 50));
       } catch (fallbackError) {
-        console.error('[NotificationList] Fallback error:', fallbackError);
         logError('Failed to load unread notifications as fallback', fallbackError);
         setNotifications([]);
       }
@@ -83,38 +69,99 @@ export const NotificationList = ({ onClose }: NotificationListProps) => {
     }
   }, []);
 
+  // Only poll when dropdown is open and WebSocket is disconnected
   usePolling(loadNotifications, NOTIFICATION_POLL_INTERVAL_MS, {
-    runImmediately: true,
+    runImmediately: isOpen,
+    enabled: isOpen && !isConnected,
   });
 
+  // Load notifications when dropdown opens
+  useEffect(() => {
+    if (isOpen) {
+      loadNotifications();
+    }
+  }, [isOpen, loadNotifications]);
+
+  // Debounced update function to prevent excessive re-renders
+  const debouncedUpdateNotifications = useCallback((updater: (prev: Notification[]) => Notification[]) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setNotifications(updater);
+    }, 100); // 100ms debounce
+  }, []);
+
   const handleMarkRead = async (notification: Notification) => {
+    if (markingRead === notification.id) return; // Prevent double-click
+    
+    setMarkingRead(notification.id);
     try {
       await markNotificationAsRead(notification.id);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, status: 'read' as const, readAt: new Date().toISOString() } : n))
+      // Use debounced update for better performance
+      debouncedUpdateNotifications((prev) =>
+        prev.map((n) => 
+          n.id === notification.id 
+            ? { ...n, status: 'read' as const, readAt: new Date().toISOString() } 
+            : n
+        )
       );
     } catch (error) {
+      logError('Failed to mark notification as read', error);
       toast.error('Failed to mark notification as read');
+    } finally {
+      setMarkingRead(null);
     }
   };
 
-  const handleMarkAllRead = async () => {
+  const handleMarkAllRead = useCallback(async () => {
+    if (markingAllRead) return; // Prevent double-click
+    
+    setMarkingAllRead(true);
     try {
       await markAllNotificationsAsRead();
       await loadNotifications();
       toast.success('All notifications marked as read');
     } catch (error) {
+      logError('Failed to mark all notifications as read', error);
       toast.error('Failed to mark all as read');
+    } finally {
+      setMarkingAllRead(false);
     }
-  };
+  }, [markingAllRead, loadNotifications]);
+
+  // Keyboard shortcut: Ctrl+Shift+M or Cmd+Shift+M to mark all as read
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+Shift+M (Windows/Linux) or Cmd+Shift+M (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
+        e.preventDefault();
+        const unreadCount = notifications.filter((n) => n.status === 'unread').length;
+        if (unreadCount > 0 && !markingAllRead) {
+          void handleMarkAllRead();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, notifications, markingAllRead, handleMarkAllRead]);
 
   const handleArchive = async (notification: Notification) => {
+    if (archiving === notification.id) return; // Prevent double-click
+    
+    setArchiving(notification.id);
     try {
       await markNotificationAsArchived(notification.id);
       setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
       toast.success('Notification archived');
     } catch (error) {
+      logError('Failed to archive notification', error);
       toast.error('Failed to archive notification');
+    } finally {
+      setArchiving(null);
     }
   };
 
@@ -148,6 +195,15 @@ export const NotificationList = ({ onClose }: NotificationListProps) => {
     }
   };
 
+  // Sanitize content to prevent XSS attacks
+  const sanitizeContent = (content: string): string => {
+    if (!content) return '';
+    // Use textContent to strip all HTML and return plain text
+    const div = document.createElement('div');
+    div.textContent = content;
+    return div.textContent || '';
+  };
+
   const unreadCount = notifications.filter((n) => n.status === 'unread').length;
 
   if (loading) {
@@ -173,9 +229,15 @@ export const NotificationList = ({ onClose }: NotificationListProps) => {
               variant="ghost"
               size="sm"
               onClick={handleMarkAllRead}
+              disabled={markingAllRead}
               className="text-xs h-7"
+              title="Mark all as read (Ctrl+Shift+M / Cmd+Shift+M)"
             >
-              <CheckCheck className="h-3 w-3 mr-1" />
+              {markingAllRead ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <CheckCheck className="h-3 w-3 mr-1" />
+              )}
               Mark all read
             </Button>
           )}
@@ -216,8 +278,8 @@ export const NotificationList = ({ onClose }: NotificationListProps) => {
                         {formatDateTime(notification.createdAt)}
                       </span>
                     </div>
-                    <h4 className="font-medium text-sm mb-1">{notification.title}</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-2">{notification.message}</p>
+                    <h4 className="font-medium text-sm mb-1">{sanitizeContent(notification.title)}</h4>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{sanitizeContent(notification.message)}</p>
                     {notification.actionUrl && (
                       <div className="flex items-center gap-1 mt-2 text-xs text-primary">
                         <ExternalLink className="h-3 w-3" />
@@ -231,24 +293,36 @@ export const NotificationList = ({ onClose }: NotificationListProps) => {
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
+                        disabled={markingRead === notification.id}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleMarkRead(notification);
                         }}
+                        aria-label="Mark as read"
                       >
-                        <Check className="h-3 w-3" />
+                        {markingRead === notification.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
                       </Button>
                     )}
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
+                      disabled={archiving === notification.id}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleArchive(notification);
                       }}
+                      aria-label="Archive notification"
                     >
-                      <Archive className="h-3 w-3" />
+                      {archiving === notification.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Archive className="h-3 w-3" />
+                      )}
                     </Button>
                   </div>
                 </div>

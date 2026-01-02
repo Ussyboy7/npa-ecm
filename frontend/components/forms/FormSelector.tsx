@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +40,7 @@ export function FormSelector({ correspondenceId, onFormSubmitted }: FormSelector
       // Ensure data is always an array
       setTemplates(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Error loading templates:", error);
+      logError("Error loading templates:", error);
       toast.error("Failed to load form templates");
       setTemplates([]); // Set to empty array on error
     } finally {
@@ -126,7 +127,7 @@ export function FormSelector({ correspondenceId, onFormSubmitted }: FormSelector
       setSelectedTemplate(null);
       setFormData({});
     } catch (error) {
-      console.error("Error submitting form:", error);
+      logError("Error submitting form:", error);
       toast.error("Failed to submit form");
     } finally {
       setSubmitting(false);
@@ -210,7 +211,7 @@ export function FormSelector({ correspondenceId, onFormSubmitted }: FormSelector
       </Card>
 
       <Dialog open={!!selectedTemplate} onOpenChange={(open) => !open && setSelectedTemplate(null)}>
-        <DialogContent className="max-w-4xl max-h-[95vh]">
+        <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[95vh] overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-xl">{selectedTemplate?.name}</DialogTitle>
             {selectedTemplate?.description && (

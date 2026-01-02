@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { GRADE_LEVELS, type User } from "@/lib/npa-structure";
 import { toast } from "@/hooks/use-toast";
@@ -118,6 +119,19 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
   );
 
   const selectedUserName = user?.name ?? "";
+
+  // Real-time duplicate checks
+  const emailDuplicate = useMemo(() => {
+    if (!formData.email || !user) return null;
+    const duplicate = users.find(u => u.id !== user.id && u.email.toLowerCase() === formData.email.toLowerCase());
+    return duplicate;
+  }, [formData.email, user, users]);
+
+  const usernameDuplicate = useMemo(() => {
+    if (!formData.username || user) return null;
+    const duplicate = users.find(u => u.username?.toLowerCase() === formData.username?.toLowerCase());
+    return duplicate;
+  }, [formData.username, user, users]);
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -273,7 +287,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{user ? 'Edit User Access' : 'Create New User'}</DialogTitle>
           <DialogDescription>
@@ -283,7 +297,8 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* User Info Display (Edit Mode) */}
           {user && (
             <div className="rounded-md border bg-muted/30 p-3 space-y-1">
               <p className="text-sm font-semibold text-foreground">{user.name}</p>
@@ -294,185 +309,313 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
             </div>
           )}
 
-          {!user && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="username">Username *</Label>
-                <Input
-                  id="username"
-                  value={formData.username || ''}
-                  onChange={(event) =>
-                    setFormData((prev) => ({ ...prev, username: event.target.value }))
-                  }
-                  placeholder="username"
-                  required
-                  aria-label="Username"
-                  aria-required="true"
-                  aria-invalid={!!validationErrors.username}
-                  aria-describedby={validationErrors.username ? "username-error" : undefined}
-                />
-                {validationErrors.username && (
-                  <p id="username-error" className="text-xs text-destructive" role="alert">
-                    {validationErrors.username}
-                  </p>
-                )}
-                {!validationErrors.username && formData.username && users.some(u => u.username?.toLowerCase() === formData.username?.toLowerCase()) && (
-                  <p className="text-xs text-destructive" role="alert">
-                    This username is already in use
-                  </p>
-                )}
-              </div>
+          {/* Section 1: Basic Information */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Basic Information</h3>
+              <div className="space-y-4">
+                {!user && (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username *</Label>
+                      <Input
+                        id="username"
+                        value={formData.username || ''}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, username: event.target.value }))
+                        }
+                        placeholder="username"
+                        required
+                        aria-label="Username"
+                        aria-required="true"
+                        aria-invalid={!!validationErrors.username || !!usernameDuplicate}
+                        aria-describedby={validationErrors.username ? "username-error" : usernameDuplicate ? "username-duplicate" : undefined}
+                      />
+                      {validationErrors.username && (
+                        <p id="username-error" className="text-xs text-destructive" role="alert">
+                          {validationErrors.username}
+                        </p>
+                      )}
+                      {!validationErrors.username && usernameDuplicate && (
+                        <p id="username-duplicate" className="text-xs text-destructive" role="alert">
+                          This username is already in use
+                        </p>
+                      )}
+                    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(event) =>
-                    setFormData((prev) => ({ ...prev, email: event.target.value }))
-                  }
-                  placeholder="user@npa.gov.ng"
-                  required
-                  aria-label="User email address"
-                  aria-required="true"
-                  aria-invalid={!!validationErrors.email}
-                  aria-describedby={validationErrors.email ? "email-error" : undefined}
-                />
-                {validationErrors.email && (
-                  <p id="email-error" className="text-xs text-destructive" role="alert">
-                    {validationErrors.email}
-                  </p>
-                )}
-                {!validationErrors.email && formData.email && !user && users.some(u => u.email.toLowerCase() === formData.email.toLowerCase()) && (
-                  <p className="text-xs text-destructive" role="alert">
-                    This email is already in use
-                  </p>
-                )}
-              </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name *</Label>
+                      <Input
+                        id="firstName"
+                        value={formData.firstName || ''}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, firstName: event.target.value }))
+                        }
+                        placeholder="First name"
+                        required
+                        aria-invalid={!!validationErrors.firstName}
+                        aria-describedby={validationErrors.firstName ? "firstName-error" : undefined}
+                      />
+                      {validationErrors.firstName && (
+                        <p id="firstName-error" className="text-xs text-destructive" role="alert">
+                          {validationErrors.firstName}
+                        </p>
+                      )}
+                    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="firstName">First Name *</Label>
-                <Input
-                  id="firstName"
-                  value={formData.firstName || ''}
-                  onChange={(event) =>
-                    setFormData((prev) => ({ ...prev, firstName: event.target.value }))
-                  }
-                  placeholder="First name"
-                  required
-                  aria-invalid={!!validationErrors.firstName}
-                  aria-describedby={validationErrors.firstName ? "firstName-error" : undefined}
-                />
-                {validationErrors.firstName && (
-                  <p id="firstName-error" className="text-xs text-destructive" role="alert">
-                    {validationErrors.firstName}
-                  </p>
-                )}
-              </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name *</Label>
+                      <Input
+                        id="lastName"
+                        value={formData.lastName || ''}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, lastName: event.target.value }))
+                        }
+                        placeholder="Last name"
+                        required
+                        aria-invalid={!!validationErrors.lastName}
+                        aria-describedby={validationErrors.lastName ? "lastName-error" : undefined}
+                      />
+                      {validationErrors.lastName && (
+                        <p id="lastName-error" className="text-xs text-destructive" role="alert">
+                          {validationErrors.lastName}
+                        </p>
+                      )}
+                    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name *</Label>
-                <Input
-                  id="lastName"
-                  value={formData.lastName || ''}
-                  onChange={(event) =>
-                    setFormData((prev) => ({ ...prev, lastName: event.target.value }))
-                  }
-                  placeholder="Last name"
-                  required
-                  aria-invalid={!!validationErrors.lastName}
-                  aria-describedby={validationErrors.lastName ? "lastName-error" : undefined}
-                />
-                {validationErrors.lastName && (
-                  <p id="lastName-error" className="text-xs text-destructive" role="alert">
-                    {validationErrors.lastName}
-                  </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password *</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={formData.password || ''}
+                        onChange={(event) =>
+                          setFormData((prev) => ({ ...prev, password: event.target.value }))
+                        }
+                        placeholder="Set initial password"
+                        required
+                        aria-invalid={!!validationErrors.password}
+                        aria-describedby={validationErrors.password ? "password-error" : undefined}
+                      />
+                      {validationErrors.password && (
+                        <p id="password-error" className="text-xs text-destructive" role="alert">
+                          {validationErrors.password}
+                        </p>
+                      )}
+                      {!validationErrors.password && formData.password && (
+                        <p className="text-xs text-muted-foreground">
+                          Password strength: {formData.password.length >= 12 ? 'Strong' : formData.password.length >= 8 ? 'Medium' : 'Weak'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 )}
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password *</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password || ''}
-                  onChange={(event) =>
-                    setFormData((prev) => ({ ...prev, password: event.target.value }))
-                  }
-                  placeholder="Set initial password"
-                  required
-                  aria-invalid={!!validationErrors.password}
-                  aria-describedby={validationErrors.password ? "password-error" : undefined}
-                />
-                {validationErrors.password && (
-                  <p id="password-error" className="text-xs text-destructive" role="alert">
-                    {validationErrors.password}
-                  </p>
-                )}
-                {!validationErrors.password && formData.password && (
-                  <p className="text-xs text-muted-foreground">
-                    Password strength: {formData.password.length >= 12 ? 'Strong' : formData.password.length >= 8 ? 'Medium' : 'Weak'}
-                  </p>
-                )}
+                {/* Email - Always visible, unified placement */}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email {!user && '*'}</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(event) =>
+                      setFormData((prev) => ({ ...prev, email: event.target.value }))
+                    }
+                    placeholder="user@npa.gov.ng"
+                    required={!user}
+                    aria-label="User email address"
+                    aria-required={!user}
+                    aria-invalid={!!validationErrors.email || !!emailDuplicate}
+                    aria-describedby={validationErrors.email ? "email-error" : emailDuplicate ? "email-duplicate" : undefined}
+                  />
+                  {validationErrors.email && (
+                    <p id="email-error" className="text-xs text-destructive" role="alert">
+                      {validationErrors.email}
+                    </p>
+                  )}
+                  {!validationErrors.email && emailDuplicate && (
+                    <p id="email-duplicate" className="text-xs text-destructive" role="alert">
+                      This email is already in use by {emailDuplicate.name}
+                    </p>
+                  )}
+                </div>
+
+                {/* Employee ID - Always visible, unified placement */}
+                <div className="space-y-2">
+                  <Label htmlFor="employeeId">Employee ID {!user && '*'}</Label>
+                  <Input
+                    id="employeeId"
+                    name="employeeId"
+                    value={formData.employeeId}
+                    onChange={(event) =>
+                      setFormData((prev) => ({ ...prev, employeeId: event.target.value }))
+                    }
+                    placeholder="e.g. NPA123"
+                    required={!user}
+                    aria-invalid={!!validationErrors.employeeId}
+                    aria-describedby={validationErrors.employeeId ? "employeeId-error" : undefined}
+                  />
+                  {validationErrors.employeeId && (
+                    <p id="employeeId-error" className="text-xs text-destructive" role="alert">
+                      {validationErrors.employeeId}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-          )}
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="systemRole">System Role {!user && '*'}</Label>
-              <Select
-                value={formData.systemRole || EMPTY_VALUE}
-                onValueChange={(value) => {
-                  setFormData((prev) => ({ ...prev, systemRole: value === EMPTY_VALUE ? '' : value }));
-                }}
-              >
-                <SelectTrigger id="systemRole" name="systemRole">
-                  <SelectValue placeholder="Select role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={EMPTY_VALUE}>Not assigned</SelectItem>
-                  {roleOptions.map((role) => (
-                    <SelectItem key={role.value} value={role.value}>
-                      {role.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {validationErrors.systemRole && (
-                <p id="systemRole-error" className="text-xs text-destructive" role="alert">
-                  {validationErrors.systemRole}
-                </p>
-              )}
-              {!validationErrors.systemRole && formData.systemRole && formData.systemRole !== EMPTY_VALUE && (
-                <p className="text-xs text-muted-foreground">
-                  Selected: {roleOptions.find((r) => r.value === formData.systemRole)?.label || 'Unknown role'}
-                </p>
-              )}
-            </div>
+          <Separator />
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="gradeLevel">Grade Level</Label>
-                <Select
-                  value={formData.gradeLevel || ""}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, gradeLevel: value }))}
-                >
-                  <SelectTrigger id="gradeLevel">
-                    <SelectValue placeholder="Select grade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GRADE_LEVEL_OPTIONS.map((grade) => (
-                      <SelectItem key={grade.code} value={grade.code}>
-                        {grade.code} – {grade.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          {/* Section 2: Role & Organization */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Role & Organization</h3>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="systemRole">System Role {!user && '*'}</Label>
+                  <Select
+                    value={formData.systemRole || EMPTY_VALUE}
+                    onValueChange={(value) => {
+                      setFormData((prev) => ({ ...prev, systemRole: value === EMPTY_VALUE ? '' : value }));
+                    }}
+                  >
+                    <SelectTrigger id="systemRole" name="systemRole">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_VALUE}>Not assigned</SelectItem>
+                      {roleOptions.map((role) => (
+                        <SelectItem key={role.value} value={role.value}>
+                          {role.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {validationErrors.systemRole && (
+                    <p id="systemRole-error" className="text-xs text-destructive" role="alert">
+                      {validationErrors.systemRole}
+                    </p>
+                  )}
+                  {!validationErrors.systemRole && formData.systemRole && formData.systemRole !== EMPTY_VALUE && (
+                    <p className="text-xs text-muted-foreground">
+                      Selected: {roleOptions.find((r) => r.value === formData.systemRole)?.label || 'Unknown role'}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="gradeLevel">Grade Level</Label>
+                    <Select
+                      value={formData.gradeLevel || ""}
+                      onValueChange={(value) => setFormData((prev) => ({ ...prev, gradeLevel: value }))}
+                    >
+                      <SelectTrigger id="gradeLevel">
+                        <SelectValue placeholder="Select grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GRADE_LEVEL_OPTIONS.map((grade) => (
+                          <SelectItem key={grade.code} value={grade.code}>
+                            {grade.code} – {grade.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="directorate">Directorate</Label>
+                    <Select
+                      value={formData.directorateId || EMPTY_VALUE}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          directorateId: value === EMPTY_VALUE ? "" : value,
+                          divisionId: "",
+                          departmentId: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="directorate">
+                        <SelectValue placeholder="Select directorate" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={EMPTY_VALUE}>Unassigned</SelectItem>
+                        {directorates
+                          .filter((dir) => dir.isActive)
+                          .map((dir) => (
+                            <SelectItem key={dir.id} value={dir.id}>
+                              {dir.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="division">Division</Label>
+                    <Select
+                      value={formData.divisionId || EMPTY_VALUE}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          divisionId: value === EMPTY_VALUE ? "" : value,
+                          departmentId: "",
+                        }))
+                      }
+                      disabled={!formData.directorateId}
+                    >
+                      <SelectTrigger id="division">
+                        <SelectValue placeholder="Select division" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={EMPTY_VALUE}>Unassigned</SelectItem>
+                        {availableDivisions.map((division) => (
+                          <SelectItem key={division.id} value={division.id}>
+                            {division.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="department">Department</Label>
+                    <Select
+                      value={formData.departmentId || EMPTY_VALUE}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({ ...prev, departmentId: value === EMPTY_VALUE ? "" : value }))
+                      }
+                      disabled={!formData.divisionId}
+                    >
+                      <SelectTrigger id="department">
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={EMPTY_VALUE}>Unassigned</SelectItem>
+                        {availableDepartments.map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
+            </div>
+          </div>
 
+          <Separator />
+
+          {/* Section 3: Status */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Account Status</h3>
               <div className="space-y-2">
-                <Label htmlFor="active">Status</Label>
                 <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2">
                   <Switch
                     id="active"
@@ -485,142 +628,17 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                 </div>
               </div>
             </div>
+          </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="directorate">Directorate</Label>
-                <Select
-                  value={formData.directorateId || EMPTY_VALUE}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      directorateId: value === EMPTY_VALUE ? "" : value,
-                      divisionId: "",
-                      departmentId: "",
-                    }))
-                  }
-                >
-                  <SelectTrigger id="directorate">
-                    <SelectValue placeholder="Select directorate" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_VALUE}>Unassigned</SelectItem>
-                    {directorates
-                      .filter((dir) => dir.isActive)
-                      .map((dir) => (
-                        <SelectItem key={dir.id} value={dir.id}>
-                          {dir.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="division">Division</Label>
-                <Select
-                  value={formData.divisionId || EMPTY_VALUE}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      divisionId: value === EMPTY_VALUE ? "" : value,
-                      departmentId: "",
-                    }))
-                  }
-                  disabled={!formData.directorateId}
-                >
-                  <SelectTrigger id="division">
-                    <SelectValue placeholder="Select division" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={EMPTY_VALUE}>Unassigned</SelectItem>
-                    {availableDivisions.map((division) => (
-                      <SelectItem key={division.id} value={division.id}>
-                        {division.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="department">Department</Label>
-              <Select
-                value={formData.departmentId || EMPTY_VALUE}
-                onValueChange={(value) =>
-                  setFormData((prev) => ({ ...prev, departmentId: value === EMPTY_VALUE ? "" : value }))
-                }
-                disabled={!formData.divisionId}
-              >
-                <SelectTrigger id="department">
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={EMPTY_VALUE}>Unassigned</SelectItem>
-                  {availableDepartments.map((department) => (
-                    <SelectItem key={department.id} value={department.id}>
-                      {department.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {user ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(event) =>
-                      setFormData((prev) => ({ ...prev, email: event.target.value }))
-                    }
-                    placeholder="user@npa.gov.ng"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="employeeId">Employee ID</Label>
-                  <Input
-                    id="employeeId"
-                    name="employeeId"
-                    value={formData.employeeId}
-                    onChange={(event) =>
-                      setFormData((prev) => ({ ...prev, employeeId: event.target.value }))
-                    }
-                    placeholder="e.g. NPA123"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Label htmlFor="employeeId">Employee ID *</Label>
-                <Input
-                  id="employeeId"
-                  name="employeeId"
-                  value={formData.employeeId}
-                  onChange={(event) =>
-                    setFormData((prev) => ({ ...prev, employeeId: event.target.value }))
-                  }
-                  placeholder="e.g. NPA123"
-                  required
-                />
-              </div>
-            )}
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (user ? "Saving…" : "Creating…") : (user ? "Save changes" : "Create user")}
-              </Button>
-            </DialogFooter>
-          </form>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (user ? "Saving…" : "Creating…") : (user ? "Save changes" : "Create user")}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

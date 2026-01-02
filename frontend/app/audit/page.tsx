@@ -36,6 +36,8 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { getActivityLogs, type ActivityLog } from '@/lib/audit-storage';
 import { logError } from '@/lib/client-logger';
+import { exportToCSV } from '@/lib/admin-export';
+import { toast } from 'sonner';
 
 const ACTION_TYPES = [
   { value: 'user_login', label: 'User Login' },
@@ -93,13 +95,18 @@ const AuditTrailPage = () => {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [successFilter, setSuccessFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
+  const [customDateFrom, setCustomDateFrom] = useState<string>('');
+  const [customDateTo, setCustomDateTo] = useState<string>('');
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [summaryStats, setSummaryStats] = useState<AuditSummary>(DEFAULT_SUMMARY);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [goToPageInput, setGoToPageInput] = useState('');
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Debounce search
@@ -111,7 +118,31 @@ const AuditTrailPage = () => {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, pageSize]);
+  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, pageSize, dateRangeFilter, customDateFrom, customDateTo]);
+
+  // Build date range params
+  const getDateRangeParams = () => {
+    const params: Record<string, unknown> = {};
+    
+    if (dateRangeFilter === 'last7') {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 7);
+      params.from_date = fromDate.toISOString().split('T')[0];
+    } else if (dateRangeFilter === 'last30') {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 30);
+      params.from_date = fromDate.toISOString().split('T')[0];
+    } else if (dateRangeFilter === 'last90') {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 90);
+      params.from_date = fromDate.toISOString().split('T')[0];
+    } else if (dateRangeFilter === 'custom') {
+      if (customDateFrom) params.from_date = customDateFrom;
+      if (customDateTo) params.to_date = customDateTo;
+    }
+    
+    return params;
+  };
 
   // Fetch logs
   const fetchLogs = async () => {
@@ -120,10 +151,12 @@ const AuditTrailPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, any> = {
+      const dateParams = getDateRangeParams();
+      const params: Record<string, unknown> = {
         page,
         pageSize,
         ordering: sortOrder === 'desc' ? '-timestamp' : 'timestamp',
+        ...dateParams,
       };
       if (actionFilter !== 'all') params.action = actionFilter;
       if (moduleFilter !== 'all') params.module = moduleFilter;
@@ -144,9 +177,52 @@ const AuditTrailPage = () => {
     }
   };
 
+  // Fetch summary stats separately
+  const fetchSummaryStats = async () => {
+    if (!hydrated || !currentUser) return;
+    
+    try {
+      const dateParams = getDateRangeParams();
+      const baseParams: Record<string, unknown> = {
+        page: 1,
+        pageSize: 1, // Just need count
+        ...dateParams,
+      };
+      if (moduleFilter !== 'all') baseParams.module = moduleFilter;
+      if (severityFilter !== 'all') baseParams.severity = severityFilter;
+      if (successFilter !== 'all') baseParams.success = successFilter === 'true';
+      if (debouncedSearch) baseParams.search = debouncedSearch;
+
+      // Fetch counts for each stat
+      const [allResponse, loginResponse, errorResponse] = await Promise.all([
+        getActivityLogs(baseParams),
+        getActivityLogs({ ...baseParams, action: 'user_login' }),
+        getActivityLogs({ ...baseParams, severity: 'error' }),
+      ]);
+
+      // Get failed count (success = false)
+      const failedResponse = await getActivityLogs({ ...baseParams, success: false });
+      
+      // Get action count (excluding login/logout) - use total minus logins/logouts
+      const logoutResponse = await getActivityLogs({ ...baseParams, action: 'user_logout' });
+      const actionCount = Math.max(0, allResponse.count - loginResponse.count - logoutResponse.count);
+
+      setSummaryStats({
+        total: allResponse.count,
+        logins: loginResponse.count,
+        errors: errorResponse.count + failedResponse.count,
+        actions: actionCount,
+      });
+    } catch (err) {
+      // Silently fail - summary is not critical
+      logWarn('Failed to load summary stats:', err);
+    }
+  };
+
   useEffect(() => {
     void fetchLogs();
-  }, [hydrated, currentUser, page, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder]);
+    void fetchSummaryStats();
+  }, [hydrated, currentUser, page, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateRangeFilter, customDateFrom, customDateTo]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -158,15 +234,8 @@ const AuditTrailPage = () => {
     }
   };
 
-  // Calculate summary (uses totalCount for total, current page data for breakdowns)
-  const summary = useMemo<AuditSummary>(() => {
-    return {
-      total: totalCount,
-      logins: logs.filter(log => log.action === 'user_login').length,
-      errors: logs.filter(log => log.severity === 'error' || log.severity === 'critical' || !log.success).length,
-      actions: logs.filter(log => !['user_login', 'user_logout'].includes(log.action)).length,
-    };
-  }, [logs, totalCount]);
+  // Use summary stats from API
+  const summary = summaryStats;
 
   const getUserName = (userId?: string) => {
     if (!userId) return 'System';
@@ -327,9 +396,22 @@ const AuditTrailPage = () => {
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button variant="outline" disabled>
-              <Download className="h-4 w-4 mr-2" />
-              Export
+            <Button 
+              variant="outline" 
+              onClick={handleExport}
+              disabled={exporting || loading || logs.length === 0}
+            >
+              {exporting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -339,7 +421,7 @@ const AuditTrailPage = () => {
           title="Understanding the Audit Trail"
           description="The audit trail provides a comprehensive record of all activities in the system. Use filters to find specific events, track user actions, and investigate security incidents."
           links={[
-            { label: 'User Management', href: '/admin/users' },
+            { label: 'User Management', href: '/admin/users-roles?tab=users' },
             { label: 'System Settings', href: '/settings' },
           ]}
         />
@@ -475,6 +557,39 @@ const AuditTrailPage = () => {
                 </Select>
               </div>
               <div className="w-full md:w-48 space-y-1">
+                <Label className="text-xs text-muted-foreground">Date Range</Label>
+                <Select value={dateRangeFilter} onValueChange={(v) => setDateRangeFilter(v as typeof dateRangeFilter)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="last7">Last 7 Days</SelectItem>
+                    <SelectItem value="last30">Last 30 Days</SelectItem>
+                    <SelectItem value="last90">Last 90 Days</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
+                  </SelectContent>
+                </Select>
+                {dateRangeFilter === 'custom' && (
+                  <div className="mt-2 space-y-2">
+                    <Input
+                      type="date"
+                      placeholder="From"
+                      value={customDateFrom}
+                      onChange={(e) => setCustomDateFrom(e.target.value)}
+                      className="w-full"
+                    />
+                    <Input
+                      type="date"
+                      placeholder="To"
+                      value={customDateTo}
+                      onChange={(e) => setCustomDateTo(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="w-full md:w-48 space-y-1">
                 <Label className="text-xs text-muted-foreground">Sort Order</Label>
                 <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as 'asc' | 'desc')}>
                 <SelectTrigger>
@@ -486,7 +601,7 @@ const AuditTrailPage = () => {
                 </SelectContent>
               </Select>
               </div>
-              {(actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || debouncedSearch) && (
+              {(actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || debouncedSearch || dateRangeFilter !== 'all') && (
                 <div className="flex items-end">
                   <Button
                     variant="ghost"
@@ -497,6 +612,9 @@ const AuditTrailPage = () => {
                       setModuleFilter('all');
                       setSeverityFilter('all');
                       setSuccessFilter('all');
+                      setDateRangeFilter('all');
+                      setCustomDateFrom('');
+                      setCustomDateTo('');
                     }}
                     className="text-xs"
                   >
@@ -528,11 +646,11 @@ const AuditTrailPage = () => {
             <CardContent className="py-12 text-center">
               <Activity className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
               <p className="text-sm text-muted-foreground mb-2">
-                {debouncedSearch || actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all'
+                {debouncedSearch || actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || dateRangeFilter !== 'all'
                   ? 'No audit logs match your filters'
                   : 'No audit logs recorded yet.'}
               </p>
-              {(debouncedSearch || actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all') && (
+              {(debouncedSearch || actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || dateRangeFilter !== 'all') && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -542,6 +660,9 @@ const AuditTrailPage = () => {
                     setModuleFilter('all');
                     setSeverityFilter('all');
                     setSuccessFilter('all');
+                    setDateRangeFilter('all');
+                    setCustomDateFrom('');
+                    setCustomDateTo('');
                   }}
                   className="mt-4"
                 >

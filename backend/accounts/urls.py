@@ -17,6 +17,8 @@ from .views import (
     ExecutiveSignatureView,
     SealVerificationView,
     ApplySealView,
+    SignatureTemplateViewSet,
+    UserSignaturePreferencesViewSet,
     # 2FA views
     TwoFactorStatusView,
     RequestEmailOTPView,
@@ -30,6 +32,8 @@ from .views import (
 
 router = DefaultRouter()
 router.register(r"users", UserViewSet, basename="user")
+router.register(r"signature-templates", SignatureTemplateViewSet, basename="signature-template")
+router.register(r"signature-preferences", UserSignaturePreferencesViewSet, basename="signature-preferences")
 
 
 urlpatterns = [

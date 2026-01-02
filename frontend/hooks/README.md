@@ -75,22 +75,36 @@ const MyTable = () => {
 };
 ```
 
-### `useFilters`
+### `useDebounce`
 
-Manages filter state with optional localStorage persistence and debouncing.
+Debounces a value to reduce unnecessary re-renders and API calls.
 
 **Usage:**
 ```typescript
-import { useFilters } from '@/hooks/use-filters';
+import { useDebounce } from '@/hooks/use-debounce';
 
-type MyFilters = {
-  status: string;
-  type: string;
-  search: string;
+const MyComponent = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedQuery = useDebounce(searchQuery, 300);
+  
+  useEffect(() => {
+    if (debouncedQuery) {
+      // Perform search with debounced query
+    }
+  }, [debouncedQuery]);
+  
+  return (
+    <input
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+    />
+  );
 };
+```
 
-const MyPage = () => {
-  const filters = useFilters<MyFilters>({
+### `useFilters` (Removed)
+
+This hook was removed as it was not being used. Components implement their own filter logic as needed.
     initialFilters: { status: 'all', type: 'all' },
     storageKey: 'my_page_filters', // Optional: persist to localStorage
     debounceMs: 300, // Optional: debounce filter changes

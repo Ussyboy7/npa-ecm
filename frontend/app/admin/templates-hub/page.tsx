@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { RichTextEditor } from "@/components/dms/RichTextEditor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
+import { ContextualHelp } from "@/components/help/ContextualHelp";
 import {
   Table,
   TableBody,
@@ -40,7 +41,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  initializeTemplates,
   loadTemplates,
   getTemplatesByScope,
   type DocumentTemplate,
@@ -117,6 +117,9 @@ export default function TemplatesHubPage() {
   const [formSearch, setFormSearch] = useState("");
   const [formCategoryFilter, setFormCategoryFilter] = useState<string>("all");
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
+  const [showWorkflowDeleteConfirm, setShowWorkflowDeleteConfirm] = useState(false);
+  const [workflowToDelete, setWorkflowToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   // Personal template users
   const personalTemplateUsers = useMemo(
@@ -125,9 +128,19 @@ export default function TemplatesHubPage() {
   );
 
   // ============ DOCUMENT TEMPLATES LOGIC ============
-  const refreshTemplates = () => {
-    const loaded = loadTemplates();
-    setTemplates([...loaded]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  
+  const refreshTemplates = async () => {
+    setTemplatesLoading(true);
+    try {
+      const loaded = await loadTemplates();
+      setTemplates([...loaded]);
+    } catch (error) {
+      logError('Failed to load templates:', error);
+      toast({ title: "Error", description: "Failed to load templates. Please try again.", variant: "destructive" });
+    } finally {
+      setTemplatesLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -136,23 +149,36 @@ export default function TemplatesHubPage() {
   }, []);
 
   useEffect(() => {
-    const scoped = getTemplatesByScope(activeScope, selectedScopeId ?? undefined, activeTemplateType);
-    if (scoped.length) {
-      const template = scoped[0];
-      setSelectedTemplateId(template.id);
-      setTitle(template.title);
-      setDescription(template.description ?? "");
-      setContentHtml(template.contentHtml);
-    } else {
-      setSelectedTemplateId(null);
-      setTitle("");
-      setDescription("");
-      setContentHtml("");
-    }
+    const loadScopedTemplates = async () => {
+      try {
+        const scoped = await getTemplatesByScope(activeScope, selectedScopeId ?? undefined, activeTemplateType);
+        if (scoped.length) {
+          const template = scoped[0];
+          setSelectedTemplateId(template.id);
+          setTitle(template.title);
+          setDescription(template.description ?? "");
+          setContentHtml(template.contentHtml);
+        } else {
+          setSelectedTemplateId(null);
+          setTitle("");
+          setDescription("");
+          setContentHtml("");
+        }
+      } catch (error) {
+        logError('Failed to load scoped templates:', error);
+      }
+    };
+    loadScopedTemplates();
   }, [activeScope, selectedScopeId, templates, activeTemplateType]);
 
   const scopedTemplates = useMemo(() => {
-    return getTemplatesByScope(activeScope, selectedScopeId ?? undefined, activeTemplateType);
+    // Filter from loaded templates synchronously for UI
+    return templates.filter((template) => {
+      if (template.scope !== activeScope) return false;
+      if (template.templateType !== activeTemplateType) return false;
+      if (activeScope === 'organization') return true;
+      return template.scopeId === (selectedScopeId ?? null);
+    });
   }, [templates, activeScope, selectedScopeId, activeTemplateType]);
 
   const scopeEntityOptions = useMemo(() => {
@@ -192,7 +218,7 @@ export default function TemplatesHubPage() {
     setContentHtml(template.contentHtml);
   };
 
-  const handleSaveDocTemplate = () => {
+  const handleSaveDocTemplate = async () => {
     if (!currentUser) {
       toast({ title: "No current user found", description: "Unable to save template without admin context.", variant: "destructive" });
       return;
@@ -206,37 +232,42 @@ export default function TemplatesHubPage() {
       return;
     }
 
-    const now = new Date().toISOString();
-    if (selectedTemplateId) {
-      const existing = templates.find((template) => template.id === selectedTemplateId);
-      if (!existing) return;
-      const updated: DocumentTemplate = {
-        ...existing,
-        title: title.trim(),
-        description: description.trim() || undefined,
-        contentHtml,
-        updatedAt: now,
-        updatedBy: currentUser.id,
-        templateType: existing.templateType,
-      };
-      saveTemplate(updated);
-      refreshTemplates();
-      toast({ title: "Template updated", description: `${updated.title} saved successfully.` });
-    } else {
-      const created = createTemplate({
-        scope: activeScope,
-        scopeId: activeScope === "organization" ? null : selectedScopeId,
-        title: title.trim(),
-        description: description.trim() || undefined,
-        contentHtml,
-        createdBy: currentUser.id,
-        updatedBy: currentUser.id,
-        isDefault: true,
-        templateType: activeTemplateType,
-      });
-      refreshTemplates();
-      setSelectedTemplateId(created.id);
-      toast({ title: "Template created", description: `${created.title} is now available.` });
+    try {
+      if (selectedTemplateId) {
+        const existing = templates.find((template) => template.id === selectedTemplateId);
+        if (!existing) return;
+        const now = new Date().toISOString();
+        const updated: DocumentTemplate = {
+          ...existing,
+          title: title.trim(),
+          description: description.trim() || undefined,
+          contentHtml,
+          updatedAt: now,
+          updatedBy: currentUser.id,
+          templateType: existing.templateType,
+        };
+        await saveTemplate(updated);
+        await refreshTemplates();
+        toast({ title: "Template updated", description: `${updated.title} saved successfully.` });
+      } else {
+        const created = await createTemplate({
+          scope: activeScope,
+          scopeId: activeScope === "organization" ? null : selectedScopeId,
+          title: title.trim(),
+          description: description.trim() || undefined,
+          contentHtml,
+          createdBy: currentUser.id,
+          updatedBy: currentUser.id,
+          isDefault: true,
+          templateType: activeTemplateType,
+        });
+        await refreshTemplates();
+        setSelectedTemplateId(created.id);
+        toast({ title: "Template created", description: `${created.title} is now available.` });
+      }
+    } catch (error) {
+      logError('Failed to save template:', error);
+      toast({ title: "Error", description: "Failed to save template. Please try again.", variant: "destructive" });
     }
   };
 
@@ -251,11 +282,16 @@ export default function TemplatesHubPage() {
     }
   };
 
-  const handleDeleteDocTemplate = () => {
+  const handleDeleteDocTemplate = async () => {
     if (!selectedTemplateId) return;
-    deleteTemplate(selectedTemplateId);
-    refreshTemplates();
-    toast({ title: "Template deleted", description: "Template removed successfully." });
+    try {
+      await deleteTemplate(selectedTemplateId);
+      await refreshTemplates();
+      toast({ title: "Template deleted", description: "Template removed successfully." });
+    } catch (error) {
+      logError('Failed to delete template:', error);
+      toast({ title: "Error", description: "Failed to delete template. Please try again.", variant: "destructive" });
+    }
   };
 
   // ============ WORKFLOW TEMPLATES LOGIC ============
@@ -265,7 +301,7 @@ export default function TemplatesHubPage() {
       const data = await getWorkflowTemplates();
       setWorkflowTemplates(data);
     } catch (error) {
-      console.error("Error loading workflow templates:", error);
+      logError("Error loading workflow templates:", error);
       toast({ title: "Error", description: "Failed to load workflow templates", variant: "destructive" });
     } finally {
       setWorkflowLoading(false);
@@ -289,20 +325,27 @@ export default function TemplatesHubPage() {
     });
   }, [workflowTemplates, workflowSearch]);
 
-  const handleDeleteWorkflow = async (id: string, name: string) => {
-    const confirmed = window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`);
-    if (!confirmed) return;
-    const doubleConfirm = window.prompt('Type "DELETE" to confirm:');
-    if (doubleConfirm !== "DELETE") {
-      toast({ title: "Cancelled", description: "Template deletion cancelled" });
+  const handleDeleteWorkflowClick = (id: string, name: string) => {
+    setWorkflowToDelete({ id, name });
+    setDeleteConfirmText("");
+    setShowWorkflowDeleteConfirm(true);
+  };
+
+  const handleDeleteWorkflow = async () => {
+    if (!workflowToDelete) return;
+    if (deleteConfirmText !== "DELETE") {
+      toast({ title: "Invalid confirmation", description: 'Please type "DELETE" to confirm', variant: "destructive" });
       return;
     }
     try {
-      await deleteWorkflowTemplate(id);
+      await deleteWorkflowTemplate(workflowToDelete.id);
       toast({ title: "Success", description: "Template deleted successfully" });
       loadWorkflowTemplates();
+      setShowWorkflowDeleteConfirm(false);
+      setWorkflowToDelete(null);
+      setDeleteConfirmText("");
     } catch (error) {
-      console.error("Error deleting template:", error);
+      logError("Error deleting template:", error);
       toast({ title: "Error", description: "Failed to delete template", variant: "destructive" });
     }
   };
@@ -313,7 +356,7 @@ export default function TemplatesHubPage() {
       toast({ title: "Success", description: `Template ${!template.is_active ? "activated" : "deactivated"} successfully` });
       loadWorkflowTemplates();
     } catch (error) {
-      console.error("Error toggling template:", error);
+      logError("Error toggling template:", error);
       toast({ title: "Error", description: "Failed to update template", variant: "destructive" });
     }
   };
@@ -333,7 +376,7 @@ export default function TemplatesHubPage() {
       const data = await getFormTemplates({ is_active: undefined, search: formSearch || undefined });
       setFormTemplates(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error("Error loading form templates:", error);
+      logError("Error loading form templates:", error);
       sonnerToast.error("Failed to load form templates");
       setFormTemplates([]);
     } finally {
@@ -360,7 +403,7 @@ export default function TemplatesHubPage() {
       sonnerToast.success("Template deleted successfully");
       loadFormTemplates();
     } catch (error) {
-      console.error("Error deleting template:", error);
+      logError("Error deleting template:", error);
       sonnerToast.error("Failed to delete template");
     } finally {
       setDeletingFormId(null);
@@ -373,7 +416,7 @@ export default function TemplatesHubPage() {
       sonnerToast.success("Template cloned successfully");
       router.push(`/admin/form-templates/${cloned.id}`);
     } catch (error) {
-      console.error("Error cloning template:", error);
+      logError("Error cloning template:", error);
       sonnerToast.error("Failed to clone template");
     }
   };
@@ -428,14 +471,26 @@ export default function TemplatesHubPage() {
       <DashboardLayout>
         <div className="p-6 space-y-6">
           {/* Header */}
-          <div className="flex flex-col gap-2">
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-              <LayoutTemplate className="h-8 w-8 text-primary" />
-              Templates Hub
-            </h1>
-            <p className="text-muted-foreground">
-              Manage document templates, workflow templates, and form templates in one place
-            </p>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2">
+              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+                <LayoutTemplate className="h-8 w-8 text-primary" />
+                Templates Hub
+              </h1>
+              <p className="text-muted-foreground">
+                Manage document templates, workflow templates, and form templates in one place
+              </p>
+            </div>
+            <ContextualHelp
+              title="How to manage templates"
+              description="Create and manage templates for documents, minutes, workflows, and forms. Templates can be scoped to organization, directorate, division, department, or personal use."
+              steps={[
+                'Select a template type (Documents, Minutes, Workflows, or Forms).',
+                'Choose the scope level (organization-wide, directorate, division, etc.).',
+                'Create or edit templates using the editor.',
+                'For workflows and forms, use the dedicated creation pages for advanced configuration.',
+              ]}
+            />
           </div>
 
           {/* Overview Stats */}
@@ -721,7 +776,7 @@ export default function TemplatesHubPage() {
                         </TableHeader>
                         <TableBody>
                           {filteredWorkflowTemplates.map((template) => (
-                            <TableRow key={template.id}>
+                            <TableRow key={template.id} className="hover:bg-muted/50">
                               <TableCell>
                                 <div className="font-medium">{template.name}</div>
                                 {template.description && (
@@ -759,7 +814,7 @@ export default function TemplatesHubPage() {
                                       {template.is_active ? <PowerOff className="h-4 w-4 mr-2" /> : <Power className="h-4 w-4 mr-2" />}
                                       {template.is_active ? "Deactivate" : "Activate"}
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDeleteWorkflow(template.id, template.name)} className="text-destructive">
+                                    <DropdownMenuItem onClick={() => handleDeleteWorkflowClick(template.id, template.name)} className="text-destructive">
                                       <Trash2 className="h-4 w-4 mr-2" />Delete
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
@@ -895,6 +950,50 @@ export default function TemplatesHubPage() {
                 className="bg-destructive text-destructive-foreground"
               >
                 Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Workflow Confirmation */}
+        <AlertDialog open={showWorkflowDeleteConfirm} onOpenChange={setShowWorkflowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Workflow Template</AlertDialogTitle>
+              <AlertDialogDescription>
+                <div className="space-y-3">
+                  <p>
+                    Are you sure you want to delete <strong>"{workflowToDelete?.name}"</strong>? This action cannot be undone.
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="delete-confirm">Type "DELETE" to confirm:</Label>
+                    <Input
+                      id="delete-confirm"
+                      value={deleteConfirmText}
+                      onChange={(e) => setDeleteConfirmText(e.target.value)}
+                      placeholder="DELETE"
+                      className="font-mono"
+                    />
+                  </div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={() => {
+                  setShowWorkflowDeleteConfirm(false);
+                  setWorkflowToDelete(null);
+                  setDeleteConfirmText("");
+                }}
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteWorkflow}
+                disabled={deleteConfirmText !== "DELETE"}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete Template
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

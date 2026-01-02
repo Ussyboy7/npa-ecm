@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { LogOut, Shield, Bell, HelpCircle, UserCog, Clock, Calendar, Settings, User, Inbox, AlertTriangle, X } from "lucide-react";
 import { NotificationBell } from "./notifications/NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
@@ -28,33 +28,33 @@ export const TopBar = () => {
   const [authenticated, setAuthenticated] = useState(false);
   const { currentUser, hydrated, isImpersonating } = useCurrentUser();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [showImpersonationBanner, setShowImpersonationBanner] = useState(true);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setAuthenticated(hasTokens());
     setMounted(true);
+    // Set initial time only on client
+    setCurrentTime(new Date());
   }, []);
 
   // Update time every minute
   useEffect(() => {
+    if (!mounted) return;
+    
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 60000); // Update every minute
 
     return () => clearInterval(timer);
-  }, []);
+  }, [mounted]);
 
   const handleLogout = async () => {
     await logout();
     setAuthenticated(false);
     router.push("/login");
   };
-
-  const handleRoleSwitcherOpenChange = useCallback((open: boolean) => {
-    setRoleSwitcherOpen(open);
-  }, []);
 
   // Handle Escape key to close the role switcher panel
   useEffect(() => {
@@ -75,6 +75,7 @@ export const TopBar = () => {
       document.body.style.overflow = '';
     };
   }, [roleSwitcherOpen]);
+
 
   const getUserInitials = () => {
     if (!currentUser?.name) return 'U';
@@ -168,20 +169,16 @@ export const TopBar = () => {
         <div className="hidden md:flex items-center gap-3 text-xs text-sidebar-foreground/70">
           <div className="flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5" />
-            {mounted ? (
-              <span className="font-medium tabular-nums text-sidebar-foreground">{formatTime(currentTime)}</span>
-            ) : (
-              <span className="font-medium tabular-nums text-sidebar-foreground">--:-- --</span>
-            )}
+            <span className="font-medium tabular-nums text-sidebar-foreground" suppressHydrationWarning>
+              {currentTime ? formatTime(currentTime) : '--:-- --'}
+            </span>
           </div>
           <div className="h-4 w-px bg-sidebar-border" />
           <div className="flex items-center gap-1.5">
             <Calendar className="h-3.5 w-3.5" />
-            {mounted ? (
-              <span>{formatDate(currentTime)}</span>
-            ) : (
-              <span>--/--/----</span>
-            )}
+            <span suppressHydrationWarning>
+              {currentTime ? formatDate(currentTime) : '-- -- --'}
+            </span>
           </div>
         </div>
 
@@ -337,6 +334,7 @@ export const TopBar = () => {
           </div>
         </div>
       )}
+
       </header>
     </>
   );

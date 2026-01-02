@@ -713,6 +713,401 @@ class Command(BaseCommand):
                 self.style.WARNING(f'Template already exists: {template.name}')
             )
 
+        # Add the three NPA-specific ECM forms from the design document
+        npa_forms = [
+            {
+                "name": "Project Completion Validation Form",
+                "slug": "project-completion-validation",
+                "description": "Mandatory form for user departments to validate project completion. Required before audit review.",
+                "category": FormTemplate.Category.GENERAL,
+                "structure": {
+                    "fields": [
+                        {
+                            "id": "scope_completed",
+                            "name": "scope_completed",
+                            "label": "1. Scope of Work Completed?",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "fully", "label": "Fully Completed"},
+                                {"value": "partial", "label": "Partially Completed"},
+                                {"value": "not", "label": "Not Completed"},
+                            ],
+                        },
+                        {
+                            "id": "physical_inspection",
+                            "name": "physical_inspection",
+                            "label": "2. Physical Inspection Conducted?",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "yes", "label": "Yes"},
+                                {"value": "no", "label": "No"},
+                            ],
+                        },
+                        {
+                            "id": "inspection_date",
+                            "name": "inspection_date",
+                            "label": "Inspection Date",
+                            "type": "date",
+                            "required": False,
+                        },
+                        {
+                            "id": "outstanding_issues",
+                            "name": "outstanding_issues",
+                            "label": "3. Any Outstanding Issues?",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "no", "label": "No"},
+                                {"value": "yes", "label": "Yes"},
+                            ],
+                        },
+                        {
+                            "id": "outstanding_issues_description",
+                            "name": "outstanding_issues_description",
+                            "label": "Describe Outstanding Issues",
+                            "type": "textarea",
+                            "required": False,
+                            "placeholder": "Describe any outstanding issues...",
+                        },
+                        {
+                            "id": "completion_report_attached",
+                            "name": "completion_report_attached",
+                            "label": "4. Supporting Documents Attached - Completion Report",
+                            "type": "checkbox",
+                            "required": False,
+                        },
+                        {
+                            "id": "site_photos_attached",
+                            "name": "site_photos_attached",
+                            "label": "Site Photos",
+                            "type": "checkbox",
+                            "required": False,
+                        },
+                        {
+                            "id": "engineers_confirmation_attached",
+                            "name": "engineers_confirmation_attached",
+                            "label": "Engineer's Confirmation",
+                            "type": "checkbox",
+                            "required": False,
+                        },
+                        {
+                            "id": "declarant_name",
+                            "name": "declarant_name",
+                            "label": "Name",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "Enter full name",
+                        },
+                        {
+                            "id": "declarant_designation",
+                            "name": "declarant_designation",
+                            "label": "Designation",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "Enter designation",
+                        },
+                        {
+                            "id": "declarant_signature",
+                            "name": "declarant_signature",
+                            "label": "Digital Signature",
+                            "type": "file",
+                            "required": True,
+                        },
+                    ],
+                    "sections": [
+                        {
+                            "id": "completion_details",
+                            "title": "Completion Details",
+                            "fields": ["scope_completed", "physical_inspection", "inspection_date", "outstanding_issues", "outstanding_issues_description"],
+                        },
+                        {
+                            "id": "supporting_documents",
+                            "title": "Supporting Documents",
+                            "fields": ["completion_report_attached", "site_photos_attached", "engineers_confirmation_attached"],
+                        },
+                        {
+                            "id": "declaration",
+                            "title": "Declaration",
+                            "fields": ["declarant_name", "declarant_designation", "declarant_signature"],
+                        },
+                    ],
+                    "layout": "single",
+                },
+            },
+            {
+                "name": "Audit Monitoring & Clearance Form",
+                "slug": "audit-monitoring-clearance",
+                "description": "Critical control form for audit department. Must be approved before payment certification can proceed.",
+                "category": FormTemplate.Category.AUDIT,
+                "structure": {
+                    "fields": [
+                        {
+                            "id": "contract_award_compliance",
+                            "name": "contract_award_compliance",
+                            "label": "1. Contract Award Compliance Verified?",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "yes", "label": "Yes"},
+                                {"value": "no", "label": "No"},
+                            ],
+                        },
+                        {
+                            "id": "procurement_process_reviewed",
+                            "name": "procurement_process_reviewed",
+                            "label": "2. Procurement Process Reviewed?",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "yes", "label": "Yes"},
+                                {"value": "no", "label": "No"},
+                            ],
+                        },
+                        {
+                            "id": "user_dept_completion_attached",
+                            "name": "user_dept_completion_attached",
+                            "label": "3. User Department Completion Acknowledgment Attached?",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "yes", "label": "Yes"},
+                                {"value": "no", "label": "No"},
+                            ],
+                        },
+                        {
+                            "id": "procurement_monitoring_confirmation",
+                            "name": "procurement_monitoring_confirmation",
+                            "label": "4. Procurement Monitoring Officer Confirmation?",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "yes", "label": "Yes"},
+                                {"value": "no", "label": "No"},
+                            ],
+                        },
+                        {
+                            "id": "audit_observations",
+                            "name": "audit_observations",
+                            "label": "5. Any Audit Observations?",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "none", "label": "None"},
+                                {"value": "yes", "label": "Yes"},
+                            ],
+                        },
+                        {
+                            "id": "audit_observations_description",
+                            "name": "audit_observations_description",
+                            "label": "Describe Audit Observations",
+                            "type": "textarea",
+                            "required": False,
+                            "placeholder": "Describe any audit observations...",
+                        },
+                        {
+                            "id": "risk_level",
+                            "name": "risk_level",
+                            "label": "6. Risk Level",
+                            "type": "select",
+                            "required": True,
+                            "options": [
+                                {"value": "low", "label": "Low"},
+                                {"value": "medium", "label": "Medium"},
+                                {"value": "high", "label": "High"},
+                            ],
+                        },
+                        {
+                            "id": "audit_recommendation",
+                            "name": "audit_recommendation",
+                            "label": "Audit Recommendation",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "clear", "label": "Clear for Payment"},
+                                {"value": "clear_with_observations", "label": "Clear with Observations"},
+                                {"value": "not_cleared", "label": "Not Cleared"},
+                            ],
+                        },
+                        {
+                            "id": "audit_officer_name",
+                            "name": "audit_officer_name",
+                            "label": "Audit Officer - Name",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "Enter audit officer name",
+                        },
+                        {
+                            "id": "audit_officer_signature",
+                            "name": "audit_officer_signature",
+                            "label": "Audit Officer - Signature",
+                            "type": "file",
+                            "required": True,
+                        },
+                        {
+                            "id": "gm_audit_name",
+                            "name": "gm_audit_name",
+                            "label": "GM Audit Approval - Name",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "Enter GM Audit name",
+                        },
+                        {
+                            "id": "gm_audit_signature",
+                            "name": "gm_audit_signature",
+                            "label": "GM Audit Approval - Signature",
+                            "type": "file",
+                            "required": True,
+                        },
+                    ],
+                    "sections": [
+                        {
+                            "id": "compliance_verification",
+                            "title": "Compliance Verification",
+                            "fields": ["contract_award_compliance", "procurement_process_reviewed", "user_dept_completion_attached", "procurement_monitoring_confirmation"],
+                        },
+                        {
+                            "id": "audit_assessment",
+                            "title": "Audit Assessment",
+                            "fields": ["audit_observations", "audit_observations_description", "risk_level", "audit_recommendation"],
+                        },
+                        {
+                            "id": "approvals",
+                            "title": "Approvals",
+                            "fields": ["audit_officer_name", "audit_officer_signature", "gm_audit_name", "gm_audit_signature"],
+                        },
+                    ],
+                    "layout": "single",
+                },
+            },
+            {
+                "name": "Payment Certification Form",
+                "slug": "payment-certification",
+                "description": "Finance department form for payment certification. Locked until audit clearance is approved.",
+                "category": FormTemplate.Category.FINANCE,
+                "structure": {
+                    "fields": [
+                        {
+                            "id": "invoice_amount",
+                            "name": "invoice_amount",
+                            "label": "Invoice Amount (NGN)",
+                            "type": "currency",
+                            "required": True,
+                            "validation": {"min": 0},
+                        },
+                        {
+                            "id": "certified_amount",
+                            "name": "certified_amount",
+                            "label": "Certified Amount (NGN)",
+                            "type": "currency",
+                            "required": True,
+                            "validation": {"min": 0},
+                        },
+                        {
+                            "id": "payment_recommendation",
+                            "name": "payment_recommendation",
+                            "label": "Payment Recommendation",
+                            "type": "radio",
+                            "required": True,
+                            "options": [
+                                {"value": "pay_full", "label": "Pay Full Amount"},
+                                {"value": "pay_adjusted", "label": "Pay Adjusted Amount"},
+                                {"value": "withhold", "label": "Withhold Payment"},
+                            ],
+                        },
+                        {
+                            "id": "remarks",
+                            "name": "remarks",
+                            "label": "Remarks",
+                            "type": "textarea",
+                            "required": False,
+                            "placeholder": "Enter payment remarks...",
+                        },
+                        {
+                            "id": "finance_officer_name",
+                            "name": "finance_officer_name",
+                            "label": "Prepared By (Finance Officer) - Name",
+                            "type": "text",
+                            "required": True,
+                            "placeholder": "Enter finance officer name",
+                        },
+                        {
+                            "id": "finance_officer_signature",
+                            "name": "finance_officer_signature",
+                            "label": "Finance Officer - Signature",
+                            "type": "file",
+                            "required": True,
+                        },
+                        {
+                            "id": "approver_level",
+                            "name": "approver_level",
+                            "label": "Approved By",
+                            "type": "select",
+                            "required": True,
+                            "options": [
+                                {"value": "gm_finance", "label": "GM Finance"},
+                                {"value": "ed_finance", "label": "ED Finance"},
+                            ],
+                        },
+                        {
+                            "id": "final_authorization",
+                            "name": "final_authorization",
+                            "label": "Final Authorization (if threshold exceeded)",
+                            "type": "checkbox",
+                            "required": False,
+                        },
+                        {
+                            "id": "md_authorization",
+                            "name": "md_authorization",
+                            "label": "MD Authorization Required",
+                            "type": "checkbox",
+                            "required": False,
+                        },
+                    ],
+                    "sections": [
+                        {
+                            "id": "payment_details",
+                            "title": "Payment Details",
+                            "fields": ["invoice_amount", "certified_amount", "payment_recommendation", "remarks"],
+                        },
+                        {
+                            "id": "preparation",
+                            "title": "Preparation",
+                            "fields": ["finance_officer_name", "finance_officer_signature"],
+                        },
+                        {
+                            "id": "approval",
+                            "title": "Approval",
+                            "fields": ["approver_level", "final_authorization", "md_authorization"],
+                        },
+                    ],
+                    "layout": "single",
+                },
+            },
+        ]
+
+        for form_data in npa_forms:
+            template, created = FormTemplate.objects.get_or_create(
+                slug=form_data["slug"],
+                defaults={
+                    "name": form_data["name"],
+                    "description": form_data["description"],
+                    "category": form_data["category"],
+                    "structure": form_data["structure"],
+                    "is_active": True,
+                },
+            )
+            if created:
+                created_count += 1
+                self.stdout.write(
+                    self.style.SUCCESS(f'Created template: {template.name}')
+                )
+            else:
+                self.stdout.write(
+                    self.style.WARNING(f'Template already exists: {template.name}')
+                )
+
         self.stdout.write(
             self.style.SUCCESS(f'\nSuccessfully seeded {created_count} form templates.')
         )

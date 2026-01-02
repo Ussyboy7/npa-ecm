@@ -55,11 +55,11 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
 
   const managementGrades = isMD || isED || isGM || isAGM || isPrincipalManager;
 
-  if (managementGrades || isSeniorManager || isSuperAdmin) {
+  if (managementGrades || isSeniorManager || isSuperAdmin || role === "Secretary") {
     profile.canAccessApprovals = true;
   }
 
-  if (isMD || isED || isGM || isAGM || isSuperAdmin) {
+  if (isMD || isED || isGM || isAGM || isSuperAdmin || role === "Secretary") {
     profile.canAccessAnalytics = true;
     profile.canAccessReports = true;
   }
@@ -72,7 +72,7 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
     profile.canAccessAdministration = true;
   }
 
-  if (managementGrades || isSuperAdmin) {
+  if (managementGrades || isSuperAdmin || role === "Secretary") {
     profile.canDistribute = true;
   }
 
@@ -111,10 +111,10 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
   }
 
   const allowedLevels: ArchiveLevel[] = ["department"];
-  if (isGM || isMD || isED || isSuperAdmin) {
+  if (isGM || isMD || isED || isSuperAdmin || role === "Secretary") {
     allowedLevels.push("division");
   }
-  if (isMD || isED || isSuperAdmin) {
+  if (isMD || isED || isSuperAdmin || role === "Secretary") {
     allowedLevels.push("directorate");
   }
   profile.allowedArchiveLevels = Array.from(new Set(allowedLevels));

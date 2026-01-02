@@ -4,7 +4,7 @@ import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
 import { login, clearTokens } from "@/lib/api-client";
+import { getStoredRedirectPath } from "@/lib/auth-errors";
 
 type PersonaOption = {
   id: string;
@@ -77,6 +78,7 @@ const DEMO_PERSONAS: PersonaOption[] = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -115,7 +117,27 @@ export default function LoginPage() {
       }
 
       toast.success("Signed in successfully");
-      router.push("/dashboard");
+      
+      // Check for redirect from middleware (cookie) or sessionStorage
+      const redirectFromCookie = typeof document !== 'undefined' 
+        ? document.cookie.split('; ').find(row => row.startsWith('redirect_after_login='))?.split('=')[1]
+        : null;
+      
+      // Also check sessionStorage
+      const redirectFromStorage = getStoredRedirectPath();
+      
+      // Check URL search params (from middleware redirect)
+      const redirectFromUrl = searchParams?.get('redirect');
+      
+      // Priority: URL param > Cookie > SessionStorage > Default
+      const redirectPath = redirectFromUrl || redirectFromCookie || redirectFromStorage || "/dashboard";
+      
+      // Clear cookie if it exists
+      if (redirectFromCookie && typeof document !== 'undefined') {
+        document.cookie = 'redirect_after_login=; path=/; max-age=0; samesite=lax';
+      }
+      
+      router.push(redirectPath);
     } catch (error) {
       logError(error);
       clearTokens();

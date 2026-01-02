@@ -1,8 +1,21 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from "@/components/ui/toast";
 
 export function Toaster() {
   const { toasts } = useToast();
+  const [mounted, setMounted] = useState(false);
+
+  // Only render on client to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <ToastProvider>

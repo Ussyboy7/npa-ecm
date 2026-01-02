@@ -12,7 +12,7 @@ export const sanitizeHtml = (html: string, options?: Partial<DOMPurify.Config>):
     return html;
   }
 
-  const defaultOptions: any = {
+  const defaultOptions: unknown = {
     ALLOWED_TAGS: [
       'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'a', 'img', 'table', 'thead',

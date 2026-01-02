@@ -46,7 +46,7 @@ DEFAULT_ALLOWED_MIME_TYPES: tuple[str, ...] = (
     'image/png',
 )
 
-MAX_UPLOAD_SIZE_BYTES = getattr(settings, 'MAX_UPLOAD_SIZE_BYTES', 10 * 1024 * 1024)
+MAX_UPLOAD_SIZE_BYTES = getattr(settings, 'MAX_UPLOAD_SIZE_BYTES', 30 * 1024 * 1024)
 ALLOWED_EXTENSIONS: Iterable[str] = getattr(
     settings, 'ALLOWED_UPLOAD_EXTENSIONS', DEFAULT_ALLOWED_EXTENSIONS,
 )
@@ -104,7 +104,8 @@ def validate_file_upload(
         raise ValidationError({field_name: 'Uploaded file is empty.'})
 
     if file_size > MAX_UPLOAD_SIZE_BYTES:
-        raise ValidationError({field_name: f'File exceeds maximum size of {MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB.'})
+        max_size_mb = MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)
+        raise ValidationError({field_name: f'File exceeds maximum size of {max_size_mb}MB.'})
 
     extension = Path(file_name).suffix.lower().lstrip('.')
     if extension not in ALLOWED_EXTENSIONS:

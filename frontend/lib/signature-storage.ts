@@ -302,60 +302,58 @@ export const deleteUserSignature = (userId: string) => {
 };
 
 // ==========================================
-// Template Functions (still use localStorage)
+// Template Functions (now using backend)
 // ==========================================
 
-export const loadSignatureTemplates = (): SignatureTemplate[] => {
-  if (typeof window === 'undefined') return [];
+import * as signatureTemplateApi from '@/lib/api/signature-templates';
+
+export const loadSignatureTemplates = async (): Promise<SignatureTemplate[]> => {
   try {
-    const data = localStorage.getItem(TEMPLATE_KEY);
-    if (!data) return [];
-    return JSON.parse(data) as SignatureTemplate[];
+    const templates = await signatureTemplateApi.getSignatureTemplates();
+    // If no templates exist, return defaults (they'll be created in backend on first use)
+    if (templates.length === 0) {
+      return DEFAULT_SIGNATURE_TEMPLATES;
+    }
+    return templates;
   } catch (error) {
-    logError('Failed to load templates:', error);
-    return [];
+    logError('Failed to load signature templates from backend:', error);
+    // Fallback to defaults if backend fails
+    return DEFAULT_SIGNATURE_TEMPLATES;
   }
 };
 
-export const saveSignatureTemplates = (templates: SignatureTemplate[]) => {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(TEMPLATE_KEY, JSON.stringify(templates));
-  } catch (error) {
-    logError('Failed to save templates:', error);
-  }
+export const saveSignatureTemplates = async (templates: SignatureTemplate[]): Promise<void> => {
+  // Templates are managed in backend - this function is kept for compatibility
+  // but doesn't actually save to localStorage anymore
+  logWarn('saveSignatureTemplates is deprecated - templates are managed in backend');
 };
 
-export const ensureDefaultSignatureTemplates = (): SignatureTemplate[] => {
-  const existing = loadSignatureTemplates();
+export const ensureDefaultSignatureTemplates = async (): Promise<SignatureTemplate[]> => {
+  const existing = await loadSignatureTemplates();
   if (existing.length === 0) {
-    saveSignatureTemplates(DEFAULT_SIGNATURE_TEMPLATES);
     return [...DEFAULT_SIGNATURE_TEMPLATES];
   }
   return existing;
 };
 
 // ==========================================
-// User Preferences (still use localStorage)
+// User Preferences (now using backend)
 // ==========================================
 
-export const loadUserSignaturePreferences = (userId: string): UserSignaturePreferences | null => {
-  if (typeof window === 'undefined') return null;
+export const loadUserSignaturePreferences = async (userId: string): Promise<UserSignaturePreferences | null> => {
   try {
-    const data = localStorage.getItem(getUserPrefKey(userId));
-    if (!data) return null;
-    return JSON.parse(data) as UserSignaturePreferences;
+    return await signatureTemplateApi.getUserSignaturePreferences();
   } catch (error) {
-    logError('Failed to load signature preferences:', error);
+    logError('Failed to load signature preferences from backend:', error);
     return null;
   }
 };
 
-export const saveUserSignaturePreferences = (userId: string, prefs: UserSignaturePreferences) => {
-  if (typeof window === 'undefined') return;
+export const saveUserSignaturePreferences = async (userId: string, prefs: UserSignaturePreferences): Promise<void> => {
   try {
-    localStorage.setItem(getUserPrefKey(userId), JSON.stringify(prefs));
+    await signatureTemplateApi.updateUserSignaturePreferences(prefs);
   } catch (error) {
-    logError('Failed to save signature preferences:', error);
+    logError('Failed to save signature preferences to backend:', error);
+    throw error;
   }
 };

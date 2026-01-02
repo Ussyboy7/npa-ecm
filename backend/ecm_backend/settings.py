@@ -192,7 +192,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Should be set to the nginx/public URL in staging/production
 MEDIA_BASE_URL = os.getenv("MEDIA_BASE_URL", "")
 
-MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "30"))
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 CLAMAV_SCAN_ENABLED = os.getenv("CLAMAV_SCAN_ENABLED", "false").lower() == "true"
 CLAMAV_BINARY_PATH = os.getenv("CLAMAV_BINARY_PATH", "clamscan")
@@ -229,6 +229,9 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3002,http://127.0.0.1:3002,http://localhost:3000,http://127.0.0.1:3000").split(",") if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
+
+# Allow iframe embedding for same-origin (needed for PDF previews)
+X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 
 # ---------------------------------------------------------------------------

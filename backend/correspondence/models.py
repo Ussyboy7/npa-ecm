@@ -13,7 +13,35 @@ from dms.models import Document
 
 
 class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
-    """Represents an incoming or outgoing correspondence item."""
+    """
+    Represents an incoming or outgoing correspondence item.
+    
+    CORRESPONDENCE ROUTING CONCEPT:
+    ===============================
+    
+    Minutes = Routes: Minutes are like routes - short forms of sending correspondence 
+    to other offices/users. Like physical documents with handwritten minutes.
+    
+    Flow Types:
+    -----------
+    1. INWARD - Coming INTO your office:
+       - Internal: From another NPA office (minuted to you) → Office Inbox
+       - External: From external org (physical copy received, registered) → Office Inbox
+    
+    2. OUTWARD - Going OUT OF your office:
+       - Internal: To another NPA office (you minute it out) → Office Outbox
+       - External: To external org (registered, printed, mailed) → Office Outbox
+    
+    Source & Direction:
+    -------------------
+    - source: INTERNAL (within NPA) or EXTERNAL (outside NPA)
+    - direction: UPWARD (inward) or DOWNWARD (outward)
+    
+    Physical vs Digital:
+    --------------------
+    - Internal (NPA to NPA): Digital routing via minutes
+    - External (NPA ↔ External): Physical copies, but system tracks digitally
+    """
 
     class Source(models.TextChoices):
         INTERNAL = "internal", "Internal"
@@ -24,6 +52,7 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         IN_PROGRESS = "in-progress", "In Progress"
         COMPLETED = "completed", "Completed"
         ARCHIVED = "archived", "Archived"
+        WITHDRAWN = "withdrawn", "Withdrawn"
 
     class Priority(models.TextChoices):
         LOW = "low", "Low"
@@ -129,6 +158,17 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     )
     completion_summary_generated_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # Withdrawal tracking (similar to recall in minutes)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+    withdraw_reason = models.TextField(null=True, blank=True)
+    withdrawn_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="correspondence_withdrawn",
+        help_text="User who withdrew this correspondence",
+    )
     # Parallel routing fields
     workflow_state = models.CharField(
         max_length=20,
@@ -142,6 +182,24 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     )
     active_parallel_branches = models.IntegerField(default=0)
     completed_parallel_branches = models.IntegerField(default=0)
+    # Parent correspondence for responses (RE: correspondence)
+    parent_correspondence = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="response_correspondence",
+        help_text="Parent correspondence this is responding to (for RE: correspondence)",
+    )
+    # Case/File Management
+    case = models.ForeignKey(
+        "Case",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="correspondence",
+        help_text="Case/File this correspondence belongs to",
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -157,6 +215,81 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.reference_number} - {self.subject}"
+    
+    # Routing concept helper methods
+    def is_inward(self) -> bool:
+        """
+        Check if correspondence is INWARD (coming INTO office).
+        
+        Returns:
+            True if direction is UPWARD (inward), False otherwise
+        """
+        return self.direction == self.Direction.UPWARD
+    
+    def is_outward(self) -> bool:
+        """
+        Check if correspondence is OUTWARD (going OUT OF office).
+        
+        Returns:
+            True if direction is DOWNWARD (outward), False otherwise
+        """
+        return self.direction == self.Direction.DOWNWARD
+    
+    def is_internal(self) -> bool:
+        """
+        Check if correspondence is INTERNAL (within NPA).
+        
+        Returns:
+            True if source is INTERNAL, False if EXTERNAL
+        """
+        return self.source == self.Source.INTERNAL
+    
+    def is_external(self) -> bool:
+        """
+        Check if correspondence is EXTERNAL (outside NPA).
+        
+        Returns:
+            True if source is EXTERNAL, False if INTERNAL
+        """
+        return self.source == self.Source.EXTERNAL
+    
+    def get_flow_type(self) -> str:
+        """
+        Get the flow type based on routing concept.
+        
+        Returns:
+            One of: 'inward-internal', 'inward-external', 'outward-internal', 'outward-external'
+        """
+        if self.is_inward():
+            return 'inward-internal' if self.is_internal() else 'inward-external'
+        else:
+            return 'outward-internal' if self.is_internal() else 'outward-external'
+    
+    def should_appear_in_office_inbox(self) -> bool:
+        """
+        Check if correspondence should appear in Office Inbox.
+        
+        Office Inbox shows INWARD correspondence (coming INTO office):
+        - Inward-Internal: Minuted to your office
+        - Inward-External: Physical copy received, registered
+        
+        Returns:
+            True if inward (direction=UPWARD), False otherwise
+        """
+        return self.is_inward()
+    
+    def should_appear_in_office_outbox(self) -> bool:
+        """
+        Check if correspondence should appear in Office Outbox.
+        
+        Office Outbox shows OUTWARD correspondence (going OUT OF office):
+        - Outward-Internal: You minute it out
+        - Outward-External: Registered, printed, mailed
+        
+        Returns:
+            True if outward (direction=DOWNWARD), False otherwise
+        """
+        return self.is_outward()
 
 
 class CorrespondenceDocumentLink(UUIDModel, TimeStampedModel):
@@ -171,17 +304,35 @@ class CorrespondenceDocumentLink(UUIDModel, TimeStampedModel):
 
 
 class CorrespondenceDistribution(UUIDModel, TimeStampedModel):
-    """Distribution list for correspondence recipients."""
+    """
+    Distribution list for correspondence recipients (CC).
+    
+    DISTRIBUTION CONCEPT:
+    ====================
+    
+    Distribution is like routing but for information sharing:
+    - Distribution recipients see correspondence in their Office Inbox
+    - Distribution can be "For Information", "For Action", or "For Comment"
+    - Distribution items can be further minuted down (acted upon)
+    - Everything is tracked and recorded
+    
+    Key Points:
+    - Distribution items appear in Office Inbox/Outbox
+    - Distribution recipients can take action (minute, forward, etc.)
+    - Distribution is tracked for audit purposes
+    - Distribution is separate from direct routing but still visible
+    """
 
     class RecipientType(models.TextChoices):
         DIVISION = "division", "Division"
         DEPARTMENT = "department", "Department"
         DIRECTORATE = "directorate", "Directorate"
+        USER = "user", "User"
 
     class Purpose(models.TextChoices):
         INFORMATION = "information", "For Information"
         ACTION = "action", "For Action"
-        COMMENT = "comment", "For Comment"
+        # COMMENT removed - streamlined to 2 purposes
 
     correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="distribution")
     recipient_type = models.CharField(max_length=20, choices=RecipientType.choices)
@@ -206,11 +357,31 @@ class CorrespondenceDistribution(UUIDModel, TimeStampedModel):
         blank=True,
         related_name="department_distribution_entries",
     )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="user_distribution_entries",
+        help_text="User recipient (for parallel routing)",
+    )
     added_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         related_name="distribution_added",
+    )
+    minute = models.ForeignKey(
+        "Minute",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="distribution_entries",
+        help_text="The minute that added this distribution entry (if added via minute)",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this distribution entry is active. Set to False when the linked minute is recalled.",
     )
     purpose = models.CharField(max_length=20, choices=Purpose.choices, default=Purpose.INFORMATION)
 
@@ -229,7 +400,30 @@ class CorrespondenceAttachment(UUIDModel, TimeStampedModel):
 
 
 class Minute(UUIDModel, TimeStampedModel):
-    """Minutes, forwards, and approvals taken on correspondence."""
+    """
+    Minutes, forwards, and approvals taken on correspondence.
+    
+    MINUTES = ROUTES CONCEPT:
+    ========================
+    
+    Minutes are like routes - they're short forms of using correspondence to send 
+    to other offices/users. Like physical documents with handwritten minutes.
+    
+    When you minute correspondence:
+    - You're routing it from your office to another office/user
+    - It appears in your Office Outbox (outward)
+    - Recipient receives it in their Office Inbox (inward)
+    
+    Minute Flow:
+    ------------
+    - Minute Inward (Received): Someone minutes to you → You receive in Office Inbox
+    - Minute Outward (Sent): You minute to others → Appears in your Office Outbox
+    
+    Physical Concept:
+    ----------------
+    Minutes are like physical annotations on documents - they route correspondence
+    between offices/users, similar to how handwritten minutes route physical documents.
+    """
 
     class ActionType(models.TextChoices):
         MINUTE = "minute", "Minute"
@@ -416,13 +610,36 @@ class Minute(UUIDModel, TimeStampedModel):
         return True
 
     def can_be_recalled(self):
-        """Check if minute can still be recalled."""
+        """
+        Check if minute can still be recalled.
+        
+        A minute can be recalled if:
+        1. It hasn't been recalled already
+        2. No subsequent minutes have been created (no one has acted on it yet)
+        
+        If no subsequent minutes exist, we allow recall even if:
+        - The minute was opened (viewed)
+        - The 30-minute window has expired
+        
+        This is more flexible and practical - if no action has been taken,
+        the sender should be able to recall their minute.
+        """
         if self.is_recalled:
             return False  # Already recalled
-        if self.is_opened:
-            return False  # Once opened, cannot recall
-        if self.edit_window_expires_at and timezone.now() > self.edit_window_expires_at:
-            return False  # Window expired
+        
+        # Check if any subsequent minutes have been created
+        # If yes, the workflow has progressed and recall is not safe
+        subsequent_minutes = Minute.objects.filter(
+            correspondence=self.correspondence,
+            timestamp__gt=self.timestamp,
+            is_recalled=False  # Don't count other recalled minutes
+        ).exists()
+        
+        if subsequent_minutes:
+            return False  # Workflow has progressed, cannot recall
+        
+        # If no subsequent minutes, allow recall regardless of opened status or time window
+        # The "opened" status is just view tracking, not an action
         return True
 
     def save(self, *args, **kwargs):
@@ -431,6 +648,40 @@ class Minute(UUIDModel, TimeStampedModel):
             # Set 30-minute window from creation
             self.edit_window_expires_at = timezone.now() + timedelta(minutes=30)
         super().save(*args, **kwargs)
+    
+    # Routing concept helper methods
+    def routes_correspondence(self) -> bool:
+        """
+        Check if this minute routes correspondence to another office/user.
+        
+        Minutes = Routes: When you minute correspondence, you're routing it.
+        
+        Returns:
+            True if minute has a recipient (to_office or to_user), False otherwise
+        """
+        return bool(self.to_office or self.to_user)
+    
+    def is_routing_inward(self) -> bool:
+        """
+        Check if this minute routes correspondence INWARD (to recipient).
+        
+        When someone minutes to you, it's routing inward (you receive it).
+        
+        Returns:
+            True if direction is UPWARD (inward routing), False otherwise
+        """
+        return self.direction == self.Direction.UPWARD
+    
+    def is_routing_outward(self) -> bool:
+        """
+        Check if this minute routes correspondence OUTWARD (from sender).
+        
+        When you minute to others, it's routing outward (you send it).
+        
+        Returns:
+            True if direction is DOWNWARD (outward routing), False otherwise
+        """
+        return self.direction == self.Direction.DOWNWARD
 
 
 class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
@@ -680,3 +931,601 @@ class CorrespondenceDelegation(UUIDModel, TimeStampedModel):
             self.save(update_fields=["status"])
             return False
         return True
+
+
+class Case(UUIDModel, SoftDeleteModel, TimeStampedModel):
+    """
+    Unified Case/File entity that groups related correspondence, documents, forms, and actions.
+    
+    This is the foundation of the ECM vision: "correspondence triggers cases, documents are evidence,
+    workflow is control, and the case file is the truth."
+    """
+    
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        IN_PROGRESS = "in_progress", "In Progress"
+        RESOLVED = "resolved", "Resolved"
+        CLOSED = "closed", "Closed"
+        ARCHIVED = "archived", "Archived"
+    
+    class CaseType(models.TextChoices):
+        COMPLAINT = "complaint", "Complaint"
+        REQUEST = "request", "Request"
+        INQUIRY = "inquiry", "Inquiry"
+        PROJECT = "project", "Project"
+        LEGAL = "legal", "Legal"
+        AUDIT = "audit", "Audit"
+        GENERAL = "general", "General"
+    
+    # Case identification
+    case_number = models.CharField(max_length=100, unique=True, db_index=True, help_text="Unique case reference number")
+    title = models.CharField(max_length=500, help_text="Case title/summary")
+    description = models.TextField(blank=True, help_text="Detailed case description")
+    case_type = models.CharField(max_length=32, choices=CaseType.choices, default=CaseType.GENERAL)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    
+    # Organization
+    division = models.ForeignKey(
+        "organization.Division",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cases",
+    )
+    department = models.ForeignKey(
+        "organization.Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cases",
+    )
+    owning_office = models.ForeignKey(
+        "organization.Office",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_cases",
+    )
+    
+    # Ownership and assignment
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cases_created",
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cases_assigned",
+    )
+    current_office = models.ForeignKey(
+        "organization.Office",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="active_cases",
+    )
+    
+    # Dates
+    opened_at = models.DateTimeField(auto_now_add=True, help_text="When case was opened")
+    resolved_at = models.DateTimeField(null=True, blank=True, help_text="When case was resolved")
+    closed_at = models.DateTimeField(null=True, blank=True, help_text="When case was closed")
+    
+    # Priority
+    priority = models.CharField(
+        max_length=20,
+        choices=Correspondence.Priority.choices,
+        default=Correspondence.Priority.MEDIUM,
+    )
+    
+    # Tags and metadata
+    tags = models.JSONField(default=list, blank=True)
+    metadata = models.JSONField(default=dict, blank=True, help_text="Additional case metadata")
+    
+    # Completion package
+    completion_package = models.ForeignKey(
+        "dms.Document",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="case_completion_packages",
+        help_text="Auto-generated completion package document",
+    )
+    completion_package_generated_at = models.DateTimeField(null=True, blank=True)
+    
+    # Template reference (if created from template)
+    template = models.ForeignKey(
+        "CaseTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cases",
+        help_text="Case template used to create this case",
+    )
+    
+    class Meta:
+        ordering = ["-opened_at"]
+        indexes = [
+            models.Index(fields=["case_number"]),
+            models.Index(fields=["status", "-opened_at"]),
+            models.Index(fields=["case_type", "status"]),
+            models.Index(fields=["assigned_to", "status"]),
+            models.Index(fields=["owning_office", "status"]),
+            models.Index(fields=["is_deleted", "-opened_at"]),
+        ]
+        verbose_name = "Case"
+        verbose_name_plural = "Cases"
+    
+    def __str__(self) -> str:
+        return f"{self.case_number} - {self.title}"
+    
+    def get_related_correspondence(self):
+        """Get all correspondence linked to this case."""
+        return self.correspondence.all()
+    
+    def get_related_documents(self):
+        """Get all documents linked to this case."""
+        return [link.document for link in self.document_links.select_related('document').all()]
+    
+    def get_related_forms(self):
+        """Get all forms linked to this case."""
+        return [link.form_document for link in self.form_links.select_related('form_document', 'form_document__document').all()]
+    
+    def get_all_activities(self):
+        """Get all activities (minutes, approvals, etc.) related to this case."""
+        from correspondence.models import Minute
+        correspondence_ids = self.correspondence.values_list('id', flat=True)
+        return Minute.objects.filter(correspondence_id__in=correspondence_ids).order_by('timestamp')
+
+
+class CaseCorrespondenceLink(UUIDModel, TimeStampedModel):
+    """Link between a Case and Correspondence."""
+    
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name="correspondence_links")
+    correspondence = models.ForeignKey(Correspondence, on_delete=models.CASCADE, related_name="case_links")
+    is_primary = models.BooleanField(default=False, help_text="True if this is the correspondence that triggered the case")
+    notes = models.TextField(blank=True, help_text="Notes about this link")
+    
+    class Meta:
+        unique_together = ("case", "correspondence")
+        indexes = [
+            models.Index(fields=["case", "is_primary"]),
+        ]
+
+
+class CaseDocumentLink(UUIDModel, TimeStampedModel):
+    """Link between a Case and DMS Document."""
+    
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name="document_links")
+    document = models.ForeignKey("dms.Document", on_delete=models.CASCADE, related_name="case_links")
+    notes = models.TextField(blank=True, help_text="Notes about this link")
+    
+    class Meta:
+        unique_together = ("case", "document")
+        indexes = [
+            models.Index(fields=["case"]),
+        ]
+
+
+class CaseFormLink(UUIDModel, TimeStampedModel):
+    """Link between a Case and Form Document."""
+    
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name="form_links")
+    form_document = models.ForeignKey("dms.FormDocument", on_delete=models.CASCADE, related_name="case_links")
+    notes = models.TextField(blank=True, help_text="Notes about this link")
+    
+    class Meta:
+        unique_together = ("case", "form_document")
+        indexes = [
+            models.Index(fields=["case"]),
+        ]
+
+
+class CaseTemplate(UUIDModel, SoftDeleteModel, TimeStampedModel):
+    """Template for creating cases with pre-configured structures."""
+    
+    class CaseType(models.TextChoices):
+        COMPLAINT = "complaint", "Complaint"
+        REQUEST = "request", "Request"
+        INQUIRY = "inquiry", "Inquiry"
+        PROJECT = "project", "Project"
+        LEGAL = "legal", "Legal"
+        AUDIT = "audit", "Audit"
+        GENERAL = "general", "General"
+    
+    name = models.CharField(max_length=255, help_text="Template name")
+    slug = models.SlugField(max_length=255, unique=True, help_text="Unique template identifier")
+    description = models.TextField(blank=True, help_text="Template description")
+    case_type = models.CharField(
+        max_length=32,
+        choices=CaseType.choices,
+        default=CaseType.GENERAL,
+        help_text="Default case type for this template"
+    )
+    is_active = models.BooleanField(default=True, help_text="Whether this template is active")
+    
+    # Default values for cases created from this template
+    default_priority = models.CharField(
+        max_length=20,
+        default="medium",
+        help_text="Default priority for cases created from this template"
+    )
+    
+    # JSON field storing template configuration
+    structure = models.JSONField(
+        default=dict,
+        help_text="Template structure and configuration"
+    )
+    
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_case_templates",
+    )
+    
+    usage_count = models.IntegerField(default=0, help_text="Number of times this template has been used")
+    
+    class Meta:
+        ordering = ["case_type", "name"]
+        indexes = [
+            models.Index(fields=["case_type", "is_active"]),
+            models.Index(fields=["slug"]),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_case_type_display()})"
+    
+    def increment_usage(self):
+        """Increment usage count."""
+        self.usage_count += 1
+        self.save(update_fields=['usage_count'])
+
+
+class CaseComment(UUIDModel, TimeStampedModel):
+    """Comments and discussions on cases."""
+    
+    case = models.ForeignKey(
+        Case,
+        on_delete=models.CASCADE,
+        related_name="comments",
+        help_text="Case this comment belongs to"
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="case_comments",
+        help_text="User who wrote this comment"
+    )
+    content = models.TextField(help_text="Comment content")
+    
+    # Threading support
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="replies",
+        help_text="Parent comment if this is a reply"
+    )
+    
+    # Mentions support
+    mentions = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="mentioned_in_case_comments",
+        blank=True,
+        help_text="Users mentioned in this comment"
+    )
+    
+    # Status
+    is_resolved = models.BooleanField(default=False, help_text="Whether this comment/thread is resolved")
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_case_comments",
+    )
+    
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["case", "created_at"]),
+            models.Index(fields=["parent"]),
+        ]
+    
+    def __str__(self):
+        return f"Comment on {self.case.case_number} by {self.author}"
+    
+    def resolve(self, user):
+        """Mark this comment as resolved."""
+        self.is_resolved = True
+        self.resolved_at = timezone.now()
+        self.resolved_by = user
+        self.save(update_fields=['is_resolved', 'resolved_at', 'resolved_by'])
+    
+    def unresolve(self):
+        """Mark this comment as unresolved."""
+        self.is_resolved = False
+        self.resolved_at = None
+        self.resolved_by = None
+        self.save(update_fields=['is_resolved', 'resolved_at', 'resolved_by'])
+
+
+class CaseWorkflowRule(UUIDModel, TimeStampedModel):
+    """Workflow rules for automated case status transitions and SLA tracking."""
+    
+    class TriggerType(models.TextChoices):
+        STATUS_CHANGE = "status_change", "Status Change"
+        TIME_ELAPSED = "time_elapsed", "Time Elapsed"
+        PRIORITY_CHANGE = "priority_change", "Priority Change"
+        ASSIGNMENT_CHANGE = "assignment_change", "Assignment Change"
+        LINK_ADDED = "link_added", "Link Added"
+        FORM_COMPLETED = "form_completed", "Form Completed"
+    
+    class ActionType(models.TextChoices):
+        CHANGE_STATUS = "change_status", "Change Status"
+        ASSIGN_TO = "assign_to", "Assign To"
+        SEND_NOTIFICATION = "send_notification", "Send Notification"
+        ESCALATE = "escalate", "Escalate"
+        AUTO_CLOSE = "auto_close", "Auto Close"
+    
+    name = models.CharField(max_length=255, help_text="Rule name")
+    description = models.TextField(blank=True, help_text="Rule description")
+    case_type = models.CharField(
+        max_length=32,
+        choices=Case.CaseType.choices,
+        null=True,
+        blank=True,
+        help_text="Apply to specific case type (leave blank for all)"
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=Correspondence.Priority.choices,
+        null=True,
+        blank=True,
+        help_text="Apply to specific priority (leave blank for all)"
+    )
+    trigger_type = models.CharField(max_length=30, choices=TriggerType.choices)
+    trigger_conditions = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="JSON conditions for triggering (e.g., {'days': 7, 'status': 'open'})"
+    )
+    action_type = models.CharField(max_length=30, choices=ActionType.choices)
+    action_config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="JSON configuration for action (e.g., {'status': 'in_progress', 'assign_to_role': 'manager'})"
+    )
+    is_active = models.BooleanField(default=True, help_text="Whether this rule is active")
+    priority_order = models.IntegerField(default=0, help_text="Order for rule evaluation (lower = higher priority)")
+    
+    class Meta:
+        ordering = ["priority_order", "name"]
+        indexes = [
+            models.Index(fields=["case_type", "is_active"]),
+            models.Index(fields=["trigger_type", "is_active"]),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_trigger_type_display()})"
+    
+    def matches_case(self, case: Case) -> bool:
+        """Check if this rule matches a case."""
+        if self.case_type and case.case_type != self.case_type:
+            return False
+        if self.priority and case.priority != self.priority:
+            return False
+        return True
+
+
+class CaseSLA(UUIDModel, TimeStampedModel):
+    """SLA tracking for cases."""
+    
+    case = models.OneToOneField(
+        Case,
+        on_delete=models.CASCADE,
+        related_name="sla",
+        help_text="Case this SLA applies to"
+    )
+    target_days = models.PositiveIntegerField(help_text="Target days to resolve")
+    target_date = models.DateTimeField(help_text="Target resolution date")
+    warning_threshold_percent = models.PositiveIntegerField(
+        default=75,
+        help_text="Percentage of SLA time elapsed to trigger warning"
+    )
+    critical_threshold_percent = models.PositiveIntegerField(
+        default=90,
+        help_text="Percentage of SLA time elapsed to trigger critical alert"
+    )
+    warning_sent = models.BooleanField(default=False, help_text="Whether warning notification was sent")
+    critical_sent = models.BooleanField(default=False, help_text="Whether critical notification was sent")
+    breached = models.BooleanField(default=False, help_text="Whether SLA was breached")
+    breached_at = models.DateTimeField(null=True, blank=True, help_text="When SLA was breached")
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=["case", "target_date"]),
+            models.Index(fields=["breached", "target_date"]),
+        ]
+    
+    def __str__(self):
+        return f"SLA for {self.case.case_number}"
+    
+    def check_status(self) -> str:
+        """Check current SLA status: 'ok', 'warning', 'critical', 'breach'."""
+        from django.utils import timezone
+        now = timezone.now()
+        
+        if self.target_date <= now:
+            if not self.breached:
+                self.breached = True
+                self.breached_at = now
+                self.save(update_fields=['breached', 'breached_at'])
+            return "breach"
+        
+        elapsed = (now - self.case.opened_at).total_seconds()
+        total = (self.target_date - self.case.opened_at).total_seconds()
+        percent_elapsed = (elapsed / total) * 100 if total > 0 else 0
+        
+        if percent_elapsed >= self.critical_threshold_percent:
+            return "critical"
+        elif percent_elapsed >= self.warning_threshold_percent:
+            return "warning"
+        else:
+            return "ok"
+
+
+class CorrespondenceTemplate(UUIDModel, TimeStampedModel):
+    """Template for correspondence and minute content with scope-based access."""
+
+    class TemplateScope(models.TextChoices):
+        ORGANIZATION = "organization", "Organization"
+        DIRECTORATE = "directorate", "Directorate"
+        DIVISION = "division", "Division"
+        DEPARTMENT = "department", "Department"
+        USER = "user", "User"
+
+    class TemplateType(models.TextChoices):
+        DOCUMENT = "document", "Document"
+        MINUTE = "minute", "Minute"
+        TREATMENT = "treatment", "Treatment"
+
+    class ActionType(models.TextChoices):
+        MINUTE = "minute", "Minute"
+        APPROVE = "approve", "Approve"
+        ANY = "any", "Any"
+
+    title = models.CharField(max_length=255, help_text="Template title")
+    description = models.TextField(blank=True, help_text="Template description")
+    scope = models.CharField(
+        max_length=32,
+        choices=TemplateScope.choices,
+        help_text="Scope level for template access",
+    )
+    scope_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="ID of the scope entity (directorate, division, department, or user ID)",
+    )
+    template_type = models.CharField(
+        max_length=32,
+        choices=TemplateType.choices,
+        default=TemplateType.DOCUMENT,
+        help_text="Type of template",
+    )
+    action_type = models.CharField(
+        max_length=32,
+        choices=ActionType.choices,
+        null=True,
+        blank=True,
+        help_text="Action type for minute templates",
+    )
+    content_html = models.TextField(help_text="HTML content of the template")
+    content_text = models.TextField(
+        blank=True,
+        help_text="Plain text version of the template",
+    )
+    is_default = models.BooleanField(
+        default=True,
+        help_text="Whether this is the default template for its scope",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this template is active",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_correspondence_templates",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="updated_correspondence_templates",
+    )
+
+    class Meta:
+        ordering = ["scope", "scope_id", "template_type", "title"]
+        indexes = [
+            models.Index(fields=["scope", "scope_id", "template_type"]),
+            models.Index(fields=["is_active", "is_default"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.get_scope_display()})"
+
+
+class CorrespondenceDraft(UUIDModel, TimeStampedModel):
+    """Draft for minute or treatment that can be saved and resumed later."""
+
+    class DraftType(models.TextChoices):
+        MINUTE = "minute", "Minute"
+        TREATMENT = "treatment", "Treatment"
+
+    class ActionType(models.TextChoices):
+        MINUTE = "minute", "Minute"
+        APPROVE = "approve", "Approve"
+
+    correspondence = models.ForeignKey(
+        Correspondence,
+        on_delete=models.CASCADE,
+        related_name="drafts",
+        help_text="The correspondence this draft is for",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="correspondence_drafts",
+        help_text="User who created this draft",
+    )
+    draft_type = models.CharField(
+        max_length=20,
+        choices=DraftType.choices,
+        help_text="Type of draft (minute or treatment)",
+    )
+    content = models.TextField(help_text="Draft content")
+    subject = models.CharField(max_length=255, blank=True, help_text="Optional subject")
+    forward_to = models.CharField(
+        max_length=255, blank=True, help_text="Optional forward to recipient"
+    )
+    on_behalf_of = models.CharField(
+        max_length=255, blank=True, help_text="Optional on behalf of user"
+    )
+    action_type = models.CharField(
+        max_length=20,
+        choices=ActionType.choices,
+        blank=True,
+        null=True,
+        help_text="Action type for minute drafts",
+    )
+    files_metadata = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="File metadata for uploaded files",
+    )
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["correspondence", "user", "draft_type"]),
+            models.Index(fields=["user", "-updated_at"]),
+        ]
+        unique_together = [
+            ("correspondence", "user", "draft_type"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Draft for {self.correspondence.reference_number} by {self.user.username}"

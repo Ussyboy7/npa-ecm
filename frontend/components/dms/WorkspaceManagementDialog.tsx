@@ -83,7 +83,7 @@ export const WorkspaceManagementDialog = ({
       toast.success("Workspace created successfully");
       setFormData({ name: "", description: "", color: "#2563eb", memberIds: [] });
       onWorkspaceChange();
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError("Failed to create workspace", error);
       toast.error(error?.response?.data?.detail || "Failed to create workspace");
     } finally {
@@ -109,7 +109,7 @@ export const WorkspaceManagementDialog = ({
       setEditingId(null);
       setFormData({ name: "", description: "", color: "#2563eb", memberIds: [] });
       onWorkspaceChange();
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError("Failed to update workspace", error);
       toast.error(error?.response?.data?.detail || "Failed to update workspace");
     } finally {
@@ -129,7 +129,7 @@ export const WorkspaceManagementDialog = ({
       });
       toast.success("Workspace deleted successfully");
       onWorkspaceChange();
-    } catch (error: any) {
+    } catch (error: Record<string, unknown>) {
       logError("Failed to delete workspace", error);
       toast.error(error?.response?.data?.detail || "Failed to delete workspace");
     } finally {
@@ -166,7 +166,7 @@ export const WorkspaceManagementDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Manage Workspaces</DialogTitle>
           <DialogDescription>

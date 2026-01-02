@@ -47,7 +47,7 @@ export const MODAL_CONSTANTS = {
 
   // File size limits (in bytes)
   FILE_UPLOAD: {
-    MAX_SIZE: 10 * 1024 * 1024, // 10MB
+    MAX_SIZE: 30 * 1024 * 1024, // 30MB
     ALLOWED_TYPES: [
       'application/pdf',
       'application/msword',

@@ -10,14 +10,14 @@ export interface ApiError {
   detail?: string;
   message?: string;
   errors?: Record<string, string[]>;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export class AdminError extends Error {
   public code: string;
-  public details: any;
+  public details: unknown;
 
-  constructor(message: string, code: string = 'UNKNOWN_ERROR', details?: any) {
+  constructor(message: string, code: string = 'UNKNOWN_ERROR', details?: unknown) {
     super(message);
     this.name = 'AdminError';
     this.code = code;
@@ -108,7 +108,7 @@ export function showWarning(message: string, title: string = 'Warning'): void {
 /**
  * Wrap async function with error handling
  */
-export function withErrorHandling<T extends (...args: any[]) => Promise<any>>(
+export function withErrorHandling<T extends (...args: unknown[]) => Promise<unknown>>(
   fn: T,
   context?: string
 ): T {

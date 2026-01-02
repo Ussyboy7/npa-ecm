@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import {
   DndContext,
   closestCenter,
@@ -120,7 +121,7 @@ export function WorkflowStepsBuilder({
         description: "Steps reordered successfully",
       });
     } catch (error) {
-      console.error("Error reordering steps:", error);
+      logError("Error reordering steps:", error);
       toast({
         title: "Error",
         description: "Failed to reorder steps",
@@ -179,7 +180,7 @@ export function WorkflowStepsBuilder({
         description: "Step deleted successfully",
       });
     } catch (error) {
-      console.error("Error deleting step:", error);
+      logError("Error deleting step:", error);
       toast({
         title: "Error",
         description: "Failed to delete step",
@@ -214,7 +215,7 @@ export function WorkflowStepsBuilder({
       setFormOpen(false);
       setEditingStep(null);
     } catch (error) {
-      console.error("Error saving step:", error);
+      logError("Error saving step:", error);
       throw error;
     }
   };

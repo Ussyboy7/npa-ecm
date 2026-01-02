@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -112,7 +113,7 @@ export function SignatureWorkflowDialog({
           submissionId = newSubmission.id;
         } catch (createError) {
           // If creation fails, use the original ID (might work if backend supports it)
-          console.warn("Could not create FormSubmission, using provided ID:", createError);
+          logWarn("Could not create FormSubmission, using provided ID:", createError);
         }
       }
       
@@ -136,7 +137,7 @@ export function SignatureWorkflowDialog({
       setAssignments([]);
       setNotes("");
     } catch (error) {
-      console.error("Error creating signature workflow:", error);
+      logError("Error creating signature workflow:", error);
       toast.error(error instanceof Error ? error.message : "Failed to create signature workflow");
     } finally {
       setSubmitting(false);
@@ -145,7 +146,7 @@ export function SignatureWorkflowDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh]">
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Route Form for Signatures</DialogTitle>
         </DialogHeader>

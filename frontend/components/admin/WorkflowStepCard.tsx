@@ -13,7 +13,7 @@ interface WorkflowStepCardProps {
   onEdit: () => void;
   onDelete: () => void;
   isDragging?: boolean;
-  dragHandleProps?: any;
+  dragHandleProps?: Record<string, unknown>;
 }
 
 export function WorkflowStepCard({

@@ -15,6 +15,7 @@ from .models import (
     DocumentDiscussionMessage,
     DocumentEditorSession,
     DocumentPermission,
+    DocumentTemplate,
     DocumentVersion,
     DocumentWorkspace,
     FormDocument,
@@ -28,6 +29,7 @@ class DocumentWorkspaceSerializer(serializers.ModelSerializer):
         queryset=DocumentWorkspace._meta.get_field("members").remote_field.model.objects.all(),
         required=False,
     )
+    slug = serializers.SlugField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = DocumentWorkspace
@@ -181,6 +183,15 @@ class DocumentSerializer(serializers.ModelSerializer):
         allow_empty=True,
     )
     form_document = serializers.SerializerMethodField()
+    case_links = serializers.SerializerMethodField()
+    parent_document = serializers.SerializerMethodField()
+    parent_document_id = serializers.PrimaryKeyRelatedField(
+        source="parent_document",
+        queryset=Document.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = Document
@@ -201,10 +212,23 @@ class DocumentSerializer(serializers.ModelSerializer):
             "versions",
             "permissions",
             "form_document",
+            "case_links",
+            "parent_document",
+            "parent_document_id",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "author", "versions", "permissions", "form_document", "created_at", "updated_at"]
+        read_only_fields = ["id", "author", "versions", "permissions", "form_document", "case_links", "parent_document", "created_at", "updated_at"]
+
+    def get_parent_document(self, obj):
+        """Get parent document data if this is a response document."""
+        if obj.parent_document:
+            return {
+                "id": str(obj.parent_document.id),
+                "title": obj.parent_document.title,
+                "reference_number": obj.parent_document.reference_number or "",
+            }
+        return None
 
     def get_form_document(self, obj):
         """Get FormDocument data if this is a form document."""
@@ -232,6 +256,24 @@ class DocumentSerializer(serializers.ModelSerializer):
                 "updated_at": form_doc.updated_at.isoformat() if form_doc.updated_at else None,
             }
         return None
+
+    def get_case_links(self, obj):
+        """Get case links for this document."""
+        from correspondence.models import CaseDocumentLink
+        links = CaseDocumentLink.objects.filter(document=obj).select_related('case')
+        return [
+            {
+                "id": str(link.id),
+                "case": {
+                    "id": str(link.case.id),
+                    "caseNumber": link.case.case_number,
+                    "title": link.case.title,
+                    "status": link.case.status,
+                },
+                "notes": link.notes or "",
+            }
+            for link in links
+        ]
 
 
 class DocumentCommentSerializer(serializers.ModelSerializer):
@@ -367,14 +409,39 @@ class FormDocumentSerializer(serializers.ModelSerializer):
     correspondence = serializers.SerializerMethodField()
 
     def get_document(self, obj):
-        """Get minimal document data to avoid circular reference."""
+        """Get document data including versions and case links."""
         if obj.document:
+            # Serialize versions using DocumentVersionSerializer
+            # Django will use prefetched data if available, otherwise it will query
+            versions = obj.document.versions.all()
+            version_serializer = DocumentVersionSerializer(versions, many=True, context=self.context)
+            
+            # Get case links
+            from correspondence.models import CaseDocumentLink
+            case_links = CaseDocumentLink.objects.filter(document=obj.document).select_related('case')
+            case_links_data = [
+                {
+                    "id": str(link.id),
+                    "case": {
+                        "id": str(link.case.id),
+                        "caseNumber": link.case.case_number,
+                        "title": link.case.title,
+                        "status": link.case.status,
+                    },
+                    "notes": link.notes or "",
+                }
+                for link in case_links
+            ]
+            
             return {
                 "id": str(obj.document.id),
                 "title": obj.document.title,
+                "description": obj.document.description,
                 "document_type": obj.document.document_type,
                 "status": obj.document.status,
                 "reference_number": obj.document.reference_number,
+                "versions": version_serializer.data,  # Always return a list, even if empty
+                "case_links": case_links_data,
             }
         return None
 
@@ -536,3 +603,47 @@ class DocumentCollectionSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "owner", "documents", "members", "created_at", "updated_at"]
+
+
+class DocumentTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for document templates."""
+    created_by = UserSerializer(read_only=True)
+    created_by_id = serializers.PrimaryKeyRelatedField(
+        source="created_by",
+        queryset=DocumentTemplate._meta.get_field("created_by").remote_field.model.objects.all(),
+        write_only=True,
+        required=False,
+    )
+    default_division = serializers.PrimaryKeyRelatedField(
+        queryset=Division.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    default_department = serializers.PrimaryKeyRelatedField(
+        queryset=Department.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+
+    class Meta:
+        model = DocumentTemplate
+        fields = [
+            "id",
+            "name",
+            "description",
+            "document_type",
+            "default_status",
+            "default_sensitivity",
+            "default_division",
+            "default_department",
+            "default_tags",
+            "template_content",
+            "template_metadata",
+            "is_active",
+            "created_by",
+            "created_by_id",
+            "usage_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_by", "usage_count", "created_at", "updated_at"]
