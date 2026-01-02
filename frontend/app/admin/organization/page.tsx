@@ -252,7 +252,7 @@ const OrganizationStructurePage = () => {
 
   const handleEditDivision = (division: Record<string, unknown>) => {
     setSelectedDivision(division);
-    setParentDirectorateId(division.directorateId);
+    setParentDirectorateId(typeof division.directorateId === 'string' ? division.directorateId : null);
     setDivisionFormOpen(true);
   };
 
@@ -264,7 +264,7 @@ const OrganizationStructurePage = () => {
 
   const handleEditDepartment = (department: Record<string, unknown>) => {
     setSelectedDepartment(department);
-    setParentDivisionId(department.divisionId);
+    setParentDivisionId(typeof department.divisionId === 'string' ? department.divisionId : null);
     setDepartmentFormOpen(true);
   };
 
