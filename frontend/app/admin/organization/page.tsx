@@ -733,7 +733,7 @@ const OrganizationStructurePage = () => {
             setDirectorateFormOpen(open);
             if (!open) setSelectedDirectorate(null);
           }}
-          directorate={selectedDirectorate || undefined}
+          directorate={selectedDirectorate ?? undefined}
         />
 
         <DirectorateLeadershipDialog
@@ -754,7 +754,7 @@ const OrganizationStructurePage = () => {
               setParentDirectorateId(null);
             }
           }}
-          division={selectedDivision}
+          division={selectedDivision ?? undefined}
           defaultDirectorateId={parentDirectorateId || undefined}
         />
 
@@ -767,7 +767,7 @@ const OrganizationStructurePage = () => {
               setParentDivisionId(null);
             }
           }}
-          department={selectedDepartment}
+          department={selectedDepartment ?? undefined}
           defaultDivisionId={parentDivisionId || undefined}
         />
 
