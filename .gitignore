@@ -1,1 +1,11 @@
 dump.rdb
+
+# Celery Beat schedule files (runtime generated)
+backend/celerybeat-schedule
+backend/celerybeat-schedule-shm
+backend/celerybeat-schedule-wal
+
+# Celery Beat schedule files (runtime generated)
+backend/celerybeat-schedule
+backend/celerybeat-schedule-shm
+backend/celerybeat-schedule-wal
