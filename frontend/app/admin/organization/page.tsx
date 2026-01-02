@@ -509,7 +509,7 @@ const OrganizationStructurePage = () => {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    onClick={() => handleAssignLeader(directorate as Record<string, unknown>)}
+                                    onClick={() => handleAssignLeader(directorate as unknown as Record<string, unknown>)}
                                   >
                                     <Users className="h-4 w-4" />
                                   </Button>
@@ -523,7 +523,7 @@ const OrganizationStructurePage = () => {
                                     variant="ghost"
                                     size="icon"
                                     className="h-8 w-8"
-                                    onClick={() => handleEditDirectorate(directorate as Record<string, unknown>)}
+                                    onClick={() => handleEditDirectorate(directorate as unknown as Record<string, unknown>)}
                                   >
                                     <Edit3 className="h-4 w-4" />
                                   </Button>
