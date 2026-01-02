@@ -9,7 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getUnreadNotificationCount, type Notification } from '@/lib/notifications-storage';
+import { getUnreadCount, type Notification } from '@/lib/notifications-storage';
 import { NotificationList } from './NotificationList';
 import { useNotificationWebSocket } from '@/hooks/use-notification-websocket';
 import { usePolling } from '@/hooks/use-polling';
@@ -93,7 +93,7 @@ export const NotificationBell = () => {
     
     isFetchingRef.current = true;
     try {
-      const count = await getUnreadNotificationCount();
+      const count = await getUnreadCount();
       setUnreadCount(count);
       setError(null);
     } catch (err) {

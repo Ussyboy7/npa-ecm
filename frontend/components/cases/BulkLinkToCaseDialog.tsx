@@ -186,14 +186,6 @@ export function BulkLinkToCaseDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                You are currently offline. Linking requires an internet connection.
-              </AlertDescription>
-            </Alert>
-          )}
-          
           {/* Search input */}
           <div className="space-y-2">
             <Label htmlFor="case-search">Search Cases</Label>

@@ -59,7 +59,7 @@ import {
   CollapsibleTrigger 
 } from "@/components/ui/collapsible";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 import { useCurrentUser } from "@/hooks/use-current-user";

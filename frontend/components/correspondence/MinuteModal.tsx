@@ -1513,6 +1513,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 </p>
               </div>
             )}
+          </div>
 
           {/* Route To - Using extracted RoutingSection component */}
           <RoutingSection
@@ -1562,6 +1563,17 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             getUserOfficeInfo={getUserOfficeInfo}
           />
 
+          {/* Minute Templates Section */}
+          {signatureTemplates.length > 0 && (
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-between">
+                  <span className="text-sm">Minute Templates</span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-3 pt-2">
                   {selectedMinuteTemplate && (
                     <div className="rounded-md border border-dashed p-2 text-xs bg-background">
                       <p className="font-medium text-foreground mb-1">{selectedMinuteTemplate.title}</p>
@@ -1593,25 +1605,26 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 </div>
               </CollapsibleContent>
             </Collapsible>
-            <Textarea
-              id="minute"
-              placeholder={
-                actionType === 'approve' 
-                  ? "Enter your approval comments or decision (this will be included with the digital seal)..."
-                  : "Enter your comments, instructions, or recommendations..."
-              }
-              value={minuteText}
-              onChange={(e) => handleTextChange(e.target.value)}
-              className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''} ${
-                actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
-              }`}
-              maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
-              aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
-              aria-required="true"
-              aria-invalid={!!minuteTextError}
-              aria-describedby="minute-text-help minute-text-error"
-            />
           )}
+
+          <Textarea
+            id="minute"
+            placeholder={
+              actionType === 'approve' 
+                ? "Enter your approval comments or decision (this will be included with the digital seal)..."
+                : "Enter your comments, instructions, or recommendations..."
+            }
+            value={minuteText}
+            onChange={(e) => handleTextChange(e.target.value)}
+            className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''} ${
+              actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
+            }`}
+            maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
+            aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
+            aria-required="true"
+            aria-invalid={!!minuteTextError}
+            aria-describedby="minute-text-help minute-text-error"
+          />
 
           {/* Distribution (CC) - Only for Management Level */}
           {canDistribute && (

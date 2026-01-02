@@ -14,6 +14,7 @@ import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { Shield, Search, FileText, QrCode, Filter, ExternalLink, CheckCircle2, XCircle, TrendingUp, RefreshCw, Download, Loader2, AlertCircle } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { toast } from "sonner";
@@ -392,13 +393,11 @@ export default function ApprovalsPage() {
   // Load data when pagination changes
   useEffect(() => {
     loadApprovals(pagination.page, pagination.pageSize);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.pageSize]);
 
   // Reset page when filters change
   useEffect(() => {
     pagination.goToFirstPage();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, filterRole, filterStatus, dateRangeFilter, sortBy, sortOrder]);
 
   // Sync pagination with URL

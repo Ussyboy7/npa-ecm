@@ -466,15 +466,9 @@ export default function VerifyPage() {
                       )}
                     </div>
                   </div>
-                  <div className="text-center space-y-2">
-                    <p className="text-slate-300 font-medium">Verifying seal...</p>
-                    <p className="text-xs text-slate-500 font-mono bg-slate-900/50 px-3 py-1.5 rounded inline-block">
-                      {serial}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-3">Please wait while we verify the authenticity</p>
-                  </div>
                 </div>
-              </CardContent>
+              )}
+            </CardContent>
             </Card>
           ) : verification && verification.serial_number ? (
             // Show verification result if we have verification data (valid or invalid)
@@ -616,5 +610,3 @@ function VerifyForm() {
     </div>
   );
 }
-
-

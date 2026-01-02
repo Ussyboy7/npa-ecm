@@ -27,7 +27,7 @@ import {
 } from "@/lib/api/forms";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 import { toast } from "sonner";
-import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, CheckCircle, Paperclip, Upload, X, Download, Send } from "lucide-react";
+import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, CheckCircle, Paperclip, Upload, X, Download, Send, Eye } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { LinkDocumentDialog } from "@/components/correspondence/LinkDocumentDialog";
 import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
@@ -35,6 +35,7 @@ import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { FormTemplate } from "@/lib/types/forms";
 import { createDocumentVersion, type DocumentVersion } from "@/lib/dms-storage";
 import { Input } from "@/components/ui/input";
+import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPreviewModal";
 
 interface FormDocumentEditorProps {
   documentId: string;

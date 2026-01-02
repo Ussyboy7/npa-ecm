@@ -13,7 +13,6 @@ import { apiFetch, getStoredAccessToken } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
 import mammoth from "mammoth";
-import { logError } from "@/lib/client-logger";
 
 interface MinuteDetailModalProps {
   minute: Minute | null;

@@ -176,12 +176,7 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
               {sealData.isValid ? "✓ Valid" : "✗ Invalid"}
             </Badge>
             
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1"
-              onClick={() => window.open(verificationUrl, '_blank')}
-            >
+            <Link href={verificationUrl} target="_blank" rel="noopener noreferrer">
               <Button
                 variant="default"
                 size="sm"

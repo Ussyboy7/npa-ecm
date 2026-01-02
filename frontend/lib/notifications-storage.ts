@@ -194,25 +194,16 @@ let globalUnreadCountState: {
   loading: false,
 };
 
-  try {
-    // The router registers 'notifications' under api/notifications/, and the viewset is also 'notifications'
-    // So the full path is /api/notifications/notifications/unread_count/
-    // apiFetch adds /api/v1/ prefix, so we need /notifications/notifications/unread_count/
-    const url = '/notifications/notifications/unread_count/';
-    console.log('[notifications-storage] Fetching unread count from:', url);
-    const response = await apiFetch<{ count: number }>(url);
-    console.log('[notifications-storage] Unread count response:', response);
-    return response.count || 0;
-  } catch (error) {
-    // Silently handle authentication errors - they're expected when user is not logged in
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage === 'Authentication required' || errorMessage === 'Authentication expired') {
-      return 0;
-    }
-    console.error('[notifications-storage] Error fetching unread count:', error);
-    logError('Failed to get unread count', error);
-    return 0;
-  }
+let globalUnreadCountPromise: Promise<number> | null = null;
+const globalUnreadCountSubscribers = new Set<(count: number) => void>();
+const UNREAD_COUNT_CACHE_TTL_MS = 30 * 1000; // 30 seconds
+
+/**
+ * Get the unread notification count for the current user.
+ * Uses singleton pattern to ensure only one fetch happens at a time.
+ */
+export const getUnreadCount = async (force = false): Promise<number> => {
+  if (!hasTokens()) return 0;
 
   // If there's already a fetch in progress, wait for it
   if (globalUnreadCountPromise && !force) {
