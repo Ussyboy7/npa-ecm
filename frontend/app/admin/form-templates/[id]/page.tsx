@@ -17,7 +17,7 @@ import {
   updateFormTemplate,
 } from "@/lib/api/forms";
 import { toast } from "sonner";
-import type { FormTemplate } from "@/lib/types/forms";
+import type { FormTemplate, FormField } from "@/lib/types/forms";
 import { FormBuilder } from "@/components/forms/FormBuilder";
 import { logError } from "@/lib/client-logger";
 
@@ -37,7 +37,7 @@ export default function FormTemplateEditorPage() {
     category: "general" as FormTemplate["category"],
     is_active: true,
     structure: {
-      fields: [] as unknown[],
+      fields: [] as FormField[],
     },
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
