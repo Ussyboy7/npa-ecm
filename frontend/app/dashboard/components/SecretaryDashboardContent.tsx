@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, UserCheck, Mail, FileText, CheckCircle2, Clock, AlertCircle, TrendingUp, Users, Activity } from 'lucide-react';
+import { Loader2, UserCheck, Mail, FileText, CheckCircle, CheckCircle2, Clock, AlertCircle, TrendingUp, Users, Activity } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { formatDateShort } from '@/lib/correspondence-helpers';

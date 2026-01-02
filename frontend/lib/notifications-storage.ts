@@ -194,19 +194,6 @@ let globalUnreadCountState: {
   loading: false,
 };
 
-<<<<<<< HEAD
-const UNREAD_COUNT_CACHE_TTL_MS = 5000; // 5 seconds cache
-let globalUnreadCountPromise: Promise<number> | null = null;
-let globalUnreadCountSubscribers = new Set<(count: number) => void>();
-
-/**
- * Get unread notification count with singleton pattern to prevent duplicate calls.
- */
-export const getUnreadNotificationCount = async (force = false): Promise<number> => {
-  if (!hasTokens()) {
-    // Notify subscribers of zero count
-    globalUnreadCountSubscribers.forEach(sub => sub(0));
-=======
   try {
     // The router registers 'notifications' under api/notifications/, and the viewset is also 'notifications'
     // So the full path is /api/notifications/notifications/unread_count/
@@ -224,7 +211,6 @@ export const getUnreadNotificationCount = async (force = false): Promise<number>
     }
     console.error('[notifications-storage] Error fetching unread count:', error);
     logError('Failed to get unread count', error);
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
     return 0;
   }
 

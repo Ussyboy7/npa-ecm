@@ -77,52 +77,17 @@ export function useSidebarCounts() {
       // Update cache
       cacheStore.set(cacheKey, { counts: response, timestamp: now });
       setCounts(response);
-<<<<<<< HEAD
-      retryCountRef.current = 0; // Reset retry count on success
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
-
-      // Silently handle authentication errors
-=======
     } catch (err) {
       // Silently handle authentication errors - they're expected when user is not logged in
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
       const errorMessage = err instanceof Error ? err.message : String(err);
       if (errorMessage === 'Authentication required' || errorMessage === 'Authentication expired') {
         setCounts(DEFAULT_COUNTS);
         setError(null);
-<<<<<<< HEAD
-        retryCountRef.current = 0;
-      } else {
-        logError('[useSidebarCounts] Error fetching counts:', err);
-        
-        // Retry logic
-        if (retryCountRef.current < MAX_RETRIES) {
-          retryCountRef.current += 1;
-          setTimeout(() => {
-            if (!signal.aborted) {
-              fetchCounts(true);
-            }
-          }, RETRY_DELAY_MS * retryCountRef.current);
-        } else {
-          // Max retries reached, show error
-          setError(errorMessage);
-          // Show toast for persistent errors
-          toast.error('Failed to load sidebar counts. Please refresh the page.');
-          // Keep showing cached counts on error
-          if (cached) {
-            setCounts(cached.counts);
-          } else {
-            setCounts(DEFAULT_COUNTS);
-          }
-        }
-=======
       } else {
         console.error('[useSidebarCounts] Error fetching counts:', err);
         setError(errorMessage);
         // Keep showing cached counts on error
         setCounts(cachedCounts);
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
       }
     } finally {
       if (!signal.aborted) {

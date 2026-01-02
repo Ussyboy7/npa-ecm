@@ -4,30 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-<<<<<<< HEAD
-import { Shield, Home, Info, CheckCircle2, AlertTriangle, QrCode, FileText } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
-import { VerifyForm } from "@/components/verify/VerifyForm";
-import { QRCodeScanner } from "@/components/verify/QRCodeScanner";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
-import { ContextualHelp } from "@/components/help/ContextualHelp";
-
-export default function VerifyPage() {
-  const router = useRouter();
-  const [showQRScanner, setShowQRScanner] = useState(false);
-
-  const handleVerify = (serial: string) => {
-    router.push(`/verify/${serial}`);
-  };
-
-  const handleQRScan = (serial: string) => {
-    setShowQRScanner(false);
-    handleVerify(serial);
-=======
 import { Shield, Home, Search, Info, CheckCircle2, AlertTriangle, QrCode, FileText } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,7 +19,6 @@ export default function VerifyPage() {
     if (serialInput.trim()) {
       router.push(`/verify/${serialInput.trim()}`);
     }
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
   };
 
   return (
@@ -75,21 +50,6 @@ export default function VerifyPage() {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12 max-w-4xl">
-<<<<<<< HEAD
-        <HelpGuideCard
-          title="Digital Executive Seal Verification"
-          description="Verify the authenticity of digitally approved documents using their unique serial number. Each seal contains encrypted information that confirms the document's approval status, timestamp, and authorized signatory."
-          links={[
-            { label: 'View All Documents', href: '/search' },
-            { label: 'Executive Approvals', href: '/approvals' }
-          ]}
-          dismissible
-          dismissKey="verify-seal-guide"
-          className="mb-6"
-        />
-
-=======
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
         <div className="grid gap-6 md:grid-cols-3">
           {/* Main Verification Card */}
           <div className="md:col-span-2">
@@ -98,29 +58,10 @@ export default function VerifyPage() {
                 <div className="space-y-6">
                   {/* Header */}
                   <div className="text-center space-y-4">
-<<<<<<< HEAD
-                    <div className="flex justify-center items-center gap-2">
-                      <div className="h-20 w-20 rounded-full bg-emerald-600/20 flex items-center justify-center ring-4 ring-emerald-600/10">
-                        <Shield className="h-10 w-10 text-emerald-500" />
-                      </div>
-                      <ContextualHelp
-                        title="About Seal Verification"
-                        description="Digital Executive Seals provide cryptographic proof of document authenticity. Each seal is unique and cannot be forged."
-                        steps={[
-                          'Enter the serial number from the document',
-                          'Or scan the QR code for quick verification',
-                          'View detailed seal information and verification status',
-                          'Download certificate for official records'
-                        ]}
-                        placement={{ align: 'end', side: 'bottom' }}
-                        className="text-slate-400"
-                      />
-=======
                     <div className="flex justify-center">
                       <div className="h-20 w-20 rounded-full bg-emerald-600/20 flex items-center justify-center ring-4 ring-emerald-600/10">
                         <Shield className="h-10 w-10 text-emerald-500" />
                       </div>
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                     </div>
                     <div>
                       <h2 className="text-3xl font-bold text-white mb-2">Verify Digital Executive Seal</h2>
@@ -132,26 +73,6 @@ export default function VerifyPage() {
 
                   {/* Verification Form */}
                   <div className="space-y-4">
-<<<<<<< HEAD
-                    <VerifyForm onVerify={handleVerify} />
-                    
-                    {/* QR Code Scanner Button */}
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-px bg-slate-700" />
-                      <span className="text-xs text-slate-500 px-2">OR</span>
-                      <div className="flex-1 h-px bg-slate-700" />
-                    </div>
-                    
-                    <Button 
-                      onClick={() => setShowQRScanner(true)}
-                      variant="outline"
-                      className="w-full h-12 text-base border-slate-600 hover:bg-slate-700"
-                      size="lg"
-                      aria-label="Scan QR code"
-                    >
-                      <QrCode className="h-5 w-5 mr-2" />
-                      Scan QR Code
-=======
                     <div>
                       <label className="text-sm font-medium text-slate-300 mb-2 block">
                         Serial Number
@@ -179,7 +100,6 @@ export default function VerifyPage() {
                     >
                       <Shield className="h-5 w-5 mr-2" />
                       Verify Seal
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                     </Button>
                   </div>
 
@@ -290,16 +210,6 @@ export default function VerifyPage() {
           </p>
         </div>
       </footer>
-<<<<<<< HEAD
-
-      {/* QR Code Scanner Modal */}
-      <QRCodeScanner
-        open={showQRScanner}
-        onOpenChange={setShowQRScanner}
-        onScan={handleQRScan}
-      />
-=======
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
     </div>
   );
 }

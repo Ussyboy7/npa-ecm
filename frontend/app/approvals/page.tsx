@@ -17,15 +17,9 @@ import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { toast } from "sonner";
-<<<<<<< HEAD
-import { exportToCSV } from '@/lib/admin-export';
-import { format } from 'date-fns';
-import { logError } from '@/lib/client-logger';
-=======
 import { SealBadge } from "@/components/seals/SealBadge";
 import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
 import { EmptyState } from "@/components/shared/EmptyState";
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
 
 interface ExecutiveApproval {
   id: string;
@@ -794,73 +788,6 @@ export default function ApprovalsPage() {
           />
         </div>
 
-<<<<<<< HEAD
-        {/* Error */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error Loading Approvals</AlertTitle>
-            <AlertDescription className="flex items-center justify-between">
-              <span>{error}</span>
-              <Button variant="outline" size="sm" onClick={handleRefresh} className="ml-4">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {error && (
-          <Card>
-            <CardContent className="py-4 text-sm text-destructive">{error}</CardContent>
-          </Card>
-        )}
-
-        {loading && !refreshing ? (
-          <Card>
-            <CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading executive approvals…
-            </CardContent>
-          </Card>
-        ) : filteredApprovals.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Shield className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-sm text-muted-foreground mb-2">
-                {debouncedSearch || activeFilterCount > 0 
-                  ? 'No approvals match your filters' 
-                  : 'No executive approvals found yet.'}
-              </p>
-              {(debouncedSearch || activeFilterCount > 0) && (
-                <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">
-                  Clear Filters
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {paginatedApprovals.map((approval) => (
-              <ApprovalCard key={approval.id} approval={approval} />
-            ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        {filteredApprovals.length > 0 && (
-          <PaginationControls
-            pagination={{
-              ...pagination,
-              totalCount: filteredApprovals.length,
-              totalPages: Math.max(1, Math.ceil(filteredApprovals.length / pagination.pageSize)),
-            }}
-            showPageSizeSelector={true}
-            showGoToPage={true}
-            className="border-t border-border/60 pt-4"
-          />
-        )}
-=======
         {/* Approvals Table */}
         <Card>
           <CardHeader>
@@ -1004,7 +931,6 @@ export default function ApprovalsPage() {
             )}
           </CardContent>
         </Card>
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
       </div>
     </DashboardLayout>
   );

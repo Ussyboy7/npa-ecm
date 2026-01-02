@@ -618,11 +618,6 @@ export function AppSidebar() {
                 )}
               </SidebarMenuItem>
 
-<<<<<<< HEAD
-
-              {/* Forms Library - renamed from Forms */}
-              {visibility.showFormsLibrary && (
-=======
               {/* Verify Seal - Public verification page */}
               <SidebarMenuItem>
                 {isCollapsed ? (
@@ -656,7 +651,6 @@ export function AppSidebar() {
 
               {/* Content Capture */}
               {permissions.canAccessDocumentManagement && (
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                 <SidebarMenuItem>
                   {isCollapsed ? (
                       <Tooltip>

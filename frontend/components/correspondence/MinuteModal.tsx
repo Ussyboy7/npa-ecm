@@ -1442,11 +1442,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
                 Action Type *
               </Label>
-<<<<<<< HEAD
-              <RadioGroup value={actionType} onValueChange={(v: Record<string, unknown>) => setActionType(v)}>
-=======
               <RadioGroup value={actionType} onValueChange={(v: any) => setActionType(v)}>
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                 <div className="space-y-3">
                   {/* Minute Option */}
                   <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">
@@ -1457,11 +1453,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                         Add Minute
                       </Label>
                       <p className="text-xs text-muted-foreground">
-<<<<<<< HEAD
-                        Add a comment, instruction, or routing note. For workflow communication.
-=======
                         Add a comment, instruction, or routing note. Optional signature. For workflow communication.
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
                       </p>
                     </div>
                   </div>
@@ -1498,28 +1490,6 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             </div>
           </div>
 
-<<<<<<< HEAD
-          {/* Minute Text Section - Using shared component */}
-          <MinuteTextSection
-            minuteText={minuteText}
-            minuteTextError={minuteTextError}
-            characterCount={characterCount}
-            actionType={actionType}
-            onTextChange={handleTextChange}
-            templates={filteredMinuteTemplates}
-            selectedTemplateId={selectedMinuteTemplateId}
-            onTemplateSelect={(templateId) => setSelectedMinuteTemplateId(templateId)}
-            onTemplateApply={handleApplyMinuteTemplate}
-            onTemplateSave={handleSaveMinuteTemplate}
-            onTemplateDelete={handleDeleteSelectedMinuteTemplate}
-            newTemplateName={newTemplateName}
-            onNewTemplateNameChange={setNewTemplateName}
-            templateSectionOpen={templateSectionOpen}
-            onTemplateSectionOpenChange={setTemplateSectionOpen}
-            getTemplatePlainText={getTemplatePlainText}
-            canDeleteTemplate={(template) => template.scope === 'user' && template.createdBy === currentUser?.id}
-          />
-=======
           {/* Your Minute/Approval Text */}
           <div className="space-y-3">
             <Label htmlFor="minute" className="flex items-center gap-2">
@@ -1543,7 +1513,6 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 </p>
               </div>
             )}
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
 
           {/* Route To - Using extracted RoutingSection component */}
           <RoutingSection
@@ -1593,26 +1562,6 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             getUserOfficeInfo={getUserOfficeInfo}
           />
 
-<<<<<<< HEAD
-          {/* Signature Section - Only for Executive Approvals */}
-          {actionType === 'approve' && (
-            <SignatureSection
-              signature={userSignature}
-              currentUser={currentUser}
-              actionType={actionType}
-              isExecutive={isExecutive}
-              applySignature={applySignature}
-              onApplySignatureChange={(checked) => {
-                setApplySignatureManuallySet(true);
-                setApplySignature(checked);
-              }}
-              signatureTemplates={signatureTemplates}
-              selectedTemplateId={selectedTemplateId}
-              onTemplateChange={setSelectedTemplateId}
-              templatePreview={templatePreview}
-              showTemplateSelector={true}
-              disabled={isSubmitting}
-=======
                   {selectedMinuteTemplate && (
                     <div className="rounded-md border border-dashed p-2 text-xs bg-background">
                       <p className="font-medium text-foreground mb-1">{selectedMinuteTemplate.title}</p>
@@ -1661,7 +1610,6 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               aria-required="true"
               aria-invalid={!!minuteTextError}
               aria-describedby="minute-text-help minute-text-error"
->>>>>>> 5d0c0e6dcd2e46c27b6252c65a1fe1c3a13a9245
             />
           )}
 
