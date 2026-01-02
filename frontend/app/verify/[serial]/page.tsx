@@ -467,34 +467,6 @@ export default function VerifyPage() {
           </Card>
         ) : null}
 
-              {/* Contact Info - Enhanced */}
-              <div className="pt-6 border-t border-slate-700">
-                <div className="text-center space-y-3">
-                  <p className="text-sm font-medium text-slate-300">Need Help?</p>
-                  <p className="text-sm text-slate-400">
-                    For inquiries, contact NPA at{" "}
-                    <a 
-                      href="mailto:info@nigerianports.gov.ng" 
-                      className="text-emerald-400 hover:text-emerald-300 hover:underline font-medium"
-                    >
-                      info@nigerianports.gov.ng
-                    </a>
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 border-slate-600 hover:bg-slate-700"
-                    onClick={() => window.location.href = '/verify'}
-                  >
-                    <Shield className="h-4 w-4 mr-2" />
-                    Verify Another Seal
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Verify Another - Enhanced */}
         <Card className="mt-8 bg-slate-800/30 border-slate-700/50">
           <CardContent className="p-6">
