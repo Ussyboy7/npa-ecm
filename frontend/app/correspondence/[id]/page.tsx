@@ -505,7 +505,8 @@ const CorrespondenceDetailContent = () => {
   const refreshMinutes = useCallback(async () => {
     if (!id) return;
     try {
-      const minutesResponse = await fetchWithRetry(() => apiFetch<Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> }>>(`/correspondence/minutes/?correspondence=${id}`));
+      type MinutesResponseType = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
+      const minutesResponse = await fetchWithRetry(() => apiFetch<MinutesResponseType>(`/correspondence/minutes/?correspondence=${id}`));
       const minutesData = Array.isArray(minutesResponse) 
         ? minutesResponse 
         : (minutesResponse?.results || []);
@@ -659,7 +660,7 @@ const CorrespondenceDetailContent = () => {
 
     // De-duplicate by id
     const seenIds = new Set<string>();
-    const unique = parallelRoutingGroups.filter((group) => {
+    const unique = (parallelRoutingGroups as Array<Record<string, unknown>>).filter((group) => {
       const groupId = String(group.id);
       if (seenIds.has(groupId)) {
         logWarn('[ParallelRouting] Duplicate in state', { groupId });

@@ -28,7 +28,7 @@ export interface CorrespondenceDetailState {
 }
 
 export type CorrespondenceDetailAction =
-  | { type: 'SET_MINUTES'; payload: unknown[] }
+  | { type: 'SET_MINUTES'; payload: Minute[] }
   | { type: 'SET_REMOTE_CORRESPONDENCE'; payload: Correspondence | null }
   | { type: 'SET_DETAIL_LOADING'; payload: boolean }
   | { type: 'SET_BACKEND_DELEGATION'; payload: CorrespondenceDetailState['backendDelegation'] }
