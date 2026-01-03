@@ -596,7 +596,7 @@ const FormsPage = () => {
                             <SelectContent>
                               <SelectItem value="all">All Templates</SelectItem>
                               {availableTemplates.map(({ id, name }) => (
-                                <SelectItem key={id} value={id}>{name || 'Unnamed Template'}</SelectItem>
+                                <SelectItem key={id as string} value={id as string}>{name || 'Unnamed Template'}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
