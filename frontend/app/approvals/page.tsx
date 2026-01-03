@@ -168,7 +168,7 @@ export default function ApprovalsPage() {
       
       setApprovals(executiveApprovals);
       // Use backend count for accurate pagination
-      const count = (response && typeof response === 'object' && 'count' in response && typeof response.count as number === 'number') 
+      const count = (response && typeof response === 'object' && 'count' in response && typeof response.count === 'number') 
         ? response.count as number 
         : executiveApprovals.length;
       setCount(count);

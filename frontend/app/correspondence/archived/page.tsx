@@ -142,7 +142,7 @@ const ArchivedCorrespondence = () => {
 
         const results = Array.isArray(response.results) ? response.results : [];
         setRecords(results.map(mapApiCorrespondence));
-        setCount((response && typeof response === 'object' && 'count' in response && typeof response.count as number === 'number') ? response.count as number : results.length);
+        setCount((response && typeof response === 'object' && 'count' in response && typeof response.count === 'number') ? response.count as number : results.length);
         const responseObj = response as Record<string, unknown>;
         const summaryObj = responseObj.summary as Record<string, unknown> | undefined;
         setSummary({
