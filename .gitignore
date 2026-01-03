@@ -1,6 +1,35 @@
-dump.rdb
+# --- Global ---
+node_modules/
+**/node_modules/
 
-# Celery Beat schedule files (runtime generated)
-backend/celerybeat-schedule
-backend/celerybeat-schedule-shm
-backend/celerybeat-schedule-wal
+.env
+.env.*
+!.env.example
+
+.DS_Store
+dump.rdb
+appendonly.aof
+
+# Frontend
+frontend/.next/
+frontend/dist/
+frontend/dist-ssr/
+
+# Backend
+backend/.venv/
+backend/venv/
+backend/staticfiles/
+backend/media/
+
+# Celery
+celerybeat-schedule*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
