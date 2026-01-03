@@ -293,7 +293,7 @@ const RegisteredCorrespondencePage = () => {
                           <TableCell>{currentOwnerName}</TableCell>
                           <TableCell>{formatDateShort(item.receivedDate)}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={getStatusBadgeClass(item.status as string)}>
+                            <Badge variant="outline" className={getStatusBadgeClass(item.status as 'pending' | 'in-progress' | 'completed' | 'archived')}>
                               {(item.status as string).replace("-", " ")}
                             </Badge>
                           </TableCell>
