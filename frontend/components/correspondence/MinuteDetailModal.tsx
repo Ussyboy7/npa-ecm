@@ -486,18 +486,25 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                     ) : (
                       <div className="space-y-2">
                         {(distribution as Record<string, unknown>[]).map((dist: Record<string, unknown>) => {
-                          const recipientName = 
-                            dist.user_name ||
-                            dist.directorate_name ||
-                            dist.division_name ||
-                            dist.department_name ||
-                            'Unknown';
-                          const recipientType = dist.recipient_type || 'division';
-                          const purpose = dist.purpose || 'information';
+                          const recipientNameRaw =
+                            ('user_name' in dist && typeof dist.user_name === 'string' && dist.user_name) ||
+                            ('directorate_name' in dist && typeof dist.directorate_name === 'string' && dist.directorate_name) ||
+                            ('division_name' in dist && typeof dist.division_name === 'string' && dist.division_name) ||
+                            ('department_name' in dist && typeof dist.department_name === 'string' && dist.department_name) ||
+                            undefined;
+                          const recipientName = recipientNameRaw ?? 'Unknown';
+
+                          const recipientTypeRaw = 'recipient_type' in dist && typeof dist.recipient_type === 'string' ? dist.recipient_type : undefined;
+                          const recipientType = (recipientTypeRaw || 'division') as string;
+
+                          const purposeRaw = 'purpose' in dist && typeof dist.purpose === 'string' ? dist.purpose : undefined;
+                          const purpose = purposeRaw || 'information';
+                          
+                          const distId = 'id' in dist ? String(dist.id) : undefined;
                           
                           return (
                             <div
-                              key={dist.id as string}
+                              key={distId}
                               className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border"
                             >
                               <div className="flex items-center gap-2 flex-1 min-w-0">
