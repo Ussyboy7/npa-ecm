@@ -79,14 +79,14 @@ export const CorrespondenceHeader = ({
   ) || [];
 
   const handleUnlinkCase = async () => {
-    if (!correspondence.case) return;
+    if (!correspondence.caseId) return;
 
     if (!confirm("Are you sure you want to unlink this correspondence from the case?")) {
       return;
     }
 
     try {
-      await unlinkCorrespondenceFromCase(correspondence.case.id, correspondence.id);
+      await unlinkCorrespondenceFromCase(correspondence.caseId, correspondence.id);
       toast.success("Correspondence unlinked from case");
       onCaseUnlinked?.();
     } catch (err) {
@@ -197,23 +197,18 @@ export const CorrespondenceHeader = ({
                 )}
               </div>
               {/* Case link - if correspondence is linked to a case */}
-              {correspondence.case && (
+              {correspondence.caseId && (
                 <div className="mt-1 flex items-center gap-2">
                   <Badge variant="outline" className="gap-1">
                     <FolderTree className="h-3 w-3" />
                     <Link
-                      href={`/cases/${correspondence.case.id}`}
+                      href={`/cases/${correspondence.caseId}`}
                       className="hover:underline"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {correspondence.case.caseNumber}
+                      Case #{correspondence.caseId}
                     </Link>
                   </Badge>
-                  {correspondence.case.status && (
-                    <Badge variant="secondary" className="text-xs">
-                      {correspondence.case.status.replace('_', ' ').toUpperCase()}
-                    </Badge>
-                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -323,7 +318,7 @@ export const CorrespondenceHeader = ({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {!correspondence.case && onOpenLinkCaseModal && (
+            {!correspondence.caseId && onOpenLinkCaseModal && (
               <Button
                 variant="outline"
                 size="icon"
