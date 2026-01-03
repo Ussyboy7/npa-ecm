@@ -737,7 +737,7 @@ const CorrespondenceDetailContent = () => {
   // If routing was reverted after recall, enable actions for the sender
   const actionsDisabled = detailLoading || (isCompleted && !isRecalledAndReverted) || isForInformationOnly;
   const turnRestrictedDisabled = actionsDisabled || (!isCurrentUserTurn && !isRecalledAndReverted);
-  const completionPackageUrl = buildDownloadUrl(correspondence.completionPackage?.fileUrl ?? null);
+  const completionPackageUrl = buildDownloadUrl(correspondence.completionPackage?.fileUrl ?? null) ?? null;
   const completionGeneratedAt =
     correspondence.completionPackage?.generatedAt ??
     correspondence.completionSummaryGeneratedAt ??
@@ -827,6 +827,7 @@ const CorrespondenceDetailContent = () => {
               await syncFromApi();
             }}
             onOpenLinkCaseModal={() => openModal('link-case')}
+            onOpenParallelRouteModal={() => openModal('parallel-route')}
             onDistributionShared={async () => {
               await refreshData();
               await syncFromApi();
@@ -916,6 +917,8 @@ const CorrespondenceDetailContent = () => {
             correspondence={correspondence}
             minutes={minutes}
             activeUser={activeUser}
+            onOpenParallelRouteModal={() => openModal('parallel-route')}
+            onOpenLinkCaseModal={() => openModal('link-case')}
             isCompleted={isCompleted}
             isCurrentUserTurn={isCurrentUserTurn}
             isForInformationOnly={isForInformationOnly}
