@@ -144,14 +144,14 @@ const CaseDetailPage = () => {
           
           setSlaStatus(sla);
         } catch (err: unknown) {
-          if (err.name === 'AbortError') return;
+          if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
           // Log error and show user-friendly message
           logError("Failed to load SLA status", err);
           setSlaError("SLA status unavailable");
           // Don't set slaStatus to null, just show error
         }
-      } catch (err: Record<string, unknown>) {
-        if (err.name === 'AbortError') return;
+      } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
         logError("Failed to load case", err);
         setError("Failed to load case. Please try again.");
       } finally {
@@ -311,8 +311,8 @@ const CaseDetailPage = () => {
       setCaseData({ ...caseData, ...updated });
       toast.success("Case updated successfully");
       setShowEditDialog(false);
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
       logError("Failed to update case", err);
       toast.error("Failed to update case");
     } finally {
