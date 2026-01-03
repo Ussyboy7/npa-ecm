@@ -177,6 +177,59 @@ const AuditTrailPage = () => {
     }
   };
 
+  // Export logs to CSV
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      // Fetch all logs for export (without pagination)
+      const dateParams = getDateRangeParams();
+      const params: Record<string, unknown> = {
+        page: 1,
+        pageSize: 10000, // Large limit for export
+        ordering: sortOrder === 'desc' ? '-timestamp' : 'timestamp',
+        ...dateParams,
+      };
+      if (actionFilter !== 'all') params.action = actionFilter;
+      if (moduleFilter !== 'all') params.module = moduleFilter;
+      if (severityFilter !== 'all') params.severity = severityFilter;
+      if (successFilter !== 'all') params.success = successFilter === 'true';
+      if (debouncedSearch) params.search = debouncedSearch;
+
+      const data = await getActivityLogs(params);
+      
+      const exportData = data.results.map((log) => ({
+        'Timestamp': formatDateTime(log.timestamp),
+        'Action': log.action || 'N/A',
+        'Module': log.module || 'N/A',
+        'User': log.user || 'N/A',
+        'Description': log.description || 'N/A',
+        'Severity': log.severity || 'info',
+        'Success': log.success ? 'Yes' : 'No',
+        'IP Address': log.ipAddress || 'N/A',
+        'User Agent': log.userAgent || 'N/A',
+      }));
+
+      exportToCSV(exportData, [
+        { key: 'Timestamp' as keyof typeof exportData[0], label: 'Timestamp' },
+        { key: 'Action' as keyof typeof exportData[0], label: 'Action' },
+        { key: 'Module' as keyof typeof exportData[0], label: 'Module' },
+        { key: 'User' as keyof typeof exportData[0], label: 'User' },
+        { key: 'Description' as keyof typeof exportData[0], label: 'Description' },
+        { key: 'Severity' as keyof typeof exportData[0], label: 'Severity' },
+        { key: 'Success' as keyof typeof exportData[0], label: 'Success' },
+        { key: 'IP Address' as keyof typeof exportData[0], label: 'IP Address' },
+        { key: 'User Agent' as keyof typeof exportData[0], label: 'User Agent' },
+      ], { filename: `audit-logs-${new Date().toISOString().split('T')[0]}.csv` });
+
+      toast.success('Audit logs exported successfully');
+    } catch (err) {
+      logError('Failed to export audit logs', err);
+      toast.error('Failed to export audit logs');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Fetch summary stats separately
   const fetchSummaryStats = async () => {
     if (!hydrated || !currentUser) return;

@@ -143,7 +143,7 @@ const CaseDetailPage = () => {
           if (signal.aborted) return;
           
           setSlaStatus(sla);
-        } catch (err: Record<string, unknown>) {
+        } catch (err: unknown) {
           if (err.name === 'AbortError') return;
           // Log error and show user-friendly message
           logError("Failed to load SLA status", err);
