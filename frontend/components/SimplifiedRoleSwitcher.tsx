@@ -221,7 +221,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       }
     } catch (error: unknown) {
       // Ignore abort errors
-      if (error?.name === 'AbortError' || abortController.signal.aborted) {
+      if ((error instanceof Error && error.name === 'AbortError') || abortController.signal.aborted) {
         return;
       }
       logError('Backend search failed', error);

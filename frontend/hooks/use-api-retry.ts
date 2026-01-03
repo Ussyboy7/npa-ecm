@@ -54,9 +54,10 @@ export const useApiRetry = (options: RetryOptions = {}) => {
 
         const isRetryable =
           attempt < config.maxRetries &&
-          (error?.status
+          (error && typeof error === 'object' && 'status' in error && typeof error.status === 'number'
             ? config.retryableStatuses.includes(error.status)
-            : error?.name !== 'AbortError' && !error?.message?.includes('401'));
+            : !(error instanceof Error && error.name === 'AbortError') &&
+              !(error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message.includes('401')));
 
         if (!isRetryable) {
           throw error;
