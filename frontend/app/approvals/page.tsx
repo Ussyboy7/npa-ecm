@@ -840,7 +840,7 @@ export default function ApprovalsPage() {
               <EmptyState
                 icon={<Shield className="h-12 w-12" />}
                 title="No executive approvals found"
-                description={
+                message={
                   activeFilterCount > 0 
                     ? "Try adjusting your filters to see more results."
                     : "Executive approvals will appear here once they are created."
