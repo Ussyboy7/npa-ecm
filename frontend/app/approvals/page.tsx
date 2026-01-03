@@ -15,9 +15,10 @@ import { PaginationControls } from '@/components/shared/PaginationControls';
 import { Shield, Search, FileText, QrCode, Filter, ExternalLink, CheckCircle2, XCircle, TrendingUp, RefreshCw, Download, Loader2, AlertCircle } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, getBaseUrl } from "@/lib/api-client";
 import { logError } from "@/lib/client-logger";
 import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
+import { exportToCSV } from "@/lib/admin-export";
 import { toast } from "sonner";
 import { SealBadge } from "@/components/seals/SealBadge";
 import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
@@ -883,9 +884,9 @@ export default function ApprovalsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="text-xs">
-                            {format(new Date(approval.sealedAt), "MMM d, yyyy")}
+                            {formatDateShort(approval.sealedAt)}
                             <div className="text-muted-foreground mt-0.5">
-                              {format(new Date(approval.sealedAt), "h:mm a")}
+                              {new Date(approval.sealedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                             </div>
                           </div>
                         </TableCell>
