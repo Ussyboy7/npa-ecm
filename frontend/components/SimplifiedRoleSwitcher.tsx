@@ -1056,7 +1056,6 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             <PaginationControls
               pagination={{
                 ...currentPagination,
-                totalCount: totalCount,
                 totalPages: Math.max(1, Math.ceil(totalCount / currentPagination.pageSize)),
                 paginationInfo: {
                   showing: `${currentPagination.startIndex}-${Math.min(currentPagination.endIndex, totalCount)}`,
