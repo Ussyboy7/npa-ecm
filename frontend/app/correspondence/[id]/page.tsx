@@ -723,8 +723,8 @@ const CorrespondenceDetailContent = () => {
     activeDelegation.status === 'active' &&
     String(correspondence.currentApproverId) === String(activeDelegation.principalId);
   
-  const isCurrentUserTurn = 
-    correspondence.currentApproverId === activeUser.id || isDelegateeAndPrincipalTurn;
+  const isCurrentUserTurn: boolean = 
+    Boolean(correspondence.currentApproverId === activeUser?.id || isDelegateeAndPrincipalTurn);
 
   // Check if last minute was recalled and routing was reverted
   const lastMinute = minutes[minutes.length - 1];
