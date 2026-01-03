@@ -406,7 +406,7 @@ const OutboxPage = () => {
                               isInternal={item.isInternal}
                               isExternal={item.isExternal}
                             />
-                            <Badge variant={getStatusBadgeVariant(item.status as string)}>{item.status as string.replace('-', ' ')}</Badge>
+                            <Badge variant={getStatusBadgeVariant(item.status as string)}>{(item.status as string).replace('-', ' ')}</Badge>
                             {daysPending > 0 && <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />{daysPending} day{daysPending === 1 ? '' : 's'} pending</Badge>}
                           </div>
                         </div>

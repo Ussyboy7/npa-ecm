@@ -25,8 +25,8 @@ export const isAuthenticationError = (error: unknown): boolean => {
   }
   if (error instanceof Error) {
     return (
-      && error.name === "AuthenticationError" ||
-      && error.name === "AuthenticationExpiredError" ||
+      error.name === "AuthenticationError" ||
+      error.name === "AuthenticationExpiredError" ||
       (error instanceof Error ? error.message : "Unknown error") === "Authentication required" ||
       (error instanceof Error ? error.message : "Unknown error") === "Authentication expired" ||
       (error instanceof Error ? error.message : "Unknown error").includes("Authentication required") ||

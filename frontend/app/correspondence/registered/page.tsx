@@ -294,7 +294,7 @@ const RegisteredCorrespondencePage = () => {
                           <TableCell>{formatDateShort(item.receivedDate)}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={getStatusBadgeClass(item.status as string)}>
-                              {item.status as string.replace("-", " ")}
+                              {(item.status as string).replace("-", " ")}
                             </Badge>
                           </TableCell>
                           <TableCell>

@@ -58,7 +58,7 @@ export function getSearchSuggestions(
     }
     
     // Check title
-    if (item.title as string && item.title as string.toLowerCase().includes(lowerQuery)) {
+    if (item.title as string && (item.title as string).toLowerCase().includes(lowerQuery)) {
       suggestions.add(item.title as string);
     }
   }

@@ -433,7 +433,7 @@ const ExecutiveSupportInboxContent = () => {
                                 {item.referenceNumber}
                               </span>
                               <Badge variant={getStatusBadgeVariant(item.status as string)}>
-                                {item.status as string.replace('-', ' ').toUpperCase()}
+                                {(item.status as string).replace('-', ' ').toUpperCase()}
                               </Badge>
                               {item.priority && (
                                 <Badge
