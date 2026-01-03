@@ -251,7 +251,7 @@ export const ParallelRouteModal = ({
       setMergeStrategy('all');
     } catch (error: unknown) {
       logError('Failed to create parallel route', error);
-      const modalError = ModalErrorHandler.createErrorFromApi(error);
+      const modalError = ModalErrorHandler.createErrorFromApi(error as Record<string, unknown>);
       const errorMessage = ModalErrorHandler.getUserFriendlyMessage(modalError);
       setError(errorMessage);
       toast.error(errorMessage);

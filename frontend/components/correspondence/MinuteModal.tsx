@@ -1237,7 +1237,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         return;
       }
       logError('Failed to record minute', error);
-      const modalError = ModalErrorHandler.createErrorFromApi(error);
+      const modalError = ModalErrorHandler.createErrorFromApi(error as Record<string, unknown>);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {
