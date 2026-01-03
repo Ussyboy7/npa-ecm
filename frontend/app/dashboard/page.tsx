@@ -35,6 +35,7 @@ import {
   searchExecutiveRecords,
 } from '@/lib/analytics-client';
 import { apiFetch } from '@/lib/api-client';
+import { logError } from '@/lib/client-logger';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import dynamic from 'next/dynamic';
@@ -73,7 +74,7 @@ const Dashboard = () => {
 
   const division = useMemo(() => {
     if (!currentUser?.division) return undefined;
-    return divisions.find((item) => item.id === currentUser.division);
+    return divisions.find((item) => item.id as string === currentUser.division);
   }, [currentUser?.division, divisions]);
 
   // Fetch dashboard data from API
@@ -84,14 +85,13 @@ const Dashboard = () => {
       setDashboardLoading(true);
       try {
         // Fetch my inbox data which includes summary stats
-        const inboxResponse = await apiFetch<Record<string, unknown>>('/correspondence/items/my-inbox/?page_size=10');
-        const inboxData = Array.isArray(inboxResponse) ? inboxResponse : inboxResponse.results || [];
-        const summary = inboxResponse.summary || {};
-        
-        // Map to correspondence objects
-        const pending = inboxData
+        type InboxResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>>; summary?: Record<string, unknown> };
+        const inboxResponse = await apiFetch<InboxResponse>('/correspondence/items/my-inbox/?page_size=10');
+        const inboxDataArray = Array.isArray(inboxResponse) ? inboxResponse : (inboxResponse?.results || []);
+        const summary = (inboxResponse && typeof inboxResponse === 'object' && 'summary' in inboxResponse) ? inboxResponse.summary as Record<string, unknown> : {};
+        const pending = inboxDataArray
           .map(mapApiCorrespondence)
-          .filter((item) => item.status !== 'completed')
+          .filter((item) => item.status as string !== 'completed')
           .sort((a, b) => new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime())
           .slice(0, 10); // Limit to 10 most recent
         
@@ -103,21 +103,23 @@ const Dashboard = () => {
         const completedTodayResponse = await apiFetch<Record<string, unknown>>(
           `/correspondence/items/?status=completed&page_size=100`
         );
-        const completedItems = Array.isArray(completedTodayResponse) 
-          ? completedTodayResponse 
-          : completedTodayResponse.results || [];
-        const completedToday = completedItems.filter((item: Record<string, unknown>) => {
-          const referenceDate = item.updated_at || item.received_date;
+        type CompletedResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
+        const completedTodayResponseTyped = completedTodayResponse as CompletedResponse;
+        const completedItems = Array.isArray(completedTodayResponseTyped) 
+          ? completedTodayResponseTyped 
+          : (completedTodayResponseTyped?.results || []);
+        const completedToday = completedItems.filter((item) => {
+          const referenceDate = (item.updated_at && typeof item.updated_at === 'string') ? item.updated_at : ((item.received_date && typeof item.received_date === 'string') ? item.received_date : null);
           return referenceDate && new Date(referenceDate).getTime() >= startOfToday.getTime();
         }).length;
         
         setStats({
-          pending: summary.pending || pending.length,
-          inProgress: summary.in_progress || 0,
+          pending: (summary && typeof summary.pending === 'number') ? summary.pending : pending.length,
+          inProgress: (summary && typeof summary.in_progress === 'number') ? summary.in_progress : 0,
           completedToday,
-          urgent: summary.urgent || 0,
+          urgent: (summary && typeof summary.urgent === 'number') ? summary.urgent : 0,
         });
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load dashboard data:', error);
         // Set defaults on error
         setPendingCorrespondence([]);
@@ -173,7 +175,7 @@ const Dashboard = () => {
   const officeAssignments = useMemo(() => {
     return userOfficeMemberships
       .map((membership) => {
-        const office = offices.find((item) => item.id === membership.officeId);
+        const office = offices.find((item) => item.id as string === membership.officeId);
         if (!office) return null;
         return { membership, office };
       })
@@ -347,7 +349,10 @@ const Dashboard = () => {
             <p className="text-muted-foreground mt-1">
               {typeof currentUser.systemRole === 'string' 
                 ? currentUser.systemRole 
-                : currentUser.systemRole?.name || 'User'}
+                : (() => {
+                    const systemRoleObj = currentUser.systemRole as Record<string, unknown> | undefined;
+                    return (systemRoleObj && typeof systemRoleObj.name === 'string') ? systemRoleObj.name : 'User';
+                  })()}
               {division && ` - ${division.name}`}
             </p>
           </div>
@@ -530,8 +535,8 @@ const Dashboard = () => {
                   ) : (
                     inboxPreview.map((item) => (
                       <Link
-                        key={item.id}
-                        href={`/correspondence/${item.id}`}
+                        key={item.id as string}
+                        href={`/correspondence/${item.id as string}`}
                         className="block border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors"
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -584,8 +589,8 @@ const Dashboard = () => {
                     ) : (
                       escalationItems.map((item) => (
                         <Link
-                          key={item.id}
-                          href={`/correspondence/${item.id}`}
+                          key={item.id as string}
+                          href={`/correspondence/${item.id as string}`}
                           className="block border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors"
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -613,8 +618,8 @@ const Dashboard = () => {
                     ) : (
                       approvalsList.map((item) => (
                         <Link
-                          key={item.id}
-                          href={`/correspondence/${item.id}`}
+                          key={item.id as string}
+                          href={`/correspondence/${item.id as string}`}
                           className="block border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors"
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -711,8 +716,8 @@ const Dashboard = () => {
                   <div className="space-y-3">
                     {executiveRecords.map((item) => (
                       <Link
-                        key={item.id}
-                        href={`/correspondence/${item.id}`}
+                        key={item.id as string}
+                        href={`/correspondence/${item.id as string}`}
                         className="block border border-border rounded-lg p-3 hover:bg-muted/50 transition-colors"
                       >
                         <div className="flex items-center justify-between gap-2">

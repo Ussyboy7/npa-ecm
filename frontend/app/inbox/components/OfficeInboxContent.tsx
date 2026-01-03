@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { logInfo } from '@/lib/client-logger';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -74,7 +75,7 @@ const isOverdue = (item: Correspondence, slaTargets: SLATargets | null): boolean
   const thresholdHours = slaTargets?.[priority as keyof SLATargets] ?? DEFAULT_SLA_THRESHOLDS[priority] ?? DEFAULT_SLA_THRESHOLDS.default;
   const received = new Date(item.receivedDate).getTime();
   const hoursOpen = (Date.now() - received) / (1000 * 60 * 60); // Hours since received
-  return hoursOpen > thresholdHours && item.status !== 'completed';
+  return hoursOpen > thresholdHours && item.status as string !== 'completed';
 };
 
 const calculateDaysPending = (item: Correspondence): number => {
@@ -362,23 +363,24 @@ const CorrespondenceInbox = () => {
         : (Array.isArray(response) ? response : []);
       
       setInboxItems(results.map(mapApiCorrespondence));
+      const summary = response.summary as Record<string, unknown> as Record<string, unknown> | undefined;
       setSummary({
-        total: response.summary?.total ?? response.count ?? results.length,
-        urgent: response.summary?.urgent ?? 0,
-        overdue: response.summary?.overdue ?? 0,
-        assigned_to_user: response.summary?.assigned_to_user ?? 0,
+        total: (summary && typeof summary.total === 'number') ? summary.total : (response.count as number as number ?? results.length),
+        urgent: (summary && typeof summary.urgent === 'number') ? summary.urgent : 0,
+        overdue: (summary && typeof summary.overdue === 'number') ? summary.overdue : 0,
+        assigned_to_user: (summary && typeof summary.assigned_to_user === 'number') ? summary.assigned_to_user : 0,
       });
-      setCount(response.count ?? results.length);
-    } catch (err: Record<string, unknown>) {
+      setCount((response.count as number as number) ?? results.length);
+    } catch (err: unknown) {
       // Ignore abort errors and stale requests
-      if (err?.name === 'AbortError' || currentRequestId !== requestIdRef.current) {
+      if ((err instanceof Error && err.name === 'AbortError') || currentRequestId !== requestIdRef.current) {
         return;
       }
       logError('Failed to load office inbox', err);
-      
+
       // Extract user-friendly error message
       let errorMessage = 'Please try again.';
-      if (err?.message) {
+      if (err instanceof Error && err.message) {
         // For authentication errors, show a more helpful message
         if (err.message.includes('Authentication') || err.message.includes('401')) {
           errorMessage = 'Authentication required. Please refresh the page.';
@@ -400,9 +402,9 @@ const CorrespondenceInbox = () => {
       // Log the full error for debugging
       logError('[OfficeInboxContent] Full error:', {
         error: err,
-        message: err?.message,
-        status: err?.status,
-        response: err?.response,
+        message: (err instanceof Error ? err.message : 'Unknown error'),
+        status: (err instanceof Error && 'status' in err ? (err as any).status : undefined),
+        response: (err instanceof Error && 'response' in err ? (err as any).response : undefined),
       });
       
       setError(`Failed to load office inbox. ${errorMessage}`);
@@ -515,7 +517,7 @@ const CorrespondenceInbox = () => {
         'Subject': item.subject || '',
         'Sender': item.senderName || '',
         'Priority': item.priority || '',
-        'Status': item.status || '',
+        'Status': item.status as string || '',
         'Direction': item.direction || '',
         'Received Date': item.receivedDate ? formatDateShort(item.receivedDate) : '',
         'Days Pending': calculateDaysPending(item),
@@ -541,7 +543,7 @@ const CorrespondenceInbox = () => {
       });
 
       toast.success(`Exported ${exportData.length} items successfully`);
-    } catch (err: Record<string, unknown>) {
+    } catch (err: unknown) {
       toast.error('Failed to export items. Please try again.');
       logError('Export error:', err);
     } finally {

@@ -47,6 +47,17 @@ export default function VerifyPage() {
   const [hasFetched, setHasFetched] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  // Helper functions
+  const retry = () => {
+    setVerification(null);
+    setError(null);
+    setHasFetched(false);
+  };
+
+  const handleVerifyAnother = () => {
+    router.push('/verify');
+  };
+
   // Track when component has mounted on client to avoid hydration mismatches
   useEffect(() => {
     setMounted(true);

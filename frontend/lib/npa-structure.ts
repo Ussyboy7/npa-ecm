@@ -174,6 +174,7 @@ export type Correspondence = {
   };
   createdAt?: string;
   updatedAt?: string;
+  tags?: string[];
 };
 
 export type MinuteSignaturePayload = {

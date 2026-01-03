@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { logError } from '@/lib/client-logger';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -93,7 +94,7 @@ const DelegatedInbox = () => {
         method: 'POST',
       });
       // Remove from list
-      setDelegatedItems(prev => prev.filter(item => item.id !== delegationId));
+      setDelegatedItems(prev => prev.filter(item => item.id as string !== delegationId));
     } catch (err) {
       logError('Failed to mark delegation as complete:', err);
     } finally {
@@ -221,7 +222,7 @@ const DelegatedInbox = () => {
         ) : (
           <div className="space-y-4">
             {filteredItems.map((item) => (
-              <Card key={item.id} className="hover:shadow-md transition-shadow">
+              <Card key={item.id as string} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -280,11 +281,11 @@ const DelegatedInbox = () => {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => handleMarkComplete(item.id)}
-                      disabled={completingIds.has(item.id)}
+                      onClick={() => handleMarkComplete(item.id as string)}
+                      disabled={completingIds.has(item.id as string)}
                       className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10"
                     >
-                      {completingIds.has(item.id) ? (
+                      {completingIds.has(item.id as string) ? (
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
                         <CheckCircle2 className="h-4 w-4 mr-2" />

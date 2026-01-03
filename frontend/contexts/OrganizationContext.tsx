@@ -262,9 +262,9 @@ const mapApiUserToUser = (user: Record<string, unknown>): User => {
 };
 
 const mapApiDirectorate = (item: Record<string, unknown>): Directorate => ({
-  id: String(item.id),
+  id: String(item.id as string),
   name: item.name ?? 'Directorate',
-  code: item.code ?? `DIR-${String(item.id).slice(0, 6).toUpperCase()}`,
+  code: item.code ?? `DIR-${String(item.id as string).slice(0, 6).toUpperCase()}`,
   shortName: item.short_name ?? item.shortName ?? undefined,
   description: item.description ?? '',
   executiveDirectorId: normalizeId(item.executive_director ?? item.executive_director_id),
@@ -272,9 +272,9 @@ const mapApiDirectorate = (item: Record<string, unknown>): Directorate => ({
 });
 
 const mapApiDivision = (item: Record<string, unknown>): Division => ({
-  id: String(item.id),
+  id: String(item.id as string),
   name: item.name ?? 'Division',
-  code: item.code ?? `DIV-${String(item.id).slice(0, 6).toUpperCase()}`,
+  code: item.code ?? `DIV-${String(item.id as string).slice(0, 6).toUpperCase()}`,
   shortName: item.short_name ?? item.shortName ?? undefined,
   directorateId: normalizeId(item.directorate ?? item.directorate_id) ?? '',
   generalManagerId:
@@ -285,9 +285,9 @@ const mapApiDivision = (item: Record<string, unknown>): Division => ({
 });
 
 const mapApiDepartment = (item: Record<string, unknown>): Department => ({
-  id: String(item.id),
+  id: String(item.id as string),
   name: item.name ?? 'Department',
-  code: item.code ?? `DEPT-${String(item.id).slice(0, 6).toUpperCase()}`,
+  code: item.code ?? `DEPT-${String(item.id as string).slice(0, 6).toUpperCase()}`,
   shortName: item.short_name ?? item.shortName ?? undefined,
   divisionId: normalizeId(item.division ?? item.division_id) ?? '',
   assistantGeneralManagerId:
@@ -304,7 +304,7 @@ const mapApiDelegation = (item: Record<string, unknown>): AssistantAssignment =>
   if (item.can_approve) permissions.push('approve');
 
   return {
-    id: String(item.id),
+    id: String(item.id as string),
     executiveId: item.principal_id ?? item.principal?.id ?? '',
     assistantId: item.assistant_id ?? item.assistant?.id ?? '',
     type: item.can_approve ? 'TA' : 'PA',
@@ -314,7 +314,7 @@ const mapApiDelegation = (item: Record<string, unknown>): AssistantAssignment =>
 };
 
 const mapApiRole = (item: Record<string, unknown>): Role => ({
-  id: String(item.id),
+  id: String(item.id as string),
   name: item.name ?? 'Role',
   description: item.description ?? '',
   isActive: item.is_active ?? true,
@@ -325,9 +325,9 @@ const mapApiRole = (item: Record<string, unknown>): Role => ({
 });
 
 const mapApiOffice = (item: Record<string, unknown>): Office => ({
-  id: String(item.id),
+  id: String(item.id as string),
   name: item.name ?? 'Office',
-  code: item.code ?? `OFF-${String(item.id).slice(0, 6).toUpperCase()}`,
+  code: item.code ?? `OFF-${String(item.id as string).slice(0, 6).toUpperCase()}`,
   officeType: item.office_type ?? 'custom',
   directorateId: normalizeId(item.directorate ?? item.directorate_id),
   divisionId: normalizeId(item.division ?? item.division_id),
@@ -340,7 +340,7 @@ const mapApiOffice = (item: Record<string, unknown>): Office => ({
 });
 
 const mapApiOfficeMembership = (item: Record<string, unknown>): OfficeMembership => ({
-  id: String(item.id),
+  id: String(item.id as string),
   officeId: normalizeId(item.office ?? item.office_id) ?? '',
   officeName: item.office_name ?? item.office?.name ?? '',
   userId: normalizeId(item.user ?? item.user_id) ?? '',
@@ -363,8 +363,8 @@ const sortByName = <T extends { name: string }>(items: T[]) =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
 const upsertById = <T extends { id: string }>(items: T[], item: T, comparator?: (items: T[]) => T[]): T[] => {
-  const next = items.some((existing) => existing.id === item.id)
-    ? items.map((existing) => (existing.id === item.id ? item : existing))
+  const next = items.some((existing) => existing.id === item.id as string)
+    ? items.map((existing) => (existing.id === item.id as string ? item : existing))
     : [...items, item];
 
   return comparator ? comparator(next) : next;
@@ -587,10 +587,10 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
       setHasSynced(true);
       logInfo('Organization data loaded successfully:', { users: sortedUsers.length, directorates: sortedDirectorates.length, divisions: sortedDivisions.length, departments: sortedDepartments.length });
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load organization data from API', error);
       if (error instanceof Error) {
-        logError('Error details:', { message: error.message, stack: error.stack });
+        logError('Error details:', { message: (error instanceof Error ? error.message : "Unknown error"), stack: error.stack });
       }
     } finally {
       setIsSyncing(false);
@@ -920,7 +920,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       const updated = mapApiRole(response);
       applyRoleUpdate(updated);
       return updated;
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to update role', error);
       return null;
     }

@@ -80,7 +80,7 @@ export const NotificationPreferencesDialog = ({
           updatedAt: '',
         });
       }
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to load preferences', error);
       toast.error('Failed to load preferences');
     } finally {
@@ -96,7 +96,7 @@ export const NotificationPreferencesDialog = ({
       await updateNotificationPreferences(preferences);
       toast.success('Preferences saved');
       onOpenChange(false);
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to save preferences', error);
       toast.error('Failed to save preferences');
     } finally {

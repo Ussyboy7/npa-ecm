@@ -70,7 +70,7 @@ export const search = async (request: SearchRequest, signal?: AbortSignal): Prom
       signal,
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
     }
@@ -111,7 +111,7 @@ export const searchWithin = async (
       }),
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to search within documents', error);
     throw error;
   }
@@ -135,7 +135,7 @@ export const getSearchSuggestions = async (
       }
     );
     return response.suggestions;
-  } catch (error) {
+      } catch (error: unknown) {
     if (error instanceof Error && error.name === 'AbortError') {
       return [];
     }
@@ -151,7 +151,7 @@ export const getSavedSearches = async (): Promise<SavedSearch[]> => {
   try {
     const response = await apiFetch<SavedSearch[]>('/search/saved/');
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get saved searches', error);
     throw error;
   }
@@ -169,7 +169,7 @@ export const createSavedSearch = async (
       body: JSON.stringify(data),
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to create saved search', error);
     throw error;
   }
@@ -183,7 +183,7 @@ export const deleteSavedSearch = async (id: string): Promise<void> => {
     await apiFetch(`/search/saved/${id}/`, {
       method: 'DELETE',
     });
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to delete saved search', error);
     throw error;
   }
@@ -196,7 +196,7 @@ export const getSearchHistory = async (limit: number = 50): Promise<SearchHistor
   try {
     const response = await apiFetch<SearchHistory[]>(`/search/history/?limit=${limit}`);
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get search history', error);
     return [];
   }

@@ -70,7 +70,7 @@ export const DivisionFormModal = ({ open, onOpenChange, division, defaultDirecto
         toast({ title: "Success", description: "Division created successfully" });
       }
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       const description = error instanceof Error ? error.message : 'Unable to save division';
       toast({ title: 'Request failed', description, variant: 'destructive' });
     } finally {

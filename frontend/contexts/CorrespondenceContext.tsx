@@ -44,7 +44,7 @@ const normalizeId = (value: unknown): string | undefined => {
 };
 
 export const mapApiCorrespondence = (item: Record<string, unknown>): Correspondence => ({
-  id: String(item.id),
+  id: String(item.id as string),
   referenceNumber: item.reference_number ?? '',
   subject: item.subject ?? '',
   documentType: item.document_type ?? 'letter',
@@ -58,7 +58,7 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
   completedAt: item.completed_at ?? undefined,
   senderName: item.sender_name ?? '',
   senderOrganization: item.sender_organization ?? '',
-  status: item.status ?? 'pending',
+  status: item.status as string ?? 'pending',
   priority: item.priority ?? 'medium',
   divisionId: normalizeId(item.division ?? item.division_id),
   divisionName: item.division_name ?? (typeof item.division === 'object' && item.division ? item.division.name : undefined),
@@ -93,7 +93,7 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
     (typeof item.current_office === 'object' && item.current_office ? item.current_office.name : undefined),
   attachments: Array.isArray(item.attachments)
     ? item.attachments.map((attachment: Record<string, unknown>) => ({
-        id: normalizeId(attachment.id) ?? `${item.id}-att-${Math.random().toString(36).slice(2)}`,
+        id: normalizeId(attachment.id) ?? `${item.id as string}-att-${Math.random().toString(36).slice(2)}`,
         fileName: attachment.file_name ?? 'Attachment',
         fileType: attachment.file_type ?? undefined,
         fileSize: typeof attachment.file_size === 'number' ? attachment.file_size : undefined,
@@ -106,7 +106,7 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
     ? item.distribution.map((recipient: Record<string, unknown>) => {
         const recipientType = recipient.recipient_type ?? 'division';
         return {
-          id: normalizeId(recipient.id) ?? `${item.id}-dist-${Math.random().toString(36).slice(2)}`,
+          id: normalizeId(recipient.id) ?? `${item.id as string}-dist-${Math.random().toString(36).slice(2)}`,
           type:
             recipientType === 'directorate'
               ? 'directorate'
@@ -184,7 +184,7 @@ const mapApiMinute = (item: Record<string, unknown>): Minute => {
   }
   
   return {
-    id: String(item.id),
+    id: String(item.id as string),
     correspondenceId: item.correspondence ?? item.correspondence_id ?? '',
     userId: normalizeId(item.user ?? item.user_id) ?? '',
     userName:
@@ -277,7 +277,7 @@ const mapApiMinute = (item: Record<string, unknown>): Minute => {
 };
 
 const mapApiDelegation = (item: Record<string, unknown>): Delegation => ({
-  id: String(item.id),
+  id: String(item.id as string),
   correspondenceId: item.correspondence ? String(item.correspondence) : '',
   principalId: normalizeId(item.principal ?? item.principal_id) ?? '',
   executiveId: normalizeId(item.principal ?? item.principal_id) ?? '', // Legacy
@@ -406,8 +406,8 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       setCorrespondence(correspondenceList);
       setMinutes(minutesList);
       setDelegations(delegationsList);
-    } catch (error) {
-      if (error instanceof Error && error.message.toLowerCase().includes('auth')) {
+    } catch (error: unknown) {
+      if (error instanceof Error && (error instanceof Error ? error.message : "Unknown error").toLowerCase().includes('auth')) {
         logInfo('Correspondence data will sync after authentication is available.');
       } else {
         logError('Failed to load correspondence from API', error);
@@ -466,7 +466,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         saveMinutes(updated);
         return updated;
       });
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to add minute via API', error);
       throw error;
     }
@@ -486,11 +486,11 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
 
       const updated = mapApiCorrespondence(response);
       setCorrespondence((prev) => {
-        const updatedList = prev.map((item) => (item.id === updated.id ? updated : item));
+        const updatedList = prev.map((item) => (item.id as string === updated.id ? updated : item));
         saveCorrespondence(updatedList);
         return updatedList;
       });
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to update correspondence via API', error);
       throw error;
     }
@@ -510,7 +510,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         return updatedList;
       });
       return created;
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to create correspondence via API', error);
       throw error;
     }

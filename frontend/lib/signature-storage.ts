@@ -135,7 +135,7 @@ export const fetchUserSignature = async (): Promise<StoredSignature | null> => {
       lastUsedAt: response.last_used_at ?? undefined,
       timesUsed: response.times_used,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to fetch signature from backend:', error);
     return null;
   }
@@ -189,7 +189,7 @@ export const uploadUserSignature = async (
       lastUsedAt: response.last_used_at ?? undefined,
       timesUsed: response.times_used,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to upload signature:', error);
     throw error;
   }
@@ -234,7 +234,7 @@ export const updateSignatureSettings = async (
       lastUsedAt: response.last_used_at ?? undefined,
       timesUsed: response.times_used,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to update signature settings:', error);
     throw error;
   }
@@ -248,7 +248,7 @@ export const deleteUserSignatureFromBackend = async (): Promise<void> => {
     await apiFetch('/accounts/signature/', {
       method: 'DELETE',
     });
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to delete signature:', error);
     throw error;
   }
@@ -269,7 +269,7 @@ export const loadUserSignature = (userId: string): StoredSignature | null => {
     const data = localStorage.getItem(`${SIGNATURE_KEY_PREFIX}${userId}`);
     if (!data) return null;
     return JSON.parse(data) as StoredSignature;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to load signature from localStorage:', error);
     return null;
   }
@@ -283,7 +283,7 @@ export const saveUserSignature = (userId: string, signature: StoredSignature) =>
   try {
     const SIGNATURE_KEY_PREFIX = 'npa_signature_';
     localStorage.setItem(`${SIGNATURE_KEY_PREFIX}${userId}`, JSON.stringify(signature));
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to save signature to localStorage:', error);
   }
 };
@@ -296,7 +296,7 @@ export const deleteUserSignature = (userId: string) => {
   try {
     const SIGNATURE_KEY_PREFIX = 'npa_signature_';
     localStorage.removeItem(`${SIGNATURE_KEY_PREFIX}${userId}`);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to delete signature from localStorage:', error);
   }
 };
@@ -315,7 +315,7 @@ export const loadSignatureTemplates = async (): Promise<SignatureTemplate[]> => 
       return DEFAULT_SIGNATURE_TEMPLATES;
     }
     return templates;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to load signature templates from backend:', error);
     // Fallback to defaults if backend fails
     return DEFAULT_SIGNATURE_TEMPLATES;
@@ -343,7 +343,7 @@ export const ensureDefaultSignatureTemplates = async (): Promise<SignatureTempla
 export const loadUserSignaturePreferences = async (userId: string): Promise<UserSignaturePreferences | null> => {
   try {
     return await signatureTemplateApi.getUserSignaturePreferences();
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to load signature preferences from backend:', error);
     return null;
   }
@@ -352,7 +352,7 @@ export const loadUserSignaturePreferences = async (userId: string): Promise<User
 export const saveUserSignaturePreferences = async (userId: string, prefs: UserSignaturePreferences): Promise<void> => {
   try {
     await signatureTemplateApi.updateUserSignaturePreferences(prefs);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to save signature preferences to backend:', error);
     throw error;
   }

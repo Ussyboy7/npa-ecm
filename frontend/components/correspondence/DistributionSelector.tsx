@@ -137,15 +137,15 @@ export const DistributionSelector = ({
     } else if (selectedType === 'directorate') {
       name = allDirectorates.find((directorate) => directorate.id === selectedId)?.name ?? '';
     } else if (selectedType === 'division') {
-      const division = allDivisions.find((item) => item.id === selectedId);
+      const division = allDivisions.find((item) => item.id as string === selectedId);
       name = division?.name ?? '';
       newRecipient.directorateId = division?.directorateId;
     } else {
-      const department = allDepartments.find((item) => item.id === selectedId);
+      const department = allDepartments.find((item) => item.id as string === selectedId);
       name = department?.name ?? '';
       newRecipient.divisionId = department?.divisionId;
       if (department?.divisionId) {
-        const parentDivision = allDivisions.find((item) => item.id === department.divisionId);
+        const parentDivision = allDivisions.find((item) => item.id as string === department.divisionId);
         newRecipient.directorateId = parentDivision?.directorateId;
       }
     }
@@ -312,7 +312,7 @@ export const DistributionSelector = ({
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">Purpose</Label>
             <Select value={selectedPurpose} onValueChange={(value) => {
-              setSelectedPurpose(value as 'information' | 'action' | 'comment');
+              setSelectedPurpose(value as 'information' | 'action');
             }}>
               <SelectTrigger className="h-9">
                 <SelectValue />

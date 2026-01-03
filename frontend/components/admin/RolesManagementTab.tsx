@@ -108,7 +108,7 @@ export const RolesManagementTab = () => {
       });
 
       await refreshOrganizationData();
-    } catch (error) {
+    } catch (error: unknown) {
       const description = error instanceof Error ? error.message : "Unable to delete role";
       toast({
         title: "Delete failed",

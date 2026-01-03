@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, UserCheck, Mail, FileText, CheckCircle, CheckCircle2, Clock, AlertCircle, TrendingUp, Users, Activity } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
+import { logError } from '@/lib/client-logger';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import Link from 'next/link';
 import { getCases } from '@/lib/api/cases';
@@ -64,7 +65,7 @@ const SecretaryDashboardContent = () => {
       try {
         const response = await apiFetch<Executive[]>('/correspondence/cases/secretary-executives/');
         setExecutives(response);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load executives:', error);
       }
     };
@@ -95,24 +96,25 @@ const SecretaryDashboardContent = () => {
 
         // Calculate metrics
         const urgentItems = correspondence.filter(
-          (item: Correspondence) => item.priority === 'urgent' && item.status !== 'completed'
+          (item: Correspondence) => item.priority === 'urgent' && item.status as string !== 'completed'
         ).length;
 
         const pendingActions = correspondence.filter(
-          (item: Correspondence) => item.status === 'pending' || item.status === 'in-progress'
+          (item: Correspondence) => item.status as string === 'pending' || item.status as string === 'in-progress'
         ).length;
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const completedToday = correspondence.filter((item: Correspondence) => {
-          if (item.status !== 'completed') return false;
+          if (item.status as string !== 'completed') return false;
           const updatedDate = item.updatedAt ? new Date(item.updatedAt) : null;
           return updatedDate && updatedDate >= today;
         }).length;
 
+        const inboxResponseObj = inboxResponse as Record<string, unknown>;
         setMetrics({
-          totalCorrespondence: inboxResponse.count || correspondence.length,
-          totalCases: casesResponse.count || cases.length,
+          totalCorrespondence: (inboxResponseObj && typeof inboxResponseObj.count === 'number') ? inboxResponseObj.count : correspondence.length,
+          totalCases: (casesResponse && typeof casesResponse === 'object' && 'count' in casesResponse && typeof casesResponse.count === 'number') ? casesResponse.count : cases.length,
           totalForms: forms.length,
           urgentItems,
           pendingActions,
@@ -126,11 +128,11 @@ const SecretaryDashboardContent = () => {
         // Add recent correspondence
         correspondence.slice(0, 5).forEach((item: Correspondence) => {
           activities.push({
-            id: item.id,
+            id: item.id as string,
             type: 'correspondence',
             title: item.subject,
             timestamp: item.updatedAt || item.receivedDate,
-            status: item.status,
+            status: item.status as string,
           });
         });
 
@@ -151,7 +153,7 @@ const SecretaryDashboardContent = () => {
         );
         setRecentActivities(activities.slice(0, 8));
 
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load secretary metrics:', error);
       } finally {
         setLoading(false);

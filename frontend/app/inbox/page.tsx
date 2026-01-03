@@ -206,15 +206,16 @@ const ExecutiveInbox = () => {
           return acc;
         }, { overdue: 0, dueSoon: 0 });
 
+        const summary = corrResponse.summary as Record<string, unknown> | undefined;
         setSummary({
-          total: corrResponse.summary?.total ?? corrResponse.count ?? corrResults.length,
-          urgent: corrResponse.summary?.urgent ?? 0,
+          total: (summary && typeof summary.total === 'number') ? summary.total : (corrResponse.count as number ?? corrResults.length),
+          urgent: (summary && typeof summary.urgent === 'number') ? summary.urgent : 0,
           overdue: slaStats.overdue,
-          pending: corrResponse.summary?.pending ?? 0,
-          inProgress: corrResponse.summary?.in_progress ?? 0,
+          pending: (summary && typeof summary.pending === 'number') ? summary.pending : 0,
+          inProgress: (summary && typeof summary.in_progress === 'number') ? summary.in_progress : 0,
           dueSoon: slaStats.dueSoon,
         });
-        setCount(corrResponse.count ?? corrResults.length);
+        setCount((corrResponse.count as number) ?? corrResults.length);
 
         // Set shared documents
         setSharedDocuments(docsResponse.results || []);
@@ -304,7 +305,7 @@ const ExecutiveInbox = () => {
               <Badge variant="outline" className="gap-1"><Mail className="h-3 w-3" />Correspondence</Badge>
               <Badge variant={getPriorityColor(corr.priority)}>{corr.priority.toUpperCase()}</Badge>
               <Badge variant="outline" className="gap-1">{corr.direction === 'downward' ? '↓ Downward' : '↑ Upward'}</Badge>
-              <Badge variant={statusBadgeVariant} className={statusBadge.variant === 'warning' ? 'bg-warning/10 text-warning gap-1' : statusBadge.variant === 'info' ? 'bg-info/10 text-info gap-1' : 'gap-1'}>
+              <Badge variant={statusBadgeVariant} className="gap-1">
                 <Clock className="h-3 w-3" />{statusBadge.label}
               </Badge>
               {slaStatus && slaStatus.status === 'overdue' && (

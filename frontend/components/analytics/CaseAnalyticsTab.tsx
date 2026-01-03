@@ -53,7 +53,7 @@ export const CaseAnalyticsTab = () => {
     try {
       const response = await apiFetch<CaseStatistics>(`/analytics/cases/?range=${rangeDays}`);
       setStats(response);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load case statistics', error);
       toast.error('Failed to load case statistics');
     } finally {
@@ -264,7 +264,7 @@ export const CaseAnalyticsTab = () => {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {stats.top_assignments.by_division.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between">
+                      <div key={item.id as string} className="flex items-center justify-between">
                         <span className="text-sm truncate flex-1">{item.name}</span>
                         <Badge variant="secondary" className="ml-2">{item.count}</Badge>
                       </div>
@@ -285,7 +285,7 @@ export const CaseAnalyticsTab = () => {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {stats.top_assignments.by_department.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between">
+                      <div key={item.id as string} className="flex items-center justify-between">
                         <span className="text-sm truncate flex-1">{item.name}</span>
                         <Badge variant="secondary" className="ml-2">{item.count}</Badge>
                       </div>
@@ -306,7 +306,7 @@ export const CaseAnalyticsTab = () => {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {stats.top_assignments.by_user.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between">
+                      <div key={item.id as string} className="flex items-center justify-between">
                         <span className="text-sm truncate flex-1">{item.name}</span>
                         <Badge variant="secondary" className="ml-2">{item.count}</Badge>
                       </div>

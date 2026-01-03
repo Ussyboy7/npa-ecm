@@ -84,7 +84,7 @@ export const RelatedCorrespondenceCard = ({
     try {
       await onRefresh();
       toast.success('Related correspondence refreshed');
-    } catch (error) {
+    } catch (error: unknown) {
       toast.error('Failed to refresh related correspondence');
     } finally {
       setIsRefreshing(false);

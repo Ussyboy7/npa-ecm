@@ -111,7 +111,7 @@ export const processOCR = async (
       }),
     });
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to process OCR', error);
     throw error;
   }
@@ -124,7 +124,7 @@ export const getCaptureJob = async (jobId: string): Promise<CaptureJob> => {
   try {
     const response = await apiFetch<CaptureJob>(`/capture/jobs/${jobId}/`);
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to get capture job', error);
     throw error;
   }
@@ -138,7 +138,7 @@ export const getOCRResult = async (documentId: string): Promise<OCRResult | null
     const response = await apiFetch<OCRResult[]>(`/capture/ocr-results/?document=${documentId}`);
     // Return the most recent result
     return response && response.length > 0 ? response[0] : null;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to get OCR result', error);
     return null;
   }
@@ -152,7 +152,7 @@ export const cancelCaptureJob = async (jobId: string): Promise<void> => {
     await apiFetch(`/capture/jobs/${jobId}/cancel/`, {
       method: 'POST',
     });
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to cancel capture job', error);
     throw error;
   }
@@ -180,7 +180,7 @@ export const processBatch = async (
       }),
     });
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to process batch', error);
     throw error;
   }
@@ -193,7 +193,7 @@ export const getBatchUpload = async (batchId: string): Promise<BatchUpload> => {
   try {
     const response = await apiFetch<BatchUpload>(`/capture/batch-uploads/${batchId}/`);
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to get batch upload', error);
     throw error;
   }

@@ -98,7 +98,7 @@ export const ReplaceVersionDialog = ({
       onComplete(updated);
       toast.success('Version replaced successfully');
       handleClose();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to replace version', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to replace version';
       setError(errorMessage);

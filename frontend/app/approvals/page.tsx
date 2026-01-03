@@ -168,8 +168,8 @@ export default function ApprovalsPage() {
       
       setApprovals(executiveApprovals);
       // Use backend count for accurate pagination
-      const count = (response && typeof response === 'object' && 'count' in response && typeof response.count === 'number') 
-        ? response.count 
+      const count = (response && typeof response === 'object' && 'count' in response && typeof response.count as number === 'number') 
+        ? response.count as number 
         : executiveApprovals.length;
       setCount(count);
     } catch (err: unknown) {
@@ -518,7 +518,7 @@ export default function ApprovalsPage() {
         const blobUrl = URL.createObjectURL(pdfBlob);
         window.open(blobUrl, '_blank');
         setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-      } catch (error) {
+      } catch (error: unknown) {
         logError("Failed to load PDF:", error);
         toast.error(`Failed to load PDF: ${error instanceof Error ? error.message : String(error)}`);
         // Fallback to correspondence if PDF fails
@@ -583,7 +583,7 @@ export default function ApprovalsPage() {
                     const blobUrl = URL.createObjectURL(pdfBlob);
                     window.open(blobUrl, '_blank');
                     setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                  } catch (error) {
+                  } catch (error: unknown) {
                     logError("Failed to load PDF:", error);
                     toast.error(`Failed to load PDF: ${error instanceof Error ? error.message : String(error)}`);
                   }
@@ -924,7 +924,7 @@ export default function ApprovalsPage() {
                                   const blobUrl = URL.createObjectURL(pdfBlob);
                                   window.open(blobUrl, '_blank');
                                   setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                                } catch (error) {
+                                } catch (error: unknown) {
                                   console.error("Failed to load PDF:", error);
                                   toast.error(`Failed to load PDF: ${error instanceof Error ? error.message : String(error)}`);
                                 }

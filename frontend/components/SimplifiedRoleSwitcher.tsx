@@ -217,7 +217,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       // Only update state if request wasn't aborted
       if (!abortController.signal.aborted && mountedRef.current) {
         setBackendSearchResults(mappedUsers);
-        setBackendSearchTotal(response.count || mappedUsers.length);
+        setBackendSearchTotal(response.count as number || mappedUsers.length);
       }
     } catch (error: Record<string, unknown>) {
       // Ignore abort errors
@@ -510,7 +510,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
         void refreshCurrentUser();
         void refreshOrganizationData();
       });
-    } catch (error) {
+      } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to switch user";
       toast.error(message);
       
@@ -574,7 +574,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
         void refreshCurrentUser();
         void refreshOrganizationData();
       });
-    } catch (error) {
+      } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to restore your session";
       toast.error(message);
     }

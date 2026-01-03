@@ -128,7 +128,7 @@ export async function getFormDocument(id: string): Promise<FormDocument> {
       documentStructure: result.document ? Object.keys(result.document) : null,
     });
     return result;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('[dms-forms] Error fetching form document:', error);
     throw error;
   }

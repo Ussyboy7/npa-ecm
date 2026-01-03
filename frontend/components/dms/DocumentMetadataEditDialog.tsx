@@ -106,7 +106,7 @@ export const DocumentMetadataEditDialog = ({
           doc.tags.forEach((tag) => allTags.add(tag.toLowerCase()));
         });
         setTagSuggestions(Array.from(allTags).slice(0, 20).sort());
-      } catch (error) {
+      } catch (error: unknown) {
         // Silently fail - tag suggestions are optional
       }
     };
@@ -170,7 +170,7 @@ export const DocumentMetadataEditDialog = ({
             return next;
           });
         }
-      } catch (error) {
+      } catch (error: unknown) {
         // Silently fail - duplicate check is optional
       } finally {
         setCheckingReferenceNumber(false);

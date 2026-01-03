@@ -128,7 +128,7 @@ export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assi
         toast({ title: "Success", description: "Assistant assigned successfully" });
       }
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       const description = error instanceof Error ? error.message : (assignment ? 'Unable to update assignment' : 'Unable to create assignment');
       toast({ title: 'Request failed', description, variant: 'destructive' });
     } finally {

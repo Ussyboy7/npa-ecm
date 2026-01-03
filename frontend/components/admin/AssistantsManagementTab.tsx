@@ -186,7 +186,7 @@ export const AssistantsManagementTab = () => {
   };
 
   const handleRemoveAssistant = (assignmentId: string) => {
-    const assignment = assistantAssignments.find((item) => item.id === assignmentId);
+    const assignment = assistantAssignments.find((item) => item.id as string === assignmentId);
     if (!assignment) return;
 
     if (!canManageExecutive(assignment.executiveId)) {
@@ -205,7 +205,7 @@ export const AssistantsManagementTab = () => {
         toast({ title: "Success", description: "Assistant removed successfully" });
         setRemoveDialogOpen(false);
         setAssignmentToRemove("");
-      } catch (error) {
+      } catch (error: unknown) {
         const description = error instanceof Error ? error.message : "Unable to remove assistant";
         toast({ title: "Request failed", description, variant: "destructive" });
       }

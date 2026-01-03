@@ -131,7 +131,7 @@ export const EscalationRulesTab = () => {
       setChoices(choicesData);
       setEscalations(escalationsData);
       setSummary(summaryData);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load escalation data:', error);
     } finally {
       setLoading(false);
@@ -185,7 +185,7 @@ export const EscalationRulesTab = () => {
       }
       setDialogOpen(false);
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save escalation rule:', error);
     } finally {
       setSaving(false);
@@ -197,7 +197,7 @@ export const EscalationRulesTab = () => {
     try {
       await deleteEscalationRule(id);
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to delete escalation rule:', error);
     }
   };
@@ -206,7 +206,7 @@ export const EscalationRulesTab = () => {
     try {
       await toggleEscalationRule(id);
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to toggle escalation rule:', error);
     }
   };
@@ -216,7 +216,7 @@ export const EscalationRulesTab = () => {
       const result = await testEscalationRule(id);
       setTestResult(result);
       setTestDialogOpen(true);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to test escalation rule:', error);
     }
   };
@@ -225,7 +225,7 @@ export const EscalationRulesTab = () => {
     try {
       await acknowledgeEscalation(id);
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to acknowledge escalation:', error);
     }
   };
@@ -234,7 +234,7 @@ export const EscalationRulesTab = () => {
     try {
       await resolveEscalation(id);
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to resolve escalation:', error);
     }
   };

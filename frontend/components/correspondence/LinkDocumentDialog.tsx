@@ -60,7 +60,7 @@ export const LinkDocumentDialog = ({
           ordering: '-updated_at',
         });
         setDocuments(response.results);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load documents for linking', error);
         setDocuments([]);
       } finally {
@@ -133,7 +133,7 @@ export const LinkDocumentDialog = ({
               <p className="font-medium text-foreground">Suggested documents based on division/subject:</p>
               <div className="flex flex-wrap gap-2">
                 {recommendedIds.slice(0, 6).map((docId) => {
-                  const doc = documents.find((item) => item.id === docId);
+                  const doc = documents.find((item) => item.id as string === docId);
                   if (!doc) return null;
                   const selected = selectedIds.includes(docId);
                   return (

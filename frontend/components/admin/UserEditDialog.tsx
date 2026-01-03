@@ -277,7 +277,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
         });
       }
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       const description = error instanceof Error ? error.message : (user ? "Unable to update user" : "Unable to create user");
       toast({ title: user ? "Update failed" : "Creation failed", description, variant: "destructive" });
     } finally {

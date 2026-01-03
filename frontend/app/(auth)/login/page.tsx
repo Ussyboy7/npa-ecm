@@ -138,7 +138,7 @@ export default function LoginPage() {
       }
       
       router.push(redirectPath);
-    } catch (error) {
+    } catch (error: unknown) {
       logError(error);
       clearTokens();
       toast.error(

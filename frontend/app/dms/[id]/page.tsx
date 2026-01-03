@@ -28,6 +28,7 @@ import {
   type DocumentComment,
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
+import { type DistributionRecipient } from '@/lib/npa-structure';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { formatFileSize } from '@/lib/file-utils';
 import { ArrowLeft, FileText, Download, Layers, Filter, User as UserIcon, Tag, Pencil, FilePlus, Clock, Eye, MessageSquare, Users, Plus, X, CheckCircle2, Circle, Activity, Shield, Loader2, FolderKanban, Share2, AlertCircle, FolderTree, PenTool, Scan, Download as DownloadIcon } from 'lucide-react';
@@ -103,7 +104,16 @@ const DocumentDetailPage = () => {
   const [replaceVersionId, setReplaceVersionId] = useState<string | null>(null);
   const [minuteDocumentCorrespondence, setMinuteDocumentCorrespondence] = useState<Correspondence | null>(null);
   const [selectedAccessLog, setSelectedAccessLog] = useState<DocumentAccessLog | null>(null);
-  
+
+  // Helper function to normalize IDs
+  const normalizeId = (value: unknown): string | undefined => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
+      return normalizeId((value as Record<string, unknown>).id);
+    }
+    return String(value);
+  };
+
   // Document state
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -230,7 +240,7 @@ const DocumentDetailPage = () => {
       try {
         const ws = await fetchWorkspaces();
         dispatchCollaboration({ type: 'SET_WORKSPACES', payload: ws });
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load workspaces', error);
       }
     };
@@ -289,19 +299,32 @@ const DocumentDetailPage = () => {
               setFormDocumentId(formDocs[0].id);
             }
           }
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to load form document', error);
         }
       }
       return doc;
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       // Check if it's a 404 (expected for missing documents) - don't log as error
-      const isNotFound = error?.status === 404 || error?.isNotFound || error?.message?.includes('No Document matches') || error?.message?.includes('not found');
+      const errorObj = error && typeof error === 'object' ? error as Record<string, unknown> : null;
+      const isNotFound = (errorObj && errorObj.status === 404) || (errorObj && errorObj.isNotFound === true) || (errorObj && typeof errorObj.message === 'string' && (errorObj.message.includes('No Document matches') || errorObj.message.includes('not found')));
       
       if (!isNotFound) {
         // Only log unexpected errors
         logError('Failed to load document', error);
-        const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to load document';
+        let errorMessage = 'Failed to load document';
+        if (errorObj) {
+          if (errorObj.response && typeof errorObj.response === 'object') {
+            const response = errorObj.response as Record<string, unknown>;
+            if (response.data && typeof response.data === 'object') {
+              const data = response.data as Record<string, unknown>;
+              errorMessage = (data.detail as string) || errorMessage;
+            }
+          }
+          if (errorMessage === 'Failed to load document') {
+            errorMessage = (errorObj.message as string) || errorMessage;
+          }
+        }
         setDocumentError(errorMessage);
         setDocument(null);
         return null;
@@ -309,8 +332,19 @@ const DocumentDetailPage = () => {
       
       // For expected 404s, provide a helpful error message
       // The document might be: deleted, permission-restricted, or truly doesn't exist
-      const errorMessage = error?.response?.data?.detail || 
-        'The document you are looking for does not exist, has been deleted, or you do not have permission to view it.';
+      let errorMessage = 'The document you are looking for does not exist, has been deleted, or you do not have permission to view it.';
+      if (errorObj) {
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (errorMessage === 'The document you are looking for does not exist, has been deleted, or you do not have permission to view it.') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
       
         // For expected 404s, just log as info (suppressed in production)
         logInfo('Document not found:', params.id);
@@ -359,7 +393,7 @@ const DocumentDetailPage = () => {
                 action: 'view',
                 sensitivity: doc.sensitivity,
               });
-            } catch (error) {
+            } catch (error: unknown) {
               logError('Failed to log document access', error);
             }
           }
@@ -374,9 +408,9 @@ const DocumentDetailPage = () => {
               `/correspondence/document-links/?document=${params.id}`
             );
             // Handle both array and paginated response
-            const links = Array.isArray(linksResponse) 
-              ? linksResponse 
-              : (linksResponse.results || linksResponse.data || []);
+            const links = Array.isArray(linksResponse)
+              ? linksResponse
+              : ((linksResponse && typeof linksResponse === 'object' && 'results' in linksResponse && Array.isArray(linksResponse.results)) ? linksResponse.results : ((linksResponse && typeof linksResponse === 'object' && 'data' in linksResponse && Array.isArray(linksResponse.data)) ? linksResponse.data : []));
             
             logInfo(`[DMS Detail] Loaded ${links.length} document link(s) for document ${params.id}`);
             
@@ -404,112 +438,113 @@ const DocumentDetailPage = () => {
                       distribution: corrResponse.distribution,
                       distributionCount: Array.isArray(corrResponse.distribution) ? corrResponse.distribution.length : 0
                     });
-                    
-                    // Helper function to normalize IDs
-                    const normalizeId = (value: unknown): string | undefined => {
-                      if (value === null || value === undefined) return undefined;
-                      if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
-                        return normalizeId((value as Record<string, unknown>).id);
-                      }
-                      return String(value);
-                    };
-                    
+
                     // Handle paginated response
-                    const minutesArray = Array.isArray(minutesResponse) 
-                      ? minutesResponse 
-                      : (minutesResponse?.results || minutesResponse?.data || []);
+                    type MinutesResponse = Array<Record<string, unknown>> | { results?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
+                    const minutesResponseTyped = minutesResponse as MinutesResponse;
+                    const minutesArray = Array.isArray(minutesResponseTyped) 
+                      ? minutesResponseTyped 
+                      : (minutesResponseTyped?.results || minutesResponseTyped?.data || []);
 
                     // Map minutes to extract user info
                     const minutes: Minute[] = minutesArray.map((item: Record<string, unknown>) => {
 
                       return {
-                        id: String(item.id),
+                        id: String(item.id as string),
                         correspondenceId: String(corrId),
                         userId: normalizeId(item.user ?? item.user_id) ?? '',
                         userName:
                           typeof item.user === 'object' && item.user
                             ? (() => {
-                                const fullName = `${item.user.first_name ?? ''} ${item.user.last_name ?? ''}`.trim();
+                                const userObj = item.user as Record<string, unknown>;
+                                const firstName = userObj.first_name ? String(userObj.first_name) : '';
+                                const lastName = userObj.last_name ? String(userObj.last_name) : '';
+                                const fullName = `${firstName} ${lastName}`.trim();
                                 if (fullName.length > 0) return fullName;
-                                return item.user.username ?? undefined;
+                                return userObj.username ? String(userObj.username) : undefined;
                               })()
                             : undefined,
-                        userEmail: typeof item.user === 'object' ? item.user.email ?? undefined : undefined,
+                        userEmail: (typeof item.user === 'object' && item.user) ? ((item.user as Record<string, unknown>).email ? String((item.user as Record<string, unknown>).email) : undefined) : undefined,
                         userSystemRole: undefined, // Can be extracted if needed
-                        gradeLevel: item.grade_level ?? '',
-                        actionType: item.action_type ?? 'minute',
-                        minuteText: item.minute_text ?? '',
-                        direction: item.direction ?? 'downward',
-                        stepNumber: item.step_number ?? 1,
-                        timestamp: item.timestamp ?? new Date().toISOString(),
-                        actedBySecretary: item.acted_by_secretary ?? false,
-                        actedByAssistant: item.acted_by_assistant ?? false,
-                        assistantType: item.assistant_type ?? undefined,
-                        readAt: item.read_at ?? undefined,
-                        mentions: Array.isArray(item.mentions) ? item.mentions : [],
-                        signature: item.signature_payload ?? undefined,
-                        toOfficeId: item.to_office ? (typeof item.to_office === 'string' ? item.to_office : item.to_office.id) : undefined,
-                        toOfficeName: item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? item.to_office.name : undefined),
-                        toUserId: item.to_user ? (typeof item.to_user === 'string' ? item.to_user : item.to_user.id) : undefined,
-                        toUserName: item.to_user_name ?? (typeof item.to_user === 'object' && item.to_user ? `${item.to_user.first_name ?? ''} ${item.to_user.last_name ?? ''}`.trim() : undefined),
-                        isRecalled: item.is_recalled ?? false,
-                        recalledAt: item.recalled_at ?? undefined,
-                        recallReason: item.recall_reason ?? undefined,
+                        gradeLevel: String(item.grade_level ?? ''),
+                        actionType: (item.action_type ?? 'minute') as 'minute' | 'forward' | 'approve' | 'reject' | 'treat',
+                        minuteText: String(item.minute_text ?? ''),
+                        direction: (item.direction ?? 'downward') as 'upward' | 'downward',
+                        stepNumber: typeof item.step_number === 'number' ? item.step_number : 1,
+                        timestamp: (typeof item.timestamp === 'string' ? item.timestamp : new Date().toISOString()),
+                        actedBySecretary: Boolean(item.acted_by_secretary ?? false),
+                        actedByAssistant: Boolean(item.acted_by_assistant ?? false),
+                        assistantType: (item.assistant_type && typeof item.assistant_type === 'string' && (item.assistant_type === 'TA' || item.assistant_type === 'PA')) ? item.assistant_type as 'TA' | 'PA' : undefined,
+                        readAt: (item.read_at && typeof item.read_at === 'string') ? item.read_at : undefined,
+                        mentions: Array.isArray(item.mentions) ? item.mentions.map(m => String(m)) : [],
+                        signature: (item.signature_payload && typeof item.signature_payload === 'object' && 'imageData' in item.signature_payload && 'appliedAt' in item.signature_payload) ? {
+                          imageData: String((item.signature_payload as Record<string, unknown>).imageData || ''),
+                          appliedAt: String((item.signature_payload as Record<string, unknown>).appliedAt || ''),
+                          fileName: (item.signature_payload as Record<string, unknown>).fileName ? String((item.signature_payload as Record<string, unknown>).fileName) : undefined,
+                          templateId: (item.signature_payload as Record<string, unknown>).templateId ? String((item.signature_payload as Record<string, unknown>).templateId) : undefined,
+                          templateType: ((item.signature_payload as Record<string, unknown>).templateType && ['approval', 'minute', 'forward', 'treatment'].includes(String((item.signature_payload as Record<string, unknown>).templateType))) ? (item.signature_payload as Record<string, unknown>).templateType as 'approval' | 'minute' | 'forward' | 'treatment' : undefined,
+                        } : undefined,
+                        toOfficeId: item.to_office ? (typeof item.to_office === 'string' ? item.to_office : (typeof item.to_office === 'object' && item.to_office && 'id' in item.to_office ? String(item.to_office.id) : undefined)) : undefined,
+                        toOfficeName: (item.to_office_name && typeof item.to_office_name === 'string') ? item.to_office_name : (typeof item.to_office === 'object' && item.to_office && 'name' in item.to_office && typeof item.to_office.name === 'string' ? item.to_office.name : undefined),
+                        toUserId: item.to_user ? (typeof item.to_user === 'string' ? item.to_user : (typeof item.to_user === 'object' && item.to_user && 'id' in item.to_user ? String(item.to_user.id) : undefined)) : undefined,
+                        toUserName: (item.to_user_name && typeof item.to_user_name === 'string') ? item.to_user_name : (typeof item.to_user === 'object' && item.to_user ? (() => {
+                          const firstName = (item.to_user as Record<string, unknown>).first_name ? String((item.to_user as Record<string, unknown>).first_name) : '';
+                          const lastName = (item.to_user as Record<string, unknown>).last_name ? String((item.to_user as Record<string, unknown>).last_name) : '';
+                          const fullName = `${firstName} ${lastName}`.trim();
+                          return fullName.length > 0 ? fullName : undefined;
+                        })() : undefined),
+                        isRecalled: Boolean(item.is_recalled ?? false),
+                        recalledAt: (item.recalled_at && typeof item.recalled_at === 'string') ? item.recalled_at : undefined,
+                        recallReason: (item.recall_reason && typeof item.recall_reason === 'string') ? item.recall_reason : undefined,
                       };
                     });
                     // Map distribution (reuse normalizeId function defined above)
                     const distribution = Array.isArray(corrResponse.distribution)
                       ? corrResponse.distribution.map((recipient: Record<string, unknown>) => {
-                          const recipientType = recipient.recipient_type ?? 'division';
+                          const recipientType = (recipient.recipient_type && typeof recipient.recipient_type === 'string' && ['division', 'department', 'directorate', 'user'].includes(recipient.recipient_type)) ? recipient.recipient_type as 'division' | 'department' | 'directorate' | 'user' : 'division';
                           return {
                             id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
-                            type:
-                              recipientType === 'directorate'
-                                ? 'directorate'
-                                : recipientType === 'department'
-                                ? 'department'
-                                : 'division',
+                            type: recipientType as 'division' | 'department' | 'directorate' | 'user',
                             directorateId: normalizeId(recipient.directorate),
                             divisionId: normalizeId(recipient.division),
                             departmentId: normalizeId(recipient.department),
-                            name:
-                              recipient.directorate_name ??
-                              recipient.division_name ??
-                              recipient.department_name ??
-                              undefined,
+                            name: (recipient.directorate_name && typeof recipient.directorate_name === 'string') ? recipient.directorate_name : ((recipient.division_name && typeof recipient.division_name === 'string') ? recipient.division_name : ((recipient.department_name && typeof recipient.department_name === 'string') ? recipient.department_name : undefined)),
                             addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
                             addedByName:
                               typeof recipient.added_by === 'object' && recipient.added_by
                                 ? (() => {
-                                    const fullName = `${recipient.added_by.first_name ?? ''} ${recipient.added_by.last_name ?? ''}`.trim();
+                                    const addedByObj = recipient.added_by as Record<string, unknown>;
+                                    const firstName = addedByObj.first_name ? String(addedByObj.first_name) : '';
+                                    const lastName = addedByObj.last_name ? String(addedByObj.last_name) : '';
+                                    const fullName = `${firstName} ${lastName}`.trim();
                                     if (fullName.length > 0) return fullName;
-                                    return recipient.added_by.username ?? undefined;
+                                    return addedByObj.username ? String(addedByObj.username) : undefined;
                                   })()
                                 : undefined,
-                            addedAt: recipient.created_at ?? undefined,
-                            purpose: recipient.purpose ?? undefined,
+                            addedAt: (recipient.created_at && typeof recipient.created_at === 'string') ? recipient.created_at : undefined,
+                            purpose: (recipient.purpose && typeof recipient.purpose === 'string' && (recipient.purpose === 'information' || recipient.purpose === 'action')) ? recipient.purpose as 'information' | 'action' : undefined,
                           };
                         })
                       : [];
                     
                     const correspondence: Correspondence = {
                       id: String(corrResponse.id),
-                      referenceNumber: corrResponse.reference_number ?? '',
-                      subject: corrResponse.subject ?? '',
-                      source: corrResponse.source ?? 'internal',
-                      receivedDate: corrResponse.received_date ?? '',
-                      senderName: corrResponse.sender_name ?? '',
-                      senderOrganization: corrResponse.sender_organization ?? '',
-                      status: corrResponse.status ?? 'pending',
-                      priority: corrResponse.priority ?? 'medium',
-                      divisionId: corrResponse.division ? (typeof corrResponse.division === 'string' ? corrResponse.division : corrResponse.division.id) : undefined,
-                      departmentId: corrResponse.department ? (typeof corrResponse.department === 'string' ? corrResponse.department : corrResponse.department.id) : undefined,
-                      currentApproverId: corrResponse.current_approver ? (typeof corrResponse.current_approver === 'string' ? corrResponse.current_approver : corrResponse.current_approver.id) : undefined,
-                      createdById: corrResponse.created_by ? (typeof corrResponse.created_by === 'string' ? corrResponse.created_by : corrResponse.created_by.id) : undefined,
-                      direction: corrResponse.direction ?? 'upward',
+                      referenceNumber: String(corrResponse.reference_number ?? ''),
+                      subject: String(corrResponse.subject ?? ''),
+                      source: (corrResponse.source ?? 'internal') as 'internal' | 'external',
+                      receivedDate: String(corrResponse.received_date ?? ''),
+                      senderName: String(corrResponse.sender_name ?? ''),
+                      senderOrganization: String(corrResponse.sender_organization ?? ''),
+                      status: (corrResponse.status ?? 'pending') as 'pending' | 'in-progress' | 'completed' | 'archived',
+                      priority: (corrResponse.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'urgent',
+                      divisionId: corrResponse.division ? (typeof corrResponse.division === 'string' ? corrResponse.division : (typeof corrResponse.division === 'object' && corrResponse.division && 'id' in corrResponse.division ? String(corrResponse.division.id) : undefined)) : undefined,
+                      departmentId: corrResponse.department ? (typeof corrResponse.department === 'string' ? corrResponse.department : (typeof corrResponse.department === 'object' && corrResponse.department && 'id' in corrResponse.department ? String(corrResponse.department.id) : undefined)) : undefined,
+                      currentApproverId: corrResponse.current_approver ? (typeof corrResponse.current_approver === 'string' ? corrResponse.current_approver : (typeof corrResponse.current_approver === 'object' && corrResponse.current_approver && 'id' in corrResponse.current_approver ? String(corrResponse.current_approver.id) : undefined)) : undefined,
+                      createdById: corrResponse.created_by ? (typeof corrResponse.created_by === 'string' ? corrResponse.created_by : (typeof corrResponse.created_by === 'object' && corrResponse.created_by && 'id' in corrResponse.created_by ? String(corrResponse.created_by.id) : undefined)) : undefined,
+                      direction: (corrResponse.direction ?? 'upward') as 'upward' | 'downward',
                       distribution,
-                      createdAt: corrResponse.created_at,
-                      updatedAt: corrResponse.updated_at,
+                      createdAt: (corrResponse.created_at && typeof corrResponse.created_at === 'string') ? corrResponse.created_at : undefined,
+                      updatedAt: (corrResponse.updated_at && typeof corrResponse.updated_at === 'string') ? corrResponse.updated_at : undefined,
                     };
 
                       return {
@@ -517,7 +552,7 @@ const DocumentDetailPage = () => {
                         minutes,
                         linkNotes: link.notes,
                       };
-                    } catch (error) {
+                    } catch (error: unknown) {
                       logError('Failed to load related correspondence', error);
                       return null;
                     }
@@ -537,12 +572,12 @@ const DocumentDetailPage = () => {
               logInfo('[DMS Detail] No document links found for document', { documentId: params.id });
               if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
             }
-          } catch (error) {
+          } catch (error: unknown) {
             logError('[DMS Detail] Error loading related correspondence', error);
             logError('Failed to load related correspondence', error);
             if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
         }
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load document', error);
         toast.error('Unable to load document');
         router.push('/documents');
@@ -618,8 +653,8 @@ const DocumentDetailPage = () => {
         toast.success(`Text extracted from ${method} (${result.characters} characters)`);
         await loadDocument();
         return;
-      } catch (err: Record<string, unknown>) {
-        const errorMsg = err?.message || (isWordDoc ? 'Failed to extract text from Word document' : 'Failed to extract text from HTML');
+      } catch (err: unknown) {
+        const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : (isWordDoc ? 'Failed to extract text from Word document' : 'Failed to extract text from HTML');
         dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
         dispatchOCR({ type: 'SET_JOB', versionId, job: null });
         dispatchOCR({ type: 'SET_ERROR', versionId, error: errorMsg });
@@ -662,8 +697,8 @@ const DocumentDetailPage = () => {
         // Start polling for status updates
         pollOCRJobStatus(versionId, job.id);
       }
-    } catch (err: Record<string, unknown>) {
-      const errorMsg = err?.message || 'Failed to start OCR processing. Ensure Celery worker is running.';
+    } catch (err: unknown) {
+      const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Failed to start OCR processing. Ensure Celery worker is running.';
       dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
       dispatchOCR({ type: 'SET_JOB', versionId, job: null });
       dispatchOCR({ type: 'SET_ERROR', versionId, error: errorMsg });
@@ -711,14 +746,15 @@ const DocumentDetailPage = () => {
           dispatchOCR({ type: 'SET_ERROR', versionId, error: 'OCR processing timed out. The job may still be running in the background.' });
           toast.warning('OCR processing is taking longer than expected. Please check back later.');
         }
-      } catch (err: Record<string, unknown>) {
+      } catch (err: unknown) {
         logError('Failed to poll OCR job status', err);
         // Don't clear interval on first error, but clear after multiple failures
         if (pollCount >= 10) {
         clearInterval(pollInterval);
           dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
           dispatchOCR({ type: 'SET_JOB', versionId, job: null });
-          dispatchOCR({ type: 'SET_ERROR', versionId, error: err?.message || 'Failed to check OCR status. The Celery worker may not be running.' });
+          const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Failed to check OCR status. The Celery worker may not be running.';
+          dispatchOCR({ type: 'SET_ERROR', versionId, error: errorMsg });
           toast.error('Failed to check OCR status. Please ensure the backend worker is running.');
         }
       }
@@ -783,37 +819,38 @@ const DocumentDetailPage = () => {
 
               const [corrResponse, minutesResponse] = await Promise.all([
                 apiFetch<Record<string, unknown>>(`/correspondence/items/${corrId}/`),
-                apiFetch<unknown[]>(`/correspondence/minutes/?correspondence=${corrId}`),
+                apiFetch<unknown[] | { results?: unknown[]; data?: unknown[] }>(`/correspondence/minutes/?correspondence=${corrId}`),
               ]);
 
               logInfo(`[DMS Detail] Minutes API response (refresh) for correspondence ${corrId}:`, minutesResponse);
               
               // Handle paginated response
-              const minutesArray = Array.isArray(minutesResponse) 
-                ? minutesResponse 
+              const minutesArray = Array.isArray(minutesResponse)
+                ? minutesResponse
                 : (minutesResponse?.results || minutesResponse?.data || []);
 
-              const minutes: Minute[] = minutesArray.map((item: Record<string, unknown>) => {
+              const minutes: Minute[] = (minutesArray as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
 
                     return {
-                      id: String(item.id),
+                      id: String(item.id as string),
                       correspondenceId: String(corrId),
                       userId: normalizeId(item.user ?? item.user_id) ?? '',
                       userName:
                         typeof item.user === 'object' && item.user
                           ? (() => {
-                              const fullName = `${item.user.first_name ?? ''} ${item.user.last_name ?? ''}`.trim();
+                              const userObj = item.user as Record<string, unknown>;
+                              const fullName = `${userObj.first_name ?? ''} ${userObj.last_name ?? ''}`.trim();
                               if (fullName.length > 0) return fullName;
-                              return item.user.username ?? undefined;
+                              return userObj.username as string ?? undefined;
                             })()
                           : undefined,
-                      userEmail: typeof item.user === 'object' ? item.user.email ?? undefined : undefined,
+                      userEmail: typeof item.user === 'object' ? (item.user as Record<string, unknown>).email as string ?? undefined : undefined,
                       userSystemRole: undefined,
-                      gradeLevel: item.grade_level ?? '',
-                      actionType: item.action_type ?? 'minute',
-                      minuteText: item.minute_text ?? '',
-                      direction: item.direction ?? 'downward',
-                      stepNumber: item.step_number ?? 1,
+                      gradeLevel: item.grade_level as string ?? '',
+                      actionType: item.action_type as Minute['actionType'] ?? 'minute',
+                      minuteText: item.minute_text as string ?? '',
+                      direction: item.direction as Minute['direction'] ?? 'downward',
+                      stepNumber: item.step_number as number ?? 1,
                       timestamp: item.timestamp ?? new Date().toISOString(),
                       actedBySecretary: item.acted_by_secretary ?? false,
                       actedByAssistant: item.acted_by_assistant ?? false,
@@ -821,14 +858,14 @@ const DocumentDetailPage = () => {
                       readAt: item.read_at ?? undefined,
                       mentions: Array.isArray(item.mentions) ? item.mentions : [],
                       signature: item.signature_payload ?? undefined,
-                      toOfficeId: item.to_office ? (typeof item.to_office === 'string' ? item.to_office : item.to_office.id) : undefined,
-                      toOfficeName: item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? item.to_office.name : undefined),
-                      toUserId: item.to_user ? (typeof item.to_user === 'string' ? item.to_user : item.to_user.id) : undefined,
-                      toUserName: item.to_user_name ?? (typeof item.to_user === 'object' && item.to_user ? `${item.to_user.first_name ?? ''} ${item.to_user.last_name ?? ''}`.trim() : undefined),
+                      toOfficeId: item.to_office ? (typeof item.to_office === 'string' ? item.to_office : (item.to_office as Record<string, unknown>).id) : undefined,
+                      toOfficeName: item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? (item.to_office as Record<string, unknown>).name : undefined),
+                      toUserId: item.to_user ? (typeof item.to_user === 'string' ? item.to_user : (item.to_user as Record<string, unknown>).id) : undefined,
+                      toUserName: item.to_user_name ?? (typeof item.to_user === 'object' && item.to_user ? `${(item.to_user as Record<string, unknown>).first_name ?? ''} ${(item.to_user as Record<string, unknown>).last_name ?? ''}`.trim() : undefined),
                       isRecalled: item.is_recalled ?? false,
                       recalledAt: item.recalled_at ?? undefined,
-                      recallReason: item.recall_reason ?? undefined,
-                    };
+                      recallReason: item.recall_reason as string ?? undefined,
+                    } as Minute;
                   });
               
               // Map distribution (reuse normalizeId function defined above)
@@ -847,43 +884,44 @@ const DocumentDetailPage = () => {
                       divisionId: normalizeId(recipient.division),
                       departmentId: normalizeId(recipient.department),
                       name:
-                        recipient.directorate_name ??
-                        recipient.division_name ??
-                        recipient.department_name ??
+                        recipient.directorate_name as string ??
+                        recipient.division_name as string ??
+                        recipient.department_name as string ??
                         undefined,
                       addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
                       addedByName:
                         typeof recipient.added_by === 'object' && recipient.added_by
                           ? (() => {
-                              const fullName = `${recipient.added_by.first_name ?? ''} ${recipient.added_by.last_name ?? ''}`.trim();
+                              const addedByObj = recipient.added_by as Record<string, unknown>;
+                              const fullName = `${addedByObj.first_name ?? ''} ${addedByObj.last_name ?? ''}`.trim();
                               if (fullName.length > 0) return fullName;
-                              return recipient.added_by.username ?? undefined;
+                              return (recipient.added_by as Record<string, unknown>).username as string ?? undefined;
                             })()
                           : undefined,
-                      addedAt: recipient.created_at ?? undefined,
-                      purpose: recipient.purpose ?? undefined,
-                    };
+                      addedAt: recipient.created_at as string ?? undefined,
+                      purpose: recipient.purpose as DistributionRecipient['purpose'] ?? undefined,
+                    } as DistributionRecipient;
                   })
                 : [];
               
               const correspondence: Correspondence = {
                 id: String(corrResponse.id),
-                referenceNumber: corrResponse.reference_number ?? '',
-                subject: corrResponse.subject ?? '',
-                source: corrResponse.source ?? 'internal',
-                receivedDate: corrResponse.received_date ?? '',
-                senderName: corrResponse.sender_name ?? '',
-                senderOrganization: corrResponse.sender_organization ?? '',
-                status: corrResponse.status ?? 'pending',
-                priority: corrResponse.priority ?? 'medium',
-                divisionId: corrResponse.division ? (typeof corrResponse.division === 'string' ? corrResponse.division : corrResponse.division.id) : undefined,
-                departmentId: corrResponse.department ? (typeof corrResponse.department === 'string' ? corrResponse.department : corrResponse.department.id) : undefined,
-                currentApproverId: corrResponse.current_approver ? (typeof corrResponse.current_approver === 'string' ? corrResponse.current_approver : corrResponse.current_approver.id) : undefined,
-                createdById: corrResponse.created_by ? (typeof corrResponse.created_by === 'string' ? corrResponse.created_by : corrResponse.created_by.id) : undefined,
-                direction: corrResponse.direction ?? 'upward',
+                referenceNumber: corrResponse.reference_number as string ?? '',
+                subject: corrResponse.subject as string ?? '',
+                source: (corrResponse.source as 'internal' | 'external') ?? 'internal',
+                receivedDate: corrResponse.received_date as string ?? '',
+                senderName: corrResponse.sender_name as string ?? '',
+                senderOrganization: corrResponse.sender_organization as string ?? '',
+                status: (corrResponse.status as Correspondence['status']) ?? 'pending',
+                priority: corrResponse.priority as Correspondence['priority'] ?? 'medium',
+                divisionId: corrResponse.division ? (typeof corrResponse.division === 'string' ? corrResponse.division : (corrResponse.division as Record<string, unknown>).id as string) : undefined,
+                departmentId: corrResponse.department ? (typeof corrResponse.department === 'string' ? corrResponse.department : (corrResponse.department as Record<string, unknown>).id as string) : undefined,
+                currentApproverId: corrResponse.current_approver ? (typeof corrResponse.current_approver === 'string' ? corrResponse.current_approver : String((corrResponse.current_approver as Record<string, unknown>).id)) : undefined,
+                createdById: corrResponse.created_by ? (typeof corrResponse.created_by === 'string' ? corrResponse.created_by : (corrResponse.created_by as Record<string, unknown>).id as string) : undefined,
+                direction: (corrResponse.direction as Correspondence['direction']) ?? 'upward',
                 distribution,
-                createdAt: corrResponse.created_at,
-                updatedAt: corrResponse.updated_at,
+                createdAt: corrResponse.created_at as string,
+                updatedAt: corrResponse.updated_at as string,
               };
 
               return {
@@ -891,7 +929,7 @@ const DocumentDetailPage = () => {
                 minutes,
                 linkNotes: link.notes,
               };
-            } catch (error) {
+            } catch (error: unknown) {
               logError('Failed to load related correspondence', error);
               return null;
             }
@@ -903,7 +941,7 @@ const DocumentDetailPage = () => {
       } else {
         dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to refresh related correspondence', error);
       throw error;
     }
@@ -938,7 +976,7 @@ const DocumentDetailPage = () => {
       const updated = await updateDocumentWorkspaces(document.id, [...currentIds, workspaceId]);
       setDocument(updated);
       toast.success('Workspace added');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to add workspace', error);
       toast.error('Unable to add workspace');
     }
@@ -953,7 +991,7 @@ const DocumentDetailPage = () => {
       );
       setDocument(updated);
       toast.success('Workspace removed');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to remove workspace', error);
       toast.error('Unable to remove workspace');
     }
@@ -1398,7 +1436,6 @@ const DocumentDetailPage = () => {
               currentUser={uploadUser}
               document={document}
               onComplete={handleVersionUploadComplete}
-              initialComposeMode={true}
             />
           )}
         </>

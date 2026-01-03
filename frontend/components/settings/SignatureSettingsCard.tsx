@@ -126,7 +126,7 @@ export const SignatureSettingsCard = () => {
           setSealPrefix(sig.sealPrefix || DEFAULT_SEAL_SETTINGS.sealPrefix);
           setRequire2fa(sig.require2fa ?? DEFAULT_SEAL_SETTINGS.require2fa);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load signature', error);
         toast.error('Failed to load signature settings');
       } finally {
@@ -277,7 +277,7 @@ export const SignatureSettingsCard = () => {
       } else if (error?.response?.status === 400) {
         errorMessage = error?.response?.data?.detail || 'Invalid file format. Please check your file and try again.';
       } else if (error?.message) {
-        errorMessage = error.message;
+        errorMessage = (error instanceof Error ? error.message : "Unknown error");
       }
       
       setErrors(prev => ({ ...prev, file: errorMessage }));
@@ -400,7 +400,7 @@ export const SignatureSettingsCard = () => {
         
         toast.success('Settings imported successfully');
         setShowExportDialog(false);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to import settings', error);
         toast.error('Invalid settings file. Please check the format and try again.');
       }

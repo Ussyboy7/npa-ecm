@@ -39,7 +39,7 @@ export function FormSelector({ correspondenceId, onFormSubmitted }: FormSelector
       const data = await getFormTemplates({ is_active: true });
       // Ensure data is always an array
       setTemplates(Array.isArray(data) ? data : []);
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error loading templates:", error);
       toast.error("Failed to load form templates");
       setTemplates([]); // Set to empty array on error
@@ -126,7 +126,7 @@ export function FormSelector({ correspondenceId, onFormSubmitted }: FormSelector
 
       setSelectedTemplate(null);
       setFormData({});
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error submitting form:", error);
       toast.error("Failed to submit form");
     } finally {

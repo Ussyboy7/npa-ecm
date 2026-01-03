@@ -290,7 +290,7 @@ const OrganizationStructurePage = () => {
       }
       toast({ title: "Success", description: `${deactivateTarget.name} deactivated successfully` });
       setDeactivateTarget(null);
-    } catch (error) {
+      } catch (error: unknown) {
       const description = error instanceof Error ? error.message : "Unable to deactivate";
       toast({ title: "Request failed", description, variant: "destructive" });
     } finally {

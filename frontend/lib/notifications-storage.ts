@@ -177,7 +177,7 @@ export const getNotifications = async (params?: {
     
     // Map snake_case API response to camelCase frontend model
     return apiNotifications.map(mapApiNotification);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('[notifications-storage] Error fetching notifications:', error);
     throw error;
   }
@@ -232,7 +232,7 @@ export const getUnreadCount = async (force = false): Promise<number> => {
       const response = await apiFetch<{ count: number }>(url);
       logInfo('[notifications-storage] Unread count response:', response);
       
-      const count = response.count || 0;
+      const count = response.count as number || 0;
       
       // Update cache
       globalUnreadCountState.count = count;
@@ -243,7 +243,7 @@ export const getUnreadCount = async (force = false): Promise<number> => {
       globalUnreadCountSubscribers.forEach(sub => sub(count));
       
       return count;
-    } catch (error) {
+    } catch (error: unknown) {
       // Silently handle authentication errors - they're expected when user is not logged in
       const errorMessage = error instanceof Error ? error.message : String(error);
       
@@ -322,7 +322,7 @@ export const markAllNotificationsAsRead = async (): Promise<number> => {
   const response = await apiFetch<{ count: number }>('/notifications/notifications/mark_all_read/', {
     method: 'POST',
   });
-  return response.count || 0;
+  return response.count as number || 0;
 };
 
 /**
@@ -334,7 +334,7 @@ export const getNotificationPreferences = async (): Promise<NotificationPreferen
   try {
     const response = await apiFetch<NotificationPreferences>('/notifications/preferences/');
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     // Preferences might not exist yet, return null
     return null;
   }

@@ -512,7 +512,7 @@ export default function HelpAndGuidePage() {
           ) : (
             <Accordion type="single" collapsible className="w-full" aria-label="Frequently Asked Questions">
               {faqsToRender.map((item) => {
-                const itemKey = item.id;
+                const itemKey = item.id as string;
                 return (
                   <AccordionItem value={itemKey} key={itemKey}>
                     <AccordionTrigger className="text-left" aria-label={`Question: ${item.question}`}>

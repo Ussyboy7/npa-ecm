@@ -119,7 +119,7 @@ export const getRetentionPolicies = async (params?: {
     // Fallback to empty array if response is not in expected format
     logWarn('Unexpected response format from getRetentionPolicies:', response);
     return [];
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get retention policies', error);
     // Return empty array on error instead of throwing
     return [];
@@ -133,7 +133,7 @@ export const getRetentionPolicy = async (id: string): Promise<RetentionPolicy> =
   try {
     const response = await apiFetch<RetentionPolicy>(`/records/policies/${id}/`);
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get retention policy', error);
     throw error;
   }
@@ -151,7 +151,7 @@ export const createRetentionPolicy = async (
       body: JSON.stringify(data),
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to create retention policy', error);
     throw error;
   }
@@ -170,7 +170,7 @@ export const updateRetentionPolicy = async (
       body: JSON.stringify(data),
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to update retention policy', error);
     throw error;
   }
@@ -192,7 +192,7 @@ export const applyRetentionPolicy = async (
       }
     );
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to apply retention policy', error);
     throw error;
   }
@@ -222,7 +222,7 @@ export const getLegalHolds = async (params?: {
       return response;
     }
     return [];
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get legal holds', error);
     return [];
   }
@@ -238,7 +238,7 @@ export const createLegalHold = async (data: Partial<LegalHold>): Promise<LegalHo
       body: JSON.stringify(data),
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to create legal hold', error);
     throw error;
   }
@@ -270,7 +270,7 @@ export const checkLegalHold = async (
       }),
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to check legal hold', error);
     throw error;
   }
@@ -304,7 +304,7 @@ export const getDispositions = async (params?: {
       return response;
     }
     return [];
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get dispositions', error);
     return [];
   }
@@ -319,7 +319,7 @@ export const approveDisposition = async (id: string): Promise<Disposition> => {
       method: 'POST',
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to approve disposition', error);
     throw error;
   }
@@ -338,7 +338,7 @@ export const executeDisposition = async (
       body: JSON.stringify({ notes }),
     });
     return response;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to execute disposition', error);
     throw error;
   }
@@ -372,7 +372,7 @@ export const getRetentionSchedules = async (params?: {
       return response;
     }
     return [];
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get retention schedules', error);
     return [];
   }

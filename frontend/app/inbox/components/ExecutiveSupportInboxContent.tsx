@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { logError } from '@/lib/client-logger';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -58,7 +59,7 @@ const isOverdue = (item: Correspondence): boolean => {
   const threshold = SLA_THRESHOLDS[priority] ?? SLA_THRESHOLDS.default;
   const received = new Date(item.receivedDate).getTime();
   const daysOpen = (Date.now() - received) / (1000 * 60 * 60 * 24);
-  return daysOpen > threshold && item.status !== 'completed';
+  return daysOpen > threshold && item.status as string !== 'completed';
 };
 
 type InboxSummary = {
@@ -136,16 +137,17 @@ const ExecutiveSupportInboxContent = () => {
         const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/secretary-inbox/?${params.toString()}`);
         const results = Array.isArray(response.results) ? response.results : [];
         setInboxItems(results.map(mapApiCorrespondence));
+        const summary = response.summary as Record<string, unknown> as Record<string, unknown> | undefined;
         setSummary({
-          total: response.summary?.total ?? response.count ?? results.length,
-          urgent: response.summary?.urgent ?? 0,
-          overdue: response.summary?.overdue ?? 0,
-          assigned_to_user: response.summary?.assigned_to_user ?? 0,
+          total: (summary && typeof summary.total === 'number') ? summary.total : (response.count as number as number ?? results.length),
+          urgent: (summary && typeof summary.urgent === 'number') ? summary.urgent : 0,
+          overdue: (summary && typeof summary.overdue === 'number') ? summary.overdue : 0,
+          assigned_to_user: (summary && typeof summary.assigned_to_user === 'number') ? summary.assigned_to_user : 0,
         });
-        setCount(response.count ?? results.length);
-      } catch (err: Record<string, unknown>) {
+        setCount((response.count as number as number) ?? results.length);
+      } catch (err: unknown) {
         logError('Failed to fetch executive support inbox:', err);
-        setError(err.message || 'Failed to load executive support inbox');
+        setError((err instanceof Error ? err.message : 'Failed to load executive support inbox'));
         setInboxItems([]);
         setSummary(DEFAULT_SUMMARY);
         setCount(0);
@@ -284,7 +286,7 @@ const ExecutiveSupportInboxContent = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-muted-foreground">
-              {inboxItems.filter((item) => item.status === 'pending' || item.status === 'in-progress').length}
+              {inboxItems.filter((item) => item.status as string === 'pending' || item.status as string === 'in-progress').length}
             </div>
           </CardContent>
         </Card>
@@ -418,8 +420,8 @@ const ExecutiveSupportInboxContent = () => {
               <div className="space-y-2">
                 {inboxItems.map((item) => (
                   <Link
-                    key={item.id}
-                    href={`/correspondence/${item.id}`}
+                    key={item.id as string}
+                    href={`/correspondence/${item.id as string}`}
                     className="block"
                   >
                     <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
@@ -430,8 +432,8 @@ const ExecutiveSupportInboxContent = () => {
                               <span className="font-mono text-sm font-medium">
                                 {item.referenceNumber}
                               </span>
-                              <Badge variant={getStatusBadgeVariant(item.status)}>
-                                {item.status.replace('-', ' ').toUpperCase()}
+                              <Badge variant={getStatusBadgeVariant(item.status as string)}>
+                                {item.status as string.replace('-', ' ').toUpperCase()}
                               </Badge>
                               {item.priority && (
                                 <Badge

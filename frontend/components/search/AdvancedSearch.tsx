@@ -139,7 +139,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       if (!signal?.aborted) {
         setSuggestions(suggs);
       }
-    } catch (error) {
+      } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
       }
@@ -151,7 +151,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     try {
       const saved = await getSavedSearches();
       setSavedSearches(saved);
-    } catch (error) {
+      } catch (error: unknown) {
       // Silently fail
     }
   };
@@ -160,7 +160,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     try {
       const history = await getSearchHistory(10);
       setSearchHistory(history);
-    } catch (error) {
+      } catch (error: unknown) {
       // Silently fail
     }
   };
@@ -221,7 +221,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
           results: newResults,
         });
       }
-    } catch (error) {
+      } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
       }
@@ -261,7 +261,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       });
       toast.success('Search saved');
       loadSavedSearches();
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to save search', error);
       toast.error('Failed to save search');
     }
@@ -745,7 +745,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                     <ScrollArea className="h-32">
                       {searchHistory.map((item) => (
                         <button
-                          key={item.id}
+                          key={item.id as string}
                           className="w-full text-left text-sm py-1 hover:text-primary"
                           onClick={() => handleHistoryClick(item)}
                         >
@@ -769,7 +769,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                     <ScrollArea className="h-32">
                       {savedSearches.map((item) => (
                         <button
-                          key={item.id}
+                          key={item.id as string}
                           className="w-full text-left text-sm py-1 hover:text-primary"
                           onClick={() => {
                             setQuery(item.query);

@@ -100,6 +100,7 @@ interface DocumentUploadDialogProps {
   currentUser: User;
   document?: DocumentRecord;
   onComplete: (document: DocumentRecord) => void;
+  initialComposeMode?: boolean;
 }
 
 export const DocumentUploadDialog = ({
@@ -334,7 +335,7 @@ export const DocumentUploadDialog = ({
             return next;
           });
         }
-      } catch (error) {
+      } catch (error: unknown) {
         // Silently fail - duplicate check is optional
         logError('Failed to check reference number', error);
       } finally {
@@ -379,7 +380,7 @@ export const DocumentUploadDialog = ({
   useEffect(() => {
     if (!composeMode || templateApplied) return;
     if (mode === 'create' && selectedTemplateId && editorHtml.trim().length === 0) {
-      const template = templates.find((item) => item.id === selectedTemplateId);
+      const template = templates.find((item) => item.id as string === selectedTemplateId);
       if (template) {
         setEditorHtml(template.contentHtml);
         setEditorJson(null);
@@ -678,7 +679,7 @@ export const DocumentUploadDialog = ({
           }
         }
       } else if (error instanceof Error) {
-        errorMessage = error.message;
+        errorMessage = (error instanceof Error ? error.message : "Unknown error");
       }
       
       toast.error('Failed to process document', {
@@ -1273,7 +1274,7 @@ export const DocumentUploadDialog = ({
                           toast.error('Select a template to apply');
                           return;
                         }
-                        const template = templates.find((item) => item.id === selectedTemplateId);
+                        const template = templates.find((item) => item.id as string === selectedTemplateId);
                         if (!template) return;
                         if (editorHtml.trim().length > 0 && !templateApplied) {
                           setPendingTemplateAction('apply');
@@ -1520,7 +1521,7 @@ export const DocumentUploadDialog = ({
           <Button
             onClick={() => {
               if (!templatePreviewId) return;
-              const template = templates.find((item) => item.id === templatePreviewId);
+              const template = templates.find((item) => item.id as string === templatePreviewId);
               if (!template) return;
               if (editorHtml.trim().length > 0) {
                 setPendingTemplateAction('apply');
@@ -1561,7 +1562,7 @@ export const DocumentUploadDialog = ({
           <AlertDialogAction
             onClick={() => {
               if (!selectedTemplateId || !pendingTemplateAction) return;
-              const template = templates.find((item) => item.id === selectedTemplateId);
+              const template = templates.find((item) => item.id as string === selectedTemplateId);
               if (!template) return;
               
               if (pendingTemplateAction === 'apply') {
@@ -1643,7 +1644,7 @@ export const DocumentUploadDialog = ({
                 const refreshed = await getTemplatesForUser(currentUser);
                 setTemplates(refreshed);
                 setSelectedTemplateId(created.id);
-              } catch (error) {
+              } catch (error: unknown) {
                 logError('Failed to save template:', error);
                 toast.error('Failed to save template. Please try again.');
                 return;

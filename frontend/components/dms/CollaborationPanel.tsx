@@ -17,7 +17,7 @@ import { apiFetch } from '@/lib/api-client';
 import type { DocumentRecord, DocumentWorkspace } from '@/lib/dms-storage';
 
 const mapWorkspace = (item: Record<string, unknown>): DocumentWorkspace => ({
-  id: String(item.id),
+  id: String(item.id as string),
   name: item.name ?? 'Workspace',
   description: item.description ?? undefined,
   color: item.color ?? '#2563eb',

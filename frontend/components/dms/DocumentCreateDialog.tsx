@@ -161,7 +161,7 @@ export const DocumentCreateDialog = ({
       try {
         const ws = await fetchWorkspaces();
         setWorkspaces(ws);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load workspaces', error);
       }
     };
@@ -261,7 +261,7 @@ export const DocumentCreateDialog = ({
             return next;
           });
         }
-      } catch (error) {
+      } catch (error: unknown) {
         // Silently fail - duplicate check is optional
         logError('Failed to check reference number', error);
       } finally {
@@ -286,7 +286,7 @@ export const DocumentCreateDialog = ({
           setSelectedTemplateId(defaultTemplate.id);
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load templates:', error);
       setTemplates([]);
     } finally {
@@ -297,7 +297,7 @@ export const DocumentCreateDialog = ({
   useEffect(() => {
     if (templateApplied) return;
     if (selectedTemplateId && editorHtml.trim().length === 0) {
-      const template = templates.find((item) => item.id === selectedTemplateId);
+      const template = templates.find((item) => item.id as string === selectedTemplateId);
       if (template) {
         setEditorHtml(template.contentHtml);
         setEditorJson(null);
@@ -500,7 +500,7 @@ export const DocumentCreateDialog = ({
           }
         }
       } else if (error instanceof Error) {
-        errorMessage = error.message;
+        errorMessage = (error instanceof Error ? error.message : "Unknown error");
       }
       
       toast.error('Failed to create document', {
@@ -952,7 +952,7 @@ export const DocumentCreateDialog = ({
                           toast.error('Select a template to apply');
                           return;
                         }
-                        const template = templates.find((item) => item.id === selectedTemplateId);
+                        const template = templates.find((item) => item.id as string === selectedTemplateId);
                         if (!template) return;
                         if (editorHtml.trim().length > 0 && !templateApplied) {
                           setPendingTemplateAction('apply');
@@ -1138,7 +1138,7 @@ export const DocumentCreateDialog = ({
           <Button
             onClick={() => {
               if (!templatePreviewId) return;
-              const template = templates.find((item) => item.id === templatePreviewId);
+              const template = templates.find((item) => item.id as string === templatePreviewId);
               if (!template) return;
               if (editorHtml.trim().length > 0) {
                 setPendingTemplateAction('apply');
@@ -1174,7 +1174,7 @@ export const DocumentCreateDialog = ({
           <AlertDialogAction
             onClick={() => {
               if (pendingTemplateAction === 'apply' && selectedTemplateId) {
-                const template = templates.find((item) => item.id === selectedTemplateId);
+                const template = templates.find((item) => item.id as string === selectedTemplateId);
                 if (template) {
                   setEditorHtml(template.contentHtml);
                   setEditorJson(null);
@@ -1246,7 +1246,7 @@ export const DocumentCreateDialog = ({
                 // Refresh templates list
                 const available = await getTemplatesForUser(currentUser);
                 setTemplates(available);
-              } catch (error) {
+              } catch (error: unknown) {
                 logError('Failed to save template', error);
                 toast.error('Failed to save template');
               }

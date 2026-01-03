@@ -56,7 +56,7 @@ export const RetentionSchedulesManager = () => {
       const items = await getRetentionSchedules(params);
       setSchedules(items);
     } catch (error: Record<string, unknown>) {
-      if (error.name === 'AbortError') return;
+      if (error instanceof Error && error.name === 'AbortError') return;
       logError('Failed to load retention schedules:', error);
       toast.error('Failed to load retention schedules');
     } finally {

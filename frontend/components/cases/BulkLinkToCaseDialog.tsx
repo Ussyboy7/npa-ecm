@@ -19,7 +19,8 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, FolderTree, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
-import { getCases, linkDocumentToCase, linkFormToCase, type Case } from '@/lib/api/cases';
+import { getCases, linkDocumentToCase, linkFormToCase } from '@/lib/api/cases';
+import { type Case } from '@/lib/npa-structure';
 import { useDebounce } from '@/hooks/use-debounce';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
@@ -104,8 +105,8 @@ export function BulkLinkToCaseDialog({
       if (signal.aborted) return;
       
       setCases(response.results);
-    } catch (error: Record<string, unknown>) {
-      if (error.name === 'AbortError') return;
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       logError('Failed to load cases', error);
       toast.error('Failed to load cases');
     } finally {
@@ -143,8 +144,8 @@ export function BulkLinkToCaseDialog({
           }
           successCount++;
           setLinkedCount(successCount);
-        } catch (error: Record<string, unknown>) {
-          if (error.name === 'AbortError') return;
+        } catch (error: unknown) {
+          if (error instanceof Error && error.name === 'AbortError') return;
           failCount++;
           setFailedCount(failCount);
           logError(`Failed to link ${itemType} ${itemId} to case`, error);
@@ -162,8 +163,8 @@ export function BulkLinkToCaseDialog({
         onLinked();
         onOpenChange(false);
       }
-    } catch (error: Record<string, unknown>) {
-      if (error.name === 'AbortError') return;
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') return;
       logError('Bulk link failed', error);
       toast.error('Failed to link items to case');
     } finally {

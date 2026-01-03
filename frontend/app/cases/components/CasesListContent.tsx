@@ -243,7 +243,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         if (signal.aborted) return;
         
         setCases(response.results);
-        setCount(response.count);
+        setCount(response.count as number);
         
         // Fetch summary stats separately from API
         try {
@@ -276,7 +276,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           // Fallback to calculating from current page if summary fetch fails
           const allCases = response.results;
           setSummary({
-            total: response.count,
+            total: response.count as number,
             open: allCases.filter(c => c.status === 'open').length,
             inProgress: allCases.filter(c => c.status === 'in_progress').length,
             urgent: allCases.filter(c => c.priority === 'urgent').length,

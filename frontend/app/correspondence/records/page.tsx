@@ -50,6 +50,7 @@ import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
+import { logError } from '@/lib/client-logger';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
@@ -464,24 +465,40 @@ const RecordsArchivePage = () => {
       
       const results = Array.isArray(response.results) ? response.results : [];
       setRecords(results.map(mapApiCorrespondence));
-      setCount(response.count ?? results.length);
+      const responseObj = response as Record<string, unknown>;
+      setCount((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length);
+      const summaryObj = responseObj.summary as Record<string, unknown> | undefined;
       setSummary({
-        total: response.summary?.total ?? response.count ?? results.length,
-        byDirectorate: response.summary?.by_directorate ?? 0,
-        byDivision: response.summary?.by_division ?? 0,
-        byDepartment: response.summary?.by_department ?? 0,
-        thisYear: response.summary?.this_year ?? 0,
-        completed: response.summary?.completed ?? 0,
-        archived: response.summary?.archived ?? 0,
-        byPriority: response.summary?.by_priority ?? {},
-        byDirection: response.summary?.by_direction ?? {},
+        total: (summaryObj && typeof summaryObj.total === 'number') ? summaryObj.total : ((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length),
+        byDirectorate: (summaryObj && typeof summaryObj.by_directorate === 'number') ? summaryObj.by_directorate : 0,
+        byDivision: (summaryObj && typeof summaryObj.by_division === 'number') ? summaryObj.by_division : 0,
+        byDepartment: (summaryObj && typeof summaryObj.by_department === 'number') ? summaryObj.by_department : 0,
+        thisYear: (summaryObj && typeof summaryObj.this_year === 'number') ? summaryObj.this_year : 0,
+        completed: (summaryObj && typeof summaryObj.completed === 'number') ? summaryObj.completed : 0,
+        archived: (summaryObj && typeof summaryObj.archived === 'number') ? summaryObj.archived : 0,
+        byPriority: (summaryObj && typeof summaryObj.by_priority === 'object' && summaryObj.by_priority !== null) ? summaryObj.by_priority as Record<string, number> : {},
+        byDirection: (summaryObj && typeof summaryObj.by_direction === 'object' && summaryObj.by_direction !== null) ? summaryObj.by_direction as Record<string, number> : {},
       });
-      setAvailableYears(response.summary?.available_years ?? []);
-    } catch (err: Record<string, unknown>) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      const availableYearsArray = (summaryObj && Array.isArray(summaryObj.available_years)) ? summaryObj.available_years : [];
+      setAvailableYears(availableYearsArray.map(y => typeof y === 'number' ? y : parseInt(String(y), 10)).filter(y => !isNaN(y)));
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
         return;
       }
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Unable to load records. Please try again.';
+      let errorMessage = 'Unable to load records. Please try again.';
+      if (err && typeof err === 'object') {
+        const errorObj = err as Record<string, unknown>;
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (errorMessage === 'Unable to load records. Please try again.') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
       setError(errorMessage);
       setRecords([]);
       setCount(0);
@@ -591,7 +608,7 @@ const RecordsArchivePage = () => {
       });
 
       toast.success(`Exported ${exportData.length} records successfully`);
-    } catch (err: Record<string, unknown>) {
+    } catch (err: unknown) {
       toast.error('Failed to export records. Please try again.');
       logError('Export error:', err);
     } finally {
@@ -621,9 +638,9 @@ const RecordsArchivePage = () => {
 
   // RecordCard component
   const RecordCard = ({ corr }: { corr: Correspondence }) => {
-    const division = corr.divisionId ? divisions.find((item) => item.id === corr.divisionId) : null;
-    const department = corr.departmentId ? departments.find((item) => item.id === corr.departmentId) : null;
-    const directorate = corr.directorateId ? directorates.find((item) => item.id === corr.directorateId) : null;
+    const division = corr.divisionId ? divisions.find((item) => item.id as string === corr.divisionId) : null;
+    const department = corr.departmentId ? departments.find((item) => item.id as string === corr.departmentId) : null;
+    const directorate = corr.directorateId ? directorates.find((item) => item.id as string === corr.directorateId) : null;
     const archiveLevel = corr.archiveLevel || 'department';
     const levelLabel = archiveLevel === 'directorate' ? 'Directorate' : archiveLevel === 'division' ? 'Division' : 'Department';
 

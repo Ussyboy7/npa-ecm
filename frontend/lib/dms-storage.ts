@@ -219,12 +219,12 @@ const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
   const formWorkflow = formDoc?.signature_workflow as Record<string, unknown> | undefined;
   
   return {
-    id: String(item.id),
-    title: typeof item.title === 'string' ? item.title : 'Untitled Document',
+    id: String(item.id as string),
+    title: typeof item.title as string === 'string' ? item.title as string : 'Untitled Document',
     description: typeof item.description === 'string' ? item.description : undefined,
     documentType: (item.document_type as DocumentType) ?? 'other',
     referenceNumber: typeof item.reference_number === 'string' ? item.reference_number : undefined,
-    status: (item.status as DocumentStatus) ?? 'draft',
+    status: (item.status as string as DocumentStatus) ?? 'draft',
     sensitivity: (item.sensitivity as DocumentSensitivity) ?? 'internal',
     authorId: (author && 'id' in author) ? String(author.id) : String(item.author ?? ''),
     divisionId: typeof item.division === 'string' ? item.division : (typeof item.division_id === 'string' ? item.division_id : undefined),
@@ -265,7 +265,7 @@ const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
 const mapCollection = (item: Record<string, unknown>): DocumentCollection => {
   const owner = item.owner as Record<string, unknown> | undefined;
   return {
-    id: String(item.id),
+    id: String(item.id as string),
     name: typeof item.name === 'string' ? item.name : 'Collection',
     description: typeof item.description === 'string' ? item.description : undefined,
     ownerId: String(item.owner_id ?? (owner && 'id' in owner ? owner.id : item.owner) ?? ''),
@@ -287,7 +287,7 @@ const mapCollection = (item: Record<string, unknown>): DocumentCollection => {
 };
 
 const mapWorkspace = (item: Record<string, unknown>): DocumentWorkspace => ({
-  id: String(item.id),
+  id: String(item.id as string),
   name: typeof item.name === 'string' ? item.name : 'Workspace',
   description: typeof item.description === 'string' ? item.description : undefined,
   color: typeof item.color === 'string' ? item.color : '#2563eb',
@@ -302,7 +302,7 @@ let documentsCache: DocumentRecord[] = [];
 let workspacesCache: DocumentWorkspace[] = [];
 
 const updateDocumentsCache = (document: DocumentRecord) => {
-  documentsCache = [document, ...documentsCache.filter((item) => item.id !== document.id)];
+  documentsCache = [document, ...documentsCache.filter((item) => item.id as string !== document.id)];
   return documentsCache;
 };
 
@@ -355,7 +355,7 @@ export const queryDocuments = async (params: DocumentQueryParams = {}): Promise<
       next,
       previous,
     };
-  } catch (error) {
+      } catch (error: unknown) {
     logError('[DMS] Error in queryDocuments:', error);
     logError('[DMS] Error details:', { 
       message: error instanceof Error ? error.message : String(error),
@@ -624,7 +624,7 @@ export const createDocument = async (
     method: 'POST',
     body: JSON.stringify(versionPayload),
   });
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to create document version:', error);
     throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -646,7 +646,7 @@ export const createDocumentVersion = async (
     method: 'POST',
     body: JSON.stringify(versionPayload),
   });
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to create document version:', error);
     throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -671,7 +671,7 @@ export const replaceDocumentVersion = async (
       method: 'POST',
       body: JSON.stringify(versionPayload),
     });
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to replace document version', error);
     throw new Error(`Failed to replace document version: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
@@ -841,7 +841,7 @@ export const getDocumentComments = async (documentId: string, versionId?: string
   return results.map((item: Record<string, unknown>) => {
     const author = item.author as Record<string, unknown> | undefined;
     return {
-      id: String(item.id),
+      id: String(item.id as string),
       documentId: String(item.document ?? item.document_id ?? documentId),
       authorId: String((author && 'id' in author) ? author.id : item.author_id ?? item.author ?? ''),
       content: typeof item.content === 'string' ? item.content : '',
@@ -936,7 +936,7 @@ export const getDocumentDiscussions = async (documentId: string): Promise<Docume
   return results.map((item: Record<string, unknown>) => {
     const author = item.author as Record<string, unknown> | undefined;
     return {
-      id: String(item.id),
+      id: String(item.id as string),
       documentId: String(item.document ?? item.document_id ?? documentId),
       authorId: String((author && 'id' in author) ? author.id : item.author_id ?? item.author ?? ''),
       message: typeof item.message === 'string' ? item.message : '',
@@ -1004,7 +1004,7 @@ export const getActiveEditorSessions = async (documentId: string): Promise<Edito
     const sessions = results.map((item: Record<string, unknown>) => {
       const user = item.user as Record<string, unknown> | undefined;
       const session = {
-        id: String(item.id),
+        id: String(item.id as string),
         documentId: String(item.document ?? item.document_id ?? documentId),
         userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? ''),
         since: typeof item.since === 'string' ? item.since : (typeof item.created_at === 'string' ? item.created_at : new Date().toISOString()),
@@ -1017,7 +1017,7 @@ export const getActiveEditorSessions = async (documentId: string): Promise<Edito
     
     logInfo('Returning active editor sessions:', sessions);
     return sessions;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Error fetching active editor sessions:', error);
     return [];
   }
@@ -1034,7 +1034,7 @@ export const getEditorSessionForUser = async (documentId: string, userId: string
       const item = results[0] as Record<string, unknown>;
       const user = item.user as Record<string, unknown> | undefined;
       return {
-        id: String(item.id),
+        id: String(item.id as string),
         documentId: String(item.document ?? item.document_id ?? documentId),
         userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? userId),
         since: typeof item.since === 'string' ? item.since : (typeof item.created_at === 'string' ? item.created_at : new Date().toISOString()),
@@ -1043,7 +1043,7 @@ export const getEditorSessionForUser = async (documentId: string, userId: string
       };
     }
     return null;
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get editor session for user', error);
     return null;
   }
@@ -1089,7 +1089,7 @@ export const endEditorSession = async (sessionId: string): Promise<void> => {
     // This can happen if user was switched or session was reassigned
     if (error && typeof error === 'object' && (
       ('status' in error && error.status === 403) ||
-      ('message' in error && typeof error.message === 'string' && error.message.includes('only modify your own'))
+      ('message' in error && typeof (error instanceof Error ? error.message : "Unknown error") === 'string' && (error instanceof Error ? error.message : "Unknown error").includes('only modify your own'))
     )) {
       logWarn('Cannot end editor session - does not belong to current user', { sessionId, error });
       // Silently fail - this is expected in some cases (user switch, session reassignment)
@@ -1126,7 +1126,7 @@ export const getDocumentAccessLogs = async (documentId: string): Promise<Documen
   return results.map((item: Record<string, unknown>) => {
     const user = item.user as Record<string, unknown> | undefined;
     return {
-      id: String(item.id),
+      id: String(item.id as string),
       documentId: String(item.document ?? item.document_id ?? documentId),
       userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? ''),
       action: (item.action as 'view' | 'download' | 'attempted-download') ?? 'view',
@@ -1204,7 +1204,7 @@ export const getRecentDocuments = async (userId: string, limit: number = 50): Pr
     );
     
     return documents.filter((doc): doc is DocumentRecord => doc !== null);
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get recent documents', error);
     // If querying by user fails, return empty array (backend may need update)
     return [];
@@ -1246,7 +1246,7 @@ export const getSharedDocuments = async (
       next: null,
       previous: null,
     };
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get shared documents', error);
     return { results: [], count: 0, next: null, previous: null };
   }
@@ -1286,7 +1286,7 @@ export const getDocumentsSharedByUser = async (
       next: null,
       previous: null,
     };
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get documents shared by user', error);
     return { results: [], count: 0, next: null, previous: null };
   }
@@ -1419,7 +1419,7 @@ export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams
     const previous = typeof payload?.previous === 'string' ? payload.previous : null;
 
     return { results, count, next, previous };
-  } catch (error) {
+      } catch (error: unknown) {
     logError('[DMS] Error in queryDocumentsExtended:', error);
     throw error;
   }
@@ -1452,7 +1452,7 @@ export const getDocumentStats = async (): Promise<DocumentStats> => {
       published: typeof publishedResponse?.count === 'number' ? publishedResponse.count : 0,
       archived: typeof archivedResponse?.count === 'number' ? archivedResponse.count : 0,
     };
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to fetch document stats', error);
     return { total: 0, draft: 0, published: 0, archived: 0 };
   }

@@ -142,14 +142,17 @@ const ArchivedCorrespondence = () => {
 
         const results = Array.isArray(response.results) ? response.results : [];
         setRecords(results.map(mapApiCorrespondence));
-        setCount(response.count ?? results.length);
+        setCount((response && typeof response === 'object' && 'count' in response && typeof response.count as number === 'number') ? response.count as number : results.length);
+        const responseObj = response as Record<string, unknown>;
+        const summaryObj = responseObj.summary as Record<string, unknown> | undefined;
         setSummary({
-          total: response.summary?.total ?? response.count ?? results.length,
-          downward: response.summary?.downward ?? 0,
-          upward: response.summary?.upward ?? 0,
-          thisYear: response.summary?.this_year ?? 0,
+          total: (summaryObj && typeof summaryObj.total === 'number') ? summaryObj.total : ((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length),
+          downward: (summaryObj && typeof summaryObj.downward === 'number') ? summaryObj.downward : 0,
+          upward: (summaryObj && typeof summaryObj.upward === 'number') ? summaryObj.upward : 0,
+          thisYear: (summaryObj && typeof summaryObj.this_year === 'number') ? summaryObj.this_year : 0,
         });
-        setAvailableYears(response.summary?.available_years ?? []);
+        const availableYearsArray = (summaryObj && Array.isArray(summaryObj.available_years)) ? summaryObj.available_years : [];
+        setAvailableYears(availableYearsArray.map(y => typeof y === 'number' ? y : parseInt(String(y), 10)).filter(y => !isNaN(y)));
       } catch {
         if (!ignore) {
           setError('Unable to load archived correspondence. Please try again.');
@@ -341,8 +344,8 @@ const ArchivedCorrespondence = () => {
         ) : (
           <div className="space-y-3">
             {records.map((corr) => {
-              const division = corr.divisionId ? divisions.find((item) => item.id === corr.divisionId) : null;
-              const department = corr.departmentId ? departments.find((item) => item.id === corr.departmentId) : null;
+              const division = corr.divisionId ? divisions.find((item) => item.id as string === corr.divisionId) : null;
+              const department = corr.departmentId ? departments.find((item) => item.id as string === corr.departmentId) : null;
               const archiveLevel = corr.archiveLevel || 'department';
               const levelLabel = archiveLevel === 'directorate' ? 'Directorate Archive' : archiveLevel === 'division' ? 'Division Archive' : 'Department Archive';
 

@@ -66,7 +66,7 @@ const flushLogs = async () => {
         loggingDisabled = true;
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     consecutiveFailures++;
     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       loggingDisabled = true;

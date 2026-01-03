@@ -144,7 +144,7 @@ const handleDownload = async (url: string, filename: string) => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
-  } catch (error) {
+  } catch (error: unknown) {
     if (error instanceof Error && error.name === 'AbortError') {
       logWarn('Download aborted');
       return;
@@ -270,7 +270,7 @@ const CorrespondenceDetailContent = () => {
             try {
               const document = await fetchDocumentById(docId);
               return document;
-            } catch (error) {
+            } catch (error: unknown) {
               logWarn(`Failed to load linked document ${docId}`, error);
               return null;
             }
@@ -280,7 +280,7 @@ const CorrespondenceDetailContent = () => {
         if (!ignore) {
           setLinkedDocuments(results.filter((doc): doc is DocumentRecord => Boolean(doc)));
         }
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load linked documents', error);
       }
     };
@@ -363,7 +363,7 @@ const CorrespondenceDetailContent = () => {
             setBackendDelegation(null);
           }
         }
-      } catch (error) {
+      } catch (error: unknown) {
         // Handle authentication errors - redirect to login
         if (handleAuthenticationError(error)) {
           return; // Redirect is happening, exit early
@@ -487,7 +487,7 @@ const CorrespondenceDetailContent = () => {
           logInfo('[ParallelRouting] Setting parallel routing groups', uniqueGroups);
           setParallelRoutingGroups(uniqueGroups);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         // Handle authentication errors - redirect to login
         if (handleAuthenticationError(error)) {
           return; // Redirect is happening, exit early
@@ -526,7 +526,7 @@ const CorrespondenceDetailContent = () => {
       })));
       
       setMinutes(mappedMinutes);
-    } catch (error) {
+    } catch (error: unknown) {
       // Handle authentication errors - redirect to login
       if (handleAuthenticationError(error)) {
         return; // Redirect is happening, exit early
@@ -608,7 +608,7 @@ const CorrespondenceDetailContent = () => {
           ? `Instructions sent: "${notes.substring(0, 50)}${notes.length > 50 ? '...' : ''}"` 
           : `${assistantName} will be notified and can now work on this correspondence.`,
       });
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to delegate correspondence', error);
       const errorMessage = error instanceof Error ? error.message : 'Please try again.';
       
@@ -768,7 +768,7 @@ const CorrespondenceDetailContent = () => {
       });
       toast.success('Linked documents updated');
       await syncFromApi();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to update linked documents', error);
       toast.error('Unable to update linked documents', {
         description: error instanceof Error ? error.message : 'Please try again.',
@@ -788,7 +788,7 @@ const CorrespondenceDetailContent = () => {
       });
       toast.success('Document unlinked');
       await syncFromApi();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to unlink document', error);
       toast.error('Unable to unlink document', {
         description: error instanceof Error ? error.message : 'Please try again.',
@@ -1063,11 +1063,11 @@ const CorrespondenceDetailContent = () => {
               // Also fetch the correspondence detail again to get updated routing
               if (correspondence?.id) {
                 try {
-                  const updated = await apiFetch(`/correspondence/${correspondence.id}/`);
+                  const updated = await apiFetch<Record<string, unknown>>(`/correspondence/${correspondence.id}/`);
                   if (updated) {
-                    setRemoteCorrespondence(mapApiCorrespondence(updated));
+                    setRemoteCorrespondence(mapApiCorrespondence(updated as Record<string, unknown>));
                   }
-                } catch (error) {
+                } catch (error: unknown) {
                   logWarn('Failed to refresh correspondence after recall', error);
                 }
               }
@@ -1194,7 +1194,7 @@ const CorrespondenceDetailContent = () => {
                   size="sm"
                   onClick={() => {
                     setMobileActiveTab('actions');
-                    setShowTreatmentModal(true);
+                    openModal('treatment');
                   }}
                 >
                   <CheckCircle className="h-4 w-4 mr-1.5" />
@@ -1209,14 +1209,14 @@ const CorrespondenceDetailContent = () => {
                   <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuItem onClick={() => {
                       setMobileActiveTab('actions');
-                      setShowCompletionModal(true);
+                      openModal('completion');
                     }}>
                       <Archive className="h-4 w-4 mr-2" />
                       Complete & Archive
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => {
                       setMobileActiveTab('actions');
-                      setShowDelegateModal(true);
+                      openModal('delegate');
                     }}>
                       <UserIcon className="h-4 w-4 mr-2" />
                       Delegate

@@ -87,7 +87,7 @@ const RegisteredCorrespondencePage = () => {
 
     return correspondence
       .filter((item) => {
-        if (statusFilter !== "all" && item.status !== statusFilter) {
+        if (statusFilter !== "all" && item.status as string !== statusFilter) {
           return false;
         }
 
@@ -273,11 +273,11 @@ const RegisteredCorrespondencePage = () => {
                       const currentOwnerName = currentOwner?.name ?? item.currentApproverName ?? '—';
 
                       return (
-                        <TableRow key={item.id} className="hover:bg-muted/50">
+                        <TableRow key={item.id as string} className="hover:bg-muted/50">
                           <TableCell className="font-medium">{(page - 1) * pageSize + index + 1}</TableCell>
                           <TableCell>
                             <Link
-                              href={`/correspondence/${item.id}`}
+                              href={`/correspondence/${item.id as string}`}
                               className="text-primary hover:underline font-medium"
                             >
                               {item.referenceNumber}
@@ -293,8 +293,8 @@ const RegisteredCorrespondencePage = () => {
                           <TableCell>{currentOwnerName}</TableCell>
                           <TableCell>{formatDateShort(item.receivedDate)}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={getStatusBadgeClass(item.status)}>
-                              {item.status.replace("-", " ")}
+                            <Badge variant="outline" className={getStatusBadgeClass(item.status as string)}>
+                              {item.status as string.replace("-", " ")}
                             </Badge>
                           </TableCell>
                           <TableCell>

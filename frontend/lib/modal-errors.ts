@@ -39,7 +39,7 @@ export class ModalErrorHandler {
     }
 
     // Try message
-    if (error?.message) return error.message;
+    if (error?.message) return (error instanceof Error ? error.message : "Unknown error");
 
     // Default
     return 'An unexpected error occurred. Please try again.';
@@ -58,16 +58,16 @@ export class ModalErrorHandler {
   static getUserFriendlyMessage(error: ModalError): string {
     switch (error.type) {
       case 'validation':
-        return error.message;
+        return (error instanceof Error ? error.message : "Unknown error");
       case 'api':
-        return `Server error: ${error.message}`;
+        return `Server error: ${(error instanceof Error ? error.message : "Unknown error")}`;
       case 'network':
         return 'Network error. Please check your connection and try again.';
       case 'permission':
         return 'You do not have permission to perform this action.';
       case 'unknown':
       default:
-        return error.message || 'An unexpected error occurred. Please try again.';
+        return (error instanceof Error ? error.message : "Unknown error") || 'An unexpected error occurred. Please try again.';
     }
   }
 

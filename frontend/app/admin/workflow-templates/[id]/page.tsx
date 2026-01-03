@@ -60,7 +60,7 @@ function WorkflowTemplateEditorPageContent() {
         applies_to: data.applies_to,
         is_active: data.is_active,
       });
-    } catch (error) {
+      } catch (error: unknown) {
       logError("Error loading template:", error);
       toast({
         title: "Error",
@@ -92,7 +92,7 @@ function WorkflowTemplateEditorPageContent() {
         applies_to: data.applies_to,
         is_active: data.is_active,
       });
-    } catch (error) {
+      } catch (error: unknown) {
       logError("Error loading template for clone:", error);
       toast({
         title: "Error",
@@ -150,7 +150,7 @@ function WorkflowTemplateEditorPageContent() {
         });
         loadTemplate();
       }
-    } catch (error) {
+      } catch (error: unknown) {
       logError("Error saving template:", error);
       toast({
         title: "Error",

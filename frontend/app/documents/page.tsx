@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { logError } from '@/lib/client-logger';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -202,7 +203,7 @@ export default function MyDocumentsPage() {
         
         setDocuments(paginated);
         setCount(filtered.length);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Error loading documents:', error);
         setError('Failed to load documents. Please try again.');
         setDocuments([]);

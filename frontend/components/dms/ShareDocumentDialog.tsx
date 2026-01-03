@@ -171,7 +171,7 @@ export const ShareDocumentDialog = ({
           updatedAt: p.updated_at,
         }));
         setExistingPermissions(permissions);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to fetch document permissions', error);
       } finally {
         setIsLoadingPermissions(false);
@@ -198,7 +198,7 @@ export const ShareDocumentDialog = ({
           log.action === 'document_shared' && log.module === 'dms'
         );
         setShareHistory(shareLogs);
-      } catch (error) {
+      } catch (error: unknown) {
         // Silently handle - audit logs are not critical
         logWarn('Failed to fetch share history:', error);
         setShareHistory([]);
@@ -223,7 +223,7 @@ export const ShareDocumentDialog = ({
         }
         const spaces = await fetchWorkspaces();
         setWorkspaces(spaces);
-      } catch (error) {
+      } catch (error: unknown) {
         // Silently handle - workspaces are optional
         logWarn('Failed to fetch workspaces:', error);
         setWorkspaces([]);
@@ -569,11 +569,11 @@ export const ShareDocumentDialog = ({
           }
         }
       } else if (error instanceof Error) {
-        if (error.message.includes('Network') || error.message.includes('fetch')) {
+        if ((error instanceof Error ? error.message : "Unknown error").includes('Network') || (error instanceof Error ? error.message : "Unknown error").includes('fetch')) {
           errorMessage = 'Network Error';
           errorDescription = 'Unable to connect to the server. Please check your internet connection.';
         } else {
-          errorDescription = error.message;
+          errorDescription = (error instanceof Error ? error.message : "Unknown error");
         }
       }
       
@@ -838,7 +838,7 @@ export const ShareDocumentDialog = ({
           
           // Refresh document to get updated workspaceIds
           updated = await apiFetch<DocumentRecord>(`/dms/documents/${document.id}/`);
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to add document to workspaces', error);
           toast.error('Document shared, but failed to add to workspaces');
         }
@@ -903,11 +903,11 @@ export const ShareDocumentDialog = ({
           }
         }
       } else if (error instanceof Error) {
-        if (error.message.includes('Network') || error.message.includes('fetch')) {
+        if ((error instanceof Error ? error.message : "Unknown error").includes('Network') || (error instanceof Error ? error.message : "Unknown error").includes('fetch')) {
           errorMessage = 'Network Error';
           errorDescription = 'Unable to connect to the server. Please check your internet connection.';
         } else {
-          errorDescription = error.message;
+          errorDescription = (error instanceof Error ? error.message : "Unknown error");
         }
       }
       

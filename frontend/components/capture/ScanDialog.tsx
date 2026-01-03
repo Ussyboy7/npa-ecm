@@ -127,7 +127,7 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
         });
         setScanProgress(90);
         toast.success('Document scanned and OCR processing started');
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to start OCR processing', error);
         // Continue even if OCR fails
       }
@@ -141,12 +141,12 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
         router.push(`/dms/${document.id}`);
       }, 1000);
 
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
       }
       logError('Scan failed', error);
-      toast.error(error?.message || 'Failed to scan document');
+      toast.error((error instanceof Error ? error.message : 'Failed to scan document'));
       setIsScanning(false);
       setScanProgress(0);
     }

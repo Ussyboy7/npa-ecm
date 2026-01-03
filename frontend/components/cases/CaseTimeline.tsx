@@ -94,10 +94,10 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
             auditLogs = [];
             logError('Unexpected audit logs response format', { response: auditResponse });
           }
-        } catch (auditErr: Record<string, unknown>) {
-          if (auditErr.name === 'AbortError') return;
+        } catch (auditErr: unknown) {
+          if (auditErr instanceof Error && auditErr.name === 'AbortError') return;
           // If audit endpoint doesn't exist or returns 404, just log and continue
-          if (auditErr?.status === 404 || auditErr?.message?.includes('Not found')) {
+          if ((auditErr instanceof Error && 'status' in auditErr && (auditErr as any).status === 404) || (auditErr instanceof Error && auditErr.message?.includes('Not found'))) {
             setAuditError("Audit logs unavailable");
             logError('Audit logs endpoint not found, continuing without audit data', auditErr);
           } else {
@@ -135,14 +135,14 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
             timestamp: caseData.openedAt || caseData.createdAt,
             user: {
               id: caseData.createdById || '',
-              name: caseData.createdByName || 'System',
+              name: (caseData as any).createdByName || 'System',
             },
             description: `Case ${caseData.caseNumber} created: ${caseData.title}`,
           });
 
           // Add status changes from case data
-          if (caseData.statusHistory) {
-            caseData.statusHistory.forEach((statusChange) => {
+          if ((caseData as any).statusHistory) {
+            ((caseData as any).statusHistory as any[]).forEach((statusChange: any) => {
               timelineActivities.push({
                 id: `status-${statusChange.timestamp}`,
                 type: 'status_change',
@@ -166,14 +166,14 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
               timelineActivities.push({
                 id: `corr-${corr.id}`,
                 type: 'correspondence_linked',
-                timestamp: corr.linkedAt || corr.createdAt,
+                timestamp: (corr as any).linkedAt || corr.createdAt,
                 user: {
-                  id: corr.createdById || '',
-                  name: corr.createdByName || 'System',
+                  id: (corr as any).createdById || '',
+                  name: (corr as any).createdByName || 'System',
                 },
-                description: `Correspondence linked: ${corr.subject || corr.referenceNumber}`,
+                description: `Correspondence linked: ${(corr as any).subject || (corr as any).referenceNumber}`,
                 metadata: {
-                  item_title: corr.subject,
+                  item_title: (corr as any).subject,
                   item_id: corr.id,
                   item_type: 'correspondence',
                 },
@@ -186,14 +186,14 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
               timelineActivities.push({
                 id: `doc-${doc.id}`,
                 type: 'document_linked',
-                timestamp: doc.linkedAt || doc.createdAt,
+                timestamp: (doc as any).linkedAt || doc.createdAt,
                 user: {
-                  id: doc.authorId || '',
-                  name: doc.authorName || 'System',
+                  id: (doc as any).authorId || '',
+                  name: (doc as any).authorName || 'System',
                 },
-                description: `Document linked: ${doc.title}`,
+                description: `Document linked: ${(doc as any).title}`,
                 metadata: {
-                  item_title: doc.title,
+                  item_title: (doc as any).title,
                   item_id: doc.id,
                   item_type: 'document',
                 },
@@ -206,14 +206,14 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
               timelineActivities.push({
                 id: `form-${form.id}`,
                 type: 'form_linked',
-                timestamp: form.linkedAt || form.createdAt,
+                timestamp: (form as any).linkedAt || form.createdAt,
                 user: {
-                  id: form.createdById || '',
-                  name: form.createdByName || 'System',
+                  id: (form as any).createdById || '',
+                  name: (form as any).createdByName || 'System',
                 },
-                description: `Form linked: ${form.templateName || 'Form'}`,
+                description: `Form linked: ${(form as any).templateName || 'Form'}`,
                 metadata: {
-                  item_title: form.templateName,
+                  item_title: (form as any).templateName,
                   item_id: form.id,
                   item_type: 'form',
                 },
@@ -229,7 +229,7 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
               timestamp: caseData.completionPackageGeneratedAt || caseData.closedAt || '',
               user: {
                 id: caseData.createdById || '',
-                name: caseData.createdByName || 'System',
+                  name: (caseData as any).createdByName || 'System',
               },
               description: `Completion package generated`,
               metadata: {
@@ -249,8 +249,8 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
         if (signal.aborted) return;
 
         setActivities(timelineActivities);
-      } catch (error: Record<string, unknown>) {
-        if (error.name === 'AbortError') return;
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'AbortError') return;
         logError('Failed to load case timeline', error);
       } finally {
         if (!signal.aborted) {
@@ -420,7 +420,7 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
       </CardHeader>
       <CardContent>
         {auditError && (
-          <Alert variant="outline" className="mb-4">
+          <Alert variant="default" className="mb-4">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               {auditError}. Showing timeline from case data only.

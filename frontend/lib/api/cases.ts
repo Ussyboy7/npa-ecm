@@ -151,7 +151,7 @@ export async function getCases(params: CaseQueryParams = {}): Promise<CaseListRe
   
   return {
     results: response.results.map(transformApiCase),
-    count: response.count,
+    count: response.count as number,
     next: response.next,
     previous: response.previous,
   };

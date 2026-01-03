@@ -52,7 +52,7 @@ export default function NotificationsPage() {
         ? data.filter((n) => n.status !== 'archived')
         : data;
       setNotifications(filtered);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load notifications', error);
       toast.error('Failed to load notifications');
       setNotifications([]);
@@ -73,7 +73,7 @@ export default function NotificationsPage() {
     try {
       await markNotificationAsRead(notification.id);
       await loadNotifications();
-    } catch (error) {
+    } catch (error: unknown) {
       toast.error('Failed to mark notification as read');
     }
   };
@@ -83,7 +83,7 @@ export default function NotificationsPage() {
       await markAllNotificationsAsRead();
       await loadNotifications();
       toast.success('All notifications marked as read');
-    } catch (error) {
+    } catch (error: unknown) {
       toast.error('Failed to mark all as read');
     }
   };
@@ -93,7 +93,7 @@ export default function NotificationsPage() {
       await markNotificationAsArchived(notification.id);
       await loadNotifications();
       toast.success('Notification archived');
-    } catch (error) {
+    } catch (error: unknown) {
       toast.error('Failed to archive notification');
     }
   };

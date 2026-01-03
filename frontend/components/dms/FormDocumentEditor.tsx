@@ -116,7 +116,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
           logInfo('[FormDocumentEditor] Total signatures:', allSigs.length);
           setPendingSignatures(pendingSigs);
           setAllSignatures(allSigs);
-        } catch (error) {
+        } catch (error: unknown) {
           logError('[FormDocumentEditor] Error loading workflow:', error);
           setWorkflow(null);
           setPendingSignatures([]);
@@ -141,7 +141,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
             logInfo('[FormDocumentEditor] Auto-generated PDF after all signatures completed');
             // Reload to get updated document
             await loadFormDocument();
-          } catch (error) {
+          } catch (error: unknown) {
             logError('[FormDocumentEditor] Failed to auto-generate PDF:', error);
             // Don't show error toast - user can generate manually
           }
@@ -266,7 +266,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
       });
       toast.success("Form saved successfully");
       await loadFormDocument();
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error saving form:", error);
       toast.error("Failed to save form");
     } finally {
@@ -290,7 +290,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
       await loadFormDocument();
       // Auto-switch to attachments tab to show the generated PDF
       setActiveTab("attachments");
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error generating PDF:", error);
       toast.error("Failed to generate PDF");
     } finally {
@@ -306,7 +306,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
       await markFormDocumentCompleted(formDocumentId);
       toast.success("Form marked as completed");
       await loadFormDocument();
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error marking form as completed:", error);
       toast.error("Failed to mark form as completed");
     } finally {
@@ -723,7 +723,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                             }
                             toast.success(`${files.length} file(s) uploaded successfully`);
                             await loadFormDocument();
-                          } catch (error) {
+                          } catch (error: unknown) {
                             logError('Error uploading attachment:', error);
                             toast.error('Failed to upload attachment');
                           } finally {
@@ -1033,7 +1033,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               await loadFormDocument();
               setShowSignatureWorkflow(false);
               toast.success("Signature workflow created successfully");
-            } catch (error) {
+            } catch (error: unknown) {
               logError("Error linking workflow:", error);
               toast.error("Failed to link signature workflow");
             }

@@ -77,7 +77,7 @@ export async function getSignatureTemplates(params?: {
     
     const templates = Array.isArray(response) ? response : (response.results || []);
     return templates.map(mapApiTemplateToFrontend);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to fetch signature templates from backend', error);
     return [];
   }
@@ -92,7 +92,7 @@ export async function getUserSignaturePreferences(): Promise<UserSignaturePrefer
       '/accounts/signature-preferences/my_preferences/'
     );
     return mapApiPreferencesToFrontend(response);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to fetch user signature preferences from backend', error);
     return null;
   }
@@ -124,7 +124,7 @@ export async function updateUserSignaturePreferences(
       }
     );
     return mapApiPreferencesToFrontend(response);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to update user signature preferences on backend', error);
     throw error;
   }

@@ -52,7 +52,7 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
         .slice(0, 50); // Limit to 50 most recent
       
       setNotifications(filtered);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load notifications', error);
       toast.error('Failed to load notifications');
       // On error, try to at least fetch unread notifications as fallback
@@ -106,7 +106,7 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
             : n
         )
       );
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to mark notification as read', error);
       toast.error('Failed to mark notification as read');
     } finally {
@@ -122,7 +122,7 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
       await markAllNotificationsAsRead();
       await loadNotifications();
       toast.success('All notifications marked as read');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to mark all notifications as read', error);
       toast.error('Failed to mark all as read');
     } finally {
@@ -157,7 +157,7 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
       await markNotificationAsArchived(notification.id);
       setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
       toast.success('Notification archived');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to archive notification', error);
       toast.error('Failed to archive notification');
     } finally {

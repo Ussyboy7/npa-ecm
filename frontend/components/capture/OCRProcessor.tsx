@@ -148,9 +148,9 @@ export const OCRProcessor = ({ documentId, onOCRComplete }: OCRProcessorProps) =
       } else {
         toast.info('OCR processing started');
       }
-    } catch (err: Record<string, unknown>) {
+    } catch (err: unknown) {
       setIsProcessing(false);
-      const errorMsg = err?.message || 'Failed to start OCR processing';
+      const errorMsg = (err instanceof Error ? err.message : 'Failed to start OCR processing');
       setError(errorMsg);
       toast.error(errorMsg);
       logError('Failed to process OCR', err);

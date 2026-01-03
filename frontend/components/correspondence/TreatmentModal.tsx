@@ -187,7 +187,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         try {
           const templates = await getTemplatesForUser(activeUser, 'treatment');
           setMemoTemplates(templates);
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to load memo templates:', error);
           setMemoTemplates([]);
         }
@@ -257,7 +257,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           ordering: '-updated_at',
         });
         setDocuments(response.results);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load documents', error);
         setDocuments([]);
       } finally {
@@ -587,7 +587,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         setSelectedTemplateId(null);
       }
       toast.success('Template deleted');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to delete template', error);
       toast.error('Failed to delete template. Please try again.');
     }
@@ -884,7 +884,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       if (draftId) {
         try {
           await deleteDraft(draftId);
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to delete draft', error);
         }
       }
@@ -955,7 +955,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       setHasDraft(true);
       setDraftId(draft.id);
       toast.info(`Draft saved${fileMetadata.length > 0 ? ` with ${fileMetadata.length} file(s)` : ''}`);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save draft', error);
       toast.error('Failed to save draft. Please try again.');
     }

@@ -438,7 +438,7 @@ export const CompletionSummaryModal = ({
       } else {
         throw new Error('Could not open print window. Please check popup blocker settings.');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to export PDF', error);
       toast.error('Unable to export summary', {
         description: error instanceof Error ? error.message : 'Please try again.',
@@ -765,14 +765,14 @@ export const CompletionSummaryModal = ({
 
 function generateAutoSummary(correspondence: Correspondence, minutes: Minute[], users: unknown[]): string {
   const routingPath = minutes.map(m => {
-    const user = users.find(u => u.id === m.userId);
+    const user = (users as any[]).find((u: any) => u.id === m.userId);
     return `${user?.name || 'Unknown'} (${m.gradeLevel})`;
   }).join(' → ');
-  
+
   const actions = minutes
     .filter(m => m.actionType === 'treat')
     .map(m => {
-      const user = users.find(u => u.id === m.userId);
+      const user = (users as any[]).find((u: any) => u.id === m.userId);
       return `- ${user?.name || 'Unknown'}: ${m.minuteText}`;
     })
     .join('\n');

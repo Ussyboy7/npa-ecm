@@ -165,7 +165,7 @@ export function ForwardFormDialog({
       toast.success('Form forwarded successfully');
       onForwarded?.();
       onOpenChange(false);
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to forward form', error);
       toast.error('Failed to forward form');
     } finally {

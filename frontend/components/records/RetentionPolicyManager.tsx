@@ -75,7 +75,7 @@ export const RetentionPolicyManager = () => {
         setPolicies([]);
         toast.error('Invalid response format from server');
       }
-    } catch (error) {
+      } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
       }
@@ -112,7 +112,7 @@ export const RetentionPolicyManager = () => {
         is_active: true,
       });
       loadPolicies();
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to save retention policy', error);
       toast.error('Failed to save retention policy');
     }

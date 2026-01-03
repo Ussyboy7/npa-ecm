@@ -43,6 +43,7 @@ import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
+import { logError } from '@/lib/client-logger';
 import { FlowTypeBadge } from '@/components/correspondence/FlowTypeBadge';
 import {
   AlertDialog,
@@ -89,7 +90,8 @@ const getPriorityColor = (priority: string) => {
 const OfficeOutboxPage = () => {
   const router = useRouter();
   const { currentUser, hydrated } = useCurrentUser();
-  const isAdmin = currentUser?.isSuperuser || currentUser?.systemRole?.name?.toLowerCase() === 'admin';
+  const systemRoleObj = currentUser?.systemRole as Record<string, unknown> | undefined;
+  const isAdmin = currentUser?.isSuperuser || (systemRoleObj && typeof systemRoleObj.name === 'string' && systemRoleObj.name.toLowerCase() === 'admin');
   const { officeMemberships, offices, divisions, users: organizationUsers } = useOrganization();
 
   const [query, setQuery] = useState('');
@@ -221,7 +223,7 @@ const OfficeOutboxPage = () => {
         'Reference Number': item.referenceNumber || '',
         'Subject': item.subject || '',
         'Priority': item.priority || '',
-        'Status': item.status || '',
+        'Status': item.status as string || '',
         'Dispatch Date': item.dispatchDate ? formatDateShort(item.dispatchDate) : '',
         'Office': offices.find(o => o.id === item.owningOfficeId)?.name || '',
       }));
@@ -238,7 +240,7 @@ const OfficeOutboxPage = () => {
       });
 
       toast.success(`Exported ${exportData.length} items successfully`);
-    } catch (err: Record<string, unknown>) {
+    } catch (err: unknown) {
       toast.error('Failed to export items. Please try again.');
       logError('Export error:', err);
     } finally {
@@ -306,16 +308,18 @@ const OfficeOutboxPage = () => {
         );
         const results = Array.isArray(response.results) ? response.results : [];
         setOutboxItems(results.map(mapApiCorrespondence));
+        const responseObj = response as Record<string, unknown>;
+        const summaryObj = responseObj.summary as Record<string, unknown> | undefined;
         setSummary({
-          total: response.summary?.total ?? response.count ?? results.length,
-          urgent: response.summary?.urgent ?? 0,
-          pending: response.summary?.pending ?? 0,
-          inProgress: response.summary?.in_progress ?? 0,
+          total: (summaryObj && typeof summaryObj.total === 'number') ? summaryObj.total : ((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length),
+          urgent: (summaryObj && typeof summaryObj.urgent === 'number') ? summaryObj.urgent : 0,
+          pending: (summaryObj && typeof summaryObj.pending === 'number') ? summaryObj.pending : 0,
+          inProgress: (summaryObj && typeof summaryObj.in_progress === 'number') ? summaryObj.in_progress : 0,
         });
-        setCount(response.count ?? results.length);
-      } catch (err: Record<string, unknown>) {
+        setCount((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length);
+      } catch (err: unknown) {
         // Ignore abort errors
-        if (err?.name === 'AbortError') {
+        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
           return;
         }
         setError('Failed to load office outbox items. Please try again.');
@@ -348,7 +352,7 @@ const OfficeOutboxPage = () => {
   };
 
   const handleWithdrawClick = (item: Correspondence) => {
-    if (item.status !== 'pending' && item.status !== 'in-progress') {
+    if (item.status as string !== 'pending' && item.status as string !== 'in-progress') {
       toast.error('Only pending or in-progress correspondence can be withdrawn');
       return;
     }
@@ -380,8 +384,21 @@ const OfficeOutboxPage = () => {
       
       // Refresh the list
       setPage(1);
-    } catch (err: Record<string, unknown>) {
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to withdraw correspondence';
+    } catch (err: unknown) {
+      let errorMessage = 'Failed to withdraw correspondence';
+      if (err && typeof err === 'object') {
+        const errorObj = err as Record<string, unknown>;
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (errorMessage === 'Failed to withdraw correspondence') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
       toast.error(`Failed to withdraw: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
@@ -389,7 +406,7 @@ const OfficeOutboxPage = () => {
   };
 
   const handleDeleteClick = (item: Correspondence) => {
-    if (item.status !== 'pending') {
+    if (item.status as string !== 'pending') {
       toast.error('Only pending correspondence can be deleted');
       return;
     }
@@ -412,8 +429,21 @@ const OfficeOutboxPage = () => {
       
       // Refresh the list
       setPage(1);
-    } catch (err: Record<string, unknown>) {
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to delete correspondence';
+    } catch (err: unknown) {
+      let errorMessage = 'Failed to delete correspondence';
+      if (err && typeof err === 'object') {
+        const errorObj = err as Record<string, unknown>;
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (errorMessage === 'Failed to delete correspondence') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
       toast.error(`Failed to delete: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
@@ -669,8 +699,8 @@ const OfficeOutboxPage = () => {
               const daysPending = calculateDaysPending(item);
 
               return (
-                <div key={item.id} className="border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
-                  <Link href={`/correspondence/${item.id}`} className="block">
+                <div key={item.id as string} className="border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
+                  <Link href={`/correspondence/${item.id as string}`} className="block">
                     <div className="flex items-start gap-4">
                       <div className={`p-3 rounded-lg ${item.priority === 'urgent' ? 'bg-destructive/10' : item.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
                         <Mail className={`h-5 w-5 ${item.priority === 'urgent' ? 'text-destructive' : item.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
@@ -688,7 +718,7 @@ const OfficeOutboxPage = () => {
                                 isInternal={item.isInternal}
                                 isExternal={item.isExternal}
                               />
-                              <Badge variant={getStatusBadgeVariant(item.status)}>{item.status.replace('-', ' ')}</Badge>
+                              <Badge variant={getStatusBadgeVariant(item.status as string)}>{(item.status as string).replace('-', ' ')}</Badge>
                               {daysPending > 0 && <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />{daysPending} day{daysPending === 1 ? '' : 's'} pending</Badge>}
                             </div>
                           </div>
@@ -706,13 +736,13 @@ const OfficeOutboxPage = () => {
                   </Link>
                   {/* Action Menu */}
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-                    {item.status === 'pending' && (
+                    {item.status as string === 'pending' && (
                       <Button 
                         variant="outline" 
                         size="sm" 
                         onClick={(e) => {
                           e.preventDefault();
-                          router.push(`/correspondence/register?edit=${item.id}`);
+                          router.push(`/correspondence/register?edit=${item.id as string}`);
                         }}
                       >
                         Edit Draft
@@ -725,11 +755,11 @@ const OfficeOutboxPage = () => {
                         e.preventDefault();
                         handleWithdrawClick(item);
                       }}
-                      disabled={item.status !== 'pending' || isProcessing}
+                      disabled={item.status as string !== 'pending' || isProcessing}
                     >
                       Withdraw
                     </Button>
-                    {item.status === 'pending' && isAdmin && (
+                    {item.status as string === 'pending' && isAdmin && (
                       <Button 
                         variant="ghost" 
                         size="sm"

@@ -136,7 +136,7 @@ export default function TemplatesHubPage() {
     try {
       const loaded = await loadTemplates();
       setTemplates([...loaded]);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load templates:', error);
       toast({ title: "Error", description: "Failed to load templates. Please try again.", variant: "destructive" });
     } finally {
@@ -164,7 +164,7 @@ export default function TemplatesHubPage() {
           setDescription("");
           setContentHtml("");
         }
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load scoped templates:', error);
       }
     };
@@ -209,7 +209,7 @@ export default function TemplatesHubPage() {
   }, [activeScope, scopeEntityOptions, selectedScopeId]);
 
   const handleTemplateSelect = (templateId: string) => {
-    const template = templates.find((item) => item.id === templateId);
+    const template = templates.find((item) => item.id as string === templateId);
     if (!template) return;
     setActiveTemplateType(template.templateType);
     setSelectedTemplateId(template.id);
@@ -265,7 +265,7 @@ export default function TemplatesHubPage() {
         setSelectedTemplateId(created.id);
         toast({ title: "Template created", description: `${created.title} is now available.` });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save template:', error);
       toast({ title: "Error", description: "Failed to save template. Please try again.", variant: "destructive" });
     }
@@ -288,7 +288,7 @@ export default function TemplatesHubPage() {
       await deleteTemplate(selectedTemplateId);
       await refreshTemplates();
       toast({ title: "Template deleted", description: "Template removed successfully." });
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to delete template:', error);
       toast({ title: "Error", description: "Failed to delete template. Please try again.", variant: "destructive" });
     }
@@ -300,7 +300,7 @@ export default function TemplatesHubPage() {
       setWorkflowLoading(true);
       const data = await getWorkflowTemplates();
       setWorkflowTemplates(data);
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error loading workflow templates:", error);
       toast({ title: "Error", description: "Failed to load workflow templates", variant: "destructive" });
     } finally {
@@ -344,7 +344,7 @@ export default function TemplatesHubPage() {
       setShowWorkflowDeleteConfirm(false);
       setWorkflowToDelete(null);
       setDeleteConfirmText("");
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error deleting template:", error);
       toast({ title: "Error", description: "Failed to delete template", variant: "destructive" });
     }
@@ -355,7 +355,7 @@ export default function TemplatesHubPage() {
       await updateWorkflowTemplate(template.id, { is_active: !template.is_active });
       toast({ title: "Success", description: `Template ${!template.is_active ? "activated" : "deactivated"} successfully` });
       loadWorkflowTemplates();
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error toggling template:", error);
       toast({ title: "Error", description: "Failed to update template", variant: "destructive" });
     }
@@ -375,7 +375,7 @@ export default function TemplatesHubPage() {
       setFormLoading(true);
       const data = await getFormTemplates({ is_active: undefined, search: formSearch || undefined });
       setFormTemplates(Array.isArray(data) ? data : []);
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error loading form templates:", error);
       sonnerToast.error("Failed to load form templates");
       setFormTemplates([]);
@@ -402,7 +402,7 @@ export default function TemplatesHubPage() {
       await deleteFormTemplate(id);
       sonnerToast.success("Template deleted successfully");
       loadFormTemplates();
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error deleting template:", error);
       sonnerToast.error("Failed to delete template");
     } finally {
@@ -415,7 +415,7 @@ export default function TemplatesHubPage() {
       const cloned = await cloneFormTemplate(id);
       sonnerToast.success("Template cloned successfully");
       router.push(`/admin/form-templates/${cloned.id}`);
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error cloning template:", error);
       sonnerToast.error("Failed to clone template");
     }

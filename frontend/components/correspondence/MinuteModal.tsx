@@ -298,7 +298,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         try {
           const templates = await getTemplatesForUser(targetUser, 'minute');
           setMinuteTemplates(templates);
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to load minute templates', error);
           setMinuteTemplates([]);
         }
@@ -648,7 +648,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       setSelectedMinuteTemplateId(created.id);
       setNewTemplateName('');
       toast.success('Template saved for quick reuse.');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save template', error);
       toast.error('Failed to save template. Please try again.');
     }
@@ -665,7 +665,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       await refreshMinuteTemplates();
       setSelectedMinuteTemplateId(null);
       toast.success('Template removed.');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to delete template', error);
       toast.error('Failed to delete template. Please try again.');
     }
@@ -1195,7 +1195,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       if (draftId) {
         try {
           await deleteDraft(draftId);
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to delete draft', error);
         }
       }
@@ -1233,7 +1233,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       });
     } catch (error: unknown) {
       // Don't show error if request was cancelled
-      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
+      if (error instanceof Error && (error.name === 'AbortError' || (error instanceof Error ? error.message : "Unknown error").includes('aborted'))) {
         return;
       }
       logError('Failed to record minute', error);
@@ -1261,7 +1261,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       toast.info('Draft saved', {
         description: 'You can continue editing later',
       });
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save draft', error);
       toast.error('Failed to save draft');
     }
@@ -1442,7 +1442,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
                 Action Type *
               </Label>
-              <RadioGroup value={actionType} onValueChange={(v: any) => setActionType(v)}>
+              <RadioGroup value={actionType} onValueChange={(v: 'minute' | 'approve') => setActionType(v)}>
                 <div className="space-y-3">
                   {/* Minute Option */}
                   <div className="flex items-start space-x-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors">

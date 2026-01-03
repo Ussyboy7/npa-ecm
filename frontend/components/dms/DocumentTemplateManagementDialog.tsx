@@ -99,7 +99,7 @@ export const DocumentTemplateManagementDialog = ({
     try {
       const fetched = await getDocumentTemplates({ isActive: undefined }); // Get all templates
       setTemplates(fetched);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load document templates', error);
       toast.error('Failed to load templates');
     } finally {
@@ -177,7 +177,7 @@ export const DocumentTemplateManagementDialog = ({
       
       await loadTemplates();
       resetForm();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save template', error);
       toast.error('Failed to save template');
     } finally {
@@ -192,7 +192,7 @@ export const DocumentTemplateManagementDialog = ({
       toast.success('Template deleted');
       await loadTemplates();
       setShowDeleteConfirm(null);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to delete template', error);
       toast.error('Failed to delete template');
     } finally {

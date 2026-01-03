@@ -101,7 +101,7 @@ export const getWebhooks = async (params?: {
       `/integrations/webhooks/${query ? `?${query}` : ''}`
     );
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to get webhooks', error);
     throw error;
   }
@@ -117,7 +117,7 @@ export const createWebhook = async (data: Partial<Webhook>): Promise<Webhook> =>
       body: JSON.stringify(data),
     });
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to create webhook', error);
     throw error;
   }
@@ -136,7 +136,7 @@ export const updateWebhook = async (
       body: JSON.stringify(data),
     });
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to update webhook', error);
     throw error;
   }
@@ -150,7 +150,7 @@ export const deleteWebhook = async (id: string): Promise<void> => {
     await apiFetch(`/integrations/webhooks/${id}/`, {
       method: 'DELETE',
     });
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to delete webhook', error);
     throw error;
   }
@@ -175,7 +175,7 @@ export const testWebhook = async (id: string): Promise<{
       method: 'POST',
     });
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to test webhook', error);
     throw error;
   }
@@ -201,7 +201,7 @@ export const getWebhookEvents = async (params?: {
       `/integrations/webhook-events/${query ? `?${query}` : ''}`
     );
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to get webhook events', error);
     throw error;
   }
@@ -214,7 +214,7 @@ export const getEmailConnectors = async (): Promise<EmailConnector[]> => {
   try {
     const response = await apiFetch<EmailConnector[]>('/integrations/email-connectors/');
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to get email connectors', error);
     throw error;
   }
@@ -232,7 +232,7 @@ export const createEmailConnector = async (
       body: JSON.stringify(data),
     });
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to create email connector', error);
     throw error;
   }
@@ -257,7 +257,7 @@ export const sendEmail = async (data: {
       }
     );
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to send email', error);
     throw error;
   }
@@ -270,7 +270,7 @@ export const getERPConnectors = async (): Promise<ERPConnector[]> => {
   try {
     const response = await apiFetch<ERPConnector[]>('/integrations/erp-connectors/');
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to get ERP connectors', error);
     throw error;
   }
@@ -296,7 +296,7 @@ export const syncFromERP = async (
       body: JSON.stringify({ connector_id: connectorId }),
     });
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to sync from ERP', error);
     throw error;
   }
@@ -326,7 +326,7 @@ export const getIntegrationLogs = async (params?: {
       `/integrations/logs/${query ? `?${query}` : ''}`
     );
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to get integration logs', error);
     throw error;
   }

@@ -262,7 +262,7 @@ export const RoleSwitcher = () => {
       toast.success(`You are now impersonating ${user.name || user.username}`);
       await refreshCurrentUser();
       await refreshOrganizationData();
-    } catch (error) {
+    } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to impersonate user";
       toast.error(message);
     }
@@ -285,7 +285,7 @@ export const RoleSwitcher = () => {
       toast.success("Returned to your primary account");
       await refreshCurrentUser();
       await refreshOrganizationData();
-    } catch (error) {
+    } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to restore your session";
       toast.error(message);
     }

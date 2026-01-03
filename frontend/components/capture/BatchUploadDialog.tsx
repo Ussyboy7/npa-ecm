@@ -203,11 +203,11 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
           ));
 
           setUploadProgress(((i + 1) / files.length) * 50); // First 50% for upload
-        } catch (error: Record<string, unknown>) {
+        } catch (error: unknown) {
           logError(`Failed to upload ${uploadFile.file.name}`, error);
           setFiles(prev => prev.map(f => 
             f.id === uploadFile.id 
-              ? { ...f, status: 'failed', error: error?.message || 'Upload failed' }
+              ? { ...f, status: 'failed', error: (error instanceof Error ? error.message : 'Upload failed') }
               : f
           ));
         }
@@ -279,7 +279,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
                 toast.error(`Batch processing failed: ${updatedBatch.errors.map(e => e.error).join(', ')}`);
               }
             }
-          } catch (error) {
+          } catch (error: unknown) {
             logError('Failed to poll batch status', error);
           }
         }, 2000);
@@ -301,12 +301,12 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
         toast.success(`Successfully uploaded ${documentIds.length} file(s)`);
         onComplete?.(documentIds.map(id => ({ id, title: '' })));
       }
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
       }
       logError('Batch upload failed', error);
-      toast.error(error?.message || 'Batch upload failed');
+      toast.error((error instanceof Error ? error.message : 'Batch upload failed'));
       setIsUploading(false);
     }
   }, [files, processOCR, extractMetadata, onComplete, isUploading]);

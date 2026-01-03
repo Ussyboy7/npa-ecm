@@ -69,7 +69,7 @@ class WebSocketManager {
       }
 
       throw new Error('WebSocket URL cannot be determined');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Error constructing WebSocket URL:', error);
       throw error;
     }
@@ -138,7 +138,7 @@ class WebSocketManager {
           } else if (data.type === 'pong') {
             // Response to ping - connection is alive
           }
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Error parsing WebSocket message:', error);
         }
       };
@@ -185,7 +185,7 @@ class WebSocketManager {
       };
 
       this.ws = ws;
-    } catch (error) {
+    } catch (error: unknown) {
       logWarn('Failed to create WebSocket connection; continuing with polling only.', error);
       this.isConnected = false;
       this.isConnecting = false;

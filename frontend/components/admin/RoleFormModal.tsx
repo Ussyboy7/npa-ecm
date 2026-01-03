@@ -196,7 +196,7 @@ export const RoleFormModal = ({
       await refreshOrganizationData();
       onOpenChange(false);
       onSuccess();
-    } catch (error) {
+    } catch (error: unknown) {
       const description = error instanceof Error ? error.message : "Unable to save role";
       toast({
         title: existingRole ? "Update failed" : "Creation failed",

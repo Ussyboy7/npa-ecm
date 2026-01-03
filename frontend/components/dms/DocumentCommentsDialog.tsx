@@ -67,7 +67,7 @@ export const DocumentCommentsDialog = ({
           (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
         );
         setComments(ordered);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load document comments', error);
         setComments([]);
       }
@@ -192,10 +192,10 @@ export const DocumentCommentsDialog = ({
       const updated = await resolveDocumentComment(commentId, resolved);
     if (!updated) return;
     setComments((prev) => {
-      return prev.map((item) => (item.id === commentId ? updated : item));
+      return prev.map((item) => (item.id as string === commentId ? updated : item));
     });
     toast.success(resolved ? 'Comment marked as resolved' : 'Comment re-opened');
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to toggle comment resolution', error);
       toast.error('Unable to update comment status');
     }
@@ -209,10 +209,10 @@ export const DocumentCommentsDialog = ({
       await deleteDocumentComment(commentId);
       // Remove the comment and all its replies
       setComments((prev) => {
-        return prev.filter((item) => item.id !== commentId && item.parentId !== commentId);
+        return prev.filter((item) => item.id as string !== commentId && item.parentId !== commentId);
       });
       toast.success('Comment and replies removed');
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to delete comment', error);
       toast.error('Unable to delete comment');
     }

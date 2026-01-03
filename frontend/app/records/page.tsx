@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+import { logError } from '@/lib/client-logger';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { RetentionPolicyManager } from '@/components/records/RetentionPolicyManager';
 import { LegalHoldsManager } from '@/components/records/LegalHoldsManager';
@@ -45,7 +46,7 @@ export default function RecordsManagementPage() {
           pendingDispositions: dispositions.filter(d => d.status === 'pending' || d.status === 'scheduled').length,
           schedules: schedules.length,
         });
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load summary:', error);
       } finally {
         setSummaryLoading(false);

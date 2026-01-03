@@ -51,7 +51,7 @@ export function FormsChecklistCard({ correspondenceId }: FormsChecklistCardProps
       // Ensure data is always an array
       setTemplates(Array.isArray(templatesData) ? templatesData : []);
       setSubmissions(Array.isArray(submissionsData) ? submissionsData : []);
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error loading forms data:", error);
       toast.error("Failed to load forms and checklists");
       setTemplates([]);
@@ -126,7 +126,7 @@ export function FormsChecklistCard({ correspondenceId }: FormsChecklistCardProps
       setSelectedTemplate(null);
       setFormData({});
       loadData(); // Reload submissions
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error submitting form:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to submit form";
       toast.error(errorMessage);
@@ -145,7 +145,7 @@ export function FormsChecklistCard({ correspondenceId }: FormsChecklistCardProps
       toast.success("Form submitted successfully");
       setViewingSubmission(null);
       loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error submitting draft:", error);
       toast.error("Failed to submit form");
     }

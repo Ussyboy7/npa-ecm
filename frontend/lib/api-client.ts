@@ -138,7 +138,7 @@ const refreshAccessToken = async (): Promise<string | null> => {
     }
     storeTokens(data.access, data.refresh ?? refreshToken, data.expires_in);
     return data.access;
-  } catch (error) {
+      } catch (error: unknown) {
     logError("Failed to refresh access token", error);
   }
 
@@ -333,7 +333,7 @@ export const logout = async () => {
         body: JSON.stringify({ refresh }),
         credentials: "include",
       });
-    } catch (error) {
+      } catch (error: unknown) {
       logWarn("Failed to blacklist token", error);
     }
   }

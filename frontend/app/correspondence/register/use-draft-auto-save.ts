@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import { REGISTER_CONSTANTS } from './register-constants';
+import { logError } from '@/lib/client-logger';
 import { FormData, FlowType, DistributionState } from './register-utils';
 import { toast } from 'sonner';
 

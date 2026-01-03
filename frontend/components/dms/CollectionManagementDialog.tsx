@@ -69,7 +69,7 @@ export const CollectionManagementDialog = ({
           .map((c) => c.id);
         setSelectedCollectionIds(new Set(documentCollectionIds));
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load collections', error);
       toast.error('Failed to load collections');
     } finally {
@@ -103,7 +103,7 @@ export const CollectionManagementDialog = ({
       setNewCollectionIsPublic(false);
       setShowCreateForm(false);
       toast.success('Collection created successfully');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to create collection', error);
       toast.error('Failed to create collection');
     } finally {
@@ -129,7 +129,7 @@ export const CollectionManagementDialog = ({
         toast.success('Document removed from collection');
       }
       onComplete?.();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to update collection', error);
       toast.error('Failed to update collection');
     }

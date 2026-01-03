@@ -1,6 +1,6 @@
 "use client";
 
-import { logError } from '@/lib/client-logger';
+import { logError, logInfo } from '@/lib/client-logger';
 import { getStoredAccessToken } from '@/lib/api-client';
 import { useState, useEffect } from "react";
 import {

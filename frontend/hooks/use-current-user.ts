@@ -91,7 +91,7 @@ export const useCurrentUser = () => {
         globalSubscribers.forEach(sub => sub(user, true));
         
         return user;
-      } catch (error) {
+      } catch (error: unknown) {
         logWarn("Failed to hydrate current user from API", error);
         globalUserState.user = null;
         globalUserState.hydrated = true;

@@ -122,7 +122,7 @@ export function WorkflowStepForm({
     try {
       await onSave(formData);
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error saving step:", error);
       setErrors({ submit: error instanceof Error ? error.message : "Failed to save step" });
     } finally {

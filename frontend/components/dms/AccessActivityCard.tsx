@@ -109,7 +109,7 @@ export const AccessActivityCard = ({
     try {
       await onRefresh();
       toast.success('Access logs refreshed');
-    } catch (error) {
+      } catch (error: unknown) {
       toast.error('Failed to refresh access logs');
     } finally {
       setIsRefreshing(false);

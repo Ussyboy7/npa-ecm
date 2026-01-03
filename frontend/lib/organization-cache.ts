@@ -33,22 +33,22 @@ export const getOrganizationSnapshot = (): OrganizationSnapshot => snapshot;
 
 export const getDirectorateById = (id?: string | null) => {
   if (!id) return undefined;
-  return snapshot.directorates.find((item) => item.id === id);
+  return snapshot.directorates.find((item) => item.id as string === id);
 };
 
 export const getDivisionById = (id?: string | null) => {
   if (!id) return undefined;
-  return snapshot.divisions.find((item) => item.id === id);
+  return snapshot.divisions.find((item) => item.id as string === id);
 };
 
 export const getDepartmentById = (id?: string | null) => {
   if (!id) return undefined;
-  return snapshot.departments.find((item) => item.id === id);
+  return snapshot.departments.find((item) => item.id as string === id);
 };
 
 export const getUserById = (id?: string | null) => {
   if (!id) return undefined;
-  return snapshot.users.find((item) => item.id === id);
+  return snapshot.users.find((item) => item.id as string === id);
 };
 
 export const getOfficeById = (id?: string | null) => {

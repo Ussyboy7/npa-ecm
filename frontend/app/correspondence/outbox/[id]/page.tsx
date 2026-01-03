@@ -71,11 +71,12 @@ import {
   FolderTree,
 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import type { Correspondence, Minute } from '@/lib/npa-structure';
+import type { Correspondence, Minute, CorrespondenceAttachment } from '@/lib/npa-structure';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
 import { toast } from 'sonner';
+import { logError } from '@/lib/client-logger';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
 import mammoth from 'mammoth';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -151,8 +152,8 @@ const OutboxDetailPage = () => {
         newMap.delete(index);
         return newMap;
       });
-    } catch (err: Record<string, unknown>) {
-      const errorMsg = err?.message || 'Failed to load preview';
+    } catch (err: unknown) {
+      const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Failed to load preview';
       setPreviewErrors((prev) => new Map(prev).set(index, errorMsg));
       setAttachmentPreviews((prev) => {
         const newMap = new Map(prev);
@@ -177,8 +178,9 @@ const OutboxDetailPage = () => {
       setCorrespondence(mappedCorr);
 
       // Fetch minutes
-      const minutesResponse = await apiFetch<Record<string, unknown>>(`/correspondence/minutes/?correspondence=${id}`);
-      const minutesData = Array.isArray(minutesResponse) ? minutesResponse : minutesResponse.results || [];
+      type MinutesResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
+      const minutesResponse = await apiFetch<MinutesResponse>(`/correspondence/minutes/?correspondence=${id}`);
+      const minutesData = Array.isArray(minutesResponse) ? minutesResponse : (minutesResponse?.results || []);
       setMinutes(minutesData.map(mapApiMinute));
 
       // Load linked documents
@@ -212,8 +214,8 @@ const OutboxDetailPage = () => {
         // Check if this correspondence references others or is referenced
         const relatedResponse = await apiFetch<unknown[]>(`/correspondence/items/?linked_documents=${mappedCorr.linkedDocumentIds?.[0] || ''}`).catch(() => []);
         if (Array.isArray(relatedResponse)) {
-          const related = relatedResponse
-            .filter((item: Record<string, unknown>) => item.id !== mappedCorr.id)
+          const related = (relatedResponse as Array<Record<string, unknown>>)
+            .filter((item) => item.id as string !== mappedCorr.id)
             .map(mapApiCorrespondence)
             .slice(0, 5); // Limit to 5 related items
           setRelatedCorrespondence(related);
@@ -224,20 +226,33 @@ const OutboxDetailPage = () => {
 
       // Fetch case links
       try {
-        const caseLinksResponse = await apiFetch<unknown[]>(`/cases/case-correspondence-links/?correspondence=${id}`).catch(() => []);
+        const caseLinksResponse = await apiFetch<Array<Record<string, unknown>>>(`/cases/case-correspondence-links/?correspondence=${id}`).catch(() => []);
         if (Array.isArray(caseLinksResponse)) {
-          const links = caseLinksResponse.map((link: Record<string, unknown>) => ({
-            id: link.case?.id || link.case_id,
-            caseNumber: link.case?.case_number || link.case_number || 'N/A',
-            title: link.case?.title || 'Untitled Case',
-          })).filter((link: Record<string, unknown>) => link.id);
+          const links = caseLinksResponse.map((link) => ({
+            id: String((link.case && typeof link.case === 'object' && 'id' in link.case ? (link.case as Record<string, unknown>).id : null) || link.case_id || ''),
+            caseNumber: String((link.case && typeof link.case === 'object' && 'case_number' in link.case ? (link.case as Record<string, unknown>).case_number : null) || link.case_number || 'N/A'),
+            title: String((link.case && typeof link.case === 'object' && 'title' in link.case ? (link.case as Record<string, unknown>).title : null) || 'Untitled Case'),
+          })).filter((link) => link.id);
           setCaseLinks(links);
         }
       } catch (err) {
         logError('Failed to load case links:', err);
       }
-    } catch (err: Record<string, unknown>) {
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to load outbox item';
+    } catch (err: unknown) {
+      let errorMessage = 'Failed to load outbox item';
+      if (err && typeof err === 'object') {
+        const errorObj = err as Record<string, unknown>;
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (errorMessage === 'Failed to load outbox item') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
       setError(errorMessage);
       toast.error(`Failed to load outbox item: ${errorMessage}`);
     } finally {
@@ -406,7 +421,7 @@ const OutboxDetailPage = () => {
 
     setResending(true);
     try {
-      const payload: unknown = {};
+      const payload: Record<string, unknown> = {};
       if (resendCustomMessage.trim()) {
         payload.custom_message = resendCustomMessage.trim();
       }
@@ -424,11 +439,26 @@ const OutboxDetailPage = () => {
       setResendDialogOpen(false);
       setResendCustomMessage('');
       await loadData();
-    } catch (err: Record<string, unknown>) {
-      if (err?.status === 404 || err?.response?.status === 404) {
+    } catch (err: unknown) {
+      const errorObj = err && typeof err === 'object' ? err as Record<string, unknown> : null;
+      const errorStatus = errorObj && 'status' in errorObj ? errorObj.status : null;
+      const responseStatus = errorObj && errorObj.response && typeof errorObj.response === 'object' && 'status' in errorObj.response ? (errorObj.response as Record<string, unknown>).status : null;
+      if (errorStatus === 404 || responseStatus === 404) {
         toast.info('Resend functionality is not yet available on the backend');
       } else {
-        const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to send reminder';
+        let errorMessage = 'Failed to send reminder';
+        if (errorObj) {
+          if (errorObj.response && typeof errorObj.response === 'object') {
+            const response = errorObj.response as Record<string, unknown>;
+            if (response.data && typeof response.data === 'object') {
+              const data = response.data as Record<string, unknown>;
+              errorMessage = (data.detail as string) || errorMessage;
+            }
+          }
+          if (errorMessage === 'Failed to send reminder') {
+            errorMessage = (errorObj.message as string) || errorMessage;
+          }
+        }
         toast.error(`Failed to send reminder: ${errorMessage}`);
       }
     } finally {
@@ -465,11 +495,26 @@ const OutboxDetailPage = () => {
       setTimeout(() => {
         router.push('/correspondence/outbox');
       }, 1500);
-    } catch (err: Record<string, unknown>) {
-      if (err?.status === 404 || err?.response?.status === 404) {
+    } catch (err: unknown) {
+      const errorObj3 = err && typeof err === 'object' ? err as Record<string, unknown> : null;
+      const errorStatus3 = errorObj3 && 'status' in errorObj3 ? errorObj3.status : null;
+      const responseStatus3 = errorObj3 && errorObj3.response && typeof errorObj3.response === 'object' && 'status' in errorObj3.response ? (errorObj3.response as Record<string, unknown>).status : null;
+      if (errorStatus3 === 404 || responseStatus3 === 404) {
         toast.info('Withdraw functionality is not yet available on the backend');
       } else {
-        const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to withdraw correspondence';
+        let errorMessage = 'Failed to withdraw correspondence';
+        if (errorObj3) {
+          if (errorObj3.response && typeof errorObj3.response === 'object') {
+            const response = errorObj3.response as Record<string, unknown>;
+            if (response.data && typeof response.data === 'object') {
+              const data = response.data as Record<string, unknown>;
+              errorMessage = (data.detail as string) || errorMessage;
+            }
+          }
+          if (errorMessage === 'Failed to withdraw correspondence') {
+            errorMessage = (errorObj3.message as string) || errorMessage;
+          }
+        }
         toast.error(`Failed to withdraw: ${errorMessage}`);
       }
     }
@@ -1072,7 +1117,7 @@ const OutboxDetailPage = () => {
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="h-2 w-2 rounded-full bg-secondary" />
-                        <span>Routed: {minutes.filter(m => m.actionType === 'route').length}</span>
+                        <span>Routed: {minutes.filter(m => m.actionType === 'forward').length}</span>
                       </div>
                       {minutes.filter(m => m.actionType === 'reject').length > 0 && (
                         <div className="flex items-center gap-1">
@@ -1146,7 +1191,7 @@ const OutboxDetailPage = () => {
                                   {minute.fromOfficeName && (
                                     <p>
                                       <span className="font-medium">From:</span> {minute.fromOfficeName}
-                                      {minute.fromUserName && ` (${minute.fromUserName})`}
+                                      {minute.userName && ` (${minute.userName})`}
                                     </p>
                                   )}
                                   {minute.toOfficeName && (

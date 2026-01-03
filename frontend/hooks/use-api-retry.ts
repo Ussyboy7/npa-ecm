@@ -32,7 +32,7 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
  * 
  * try {
  *   const data = await fetchWithRetry(() => apiFetch('/correspondence/items/123/'));
- * } catch (error) {
+ * } catch (error: unknown) {
  *   // Handle error after all retries exhausted
  * }
  */

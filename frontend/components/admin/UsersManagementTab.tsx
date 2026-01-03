@@ -188,17 +188,17 @@ export const UsersManagementTab = () => {
       
       const response = await fetchUsers(queryParams);
       setUsers(response.results);
-      setTotalCount(response.count);
+      setTotalCount(response.count as number);
       
       // If current page exceeds total pages after filtering, reset to last valid page
-      const totalPages = Math.ceil(response.count / pageSize);
+      const totalPages = Math.ceil(response.count as number / pageSize);
       if (totalPages > 0 && validPage > totalPages) {
         setCurrentPage(totalPages);
       }
       
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       // Handle "Invalid page" error specifically
-      if (error?.message?.includes('Invalid page') || error?.detail === 'Invalid page.') {
+      if ((error instanceof Error && (error instanceof Error ? error.message : "Unknown error")?.includes('Invalid page')) || (typeof error === 'object' && error && 'detail' in error && error.detail === 'Invalid page.')) {
         // Reset to page 1 if page is invalid
         if (currentPage !== 1) {
           setCurrentPage(1);
@@ -296,7 +296,7 @@ export const UsersManagementTab = () => {
       setSelectedUserIds(new Set());
       setIsBulkActionMode(false);
       await loadUsers();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       handleApiError(error, 'Bulk Activate');
     } finally {
       setIsBulkProcessing(false);
@@ -327,7 +327,7 @@ export const UsersManagementTab = () => {
       setIsBulkActionMode(false);
       setShowBulkDeactivateConfirm(false);
       await loadUsers();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       handleApiError(error, 'Bulk Deactivate');
     } finally {
       setIsBulkProcessing(false);
@@ -358,7 +358,7 @@ export const UsersManagementTab = () => {
       setIsBulkActionMode(false);
       setShowBulkArchiveConfirm(false);
       await loadUsers();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       handleApiError(error, 'Bulk Archive');
     } finally {
       setIsBulkProcessing(false);
@@ -389,7 +389,7 @@ export const UsersManagementTab = () => {
       setIsBulkActionMode(false);
       setShowBulkDeleteConfirm(false);
       await loadUsers();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       handleApiError(error, 'Bulk Delete');
     } finally {
       setIsBulkProcessing(false);
@@ -417,7 +417,7 @@ export const UsersManagementTab = () => {
       setIsBulkActionMode(false);
       setShowBulkRoleAssign(false);
       await loadUsers();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       handleApiError(error, 'Bulk Role Assignment');
     } finally {
       setIsBulkProcessing(false);

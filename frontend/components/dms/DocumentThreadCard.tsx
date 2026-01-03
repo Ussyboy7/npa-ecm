@@ -53,7 +53,7 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
             updated_at: parent.updated_at,
             author: parent.author,
           });
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to load parent document:', error);
         }
       }
@@ -71,10 +71,10 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
           author: doc.author,
         }));
         setChildDocuments(children);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load child documents:', error);
       }
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to load thread documents:', error);
       toast.error('Failed to load document thread');
     } finally {
@@ -93,7 +93,7 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
     try {
       await loadThreadDocuments();
       toast.success('Document thread refreshed');
-    } catch (error) {
+      } catch (error: unknown) {
       toast.error('Failed to refresh document thread');
     } finally {
       setIsRefreshing(false);

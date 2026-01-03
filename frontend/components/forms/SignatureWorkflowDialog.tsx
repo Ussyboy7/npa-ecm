@@ -136,7 +136,7 @@ export function SignatureWorkflowDialog({
       onOpenChange(false);
       setAssignments([]);
       setNotes("");
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error creating signature workflow:", error);
       toast.error(error instanceof Error ? error.message : "Failed to create signature workflow");
     } finally {

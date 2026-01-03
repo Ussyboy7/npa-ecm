@@ -61,7 +61,7 @@ export default function FormTemplateEditorPage() {
         is_active: data.is_active,
         structure: data.structure || { fields: [] },
       });
-    } catch (error) {
+      } catch (error: unknown) {
       logError("Error loading template:", error);
       toast.error("Failed to load form template");
       router.push("/admin/form-templates");
@@ -126,7 +126,7 @@ export default function FormTemplateEditorPage() {
         toast.success("Form template updated successfully");
         loadTemplate();
       }
-    } catch (error) {
+      } catch (error: unknown) {
       logError("Error saving template:", error);
       toast.error(error instanceof Error ? error.message : "Failed to save template");
     } finally {

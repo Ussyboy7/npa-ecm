@@ -94,12 +94,12 @@ export function LinkFormDialog({
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/cases/${caseId}/`, {
         signal: abortControllerRef.current.signal,
       });
-      const linked = (response.forms || []).map((link: Record<string, unknown>) => 
+      const linked = ((response.forms as any[]) || []).map((link: Record<string, unknown>) =>
         link.form_document_id || link.formDocumentId
       ).filter(Boolean);
-      setLinkedIds(new Set(linked));
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+      setLinkedIds(new Set(linked as string[]));
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       // Ignore errors, just proceed
     }
   };
@@ -135,17 +135,17 @@ export function LinkFormDialog({
       
       if (signal.aborted) return;
       
-      const items = (response.results || []).map((item: Record<string, unknown>) => ({
-        id: item.id,
-        title: item.title || item.document?.title || '',
-        templateName: item.template?.name || item.template_name,
-        status: item.status || item.document?.status,
-        createdAt: item.created_at || item.document?.created_at,
+      const items = ((response.results as any[]) || []).map((item: Record<string, unknown>) => ({
+        id: item.id as string as string,
+        title: (item.title as string as string) || ((item.document as any)?.title as string) || '',
+        templateName: ((item.template as any)?.name as string) || (item.template_name as string),
+        status: (item.status as string as string) || ((item.document as any)?.status as string),
+        createdAt: (item.created_at as string) || ((item.document as any)?.created_at as string),
       }));
       setForms(items);
-      setTotalCount(response.count || 0);
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+      setTotalCount(response.count as number || 0);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       logError("Failed to fetch forms", err);
       toast.error("Failed to load forms");
     } finally {
@@ -201,8 +201,8 @@ export function LinkFormDialog({
       toast.success(`Successfully linked ${selectedIds.size} form(s) to case ${caseNumber}`);
       onLinked?.();
       onOpenChange(false);
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       logError("Failed to link forms", err);
       toast.error("Failed to link forms");
     } finally {
@@ -210,7 +210,7 @@ export function LinkFormDialog({
     }
   };
 
-  const availableItems = forms.filter(item => !linkedIds.has(item.id));
+  const availableItems = forms.filter(item => !linkedIds.has(item.id as string));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -262,32 +262,32 @@ export function LinkFormDialog({
               ) : (
                 <div className="p-2 space-y-2">
                   {availableItems.map((item) => {
-                    const isSelected = selectedIds.has(item.id);
+                    const isSelected = selectedIds.has(item.id as string);
                     return (
                       <div
-                        key={item.id}
+                        key={item.id as string}
                         className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
                           isSelected ? "bg-primary/5 border-primary" : "hover:bg-muted/50"
                         }`}
-                        onClick={() => toggleSelection(item.id)}
+                        onClick={() => toggleSelection(item.id as string)}
                       >
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={() => toggleSelection(item.id)}
+                          onCheckedChange={() => toggleSelection(item.id as string)}
                           className="mt-1"
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <FileCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="font-medium text-sm">{item.title}</span>
+                            <span className="font-medium text-sm">{item.title as string}</span>
                             {item.templateName && (
                               <Badge variant="outline" className="text-xs">
                                 {item.templateName}
                               </Badge>
                             )}
-                            {item.status && (
+                            {item.status as string && (
                               <Badge variant="secondary" className="text-xs">
-                                {item.status}
+                                {item.status as string}
                               </Badge>
                             )}
                           </div>

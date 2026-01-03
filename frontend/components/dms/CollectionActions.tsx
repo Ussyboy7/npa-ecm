@@ -69,7 +69,7 @@ export const CollectionActions = ({
       setShareDialogOpen(false);
       setShareNote('');
       onCollectionUpdate?.();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to share collection', error);
       toast.error('Failed to share collection');
     } finally {
@@ -114,7 +114,7 @@ export const CollectionActions = ({
       URL.revokeObjectURL(url);
 
       toast.success('Collection metadata exported');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to export collection metadata', error);
       toast.error('Failed to export metadata');
     } finally {

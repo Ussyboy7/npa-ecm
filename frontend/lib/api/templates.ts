@@ -77,7 +77,7 @@ export const getTemplates = async (params?: {
       return response.results.map(mapApiTemplate);
     }
     return [];
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get templates', error);
     return [];
   }
@@ -94,7 +94,7 @@ export const getTemplate = async (id: string): Promise<DocumentTemplate | null> 
   try {
     const response = await apiFetch<Record<string, unknown>>(`/correspondence/templates/${id}/`);
     return mapApiTemplate(response);
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to get template', error);
     return null;
   }
@@ -140,7 +140,7 @@ export const createTemplate = async (data: {
     });
 
     return mapApiTemplate(response);
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to create template', error);
     throw error;
   }
@@ -182,7 +182,7 @@ export const updateTemplate = async (
     });
 
     return mapApiTemplate(response);
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to update template', error);
     throw error;
   }
@@ -200,7 +200,7 @@ export const deleteTemplate = async (id: string): Promise<void> => {
     await apiFetch(`/correspondence/templates/${id}/`, {
       method: 'DELETE',
     });
-  } catch (error) {
+      } catch (error: unknown) {
     logError('Failed to delete template', error);
     throw error;
   }

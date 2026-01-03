@@ -67,7 +67,7 @@ export const DirectorateFormModal = ({ open, onOpenChange, directorate }: Direct
         toast({ title: "Success", description: "Directorate created successfully" });
       }
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       const description = error instanceof Error ? error.message : 'Unable to save directorate';
       toast({ title: 'Request failed', description, variant: 'destructive' });
     } finally {

@@ -71,7 +71,7 @@ export const LegalHoldsManager = () => {
       const holds = await getLegalHolds({ is_active: true });
       setLegalHolds(holds);
     } catch (error: Record<string, unknown>) {
-      if (error.name === 'AbortError') return;
+      if (error instanceof Error && error.name === 'AbortError') return;
       logError('Failed to load legal holds:', error);
       toast.error('Failed to load legal holds');
     } finally {
@@ -102,7 +102,7 @@ export const LegalHoldsManager = () => {
     } catch (error: Record<string, unknown>) {
       logError('Failed to create legal hold:', error);
       toast.error('Failed to create legal hold', {
-        description: error.message || 'Please try again',
+        description: (error instanceof Error ? error.message : "Unknown error") || 'Please try again',
       });
     } finally {
       setCreating(false);

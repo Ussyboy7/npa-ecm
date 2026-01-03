@@ -110,7 +110,7 @@ export const SLAConfigurationTab = () => {
       setTargets(targetsData);
       setTempTargets(targetsData);
       setChoices(choicesData);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load SLA data:', error);
     } finally {
       setLoading(false);
@@ -124,7 +124,7 @@ export const SLAConfigurationTab = () => {
       setTargets(tempTargets);
       setEditingTargets(false);
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save SLA targets:', error);
     } finally {
       setSaving(false);
@@ -172,7 +172,7 @@ export const SLAConfigurationTab = () => {
       }
       setDialogOpen(false);
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save SLA configuration:', error);
     } finally {
       setSaving(false);
@@ -184,7 +184,7 @@ export const SLAConfigurationTab = () => {
     try {
       await deleteSLAConfiguration(id);
       await loadData();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to delete SLA configuration:', error);
     }
   };

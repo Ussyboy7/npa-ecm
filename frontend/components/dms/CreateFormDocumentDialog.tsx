@@ -81,7 +81,7 @@ export function CreateFormDocumentDialog({
           doc.referenceNumber?.toLowerCase() === referenceNumber.trim().toLowerCase()
         );
         setReferenceNumberExists(exists);
-      } catch (error) {
+      } catch (error: unknown) {
         // Silently fail - duplicate check is optional
       } finally {
         setCheckingReferenceNumber(false);
@@ -128,7 +128,7 @@ export function CreateFormDocumentDialog({
         setSelectedTemplateId(data[0].id);
         setTitle(data[0].name);
       }
-    } catch (error) {
+      } catch (error: unknown) {
       logError("Error loading templates:", error);
       toast.error("Failed to load form templates");
     } finally {

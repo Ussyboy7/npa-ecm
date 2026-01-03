@@ -70,7 +70,10 @@ const UnifiedInbox = () => {
 
   const isSecretary = useMemo(() => {
     if (!currentUser?.systemRole) return false;
-    return currentUser.systemRole.name?.toLowerCase() === 'secretary';
+    const role = typeof currentUser.systemRole === 'string'
+      ? currentUser.systemRole
+      : (currentUser.systemRole as Record<string, unknown>).name as string;
+    return role?.toLowerCase() === 'secretary';
   }, [currentUser?.systemRole]);
 
   // Set initial tab from URL or default

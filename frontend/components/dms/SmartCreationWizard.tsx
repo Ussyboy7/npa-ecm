@@ -204,7 +204,7 @@ export const SmartCreationWizard = ({
           );
 
           createdDocuments.push(document);
-        } catch (error) {
+        } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           errors.push(`${fileMeta.file.name}: ${errorMessage}`);
           logError('Failed to create document', error);
@@ -223,7 +223,7 @@ export const SmartCreationWizard = ({
             isPublic: false,
           });
           collectionId = collection.id;
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to create collection', error);
           toast.warning('Documents created but collection creation failed');
         }
@@ -246,7 +246,7 @@ export const SmartCreationWizard = ({
           }, 100);
         });
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Smart creation error', error);
       toast.error('An error occurred during creation');
     } finally {

@@ -544,8 +544,8 @@ export const ExecutiveDashboardTab = () => {
                       <div className="space-y-3">
                         {delayedApprovals.map((item) => (
                           <Link
-                            key={item.id}
-                            href={`/correspondence/${item.id}`}
+                            key={item.id as string}
+                            href={`/correspondence/${item.id as string}`}
                             className="block border rounded-lg p-3 hover:bg-muted/50 transition-colors"
                           >
                             <div className="flex items-center justify-between mb-1">
@@ -580,8 +580,8 @@ export const ExecutiveDashboardTab = () => {
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {pendingTopLevel.slice(0, 6).map((item) => (
                       <Link
-                        key={item.id}
-                        href={`/correspondence/${item.id}`}
+                        key={item.id as string}
+                        href={`/correspondence/${item.id as string}`}
                         className="border rounded-lg p-3 hover:bg-muted/50 transition-colors"
                       >
                         <div className="flex items-center justify-between mb-1">

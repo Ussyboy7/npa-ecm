@@ -256,7 +256,7 @@ export const loadTemplates = async (): Promise<DocumentTemplate[]> => {
   try {
     const backendTemplates = await templateApi.getTemplates({ isActive: true });
     return backendTemplates;
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to load templates from backend:', error);
     throw error;
   }
@@ -299,7 +299,7 @@ export const saveTemplate = async (template: DocumentTemplate): Promise<Document
           isDefault: template.isDefault,
         });
         return updated;
-      } catch (error) {
+      } catch (error: unknown) {
         // If update fails (template might not exist in backend), create it
         const created = await templateApi.createTemplate({
           scope: template.scope,
@@ -315,7 +315,7 @@ export const saveTemplate = async (template: DocumentTemplate): Promise<Document
         return created;
       }
     }
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to save template to backend:', error);
     throw error;
   }
@@ -346,7 +346,7 @@ export const deleteTemplate = async (id: string): Promise<void> => {
 
   try {
     await templateApi.deleteTemplate(id);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to delete template from backend:', error);
     throw error;
   }

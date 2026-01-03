@@ -15,7 +15,7 @@ export const getFromStorage = <T>(key: string): T | null => {
   if (!raw) return null;
   try {
     return JSON.parse(raw) as T;
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Failed to parse storage item for key ${key}`, error);
     return null;
   }
@@ -103,7 +103,7 @@ import * as draftApi from '@/lib/api/drafts';
 export const saveDraft = async (draft: Partial<Draft> & { correspondenceId: string; type: 'minute' | 'treatment'; content: string }): Promise<Draft> => {
   try {
     return await draftApi.saveDraft(draft);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Error saving draft to backend:', error);
     throw error;
   }
@@ -112,7 +112,7 @@ export const saveDraft = async (draft: Partial<Draft> & { correspondenceId: stri
 export const loadDrafts = async (): Promise<Draft[]> => {
   try {
     return await draftApi.getDrafts();
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Error loading drafts from backend:', error);
     return [];
   }
@@ -121,7 +121,7 @@ export const loadDrafts = async (): Promise<Draft[]> => {
 export const getDraftByCorrespondence = async (correspondenceId: string, type: 'minute' | 'treatment'): Promise<Draft | null> => {
   try {
     return await draftApi.getDraftByCorrespondence(correspondenceId, type);
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Error loading draft for correspondence ${correspondenceId}:`, error);
     return null;
   }
@@ -130,7 +130,7 @@ export const getDraftByCorrespondence = async (correspondenceId: string, type: '
 export const deleteDraft = async (draftId: string): Promise<void> => {
   try {
     await draftApi.deleteDraft(draftId);
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Error deleting draft ${draftId}:`, error);
     throw error;
   }

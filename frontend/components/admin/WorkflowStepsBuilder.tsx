@@ -120,7 +120,7 @@ export function WorkflowStepsBuilder({
         title: "Success",
         description: "Steps reordered successfully",
       });
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error reordering steps:", error);
       toast({
         title: "Error",
@@ -179,7 +179,7 @@ export function WorkflowStepsBuilder({
         title: "Success",
         description: "Step deleted successfully",
       });
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error deleting step:", error);
       toast({
         title: "Error",
@@ -214,7 +214,7 @@ export function WorkflowStepsBuilder({
       }
       setFormOpen(false);
       setEditingStep(null);
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error saving step:", error);
       throw error;
     }

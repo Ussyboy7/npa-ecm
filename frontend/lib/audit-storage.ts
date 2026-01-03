@@ -110,7 +110,7 @@ export const getActivityLogs = async (params?: {
     if (response && typeof response === 'object' && 'results' in response) {
       return {
         results: Array.isArray(response.results) ? response.results.map(mapApiLog) : [],
-        count: response.count ?? 0,
+        count: response.count as number ?? 0,
         next: response.next ?? null,
         previous: response.previous ?? null,
       };
@@ -124,7 +124,7 @@ export const getActivityLogs = async (params?: {
       next: null,
       previous: null,
     };
-  } catch (error) {
+      } catch (error: unknown) {
     // Silently fail - audit logs are not critical for functionality
     logWarn('Failed to fetch audit logs:', error);
     return { results: [], count: 0, next: null, previous: null };

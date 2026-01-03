@@ -253,7 +253,7 @@ export default function SettingsPage() {
         if (userData.profile_photo) {
           setProfilePhoto(userData.profile_photo);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load user profile', error);
       }
     };
@@ -267,35 +267,35 @@ export default function SettingsPage() {
   const convertBackendToFrontend = (backend: Record<string, unknown>): NotificationPreferencesType | null => {
     if (!backend) return null;
     return {
-      id: backend.id,
-      user: backend.user,
-      inAppEnabled: backend.in_app_enabled ?? backend.inAppEnabled ?? true,
-      inAppUrgentOnly: backend.in_app_urgent_only ?? backend.inAppUrgentOnly ?? false,
-      emailEnabled: backend.email_enabled ?? backend.emailEnabled ?? true,
-      emailUrgentOnly: backend.email_urgent_only ?? backend.emailUrgentOnly ?? false,
-      emailDigest: backend.email_digest ?? backend.emailDigest ?? false,
-      emailDigestTime: backend.email_digest_time ?? backend.emailDigestTime,
-      moduleDms: backend.module_dms ?? backend.moduleDms ?? true,
-      moduleCorrespondence: backend.module_correspondence ?? backend.moduleCorrespondence ?? true,
-      moduleWorkflow: backend.module_workflow ?? backend.moduleWorkflow ?? true,
-      moduleSystem: backend.module_system ?? backend.moduleSystem ?? true,
-      priorityLow: backend.priority_low ?? backend.priorityLow ?? true,
-      priorityNormal: backend.priority_normal ?? backend.priorityNormal ?? true,
-      priorityHigh: backend.priority_high ?? backend.priorityHigh ?? true,
-      priorityUrgent: backend.priority_urgent ?? backend.priorityUrgent ?? true,
-      typeWorkflow: backend.type_workflow ?? backend.typeWorkflow ?? true,
-      typeDocument: backend.type_document ?? backend.typeDocument ?? true,
-      typeCorrespondence: backend.type_correspondence ?? backend.typeCorrespondence ?? true,
-      typeSystem: backend.type_system ?? backend.typeSystem ?? true,
-      typeAlert: backend.type_alert ?? backend.typeAlert ?? true,
-      typeReminder: backend.type_reminder ?? backend.typeReminder ?? true,
-      quietHoursEnabled: backend.quiet_hours_enabled ?? backend.quietHoursEnabled ?? false,
-      quietHoursStart: backend.quiet_hours_start ?? backend.quietHoursStart ?? '22:00',
-      quietHoursEnd: backend.quiet_hours_end ?? backend.quietHoursEnd ?? '07:00',
-      autoArchiveDays: backend.auto_archive_days ?? backend.autoArchiveDays ?? 30,
-      soundEnabled: backend.sound_enabled ?? backend.soundEnabled ?? true,
-      createdAt: backend.created_at ?? backend.createdAt ?? new Date().toISOString(),
-      updatedAt: backend.updated_at ?? backend.updatedAt ?? new Date().toISOString(),
+      id: backend.id as string,
+      user: backend.user as string,
+      inAppEnabled: backend.in_app_enabled as boolean ?? backend.inAppEnabled as boolean ?? true,
+      inAppUrgentOnly: backend.in_app_urgent_only as boolean ?? backend.inAppUrgentOnly as boolean ?? false,
+      emailEnabled: backend.email_enabled as boolean ?? backend.emailEnabled as boolean ?? true,
+      emailUrgentOnly: backend.email_urgent_only as boolean ?? backend.emailUrgentOnly as boolean ?? false,
+      emailDigest: backend.email_digest as boolean ?? backend.emailDigest as boolean ?? false,
+      emailDigestTime: backend.email_digest_time as string ?? backend.emailDigestTime as string,
+      moduleDms: backend.module_dms as boolean ?? backend.moduleDms as boolean ?? true,
+      moduleCorrespondence: backend.module_correspondence as boolean ?? backend.moduleCorrespondence as boolean ?? true,
+      moduleWorkflow: backend.module_workflow as boolean ?? backend.moduleWorkflow as boolean ?? true,
+      moduleSystem: backend.module_system as boolean ?? backend.moduleSystem as boolean ?? true,
+      priorityLow: backend.priority_low as boolean ?? backend.priorityLow as boolean ?? true,
+      priorityNormal: backend.priority_normal as boolean ?? backend.priorityNormal as boolean ?? true,
+      priorityHigh: backend.priority_high as boolean ?? backend.priorityHigh as boolean ?? true,
+      priorityUrgent: backend.priority_urgent as boolean ?? backend.priorityUrgent as boolean ?? true,
+      typeWorkflow: backend.type_workflow as boolean ?? backend.typeWorkflow as boolean ?? true,
+      typeDocument: backend.type_document as boolean ?? backend.typeDocument as boolean ?? true,
+      typeCorrespondence: backend.type_correspondence as boolean ?? backend.typeCorrespondence as boolean ?? true,
+      typeSystem: backend.type_system as boolean ?? backend.typeSystem as boolean ?? true,
+      typeAlert: backend.type_alert as boolean ?? backend.typeAlert as boolean ?? true,
+      typeReminder: backend.type_reminder as boolean ?? backend.typeReminder as boolean ?? true,
+      quietHoursEnabled: backend.quiet_hours_enabled as boolean ?? backend.quietHoursEnabled as boolean ?? false,
+      quietHoursStart: backend.quiet_hours_start as string ?? backend.quietHoursStart as string ?? '22:00',
+      quietHoursEnd: backend.quiet_hours_end as string ?? backend.quietHoursEnd as string ?? '07:00',
+      autoArchiveDays: backend.auto_archive_days as number ?? backend.autoArchiveDays as number ?? 30,
+      soundEnabled: backend.sound_enabled as boolean ?? backend.soundEnabled as boolean ?? true,
+      createdAt: backend.created_at as string ?? backend.createdAt as string ?? new Date().toISOString(),
+      updatedAt: backend.updated_at as string ?? backend.updatedAt as string ?? new Date().toISOString(),
     };
   };
 
@@ -342,12 +342,12 @@ export default function SettingsPage() {
       try {
         const prefs = await getNotificationPreferences();
         if (prefs) {
-          const converted = convertBackendToFrontend(prefs as Record<string, unknown>);
+          const converted = convertBackendToFrontend(prefs as unknown as Record<string, unknown>);
           if (converted) {
             setNotificationPrefs(converted);
           }
         }
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load notification preferences', error);
         toast.error('Failed to load notification preferences');
       } finally {
@@ -364,7 +364,7 @@ export default function SettingsPage() {
       try {
         const defaults = await ensureDefaultSignatureTemplates();
         setSignatureTemplates(defaults);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load signature templates', error);
         setSignatureTemplates(DEFAULT_SIGNATURE_TEMPLATES);
       }
@@ -387,7 +387,7 @@ export default function SettingsPage() {
             templateOverrides: { ...normalizedPrefs.templateOverrides },
             autoApplyForMinutes: normalizedPrefs.autoApplyForMinutes,
           });
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to load signature preferences', error);
           setSignaturePreferences(defaultPreferences);
           setInitialPreferences(defaultPreferences);
@@ -426,7 +426,7 @@ export default function SettingsPage() {
       const base64 = await fileToBase64(file);
       setProfilePhoto(base64);
       toast.success('Profile photo updated');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to upload photo', error);
       toast.error('Failed to upload photo');
     } finally {
@@ -464,7 +464,7 @@ export default function SettingsPage() {
       
       await refreshUser();
       toast.success('Profile updated successfully');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save profile', error);
       toast.error('Failed to save profile. Please try again.');
     } finally {
@@ -486,12 +486,12 @@ export default function SettingsPage() {
         method: 'PUT',
         body: JSON.stringify(backendData),
       });
-      const converted = convertBackendToFrontend(response);
+      const converted = convertBackendToFrontend(response as Record<string, unknown>);
       if (converted) {
         setNotificationPrefs(converted);
       }
       toast.success('Notification preferences saved');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save notification preferences', error);
       toast.error('Failed to save notification preferences. Please try again.');
     } finally {
@@ -522,7 +522,7 @@ export default function SettingsPage() {
         setOtpEnabled(status.has_email);
         setTotpEnabled(status.totp_enabled && status.totp_confirmed);
         setTwoFactorEnabled(status.require_2fa && (status.has_email || status.totp_confirmed));
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load 2FA status', error);
       } finally {
         setIsLoading2FAStatus(false);
@@ -559,7 +559,7 @@ export default function SettingsPage() {
         setTwoFactorSecret(response.secret);
         setTwoFactorQRCode(response.qr_code_data);
         setShowSetup2FA(true);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to setup TOTP', error);
         toast.error('Failed to setup authenticator app. Please try again.');
       } finally {
@@ -578,9 +578,9 @@ export default function SettingsPage() {
       setOtpSent(true);
       setOtpCountdown(60); // 60 second countdown
       toast.success('OTP sent to your email');
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to send OTP', error);
-      toast.error(error?.detail || error?.message || 'Failed to send OTP. Please try again.');
+      toast.error((error instanceof Error ? error.message : 'Failed to send OTP. Please try again.'));
     } finally {
       setIsEnabling2FA(false);
     }
@@ -624,9 +624,9 @@ export default function SettingsPage() {
       } else {
         toast.error('Verification failed. Please try again.');
       }
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to enable 2FA', error);
-      toast.error(error?.error || error?.detail || error?.message || 'Invalid code. Please try again.');
+      toast.error((error instanceof Error ? error.message : 'Invalid code. Please try again.'));
     } finally {
       setIsEnabling2FA(false);
     }
@@ -652,7 +652,7 @@ export default function SettingsPage() {
         setTwoFactorEnabled(false);
         setBackupCodes([]);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to disable 2FA', error);
       toast.error('Failed to disable 2FA');
     }
@@ -710,10 +710,13 @@ export default function SettingsPage() {
         confirmPassword: '',
       });
       setShowPasswordDialog(false);
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to change password', error);
-      const errorData = error?.response?.data || error?.data || {};
-      const errorMessage = errorData.current_password || errorData.new_password || errorData.detail || 'Failed to change password';
+      const errorData = (error instanceof Error && 'response' in error && error.response && typeof error.response === 'object' && 'data' in error.response) ? error.response.data as Record<string, string> : {};
+      const errorMessage: string = (typeof errorData === 'object' && errorData && 'current_password' in errorData && errorData.current_password) ||
+                          (typeof errorData === 'object' && errorData && 'new_password' in errorData && errorData.new_password) ||
+                          (typeof errorData === 'object' && errorData && 'detail' in errorData && errorData.detail) ||
+                          'Failed to change password';
       toast.error(errorMessage);
       setPasswordErrors(errorData);
     } finally {
@@ -751,7 +754,7 @@ export default function SettingsPage() {
       saveUserSignature(currentUser.id, stored);
       setSignature(stored);
       toast.success('Signature uploaded successfully');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to upload signature', error);
       toast.error('Failed to upload signature');
     } finally {
@@ -1113,8 +1116,8 @@ export default function SettingsPage() {
                         setIsLoadingNotifications(true);
                         try {
                           const prefs = await getNotificationPreferences();
-                          if (prefs) setNotificationPrefs(convertBackendToFrontend(prefs as Record<string, unknown>));
-                        } catch (error) {
+                          if (prefs) setNotificationPrefs(convertBackendToFrontend(prefs as unknown as Record<string, unknown>));
+                        } catch (error: unknown) {
                           logError('Failed to reload preferences', error);
                         } finally {
                           setIsLoadingNotifications(false);

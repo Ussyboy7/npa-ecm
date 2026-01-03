@@ -79,8 +79,8 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
         if (signal.aborted) return;
         
         setComments(data);
-      } catch (err: Record<string, unknown>) {
-        if (err.name === 'AbortError') return;
+      } catch (err: unknown) {
+        if ((err as Error).name === 'AbortError') return;
         logError("Failed to load comments", err);
         toast.error("Failed to load comments");
       } finally {
@@ -115,7 +115,7 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
       
       for (const match of mentionMatches) {
         const username = match.substring(1);
-        const user = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
+        const user = users.find((u) => u.username && u.username.toLowerCase() === username.toLowerCase());
         if (user) mentionIds.push(user.id);
       }
 
@@ -123,8 +123,8 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
       setComments((prev) => [comment, ...prev]);
       setNewComment("");
       toast.success("Comment added");
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if ((err as Error).name === 'AbortError') return;
       logError("Failed to add comment", err);
       toast.error("Failed to add comment");
     } finally {
@@ -147,7 +147,7 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
       
       for (const match of mentionMatches) {
         const username = match.substring(1);
-        const user = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
+        const user = users.find((u) => u.username && u.username.toLowerCase() === username.toLowerCase());
         if (user) mentionIds.push(user.id);
       }
 
@@ -167,8 +167,8 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
       setReplyContent("");
       setReplyingTo(null);
       toast.success("Reply added");
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if ((err as Error).name === 'AbortError') return;
       logError("Failed to add reply", err);
       toast.error("Failed to add reply");
     } finally {
@@ -188,8 +188,8 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
         prev.map((c) => (c.id === commentId ? updated : c))
       );
       toast.success("Comment resolved");
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if ((err as Error).name === 'AbortError') return;
       logError("Failed to resolve comment", err);
       toast.error("Failed to resolve comment");
     }
@@ -207,8 +207,8 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
         prev.map((c) => (c.id === commentId ? updated : c))
       );
       toast.success("Comment unresolved");
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if ((err as Error).name === 'AbortError') return;
       logError("Failed to unresolve comment", err);
       toast.error("Failed to unresolve comment");
     }
@@ -240,8 +240,8 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
       setEditingCommentId(null);
       setEditContent("");
       toast.success("Comment updated");
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if ((err as Error).name === 'AbortError') return;
       logError("Failed to update comment", err);
       toast.error("Failed to update comment");
     }
@@ -268,8 +268,8 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
       setComments((prev) => prev.filter((c) => c.id !== commentId));
       setDeletingCommentId(null);
       toast.success("Comment deleted");
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if ((err as Error).name === 'AbortError') return;
       logError("Failed to delete comment", err);
       toast.error("Failed to delete comment");
     }

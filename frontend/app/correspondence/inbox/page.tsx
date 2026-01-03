@@ -66,7 +66,7 @@ const isOverdue = (item: Correspondence): boolean => {
   const threshold = SLA_THRESHOLDS[priority] ?? SLA_THRESHOLDS.default;
   const received = new Date(item.receivedDate).getTime();
   const daysOpen = (Date.now() - received) / (1000 * 60 * 60 * 24);
-  return daysOpen > threshold && item.status !== 'completed';
+  return daysOpen > threshold && item.status as string !== 'completed';
 };
 
 const calculateDaysPending = (item: Correspondence): number => {
@@ -293,13 +293,15 @@ const CorrespondenceInbox = () => {
         const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/office-inbox/?${params.toString()}`);
         const results = Array.isArray(response.results) ? response.results : [];
         setInboxItems(results.map(mapApiCorrespondence));
+        const responseObj = response as Record<string, unknown>;
+        const summaryObj = responseObj.summary as Record<string, unknown> | undefined;
         setSummary({
-          total: response.summary?.total ?? response.count ?? results.length,
-          urgent: response.summary?.urgent ?? 0,
-          overdue: response.summary?.overdue ?? 0,
-          assigned_to_user: response.summary?.assigned_to_user ?? 0,
+          total: (summaryObj && typeof summaryObj.total === 'number') ? summaryObj.total : ((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length),
+          urgent: (summaryObj && typeof summaryObj.urgent === 'number') ? summaryObj.urgent : 0,
+          overdue: (summaryObj && typeof summaryObj.overdue === 'number') ? summaryObj.overdue : 0,
+          assigned_to_user: (summaryObj && typeof summaryObj.assigned_to_user === 'number') ? summaryObj.assigned_to_user : 0,
         });
-        setCount(response.count ?? results.length);
+        setCount((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length);
       } catch (err) {
         setError('Failed to load office inbox. Please try again.');
         setInboxItems([]);

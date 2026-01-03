@@ -51,7 +51,7 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
       try {
         const defaults = await ensureDefaultSignatureTemplates();
         setTemplates(defaults);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load signature templates', error);
         setTemplates([]);
       }
@@ -66,7 +66,7 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
         try {
           const prefs = await loadUserSignaturePreferences(userId);
           setPreferences(prefs ?? defaultPreferences);
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to load signature preferences', error);
           setPreferences(defaultPreferences);
         }

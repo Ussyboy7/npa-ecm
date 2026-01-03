@@ -77,7 +77,7 @@ export function FormSignatureDialog({
       toast.success("Form signed successfully");
       onSigned?.();
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       logError("Error signing form:", error);
       toast.error(error instanceof Error ? error.message : "Failed to sign form");
     } finally {

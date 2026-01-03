@@ -120,7 +120,7 @@ export const ActionsPanel = ({
       });
       
       await onSyncFromApi();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to recall delegation', error);
       revokeDelegation(activeDelegation.id);
       toast.success('Delegation recalled locally', {

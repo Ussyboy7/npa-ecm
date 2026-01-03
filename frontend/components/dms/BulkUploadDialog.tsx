@@ -230,7 +230,7 @@ export const BulkUploadDialog = ({
               // Don't fail the upload if OCR fails
             }
           }
-        } catch (error) {
+        } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           errors.push(`${fileMeta.file.name}: ${errorMessage}`);
           logError('Failed to create document', error);
@@ -260,7 +260,7 @@ export const BulkUploadDialog = ({
       if (enableOCR && createdDocuments.length > 0) {
         toast.info(`OCR processing started for ${createdDocuments.length} document(s)`);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Bulk upload error', error);
       toast.error('An error occurred during bulk upload');
     } finally {

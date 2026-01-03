@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon, Shield, Paperclip, Download, Eye, ExternalLink, Loader2, Users } from "lucide-react";
-import { Minute, CorrespondenceAttachment } from "@/lib/npa-structure";
+import { Minute, CorrespondenceAttachment, type Correspondence } from "@/lib/npa-structure";
 import { SealBadge } from '@/components/seals/SealBadge';
 import { useState, useEffect } from "react";
 import { apiFetch, getStoredAccessToken } from "@/lib/api-client";
@@ -24,7 +24,7 @@ interface MinuteDetailModalProps {
 
 export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, showDelegationInfo = false }: MinuteDetailModalProps) => {
   const router = useRouter();
-  const [responseCorrespondence, setResponseCorrespondence] = useState<Record<string, unknown>>(null);
+  const [responseCorrespondence, setResponseCorrespondence] = useState<Correspondence | null>(null);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<CorrespondenceAttachment | null>(null);
   const [viewAttachment, setViewAttachment] = useState<CorrespondenceAttachment | null>(null);
@@ -40,8 +40,9 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
     if (open && minute?.id) {
       setLoadingDistribution(true);
       apiFetch(`/correspondence/distribution/?minute=${minute.id}`)
-        .then((response: Record<string, unknown>) => {
-          const results = Array.isArray(response) ? response : response.results || [];
+        .then((response) => {
+          const responseData = response as Record<string, unknown>;
+          const results = Array.isArray(responseData) ? responseData : (responseData.results as any[]) || [];
           // Filter only active distribution entries
           const activeDistribution = results.filter((dist: Record<string, unknown>) => dist.is_active !== false);
           setDistribution(activeDistribution);
@@ -64,12 +65,13 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
       setLoadingAttachments(true);
       // Find response correspondence that has this correspondence as parent
       apiFetch(`/correspondence/items/?parent_correspondence=${minute.correspondenceId}`)
-        .then((response: Record<string, unknown>) => {
-          const results = Array.isArray(response) ? response : response.results || [];
+        .then((response) => {
+          const responseData = response as Record<string, unknown>;
+          const results = Array.isArray(responseData) ? responseData : (responseData.results as any[]) || [];
           // Find the one created around the same time as the minute (within 5 seconds)
           const minuteTime = new Date(minute.timestamp).getTime();
           const matching = results.find((corr: Record<string, unknown>) => {
-            const corrTime = new Date(corr.created_at || corr.createdAt).getTime();
+            const corrTime = new Date((corr.created_at || corr.createdAt) as string).getTime();
             return Math.abs(corrTime - minuteTime) < 5000; // 5 seconds tolerance
           });
           if (matching) {
@@ -202,7 +204,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
         })
         .catch((error) => {
           logError('Error converting Word document:', error);
-          setWordError(error.message || 'Failed to convert Word document');
+          setWordError((error instanceof Error ? error.message : "Unknown error") || 'Failed to convert Word document');
           setWordHtml(null);
           setLoadingAttachments(false);
         });
@@ -483,7 +485,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {distribution.map((dist: Record<string, unknown>) => {
+                        {(distribution as Record<string, unknown>[]).map((dist: Record<string, unknown>) => {
                           const recipientName = 
                             dist.user_name ||
                             dist.directorate_name ||
@@ -495,7 +497,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                           
                           return (
                             <div
-                              key={dist.id}
+                              key={dist.id as string}
                               className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border"
                             >
                               <div className="flex items-center gap-2 flex-1 min-w-0">

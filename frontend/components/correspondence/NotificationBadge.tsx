@@ -24,34 +24,34 @@ export const NotificationBadge = () => {
 
     correspondence.forEach(item => {
       // Check for urgent items
-      if (item.priority === 'urgent' && item.status === 'pending') {
+      if (item.priority === 'urgent' && item.status as string === 'pending') {
         notifs.push({
-          id: `urgent-${item.id}`,
+          id: `urgent-${item.id as string}`,
           type: 'urgent',
           title: 'Urgent Correspondence',
           message: `${item.referenceNumber}: ${item.subject}`,
           timestamp: item.receivedDate,
-          correspondenceId: item.id,
+          correspondenceId: item.id as string,
         });
       }
 
       // Check for in-progress items
-      if (item.status === 'in-progress') {
-        const itemMinutes = getMinutesByCorrespondenceId(item.id);
+      if (item.status as string === 'in-progress') {
+        const itemMinutes = getMinutesByCorrespondenceId(item.id as string);
         if (itemMinutes.length > 0) {
           notifs.push({
-            id: `progress-${item.id}`,
+            id: `progress-${item.id as string}`,
             type: 'progress',
             title: 'In Progress',
             message: `${item.referenceNumber}: Action required`,
             timestamp: itemMinutes[itemMinutes.length - 1].timestamp,
-            correspondenceId: item.id,
+            correspondenceId: item.id as string,
           });
         }
       }
 
       // Check for new minutes (last 24 hours)
-      const itemMinutes = getMinutesByCorrespondenceId(item.id);
+      const itemMinutes = getMinutesByCorrespondenceId(item.id as string);
       if (itemMinutes.length > 0) {
         const recentMinutes = itemMinutes.filter(m => {
           const minuteDate = new Date(m.timestamp);
@@ -60,12 +60,12 @@ export const NotificationBadge = () => {
         
         if (recentMinutes.length > 0) {
           notifs.push({
-            id: `minute-${item.id}`,
+            id: `minute-${item.id as string}`,
             type: 'minute',
             title: 'New Minute Added',
             message: `${item.referenceNumber}: ${recentMinutes.length} new minute${recentMinutes.length === 1 ? '' : 's'}`,
             timestamp: recentMinutes[0].timestamp,
-            correspondenceId: item.id,
+            correspondenceId: item.id as string,
           });
         }
       }

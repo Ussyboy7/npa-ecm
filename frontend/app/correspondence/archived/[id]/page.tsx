@@ -37,6 +37,7 @@ import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
 import { CorrespondenceTreeView } from '@/components/correspondence/CorrespondenceTreeView';
 import { toast } from 'sonner';
+import { logError } from '@/lib/client-logger';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
 import mammoth from 'mammoth';
 
@@ -69,8 +70,9 @@ const ArchiveDetailPage = () => {
         setCorrespondence(mappedCorr);
 
         // Fetch minutes
-        const minutesResponse = await apiFetch<Record<string, unknown>>(`/correspondence/minutes/?correspondence=${id}`);
-        const minutesData = Array.isArray(minutesResponse) ? minutesResponse : minutesResponse.results || [];
+        type MinutesResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
+        const minutesResponse = await apiFetch<MinutesResponse>(`/correspondence/minutes/?correspondence=${id}`);
+        const minutesData = Array.isArray(minutesResponse) ? minutesResponse : (minutesResponse?.results || []);
         setMinutes(minutesData.map(mapApiMinute));
 
         // Load linked documents
@@ -115,8 +117,9 @@ const ArchiveDetailPage = () => {
             }
           }
         }
-      } catch (err: Record<string, unknown>) {
-        setError(err.message || 'Failed to load archive record');
+      } catch (err: unknown) {
+        const errorMessage = err && typeof err === 'object' && 'message' in err ? (err.message as string) : 'Failed to load archive record';
+        setError(errorMessage);
         toast.error('Failed to load archive record');
       } finally {
         setLoading(false);

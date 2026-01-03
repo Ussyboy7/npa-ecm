@@ -67,7 +67,7 @@ export const DocumentTemplateDialog = ({
         isActive: true,
       });
       setTemplates(fetched);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load document templates', error);
       toast.error('Failed to load templates');
     } finally {
@@ -94,7 +94,7 @@ export const DocumentTemplateDialog = ({
         await onCreateDocument(selectedTemplate.id, documentTitle.trim());
         toast.success('Document created from template');
         onOpenChange(false);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to create document from template', error);
         toast.error('Failed to create document');
       } finally {

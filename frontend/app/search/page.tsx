@@ -12,18 +12,18 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 export default function SearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [context, setContext] = useState<string>('all');
+  const [context, setContext] = useState<'all' | 'documents' | 'correspondence' | 'cases'>('all');
 
   // Get context from URL params
   useEffect(() => {
     const urlContext = searchParams.get('context');
     if (urlContext && ['all', 'documents', 'correspondence', 'cases'].includes(urlContext)) {
-      setContext(urlContext);
+      setContext(urlContext as 'all' | 'documents' | 'correspondence' | 'cases');
     }
   }, [searchParams]);
 
   const handleContextChange = (value: string) => {
-    setContext(value);
+    setContext(value as 'all' | 'documents' | 'correspondence' | 'cases');
     // Update URL without navigation
     const params = new URLSearchParams(searchParams.toString());
     if (value === 'all') {

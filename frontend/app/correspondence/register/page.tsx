@@ -145,15 +145,15 @@ const CorrespondenceRegister = () => {
           dispatchDate: formatDateForInput(corr.dispatchDate),
           priority: corr.priority || 'medium',
           referenceNumber: corr.referenceNumber || '',
-          assignTo: corr.currentApproverId || corr.assignTo || '',
+          assignTo: corr.currentApproverId || '',
           divisionId: corr.divisionId || '',
           documentType: corr.documentType || 'letter',
           tags: Array.isArray(corr.tags) ? corr.tags.join(', ') : (corr.tags || ''),
           owningOfficeId: corr.owningOfficeId || '',
           senderReference: corr.senderReference || '',
           recipientName: corr.recipientName || '',
-          recipientEmail: corr.recipientEmail || '',
-          recipientPhone: corr.recipientPhone || '',
+          recipientEmail: '',
+          recipientPhone: '',
           remarks: corr.remarks || '',
         },
       });
@@ -167,20 +167,34 @@ const CorrespondenceRegister = () => {
       // Load distributions if available (note: mapped field is 'distribution', not 'distributions')
       if (corr.distribution && Array.isArray(corr.distribution)) {
         const dist = {
-          directorates: corr.distribution.filter((d: Record<string, unknown>) => d.type === 'directorate').map((d: Record<string, unknown>) => d.directorateId).filter(Boolean),
-          divisions: corr.distribution.filter((d: Record<string, unknown>) => d.type === 'division').map((d: Record<string, unknown>) => d.divisionId).filter(Boolean),
-          departments: corr.distribution.filter((d: Record<string, unknown>) => d.type === 'department').map((d: Record<string, unknown>) => d.departmentId).filter(Boolean),
+          directorates: corr.distribution.filter((d: Record<string, unknown>) => d.type === 'directorate').map((d: Record<string, unknown>) => String(d.directorateId || '')).filter(Boolean),
+          divisions: corr.distribution.filter((d: Record<string, unknown>) => d.type === 'division').map((d: Record<string, unknown>) => String(d.divisionId || '')).filter(Boolean),
+          departments: corr.distribution.filter((d: Record<string, unknown>) => d.type === 'department').map((d: Record<string, unknown>) => String(d.departmentId || '')).filter(Boolean),
         };
         dispatch({ type: 'SET_DISTRIBUTIONS', payload: dist });
       }
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       // Ignore abort errors
-      if (error?.name === 'AbortError') {
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
         return;
       }
       logError('Failed to load correspondence for editing', error);
       logError('Error loading correspondence:', error);
-      const errorMessage = error?.message || error?.response?.data?.detail || error?.statusText || 'Unknown error';
+      let errorMessage = 'Unknown error';
+      if (error && typeof error === 'object') {
+        const errorObj = error as Record<string, unknown>;
+        if (errorObj.message && typeof errorObj.message === 'string') {
+          errorMessage = errorObj.message;
+        } else if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        } else if (errorObj.statusText && typeof errorObj.statusText === 'string') {
+          errorMessage = errorObj.statusText;
+        }
+      }
       setLoadError(errorMessage);
       toast.error(`Failed to load correspondence: ${errorMessage}`, {
         description: editId ? `Could not load correspondence ${editId}` : 'Please try again or contact support',
@@ -212,16 +226,20 @@ const CorrespondenceRegister = () => {
   }, []); // Only run once on mount
 
   // Draft auto-save hook - memoize callbacks to prevent infinite loops
-  const handleDraftLoaded = useCallback((draft: Record<string, unknown>) => {
+  const handleDraftLoaded = useCallback((draft: { flowType?: FlowType; formData?: FormData; directorateDistribution?: string[]; divisionDistribution?: string[]; departmentDistribution?: string[] }) => {
     // Load draft data
-    dispatch({ type: 'SET_FLOW_TYPE', payload: draft.flowType });
-    dispatch({ type: 'SET_FORM_DATA', payload: draft.formData });
+    if (draft.flowType) {
+      dispatch({ type: 'SET_FLOW_TYPE', payload: draft.flowType });
+    }
+    if (draft.formData) {
+      dispatch({ type: 'SET_FORM_DATA', payload: draft.formData });
+    }
     dispatch({
       type: 'SET_DISTRIBUTIONS',
       payload: {
-        directorates: draft.directorateDistribution,
-        divisions: draft.divisionDistribution,
-        departments: draft.departmentDistribution,
+        directorates: draft.directorateDistribution || [],
+        divisions: draft.divisionDistribution || [],
+        departments: draft.departmentDistribution || [],
       },
     });
     dispatch({ type: 'SET_HAS_DRAFT', payload: true });
@@ -245,7 +263,7 @@ const CorrespondenceRegister = () => {
     if (!Array.isArray(organizationUsers)) return [];
     const eligibleGrades = new Set(REGISTER_CONSTANTS.ELIGIBLE_GRADES);
     return organizationUsers.filter(
-      (user) => user && user.gradeLevel && eligibleGrades.has(user.gradeLevel)
+      (user) => user && user.gradeLevel && eligibleGrades.has(user.gradeLevel as 'MSS4' | 'MSS3' | 'MSS2' | 'MSS1' | 'EDCS' | 'MDCS')
     );
   }, [organizationUsers]);
 
@@ -260,17 +278,17 @@ const CorrespondenceRegister = () => {
   }, [executives, assignSearch]);
 
   const directorateMap = useMemo(
-    () => new Map(directorates.map((item) => [item.id, item.name])),
+    () => new Map(directorates.map((item) => [item.id as string, item.name])),
     [directorates]
   );
 
   const divisionMap = useMemo(
-    () => new Map(divisions.map((item) => [item.id, item.name])),
+    () => new Map(divisions.map((item) => [item.id as string, item.name])),
     [divisions]
   );
 
   const departmentMap = useMemo(
-    () => new Map(departments.map((item) => [item.id, item.name])),
+    () => new Map(departments.map((item) => [item.id as string, item.name])),
     [departments]
   );
 
@@ -562,19 +580,18 @@ const CorrespondenceRegister = () => {
             router.push(`/correspondence/${correspondenceId}`);
           }
         }, 1500);
-      } catch (error: Record<string, unknown>) {
+      } catch (error: unknown) {
         // Handle authentication errors
         if (handleAuthenticationError(error)) {
           return;
         }
 
         // Handle abort errors gracefully
-        if (error?.name === 'AbortError') {
+        if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
           return;
         }
 
-        const description =
-          error instanceof Error ? error.message : (editId ? 'Unable to update correspondence' : 'Unable to register correspondence');
+        const description = (error && typeof error === 'object' && 'message' in error && typeof (error instanceof Error ? error.message : "Unknown error") === 'string') ? (error instanceof Error ? error.message : "Unknown error") : (editId ? 'Unable to update correspondence' : 'Unable to register correspondence');
         toast.error(description);
         logError(editId ? 'Failed to update correspondence' : 'Failed to register correspondence', error);
       } finally {

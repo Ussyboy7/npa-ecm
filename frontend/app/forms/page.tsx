@@ -77,7 +77,10 @@ const FormsPage = () => {
   // Check if user is secretary
   const isSecretary = useMemo(() => {
     if (!currentUser?.systemRole) return false;
-    return currentUser.systemRole.name?.toLowerCase() === 'secretary';
+    const role = typeof currentUser.systemRole === 'string'
+      ? currentUser.systemRole
+      : (currentUser.systemRole as Record<string, unknown>).name as string;
+    return role?.toLowerCase() === 'secretary';
   }, [currentUser?.systemRole]);
   const [selectedTemplate, setSelectedTemplate] = useState<FormTemplate | null>(null);
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
@@ -92,7 +95,7 @@ const FormsPage = () => {
       try {
         const response = await apiFetch<Array<{id: string; name: string; email?: string}>>('/correspondence/cases/secretary-executives/');
         setExecutives(response);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load executives', error);
       }
     };
@@ -114,7 +117,7 @@ const FormsPage = () => {
       try {
         const data = await getFormTemplates({ is_active: true });
         setAllTemplates(data);
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to load templates for filter', error);
       }
     };
@@ -184,17 +187,17 @@ const FormsPage = () => {
       
       // Apply sorting
       const sorted = [...data].sort((a, b) => {
-        let aValue: unknown;
-        let bValue: unknown;
-        
+        let aValue: string | number;
+        let bValue: string | number;
+
         switch (sortField) {
           case 'title':
             aValue = a.document.title.toLowerCase();
             bValue = b.document.title.toLowerCase();
             break;
           case 'status':
-            aValue = a.status;
-            bValue = b.status;
+            aValue = a.status as string;
+            bValue = b.status as string;
             break;
           case 'created_at':
             aValue = new Date(a.created_at).getTime();
@@ -206,7 +209,7 @@ const FormsPage = () => {
             bValue = new Date(b.updated_at).getTime();
             break;
         }
-        
+
         if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
         if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
         return 0;
@@ -216,7 +219,7 @@ const FormsPage = () => {
       const startIndex = (pagination.page - 1) * pagination.pageSize;
       const endIndex = startIndex + pagination.pageSize;
       setForms(sorted.slice(startIndex, endIndex));
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
       }
@@ -233,9 +236,9 @@ const FormsPage = () => {
   useEffect(() => {
     if (allForms.length > 0) {
       const sorted = [...allForms].sort((a, b) => {
-        let aValue: unknown;
-        let bValue: unknown;
-        
+        let aValue: string | number;
+        let bValue: string | number;
+
         switch (sortField) {
           case 'title':
             aValue = a.document.title.toLowerCase();
@@ -270,7 +273,7 @@ const FormsPage = () => {
   const loadTemplates = async () => {
     try {
       setLoading(true);
-      const params: unknown = { is_active: true };
+      const params: { category?: string; is_active?: boolean; search?: string } = { is_active: true };
       if (categoryFilter !== 'all') {
         params.category = categoryFilter;
       }
@@ -279,7 +282,7 @@ const FormsPage = () => {
       }
       const data = await getFormTemplates(params);
       setTemplates(data);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load templates', error);
       toast.error('Failed to load templates');
     } finally {
@@ -299,7 +302,7 @@ const FormsPage = () => {
         }
       });
       setPendingSignatures(workflowIds);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load pending signatures', error);
       // Don't show error toast as this is a background operation
     }
@@ -433,7 +436,7 @@ const FormsPage = () => {
       } else {
         toast.error('No PDF available for this form. Please generate it first.');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to download PDF', error);
       toast.error('Failed to download PDF');
     }
@@ -593,7 +596,7 @@ const FormsPage = () => {
                             <SelectContent>
                               <SelectItem value="all">All Templates</SelectItem>
                               {availableTemplates.map(({ id, name }) => (
-                                <SelectItem key={id} value={id}>{name}</SelectItem>
+                                <SelectItem key={id} value={id}>{name || 'Unnamed Template'}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -607,7 +610,7 @@ const FormsPage = () => {
                             <SelectContent>
                               <SelectItem value="all">All Executives</SelectItem>
                               {executives.map((exec) => (
-                                <SelectItem key={exec.id} value={exec.id}>{exec.name}</SelectItem>
+                                <SelectItem key={exec.id} value={exec.id}>{exec.name || 'Unknown Executive'}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -733,27 +736,7 @@ const FormsPage = () => {
                               <span className="text-muted-foreground">Signature workflow active</span>
                             </div>
                           )}
-                          {form.document.case_links && form.document.case_links.length > 0 && (
-                            <div className="flex items-center gap-2">
-                              <Badge 
-                                variant="outline" 
-                                className="text-xs bg-purple-50 dark:bg-purple-950 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (form.document.case_links && form.document.case_links.length > 0) {
-                                    router.push(`/cases/${form.document.case_links[0].case.id}`);
-                                  }
-                                }}
-                                title={form.document.case_links.length > 1 ? `Linked to ${form.document.case_links.length} cases` : `Linked to case ${form.document.case_links[0].case.caseNumber}`}
-                              >
-                                <FolderTree className="h-3 w-3 mr-1" />
-                                {form.document.case_links.length === 1 
-                                  ? form.document.case_links[0].case.caseNumber
-                                  : `${form.document.case_links.length} cases`
-                                }
-                              </Badge>
-                            </div>
-                          )}
+                          {/* TODO: Add case links support for forms if needed */}
                           <div className="flex items-center gap-2 pt-2 border-t">
                             <Button
                               variant="outline"
@@ -804,7 +787,6 @@ const FormsPage = () => {
                     <div className="mt-6">
                       <PaginationControls
                         pagination={pagination}
-                        totalCount={allForms.length}
                         pageSizeOptions={[10, 25, 50, 100]}
                       />
                     </div>

@@ -11,7 +11,7 @@ export type Delegation = delegationApi.Delegation;
 export const loadDelegations = async (): Promise<Delegation[]> => {
   try {
     return await delegationApi.getCorrespondenceDelegations();
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Error loading delegations from backend:', error);
     return [];
   }
@@ -31,7 +31,7 @@ export const saveDelegations = (delegations: Delegation[]): void => {
 export const addDelegation = async (delegation: Omit<Delegation, 'id' | 'delegatedAt' | 'status'>): Promise<Delegation> => {
   try {
     return await delegationApi.createCorrespondenceDelegation(delegation);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Error creating delegation:', error);
     throw error;
   }
@@ -43,7 +43,7 @@ export const addDelegation = async (delegation: Omit<Delegation, 'id' | 'delegat
 export const updateDelegation = async (id: string, updates: Partial<Delegation>): Promise<Delegation | null> => {
   try {
     return await delegationApi.updateCorrespondenceDelegation(id, updates);
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Error updating delegation ${id}:`, error);
     return null;
   }
@@ -56,7 +56,7 @@ export const getDelegationByCorrespondence = async (correspondenceId: string): P
   try {
     const delegation = await delegationApi.getDelegationByCorrespondence(correspondenceId);
     return delegation || undefined;
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Error loading delegation for correspondence ${correspondenceId}:`, error);
     return undefined;
   }
@@ -68,7 +68,7 @@ export const getDelegationByCorrespondence = async (correspondenceId: string): P
 export const getDelegationsByAssistant = async (assistantId: string): Promise<Delegation[]> => {
   try {
     return await delegationApi.getDelegationsByAssistant(assistantId);
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Error loading delegations for assistant ${assistantId}:`, error);
     return [];
   }
@@ -80,7 +80,7 @@ export const getDelegationsByAssistant = async (assistantId: string): Promise<De
 export const completeDelegation = async (id: string): Promise<Delegation | null> => {
   try {
     return await delegationApi.completeDelegation(id);
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Error completing delegation ${id}:`, error);
     return null;
   }
@@ -92,7 +92,7 @@ export const completeDelegation = async (id: string): Promise<Delegation | null>
 export const revokeDelegation = async (id: string): Promise<Delegation | null> => {
   try {
     return await delegationApi.revokeDelegation(id);
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Error revoking delegation ${id}:`, error);
     return null;
   }

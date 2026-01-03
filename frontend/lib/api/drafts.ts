@@ -84,7 +84,7 @@ export async function getDrafts(params?: {
     // Handle both array and paginated response
     const drafts = Array.isArray(response) ? response : (response.results || []);
     return drafts.map(mapApiDraftToFrontend);
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to fetch drafts from backend', error);
     return [];
   }
@@ -103,7 +103,7 @@ export async function getDraftByCorrespondence(
       draft_type: type,
     });
     return drafts[0] || null;
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Failed to fetch draft for correspondence ${correspondenceId}`, error);
     return null;
   }
@@ -140,7 +140,7 @@ export async function saveDraft(draft: Partial<Draft> & { correspondenceId: stri
       );
       return mapApiDraftToFrontend(response);
     }
-  } catch (error) {
+  } catch (error: unknown) {
     logError('Failed to save draft on backend', error);
     throw error;
   }
@@ -154,7 +154,7 @@ export async function deleteDraft(draftId: string): Promise<void> {
     await apiFetch(`/correspondence/drafts/${draftId}/`, {
       method: 'DELETE',
     });
-  } catch (error) {
+  } catch (error: unknown) {
     logError(`Failed to delete draft ${draftId} from backend`, error);
     throw error;
   }

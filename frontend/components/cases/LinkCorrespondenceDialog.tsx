@@ -97,12 +97,12 @@ export function LinkCorrespondenceDialog({
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/cases/${caseId}/`, {
         signal: abortControllerRef.current.signal,
       });
-      const linked = (response.correspondence || []).map((link: Record<string, unknown>) => 
-        link.correspondence_id || link.correspondence?.id
+      const linked = ((response.correspondence as any[]) || []).map((link: Record<string, unknown>) =>
+        link.correspondence_id || (link.correspondence as any)?.id
       ).filter(Boolean);
       setLinkedIds(new Set(linked));
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       // Ignore errors, just proceed
     }
   };
@@ -137,18 +137,18 @@ export function LinkCorrespondenceDialog({
       
       if (signal.aborted) return;
       
-      const items = (response.results || []).map((item: Record<string, unknown>) => ({
-        id: item.id,
-        referenceNumber: item.reference_number || '',
-        subject: item.subject || '',
-        status: item.status || 'pending',
-        priority: item.priority || 'medium',
-        receivedDate: item.received_date,
+      const items = ((response.results as any[]) || []).map((item: Record<string, unknown>) => ({
+        id: item.id as string as string,
+        referenceNumber: (item.reference_number as string) || '',
+        subject: (item.subject as string) || '',
+        status: (item.status as string as string) || 'pending',
+        priority: (item.priority as string) || 'medium',
+        receivedDate: item.received_date as string,
       }));
       setCorrespondence(items);
-      setTotalCount(response.count || 0);
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+      setTotalCount(response.count as number || 0);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       logError("Failed to fetch correspondence", err);
       toast.error("Failed to load correspondence");
     } finally {
@@ -209,8 +209,8 @@ export function LinkCorrespondenceDialog({
       toast.success(`Successfully linked ${selectedIds.size} correspondence item(s) to case ${caseNumber}`);
       onLinked?.();
       onOpenChange(false);
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
       logError("Failed to link correspondence", err);
       toast.error("Failed to link correspondence");
     } finally {
@@ -218,7 +218,7 @@ export function LinkCorrespondenceDialog({
     }
   };
 
-  const availableItems = correspondence.filter(item => !linkedIds.has(item.id));
+  const availableItems = correspondence.filter(item => !linkedIds.has(item.id as string));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -282,18 +282,18 @@ export function LinkCorrespondenceDialog({
               ) : (
                 <div className="p-2 space-y-2">
                   {availableItems.map((item) => {
-                    const isSelected = selectedIds.has(item.id);
+                    const isSelected = selectedIds.has(item.id as string);
                     return (
                       <div
-                        key={item.id}
+                        key={item.id as string}
                         className={`flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors ${
                           isSelected ? "bg-primary/5 border-primary" : "hover:bg-muted/50"
                         }`}
-                        onClick={() => toggleSelection(item.id)}
+                        onClick={() => toggleSelection(item.id as string)}
                       >
                         <Checkbox
                           checked={isSelected}
-                          onCheckedChange={() => toggleSelection(item.id)}
+                          onCheckedChange={() => toggleSelection(item.id as string)}
                           className="mt-1"
                         />
                         <div className="flex-1 min-w-0">
@@ -303,7 +303,7 @@ export function LinkCorrespondenceDialog({
                               {item.referenceNumber}
                             </span>
                             <Badge variant="outline" className="text-xs">
-                              {item.status}
+                              {item.status as string}
                             </Badge>
                             <Badge variant={item.priority === "urgent" ? "destructive" : "secondary"} className="text-xs">
                               {item.priority}

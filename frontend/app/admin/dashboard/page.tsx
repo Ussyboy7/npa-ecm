@@ -96,7 +96,7 @@ export default function AdminDashboardPage() {
         '/audit/activity-logs/?module=organization,accounts&page_size=10&ordering=-timestamp'
       );
       setRecentActivity(response.results || []);
-    } catch (error) {
+      } catch (error: unknown) {
       logError('Failed to load activity:', error);
     } finally {
       setLoading(false);

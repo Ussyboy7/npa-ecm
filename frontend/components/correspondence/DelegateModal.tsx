@@ -276,7 +276,7 @@ export const DelegateModal = ({
         setIsRefreshing(true);
         try {
           await refreshOrganizationData();
-        } catch (error) {
+        } catch (error: unknown) {
           logError('Failed to refresh organization data', error);
         } finally {
           setIsRefreshing(false);
@@ -346,7 +346,7 @@ export const DelegateModal = ({
       setNewAssistantId('');
       // Auto-select the newly assigned assistant
       setSelectedAssistant(newAssistantId);
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to assign assistant', error);
       
       // Check for duplicate assignment error
@@ -426,10 +426,10 @@ export const DelegateModal = ({
       setDelegationNotes('');
       setDelegationDuration('until_completed');
       setCustomExpiryDate('');
-    } catch (error) {
+    } catch (error: unknown) {
       logError('[DelegateModal] onDelegate failed:', error);
       logError('Failed to delegate correspondence', error);
-      const modalError = ModalErrorHandler.createErrorFromApi(error);
+      const modalError = ModalErrorHandler.createErrorFromApi(error as Record<string, unknown>);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {

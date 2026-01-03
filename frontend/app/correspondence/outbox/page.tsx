@@ -153,20 +153,22 @@ const OutboxPage = () => {
 
         const corrResults = Array.isArray(corrResponse.results) ? corrResponse.results : [];
         setOutboxItems(corrResults.map(mapApiCorrespondence));
+        const responseObj = corrResponse as Record<string, unknown>;
+        const summaryObj = responseObj.summary as Record<string, unknown> | undefined;
         setSummary({
-          total: corrResponse.summary?.total ?? corrResponse.count ?? corrResults.length,
-          urgent: corrResponse.summary?.urgent ?? 0,
-          pending: corrResponse.summary?.pending ?? 0,
-          inProgress: corrResponse.summary?.in_progress ?? 0,
+          total: (summaryObj && typeof summaryObj.total === 'number') ? summaryObj.total : ((responseObj && typeof responseObj.count === 'number') ? responseObj.count : corrResults.length),
+          urgent: (summaryObj && typeof summaryObj.urgent === 'number') ? summaryObj.urgent : 0,
+          pending: (summaryObj && typeof summaryObj.pending === 'number') ? summaryObj.pending : 0,
+          inProgress: (summaryObj && typeof summaryObj.in_progress === 'number') ? summaryObj.in_progress : 0,
         });
-        setCount(corrResponse.count ?? corrResults.length);
+        setCount((responseObj && typeof responseObj.count === 'number') ? responseObj.count : corrResults.length);
 
         // Set shared documents
         setSharedDocuments(docsResponse.results || []);
         setDocumentCount(docsResponse.count || 0);
-      } catch (err: Record<string, unknown>) {
+      } catch (err: unknown) {
         // Handle backend errors gracefully, especially for unsupported params
-        const errorMessage = err?.message || 'Failed to load outbox items.';
+        const errorMessage = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Failed to load outbox items.';
         if (errorMessage.includes('date_from') || errorMessage.includes('date_to')) {
           setError('Date range filtering may not be supported. Please try without date filters.');
         } else {
@@ -385,8 +387,8 @@ const OutboxPage = () => {
                 const daysPending = calculateDaysPending(item);
 
                 return (
-                <div key={item.id} className="border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
-                  <Link href={`/correspondence/${item.id}`} className="block">
+                <div key={item.id as string} className="border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
+                  <Link href={`/correspondence/${item.id as string}`} className="block">
                     <div className="flex items-start gap-4">
                     <div className={`p-3 rounded-lg ${item.priority === 'urgent' ? 'bg-destructive/10' : item.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
                       <Mail className={`h-5 w-5 ${item.priority === 'urgent' ? 'text-destructive' : item.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
@@ -404,7 +406,7 @@ const OutboxPage = () => {
                               isInternal={item.isInternal}
                               isExternal={item.isExternal}
                             />
-                            <Badge variant={getStatusBadgeVariant(item.status)}>{item.status.replace('-', ' ')}</Badge>
+                            <Badge variant={getStatusBadgeVariant(item.status as string)}>{item.status as string.replace('-', ' ')}</Badge>
                             {daysPending > 0 && <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />{daysPending} day{daysPending === 1 ? '' : 's'} pending</Badge>}
                           </div>
                         </div>
@@ -421,13 +423,13 @@ const OutboxPage = () => {
                   </Link>
                   {/* Action Menu */}
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-                    {item.status === 'pending' && (
+                    {item.status as string === 'pending' && (
                       <Button 
                         variant="outline" 
                         size="sm" 
                         onClick={(e) => {
                           e.preventDefault();
-                          router.push(`/correspondence/register?edit=${item.id}`);
+                          router.push(`/correspondence/register?edit=${item.id as string}`);
                         }}
                       >
                         Edit Draft
@@ -443,7 +445,7 @@ const OutboxPage = () => {
                     >
                       Withdraw
                     </Button>
-                    {item.status === 'pending' && (
+                    {item.status as string === 'pending' && (
                       <Button 
                         variant="ghost" 
                         size="sm"

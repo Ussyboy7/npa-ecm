@@ -71,7 +71,7 @@ export function SealVerificationResult({
         const filename = `seal-verification-certificate-${verification.serial_number}-${new Date().toISOString().split('T')[0]}.png`;
         sealPreviewRef.current.download(filename);
         toast.success('Certificate downloaded successfully');
-      } catch (error) {
+      } catch (error: unknown) {
         logError('Failed to download certificate:', error);
         toast.error('Failed to download certificate. Please try again.');
       }

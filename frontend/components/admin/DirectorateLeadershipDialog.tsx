@@ -81,7 +81,7 @@ export const DirectorateLeadershipDialog = ({
       });
 
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       const description =
         error instanceof Error ? error.message : "Unable to update directorate leadership.";
       toast({ title: "Update failed", description, variant: "destructive" });

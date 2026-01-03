@@ -85,7 +85,7 @@ export const MoveEntityModal = ({ open, onOpenChange, entityType, entityId, enti
       }
 
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: unknown) {
       const description = error instanceof Error ? error.message : 'Unable to move entity';
       toast({ title: 'Move failed', description, variant: 'destructive' });
     } finally {

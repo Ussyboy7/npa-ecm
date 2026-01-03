@@ -114,8 +114,8 @@ export function LinkCaseDialog({
       } else {
         setCases(response.results);
       }
-      setHasMore(response.results.length === 20 && (pageNum * 20) < (response.count || 0));
-      setTotalCount(response.count || 0);
+      setHasMore(response.results.length === 20 && (pageNum * 20) < (response.count as number || 0));
+      setTotalCount(response.count as number || 0);
     } catch (err) {
       logError("Failed to fetch cases", err);
       toast.error("Failed to load cases");

@@ -69,7 +69,7 @@ export const WebhookManager = () => {
         logError('Unexpected webhooks data format', data);
         setWebhooks([]);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to load webhooks', error);
       toast.error('Failed to load webhooks');
       setWebhooks([]); // Set empty array on error
@@ -92,7 +92,7 @@ export const WebhookManager = () => {
       setEditingWebhook(null);
       resetForm();
       loadWebhooks();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to save webhook', error);
       toast.error('Failed to save webhook');
     }
@@ -107,7 +107,7 @@ export const WebhookManager = () => {
       await deleteWebhook(id);
       toast.success('Webhook deleted');
       loadWebhooks();
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to delete webhook', error);
       toast.error('Failed to delete webhook');
     }
@@ -121,7 +121,7 @@ export const WebhookManager = () => {
       } else {
         toast.error(result.error || 'Webhook test failed');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       logError('Failed to test webhook', error);
       toast.error('Failed to test webhook');
     }
