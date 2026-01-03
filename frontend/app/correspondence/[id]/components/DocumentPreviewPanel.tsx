@@ -166,10 +166,24 @@ export const DocumentPreviewPanel = ({
 
       toast.success(`${files.length} file(s) uploaded successfully`);
       await onSyncFromApi();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to upload attachments', error);
+      let errorMessage = 'Please try again.';
+      if (error && typeof error === 'object') {
+        const errorObj = error as Record<string, unknown>;
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (errorMessage === 'Please try again.') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
       toast.error('Unable to upload files', {
-        description: error?.response?.data?.detail || error?.message || 'Please try again.',
+        description: errorMessage,
       });
     }
   }, [correspondence, onSyncFromApi]);
