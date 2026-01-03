@@ -90,7 +90,7 @@ export default function CaseTemplatesPage() {
         title: caseData.title,
         description: caseData.description,
         priority: caseData.priority as "medium" | "low" | "high" | "urgent",
-        case_type: selectedTemplate.case_type,
+        caseType: selectedTemplate.case_type as "complaint" | "request" | "inquiry" | "project" | "legal" | "audit" | "general" | undefined,
       });
       toast.success("Case created successfully");
       router.push(`/cases/${newCase.id}`);
