@@ -254,8 +254,8 @@ const NewCasePage = () => {
       localStorage.removeItem(AUTO_SAVE_KEY);
       setAutoSaveStatus('unsaved');
       router.push(`/cases/${newCase.id}`);
-    } catch (err: Record<string, unknown>) {
-      if (err.name === 'AbortError') return;
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
       logError("Failed to create case", err);
       toast.error("Failed to create case. Please try again.");
     } finally {

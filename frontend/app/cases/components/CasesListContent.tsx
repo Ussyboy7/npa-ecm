@@ -174,10 +174,10 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           signal: abortController.signal,
         });
         setExecutives(response);
-      } catch (err: Record<string, unknown>) {
-        if (err.name === 'AbortError') return;
+      } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
         // Silently fail if user doesn't have permission (403) or endpoint not found (404)
-        if (err.status === 403 || err.status === 404) {
+        if (err && typeof err === 'object' && 'status' in err && (err.status === 403 || err.status === 404)) {
           logWarn("Executives endpoint not available for this user");
           setExecutives([]);
           return;
@@ -271,8 +271,8 @@ export function CasesListContent({ scope, title, description }: CasesListContent
             inProgress: inProgressResponse.count,
             urgent: urgentResponse.count,
           });
-        } catch (summaryErr: Record<string, unknown>) {
-          if (summaryErr.name === 'AbortError') return;
+        } catch (summaryErr: unknown) {
+          if (summaryErr && typeof summaryErr === 'object' && 'name' in summaryErr && summaryErr.name === 'AbortError') return;
           // Fallback to calculating from current page if summary fetch fails
           const allCases = response.results;
           setSummary({
@@ -282,8 +282,8 @@ export function CasesListContent({ scope, title, description }: CasesListContent
             urgent: allCases.filter(c => c.priority === 'urgent').length,
           });
         }
-      } catch (err: Record<string, unknown>) {
-        if (err.name === 'AbortError') return;
+      } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
         logError("Failed to load cases", err);
         setError("Failed to load cases. Please try again.");
       } finally {
@@ -682,10 +682,10 @@ export function CasesListContent({ scope, title, description }: CasesListContent
                           </p>
                         )}
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {caseItem.owningOffice && (
+                          {caseItem.owningOfficeId && (
                             <div className="flex items-center gap-1">
                               <Building2 className="h-4 w-4" />
-                              <span>{caseItem.owningOffice}</span>
+                              <span>{caseItem.owningOfficeId}</span>
                             </div>
                           )}
                           <div className="flex items-center gap-1">
