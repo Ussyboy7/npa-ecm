@@ -171,7 +171,20 @@ export default function ApprovalsPage() {
         : executiveApprovals.length;
       setCount(count);
     } catch (err: unknown) {
-      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to load executive approvals';
+      let errorMessage = 'Failed to load executive approvals';
+      if (err && typeof err === 'object') {
+        const errorObj = err as Record<string, unknown>;
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (!errorMessage || errorMessage === 'Failed to load executive approvals') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
       setError(errorMessage);
       logError("Failed to load approvals", err);
       toast.error(errorMessage);
