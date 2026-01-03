@@ -74,8 +74,8 @@ export default function CaseTemplatesPage() {
   const handleCreateFromTemplate = (template: CaseTemplate) => {
     setSelectedTemplate(template);
     setCaseData({
-      title: template.structure?.default_fields?.title || "",
-      description: template.structure?.default_fields?.description || "",
+      title: (template.structure?.default_fields as Record<string, unknown>)?.title as string || "",
+      description: (template.structure?.default_fields as Record<string, unknown>)?.description as string || "",
       priority: template.default_priority || "medium",
     });
     setShowCreateDialog(true);
@@ -89,7 +89,7 @@ export default function CaseTemplatesPage() {
       const newCase = await createCaseFromTemplate(selectedTemplate.id, {
         title: caseData.title,
         description: caseData.description,
-        priority: caseData.priority,
+        priority: caseData.priority as "medium" | "low" | "high" | "urgent",
         case_type: selectedTemplate.case_type,
       });
       toast.success("Case created successfully");
