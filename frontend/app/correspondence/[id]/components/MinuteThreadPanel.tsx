@@ -20,6 +20,7 @@ import {
 import type { Minute } from '@/lib/npa-structure';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { SealBadge } from '@/components/seals/SealBadge';
+import { logInfo, logWarn } from '@/lib/client-logger';
 
 interface MinuteThreadPanelProps {
   minutes: Minute[];

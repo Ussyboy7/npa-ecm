@@ -305,26 +305,21 @@ const CorrespondenceDetailContent = () => {
         // Use retry logic for critical API calls
         const [corrResponse, minutesResponse, delegationResponse] = await Promise.all([
           fetchWithRetry(() => apiFetch<Record<string, unknown>>(`/correspondence/items/${id}/`)),
-          fetchWithRetry(() => apiFetch<Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> }>>(`/correspondence/minutes/?correspondence=${id}`)),
-          fetchWithRetry(() => apiFetch<Array<{
-            id: string;
-            status: string;
-            assistant?: { id: string };
-            assistant_id?: string;
-            principal?: { id: string };
-            principal_id?: string;
-            delegated_at?: string;
-            delegatedAt?: string;
-          }> | { results: Array<{
-            id: string;
-            status: string;
-            assistant?: { id: string };
-            assistant_id?: string;
-            principal?: { id: string };
-            principal_id?: string;
-            delegated_at?: string;
-            delegatedAt?: string;
-          }> }>>(`/correspondence/correspondence-delegations/?correspondence=${id}&status=active`)).catch(() => []),
+          fetchWithRetry(() => apiFetch<MinutesResponse>(`/correspondence/minutes/?correspondence=${id}`)),
+          fetchWithRetry(() => {
+            type DelegationItem = {
+              id: string;
+              status: string;
+              assistant?: { id: string };
+              assistant_id?: string;
+              principal?: { id: string };
+              principal_id?: string;
+              delegated_at?: string;
+              delegatedAt?: string;
+            };
+            type DelegationResponse = Array<DelegationItem> | { results: Array<DelegationItem> };
+            return apiFetch<DelegationResponse>(`/correspondence/correspondence-delegations/?correspondence=${id}&status=active`);
+          }).catch(() => []),
         ]);
         if (!ignore && !abortController.signal.aborted) {
           setRemoteCorrespondence(mapApiCorrespondence(corrResponse));
