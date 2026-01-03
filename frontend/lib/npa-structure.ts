@@ -151,6 +151,7 @@ export type Correspondence = {
     generatedAt?: string;
   } | null;
   completionSummaryGeneratedAt?: string;
+  caseId?: string;
   // Parallel routing fields
   workflowState?: 'sequential' | 'parallel' | 'merged' | 'waiting_merge';
   activeParallelBranches?: number;
