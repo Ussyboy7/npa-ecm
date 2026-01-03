@@ -112,7 +112,7 @@ export default function VerifyPage() {
           console.log('[Seal Verification] Calling fetch now...');
           response = await Promise.race([fetchPromise, timeoutPromise]);
           console.log('[Seal Verification] Fetch promise resolved!');
-        } catch (fetchError: any) {
+        } catch (fetchError: unknown) {
           console.error('[Seal Verification] Fetch exception caught:', fetchError);
           // If component unmounted (React StrictMode), just return silently
           if (!isMounted) {

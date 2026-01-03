@@ -35,7 +35,7 @@ import { formatDateTime } from '@/lib/correspondence-helpers';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { getActivityLogs, type ActivityLog } from '@/lib/audit-storage';
-import { logError } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
 
