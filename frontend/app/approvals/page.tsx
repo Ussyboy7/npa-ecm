@@ -16,6 +16,7 @@ import { Shield, Search, FileText, QrCode, Filter, ExternalLink, CheckCircle2, X
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api-client";
+import { logError } from "@/lib/client-logger";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { toast } from "sonner";
 import { SealBadge } from "@/components/seals/SealBadge";
