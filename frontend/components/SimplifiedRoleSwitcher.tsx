@@ -221,7 +221,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       }
     } catch (error: unknown) {
       // Ignore abort errors
-      if ((error instanceof Error && error.name === 'AbortError') || abortController.signal.aborted) {
+      if (error?.name === 'AbortError' || abortController.signal.aborted) {
         return;
       }
       logError('Backend search failed', error);
@@ -1056,6 +1056,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             <PaginationControls
               pagination={{
                 ...currentPagination,
+                totalCount: totalCount,
                 totalPages: Math.max(1, Math.ceil(totalCount / currentPagination.pageSize)),
                 paginationInfo: {
                   showing: `${currentPagination.startIndex}-${Math.min(currentPagination.endIndex, totalCount)}`,

@@ -247,8 +247,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
       });
     } catch (error: unknown) {
       logError("[FormDocumentEditor] Error loading form document:", error);
-      const errorMessage = (error instanceof Error && error.message) || "Failed to load form document";
-      logError("[FormDocumentEditor] Error details:", { error, errorMessage, stack: error instanceof Error ? error.stack : undefined });
+      const errorMessage = error?.message || "Failed to load form document";
+      logError("[FormDocumentEditor] Error details:", { error, errorMessage, stack: error?.stack });
       toast.error(errorMessage);
     } finally {
       setLoading(false);

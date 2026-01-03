@@ -272,12 +272,12 @@ export const SignatureSettingsCard = () => {
       
       // Provide specific error messages
       let errorMessage = 'Failed to upload signature. Please try again.';
-      if (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'status' in error.response && error.response.status === 413) {
+      if (error?.response?.status === 413) {
         errorMessage = 'File is too large. Please use a smaller image file.';
-      } else if (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'status' in error.response && error.response.status === 400) {
-        errorMessage = (error.response && typeof error.response === 'object' && 'data' in error.response && error.response.data && typeof error.response.data === 'object' && 'detail' in error.response.data && typeof error.response.data.detail === 'string') ? error.response.data.detail : 'Invalid file format. Please check your file and try again.';
-      } else if (error instanceof Error && error.message) {
-        errorMessage = error.message;
+      } else if (error?.response?.status === 400) {
+        errorMessage = error?.response?.data?.detail || 'Invalid file format. Please check your file and try again.';
+      } else if (error?.message) {
+        errorMessage = (error instanceof Error ? error.message : "Unknown error");
       }
       
       setErrors(prev => ({ ...prev, file: errorMessage }));
@@ -299,7 +299,7 @@ export const SignatureSettingsCard = () => {
       });
     } catch (error: unknown) {
       logError('Failed to delete signature', error);
-      const errorMessage = (error instanceof Error && error.message) || 'Failed to delete signature. Please try again.';
+      const errorMessage = error?.message || 'Failed to delete signature. Please try again.';
       toast.error(errorMessage);
     }
   }, []);
@@ -340,7 +340,7 @@ export const SignatureSettingsCard = () => {
       }
     } catch (error: unknown) {
       logError('Failed to save settings', error);
-      const errorMessage = (error instanceof Error && error.message) || 'Failed to save settings. Please try again.';
+      const errorMessage = error?.message || 'Failed to save settings. Please try again.';
       toast.error(errorMessage);
     } finally {
       setIsSaving(false);

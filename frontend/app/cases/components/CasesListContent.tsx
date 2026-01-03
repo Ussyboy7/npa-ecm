@@ -682,12 +682,15 @@ export function CasesListContent({ scope, title, description }: CasesListContent
                           </p>
                         )}
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {caseItem.owningOfficeId && (
-                            <div className="flex items-center gap-1">
-                              <Building2 className="h-4 w-4" />
-                              <span>{caseItem.owningOfficeId}</span>
-                            </div>
-                          )}
+                          {caseItem.owningOfficeId && (() => {
+                            const owningOffice = offices.find(o => o.id === caseItem.owningOfficeId);
+                            return owningOffice ? (
+                              <div className="flex items-center gap-1">
+                                <Building2 className="h-4 w-4" />
+                                <span>{owningOffice.name}</span>
+                              </div>
+                            ) : null;
+                          })()}
                           <div className="flex items-center gap-1">
                             <Clock className="h-4 w-4" />
                             <span>Opened {formatDateShort(caseItem.openedAt)}</span>

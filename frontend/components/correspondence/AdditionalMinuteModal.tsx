@@ -155,7 +155,7 @@ export const AdditionalMinuteModal = ({
       onClose();
     } catch (error: unknown) {
       logError('Failed to add additional minute', error);
-      const modalError = ModalErrorHandler.createErrorFromApi(error as Record<string, unknown>);
+      const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
     } finally {
       setIsSubmitting(false);

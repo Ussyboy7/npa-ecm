@@ -917,7 +917,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         return;
       }
       logError('Failed to process treatment', error);
-      const modalError = ModalErrorHandler.createErrorFromApi(error as Record<string, unknown>);
+      const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
       setShowConfirmation(false);
     } finally {

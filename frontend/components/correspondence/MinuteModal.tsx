@@ -1758,25 +1758,27 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             actionType,
             content: minuteText,
             direction: isMD ? 'downward' : (canChooseDirection ? selectedDirection : initialDirection),
-            distribution: distribution.length > 0 ? distribution.map((recipient) => {
-              // Use the name from the recipient (should already be set by DistributionSelector)
-              // Fallback to lookup if name is missing
-              let recipientName = recipient.name;
-              if (!recipientName) {
-                if (recipient.type === 'directorate' && recipient.directorateId) {
-                  recipientName = directorates.find(d => d.id === recipient.directorateId)?.name || 'Directorate';
-                } else if (recipient.type === 'division' && recipient.divisionId) {
-                  recipientName = divisions.find(d => d.id === recipient.divisionId)?.name || 'Division';
-                } else if (recipient.type === 'department' && recipient.departmentId) {
-                  recipientName = 'Department';
-                } else {
-                  recipientName = recipient.type.charAt(0).toUpperCase() + recipient.type.slice(1);
+            distribution: distribution.length > 0 ? distribution
+              .filter((r) => r.type !== 'user') // Filter out user types for ConfirmationDialog
+              .map((recipient) => {
+                // Use the name from the recipient (should already be set by DistributionSelector)
+                // Fallback to lookup if name is missing
+                let recipientName = recipient.name;
+                if (!recipientName) {
+                  if (recipient.type === 'directorate' && recipient.directorateId) {
+                    recipientName = directorates.find(d => d.id === recipient.directorateId)?.name || 'Directorate';
+                  } else if (recipient.type === 'division' && recipient.divisionId) {
+                    recipientName = divisions.find(d => d.id === recipient.divisionId)?.name || 'Division';
+                  } else if (recipient.type === 'department' && recipient.departmentId) {
+                    recipientName = 'Department';
+                  } else {
+                    recipientName = recipient.type.charAt(0).toUpperCase() + recipient.type.slice(1);
+                  }
                 }
-              }
-              return {
-                id: recipient.id,
-                type: recipient.type,
-                name: recipientName,
+                return {
+                  id: recipient.id,
+                  type: recipient.type as 'directorate' | 'division' | 'department',
+                  name: recipientName,
                 directorateId: recipient.directorateId,
                 divisionId: recipient.divisionId,
                 departmentId: recipient.departmentId,

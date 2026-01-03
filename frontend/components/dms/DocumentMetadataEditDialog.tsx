@@ -304,8 +304,8 @@ export const DocumentMetadataEditDialog = ({
     } catch (error: unknown) {
       logError('Failed to update metadata', error);
       const errorMessage =
-        (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'data' in error.response && error.response.data && typeof error.response.data === 'object' && 'detail' in error.response.data && typeof error.response.data.detail === 'string') ? error.response.data.detail :
-        (error && typeof error === 'object' && 'response' in error && error.response && typeof error.response === 'object' && 'data' in error.response && error.response.data && typeof error.response.data === 'object' && 'title' in error.response.data && Array.isArray(error.response.data.title) && error.response.data.title.length > 0 && typeof error.response.data.title[0] === 'string') ? error.response.data.title[0] :
+        error?.response?.data?.detail ||
+        error?.response?.data?.title?.[0] ||
         'Unable to update document';
       toast.error(errorMessage);
     } finally {

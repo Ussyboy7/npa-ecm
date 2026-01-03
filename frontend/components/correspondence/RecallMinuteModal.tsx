@@ -62,7 +62,7 @@ export const RecallMinuteModal = ({
       setRecallReason('');
     } catch (error: unknown) {
       logError('Failed to recall minute', error);
-      const modalError = ModalErrorHandler.createErrorFromApi(error as Record<string, unknown>);
+      const modalError = ModalErrorHandler.createErrorFromApi(error);
       const errorMessage = ModalErrorHandler.getUserFriendlyMessage(modalError);
       
       // If backend says it's already recalled, close modal and refresh parent data
