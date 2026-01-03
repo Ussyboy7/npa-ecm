@@ -838,7 +838,7 @@ export default function ApprovalsPage() {
               </div>
             ) : filteredApprovals.length === 0 ? (
               <EmptyState
-                icon={Shield}
+                icon={<Shield className="h-12 w-12" />}
                 title="No executive approvals found"
                 description={
                   activeFilterCount > 0 
