@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { apiFetch } from "@/lib/api-client";
 import { logError } from "@/lib/client-logger";
-import { formatDateShort } from "@/lib/correspondence-helpers";
+import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
 import { toast } from "sonner";
 import { SealBadge } from "@/components/seals/SealBadge";
 import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
@@ -325,7 +325,7 @@ export default function ApprovalsPage() {
         'Office': a.officeName,
         'Office Title': a.officeTitle,
         'Serial Number': a.serialNumber,
-        'Sealed At': format(new Date(a.sealedAt), 'yyyy-MM-dd HH:mm'),
+        'Sealed At': formatDateTime(a.sealedAt),
         'Status': a.isValid ? 'Valid' : 'Invalid',
         'Verification URL': a.verificationUrl,
       }));
