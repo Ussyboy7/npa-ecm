@@ -77,7 +77,7 @@ export const DispositionsManager = () => {
       
       const items = await getDispositions(params);
       setDispositions(items);
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') return;
       logError('Failed to load dispositions:', error);
       toast.error('Failed to load dispositions');
@@ -99,7 +99,7 @@ export const DispositionsManager = () => {
       setShowApproveDialog(false);
       setSelectedDisposition(null);
       await loadDispositions();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to approve disposition:', error);
       toast.error('Failed to approve disposition', {
         description: (error instanceof Error ? error.message : "Unknown error") || 'Please try again',

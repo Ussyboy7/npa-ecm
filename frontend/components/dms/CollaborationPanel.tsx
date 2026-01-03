@@ -90,7 +90,7 @@ export const CollaborationPanel = ({
       // Automatically add the new workspace to this document
       await onAddWorkspace(newWorkspace.id);
       toast.info('Workspace added to document');
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to create workspace', error);
       toast.error(error?.response?.data?.detail || 'Failed to create workspace');
     } finally {

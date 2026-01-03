@@ -249,7 +249,7 @@ export const ParallelRouteModal = ({
       setRecipients([]);
       setSearchQuery('');
       setMergeStrategy('all');
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to create parallel route', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       const errorMessage = ModalErrorHandler.getUserFriendlyMessage(modalError);

@@ -162,7 +162,7 @@ export const CompletionSummaryModal = ({
 
       setShowConfirmation(false);
       onOpenChange(false);
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to archive correspondence', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));

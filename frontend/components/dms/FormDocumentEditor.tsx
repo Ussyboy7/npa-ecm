@@ -245,7 +245,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
           versionsIsArray: Array.isArray(doc.document.versions),
         } : null,
       });
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError("[FormDocumentEditor] Error loading form document:", error);
       const errorMessage = error?.message || "Failed to load form document";
       logError("[FormDocumentEditor] Error details:", { error, errorMessage, stack: error?.stack });

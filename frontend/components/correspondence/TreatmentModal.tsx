@@ -909,7 +909,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         logError('Background sync failed after treatment', error);
         // Don't show error to user - sync will happen on next page load
       });
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       // Don't show error if request was cancelled
       if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
         setIsSubmitting(false);

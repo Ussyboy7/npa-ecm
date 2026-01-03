@@ -157,7 +157,7 @@ export const DocumentCommentsDialog = ({
         setComment('');
       }
       toast.success(actualParentId ? 'Reply added' : 'Comment added');
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Error adding comment:', error);
       // Check if backend returned a validation error
       const backendError = error?.response?.data?.content?.[0] || 

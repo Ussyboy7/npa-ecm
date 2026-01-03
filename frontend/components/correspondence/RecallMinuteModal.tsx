@@ -60,7 +60,7 @@ export const RecallMinuteModal = ({
       onSuccess();
       onClose();
       setRecallReason('');
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to recall minute', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       const errorMessage = ModalErrorHandler.getUserFriendlyMessage(modalError);

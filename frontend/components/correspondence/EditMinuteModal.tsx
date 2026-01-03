@@ -87,7 +87,7 @@ export const EditMinuteModal = ({ minute, isOpen, onClose, onSuccess }: EditMinu
       toast.success('Minute updated successfully');
       onSuccess?.();
       onClose();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to update minute', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       const errorMessage = ModalErrorHandler.getUserFriendlyMessage(modalError);

@@ -70,7 +70,7 @@ export const LegalHoldsManager = () => {
       
       const holds = await getLegalHolds({ is_active: true });
       setLegalHolds(holds);
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') return;
       logError('Failed to load legal holds:', error);
       toast.error('Failed to load legal holds');
@@ -99,7 +99,7 @@ export const LegalHoldsManager = () => {
       setShowCreateDialog(false);
       setFormData({ case_number: '', case_name: '', description: '' });
       await loadLegalHolds();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to create legal hold:', error);
       toast.error('Failed to create legal hold', {
         description: (error instanceof Error ? error.message : "Unknown error") || 'Please try again',

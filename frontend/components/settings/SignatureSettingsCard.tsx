@@ -265,7 +265,7 @@ export const SignatureSettingsCard = () => {
         setActiveTab('preview'); // Switch to preview tab
         setTimeout(() => setUploadProgress(0), 1000);
       }
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       clearInterval(progressInterval);
       setUploadProgress(0);
       logError('Failed to upload signature', error);
@@ -297,7 +297,7 @@ export const SignatureSettingsCard = () => {
       toast.success('Signature deleted successfully', {
         description: 'You can upload a new signature anytime.',
       });
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to delete signature', error);
       const errorMessage = error?.message || 'Failed to delete signature. Please try again.';
       toast.error(errorMessage);
@@ -338,7 +338,7 @@ export const SignatureSettingsCard = () => {
           icon: <CheckCircle2 className="h-4 w-4" />,
         });
       }
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to save settings', error);
       const errorMessage = error?.message || 'Failed to save settings. Please try again.';
       toast.error(errorMessage);

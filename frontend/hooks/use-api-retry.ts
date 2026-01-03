@@ -46,7 +46,7 @@ export const useApiRetry = (options: RetryOptions = {}) => {
     ): Promise<T> => {
       try {
         return await fetchFn();
-      } catch (error: Record<string, unknown>) {
+      } catch (error: unknown) {
         // Don't retry authentication errors - let them propagate immediately
         if (isAuthenticationError(error)) {
           throw error;

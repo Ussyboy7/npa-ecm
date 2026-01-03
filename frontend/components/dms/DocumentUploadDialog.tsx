@@ -361,7 +361,7 @@ export const DocumentUploadDialog = ({
             setSelectedTemplateId(defaultTemplate.id);
           }
         }
-      } catch (error: Record<string, unknown>) {
+      } catch (error: unknown) {
         // Handle 404 gracefully - endpoint may not be available yet
         if (error?.status === 404) {
           logWarn('Templates endpoint not available, continuing without templates');

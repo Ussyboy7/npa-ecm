@@ -301,7 +301,7 @@ export const DocumentMetadataEditDialog = ({
       } else {
         toast.success('Document details updated');
       }
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to update metadata', error);
       const errorMessage =
         error?.response?.data?.detail ||

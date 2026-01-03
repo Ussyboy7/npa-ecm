@@ -153,7 +153,7 @@ export const AdditionalMinuteModal = ({
       toast.success(`${getMinuteTypeLabel(minuteType)} added successfully.`);
       onSuccess();
       onClose();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to add additional minute', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));

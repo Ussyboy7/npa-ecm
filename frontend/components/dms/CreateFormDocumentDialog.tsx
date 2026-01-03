@@ -171,7 +171,7 @@ export function CreateFormDocumentDialog({
       setDescription("");
       setReferenceNumber("");
       setSelectedTemplateId("");
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError("[FormDialog] Error creating form document:", error);
       const errorMessage = error?.message || error?.error || "Failed to create form document";
       logError("[FormDialog] Error details:", { error, errorMessage, stack: error?.stack });

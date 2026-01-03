@@ -83,7 +83,7 @@ export const WorkspaceManagementDialog = ({
       toast.success("Workspace created successfully");
       setFormData({ name: "", description: "", color: "#2563eb", memberIds: [] });
       onWorkspaceChange();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError("Failed to create workspace", error);
       toast.error(error?.response?.data?.detail || "Failed to create workspace");
     } finally {
@@ -109,7 +109,7 @@ export const WorkspaceManagementDialog = ({
       setEditingId(null);
       setFormData({ name: "", description: "", color: "#2563eb", memberIds: [] });
       onWorkspaceChange();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError("Failed to update workspace", error);
       toast.error(error?.response?.data?.detail || "Failed to update workspace");
     } finally {
@@ -129,7 +129,7 @@ export const WorkspaceManagementDialog = ({
       });
       toast.success("Workspace deleted successfully");
       onWorkspaceChange();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError("Failed to delete workspace", error);
       toast.error(error?.response?.data?.detail || "Failed to delete workspace");
     } finally {

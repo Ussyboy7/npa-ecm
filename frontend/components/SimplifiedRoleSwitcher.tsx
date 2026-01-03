@@ -219,7 +219,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
         setBackendSearchResults(mappedUsers);
         setBackendSearchTotal(response.count as number || mappedUsers.length);
       }
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       // Ignore abort errors
       if (error?.name === 'AbortError' || abortController.signal.aborted) {
         return;

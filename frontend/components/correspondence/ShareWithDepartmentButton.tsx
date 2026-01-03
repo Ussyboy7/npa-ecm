@@ -40,7 +40,7 @@ export const ShareWithDepartmentButton = ({
 
       toast.success('Shared with department members successfully');
       onShared();
-    } catch (error: Record<string, unknown>) {
+    } catch (error: unknown) {
       logError('Failed to share with department', error);
       const errorMessage = error?.message || error?.detail || 'Failed to share with department';
       toast.error(errorMessage);
