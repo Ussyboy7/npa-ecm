@@ -827,7 +827,6 @@ const CorrespondenceDetailContent = () => {
               await syncFromApi();
             }}
             onOpenLinkCaseModal={() => openModal('link-case')}
-            onOpenParallelRouteModal={() => openModal('parallel-route')}
             onDistributionShared={async () => {
               await refreshData();
               await syncFromApi();
@@ -981,9 +980,11 @@ const CorrespondenceDetailContent = () => {
       {mobileActiveTab === 'actions' && (
         <div className="md:hidden">
           <ActionsPanel
-                  correspondence={correspondence}
-                  minutes={minutes}
+            correspondence={correspondence}
+            minutes={minutes}
             activeUser={activeUser}
+            onOpenParallelRouteModal={() => openModal('parallel-route')}
+            onOpenLinkCaseModal={() => openModal('link-case')}
             isCompleted={isCompleted}
             isCurrentUserTurn={isCurrentUserTurn}
             isForInformationOnly={isForInformationOnly}
