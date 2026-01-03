@@ -1,4 +1,4 @@
-import DOMPurify from 'dompurify';
+import DOMPurify, { type Config } from 'dompurify';
 
 /**
  * Sanitizes HTML content to prevent XSS attacks
@@ -6,13 +6,13 @@ import DOMPurify from 'dompurify';
  * @param options - Optional DOMPurify configuration
  * @returns Sanitized HTML string
  */
-export const sanitizeHtml = (html: string, options?: Partial<DOMPurify.Config>): string => {
+export const sanitizeHtml = (html: string, options?: Partial<Config>): string => {
   if (typeof window === 'undefined') {
     // Server-side: return as-is (will be sanitized on client)
     return html;
   }
 
-  const defaultOptions: unknown = {
+  const defaultOptions: Config = {
     ALLOWED_TAGS: [
       'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'a', 'img', 'table', 'thead',

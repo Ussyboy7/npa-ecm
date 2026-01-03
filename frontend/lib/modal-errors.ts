@@ -10,6 +10,12 @@ export interface ModalError {
 }
 
 export class ModalErrorHandler {
+  private static getErrorMessage(error: Record<string, unknown>): string {
+    if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+      return error.message;
+    }
+    return '';
+  }
   /**
    * Extract error message from API error response
    */
@@ -17,16 +23,18 @@ export class ModalErrorHandler {
     if (!error) return 'An unexpected error occurred';
 
     // Try different error response formats
-    const detail = error?.response?.data?.detail;
+    const response = error?.response as Record<string, unknown> | undefined;
+    const data = response?.data as Record<string, unknown> | undefined;
+    const detail = data?.detail;
     if (detail) {
       if (typeof detail === 'string') return detail;
       if (Array.isArray(detail) && detail.length > 0) {
-        return detail[0];
+        return String(detail[0]);
       }
     }
 
     // Try field-specific errors
-    const fieldErrors = error?.response?.data;
+    const fieldErrors = data;
     if (fieldErrors && typeof fieldErrors === 'object') {
       const firstField = Object.keys(fieldErrors)[0];
       const firstError = fieldErrors[firstField];
@@ -39,7 +47,8 @@ export class ModalErrorHandler {
     }
 
     // Try message
-    if (error?.message) return (error instanceof Error ? error.message : "Unknown error");
+    const message = this.getErrorMessage(error);
+    if (message) return message;
 
     // Default
     return 'An unexpected error occurred. Please try again.';
@@ -75,10 +84,11 @@ export class ModalErrorHandler {
    * Check if error is a network error
    */
   static isNetworkError(error: Record<string, unknown>): boolean {
+    const message = this.getErrorMessage(error).toLowerCase();
     return (
       error?.code === 'NETWORK_ERROR' ||
-      error?.message?.toLowerCase().includes('network') ||
-      error?.message?.toLowerCase().includes('fetch') ||
+      message.includes('network') ||
+      message.includes('fetch') ||
       !navigator.onLine
     );
   }
@@ -87,12 +97,14 @@ export class ModalErrorHandler {
    * Check if error is a permission error
    */
   static isPermissionError(error: Record<string, unknown>): boolean {
+    const message = this.getErrorMessage(error).toLowerCase();
+    const response = error?.response as { status?: number } | undefined;
     return (
-      error?.response?.status === 403 ||
-      error?.response?.status === 401 ||
-      error?.message?.toLowerCase().includes('permission') ||
-      error?.message?.toLowerCase().includes('unauthorized') ||
-      error?.message?.toLowerCase().includes('forbidden')
+      response?.status === 403 ||
+      response?.status === 401 ||
+      message.includes('permission') ||
+      message.includes('unauthorized') ||
+      message.includes('forbidden')
     );
   }
 

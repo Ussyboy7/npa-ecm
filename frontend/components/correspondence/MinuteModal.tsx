@@ -288,22 +288,19 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   // Templates are now loaded from backend - no initialization needed
 
   const refreshMinuteTemplates = useCallback(
-    (userArg?: User) => {
-      const loadTemplates = async () => {
-        const targetUser = userArg ?? currentUser;
-        if (!targetUser) {
-          setMinuteTemplates([]);
-          return;
-        }
-        try {
-          const templates = await getTemplatesForUser(targetUser, 'minute');
-          setMinuteTemplates(templates);
-        } catch (error: unknown) {
-          logError('Failed to load minute templates', error);
-          setMinuteTemplates([]);
-        }
-      };
-      loadTemplates();
+    async (userArg?: User) => {
+      const targetUser = userArg ?? currentUser;
+      if (!targetUser) {
+        setMinuteTemplates([]);
+        return;
+      }
+      try {
+        const templates = await getTemplatesForUser(targetUser, 'minute');
+        setMinuteTemplates(templates);
+      } catch (error: unknown) {
+        logError('Failed to load minute templates', error);
+        setMinuteTemplates([]);
+      }
     },
     [currentUser],
   );
@@ -971,7 +968,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         return;
       }
       
-      const correspondenceUpdatePayload: unknown = {
+      const correspondenceUpdatePayload: Record<string, unknown> = {
         status: 'in-progress',
         direction: finalDirection,
       };
