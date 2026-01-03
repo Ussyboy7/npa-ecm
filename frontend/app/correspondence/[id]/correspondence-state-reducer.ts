@@ -4,6 +4,7 @@
  */
 
 import type { Correspondence, Minute } from '@/lib/npa-structure';
+import type { DocumentRecord } from '@/lib/dms-storage';
 
 export interface CorrespondenceDetailState {
   minutes: Minute[];
@@ -16,7 +17,7 @@ export interface CorrespondenceDetailState {
     status: string;
     delegatedAt: string;
   } | null;
-  linkedDocuments: unknown[];
+  linkedDocuments: DocumentRecord[];
   parallelRoutingGroups: unknown[];
   selectedMinute: Minute | null;
   selectedAttachmentIndex: number | null;
@@ -32,7 +33,7 @@ export type CorrespondenceDetailAction =
   | { type: 'SET_REMOTE_CORRESPONDENCE'; payload: Correspondence | null }
   | { type: 'SET_DETAIL_LOADING'; payload: boolean }
   | { type: 'SET_BACKEND_DELEGATION'; payload: CorrespondenceDetailState['backendDelegation'] }
-  | { type: 'SET_LINKED_DOCUMENTS'; payload: unknown[] }
+  | { type: 'SET_LINKED_DOCUMENTS'; payload: DocumentRecord[] }
   | { type: 'SET_PARALLEL_ROUTING_GROUPS'; payload: unknown[] }
   | { type: 'SET_SELECTED_MINUTE'; payload: Minute | null }
   | { type: 'SET_SELECTED_ATTACHMENT_INDEX'; payload: number | null }

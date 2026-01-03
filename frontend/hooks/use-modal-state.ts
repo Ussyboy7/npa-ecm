@@ -18,6 +18,7 @@ export type ModalType =
   | 'print-preview'
   | 'document-preview'
   | 'link-document'
+  | 'link-case'
   | 'upload'
   | null;
 

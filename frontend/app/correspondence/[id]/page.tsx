@@ -672,8 +672,8 @@ const CorrespondenceDetailContent = () => {
 
     // Sort by createdAt / updatedAt to find the most recent group(s)
     const sorted = [...unique].sort((a, b) => {
-      const aTime = new Date(a.createdAt ?? a.updatedAt ?? 0).getTime();
-      const bTime = new Date(b.createdAt ?? b.updatedAt ?? 0).getTime();
+      const aTime = new Date((a.createdAt as string | number | undefined) ?? (a.updatedAt as string | number | undefined) ?? 0).getTime();
+      const bTime = new Date((b.createdAt as string | number | undefined) ?? (b.updatedAt as string | number | undefined) ?? 0).getTime();
       return aTime - bTime;
     });
 
