@@ -303,6 +303,7 @@ const CorrespondenceDetailContent = () => {
       setDetailLoading(true);
       try {
         // Use retry logic for critical API calls
+        type MinutesResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
         const [corrResponse, minutesResponse, delegationResponse] = await Promise.all([
           fetchWithRetry(() => apiFetch<Record<string, unknown>>(`/correspondence/items/${id}/`)),
           fetchWithRetry(() => apiFetch<MinutesResponse>(`/correspondence/minutes/?correspondence=${id}`)),
@@ -353,10 +354,10 @@ const CorrespondenceDetailContent = () => {
           if (activeDel) {
             setBackendDelegation({
               id: activeDel.id,
-              assistantId: activeDel.assistant?.id || activeDel.assistant_id,
-              principalId: activeDel.principal?.id || activeDel.principal_id,
+              assistantId: activeDel.assistant?.id || activeDel.assistant_id || '',
+              principalId: activeDel.principal?.id || activeDel.principal_id || '',
               status: activeDel.status,
-              delegatedAt: activeDel.delegated_at || activeDel.delegatedAt,
+              delegatedAt: activeDel.delegated_at || activeDel.delegatedAt || '',
             });
           } else {
             setBackendDelegation(null);
@@ -402,7 +403,7 @@ const CorrespondenceDetailContent = () => {
 
     // Find minutes directed to current user that haven't been opened
     const unopenedMinutes = minutes.filter(
-      (m) => 
+      (m: Minute) => 
         !m.isOpened && 
         !markedAsOpenedRef.current.has(m.id) &&
         m.toOfficeId === correspondence.currentOfficeId &&

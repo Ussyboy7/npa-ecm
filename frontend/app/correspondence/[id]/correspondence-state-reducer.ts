@@ -6,7 +6,7 @@
 import type { Correspondence, Minute } from '@/lib/npa-structure';
 
 export interface CorrespondenceDetailState {
-  minutes: unknown[];
+  minutes: Minute[];
   remoteCorrespondence: Correspondence | null;
   detailLoading: boolean;
   backendDelegation: {
