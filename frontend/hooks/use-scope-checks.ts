@@ -48,16 +48,16 @@ export function useScopeChecks(): ScopeChecks {
     const userDivisionIds: string[] = [];
     const userDirectorateIds: string[] = [];
 
-    if (currentUser.department?.id) {
-      userDepartmentIds.push(currentUser.department.id);
+    if (currentUser.department) {
+      userDepartmentIds.push(currentUser.department);
     }
 
-    if (currentUser.division?.id) {
-      userDivisionIds.push(currentUser.division.id);
+    if (currentUser.division) {
+      userDivisionIds.push(currentUser.division);
     }
 
-    if (currentUser.directorate?.id) {
-      userDirectorateIds.push(currentUser.directorate.id);
+    if (currentUser.directorate) {
+      userDirectorateIds.push(currentUser.directorate);
     }
 
     // Check if user has office membership (will be checked separately in sidebar)

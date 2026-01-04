@@ -556,7 +556,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   const addMinute = async (minute: Minute) => {
     try {
       const payload = normalizeMinutePayload(buildMinuteCreatePayload(minute));
-      const response = await apiFetch('/correspondence/minutes/', {
+      const response = await apiFetch<Record<string, unknown>>('/correspondence/minutes/', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
@@ -580,7 +580,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     }
 
     try {
-      const response = await apiFetch(`/correspondence/items/${id}/`, {
+      const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/${id}/`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
@@ -599,7 +599,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
 
   const addCorrespondence = async (newCorr: Correspondence) => {
     try {
-      const response = await apiFetch('/correspondence/items/', {
+      const response = await apiFetch<Record<string, unknown>>('/correspondence/items/', {
         method: 'POST',
         body: JSON.stringify(buildCorrespondenceCreatePayload(newCorr)),
       });

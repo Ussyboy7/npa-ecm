@@ -43,7 +43,7 @@ interface UseFileUploadReturn {
 export const useFileUpload = (options: UseFileUploadOptions = {}): UseFileUploadReturn => {
   const {
     maxSize = MODAL_CONSTANTS.FILE_UPLOAD.MAX_SIZE,
-    allowedTypes = MODAL_CONSTANTS.FILE_UPLOAD.ALLOWED_TYPES,
+    allowedTypes = MODAL_CONSTANTS.FILE_UPLOAD.ALLOWED_TYPES as unknown as string[],
     maxFiles,
     onFilesChange,
   } = options;

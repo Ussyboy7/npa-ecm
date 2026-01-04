@@ -261,7 +261,7 @@ export function advancedSearch(users: User[], query: string): User[] {
   return users.filter(user => {
     // Check field filters
     for (const [field, value] of Object.entries(fields)) {
-      const userValue = (user as Record<string, unknown>)[field];
+      const userValue = (user as unknown as Record<string, unknown>)[field];
       if (!userValue || !userValue.toString().toLowerCase().includes(value.toLowerCase())) {
         return false;
       }

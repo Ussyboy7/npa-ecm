@@ -42,7 +42,7 @@ export function useRoleChecks(): RoleChecks {
     }
 
     const grade = currentUser.gradeLevel;
-    const roleName = currentUser.systemRole?.name?.toLowerCase() || '';
+    const roleName = (currentUser.systemRole || '').toLowerCase();
     const isSuperuser = currentUser.isSuperuser || false;
 
     // Grade-based checks

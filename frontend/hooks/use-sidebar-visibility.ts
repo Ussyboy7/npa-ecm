@@ -145,8 +145,8 @@ export function useSidebarVisibility(): SidebarVisibility {
       roleSidebarConfig.showDashboard !== undefined ||
       roleSidebarConfig.showMyInbox !== undefined ||
       roleSidebarConfig.showOfficeInbox !== undefined ||
-      roleSidebarConfig.showCaseManagement !== undefined ||
-      roleSidebarConfig.showDocumentsRecords !== undefined ||
+      roleSidebarConfig.showMyCases !== undefined ||
+      roleSidebarConfig.showSearchDocuments !== undefined ||
       roleSidebarConfig.showAnalyticsReports !== undefined ||
       roleSidebarConfig.showAdministration !== undefined
     );
@@ -165,10 +165,9 @@ export function useSidebarVisibility(): SidebarVisibility {
     const hasOfficeMembership = userOfficeIds.length > 0;
 
     // Check if secretary has executive assignment
-    const hasExecutiveAssignment = roleChecks.isSecretary && 
-      assistantAssignments.some(
-        (a) => String(a.assistantId) === String(currentUser.id) && a.isActive
-      );
+    const hasExecutiveAssignment =
+      roleChecks.isSecretary &&
+      assistantAssignments.some((a) => String(a.assistantId) === String(currentUser.id));
 
     // Check if user has division/department (for Records & Archives)
     const hasOrgUnit = Boolean(

@@ -712,7 +712,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const addDirectorate = async (directorate: CreateDirectorateInput) => {
     const payload = buildDirectoratePayload(directorate);
-    const response = await apiFetch('/organization/directorates/', {
+    const response = await apiFetch<Record<string, unknown>>('/organization/directorates/', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -726,7 +726,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     if (Object.keys(payload).length === 0) {
       return directorates.find((dir) => dir.id === id) ?? null;
     }
-    const response = await apiFetch(`/organization/directorates/${id}/`, {
+    const response = await apiFetch<Record<string, unknown>>(`/organization/directorates/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -736,7 +736,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const deleteDirectorate = async (id: string) => {
-    const response = await apiFetch(`/organization/directorates/${id}/`, {
+    const response = await apiFetch<Record<string, unknown>>(`/organization/directorates/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify({ is_active: false }),
     });
@@ -747,7 +747,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const addDivision = async (division: CreateDivisionInput) => {
     const payload = buildDivisionPayload(division);
-    const response = await apiFetch('/organization/divisions/', {
+    const response = await apiFetch<Record<string, unknown>>('/organization/divisions/', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -761,7 +761,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     if (Object.keys(payload).length === 0) {
       return divisions.find((div) => div.id === id) ?? null;
     }
-    const response = await apiFetch(`/organization/divisions/${id}/`, {
+    const response = await apiFetch<Record<string, unknown>>(`/organization/divisions/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -771,7 +771,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const deleteDivision = async (id: string) => {
-    const response = await apiFetch(`/organization/divisions/${id}/`, {
+    const response = await apiFetch<Record<string, unknown>>(`/organization/divisions/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify({ is_active: false }),
     });
@@ -782,7 +782,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const addDepartment = async (department: CreateDepartmentInput) => {
     const payload = buildDepartmentPayload(department);
-    const response = await apiFetch('/organization/departments/', {
+    const response = await apiFetch<Record<string, unknown>>('/organization/departments/', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -796,7 +796,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     if (Object.keys(payload).length === 0) {
       return departments.find((dept) => dept.id === id) ?? null;
     }
-    const response = await apiFetch(`/organization/departments/${id}/`, {
+    const response = await apiFetch<Record<string, unknown>>(`/organization/departments/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -806,7 +806,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const deleteDepartment = async (id: string) => {
-    const response = await apiFetch(`/organization/departments/${id}/`, {
+    const response = await apiFetch<Record<string, unknown>>(`/organization/departments/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify({ is_active: false }),
     });
@@ -817,7 +817,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const addUser = async (user: CreateUserInput) => {
     const payload = buildCreateUserPayload(user);
-    const response = await apiFetch('/accounts/users/', {
+    const response = await apiFetch<Record<string, unknown>>('/accounts/users/', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

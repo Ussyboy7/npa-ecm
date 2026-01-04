@@ -42,6 +42,12 @@ const asOneOf = <T extends string>(value: unknown, allowed: readonly T[], fallba
   if (typeof value !== 'string') return fallback;
   return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 };
+const asBoolean = (value: unknown, fallback = false): boolean => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') return value === 'true' || value === '1';
+  return fallback;
+};
 
 // Map API response (snake_case) to frontend interface (camelCase)
 const mapApiTemplate = (template: Record<string, unknown>): DocumentTemplate => ({
@@ -54,15 +60,15 @@ const mapApiTemplate = (template: Record<string, unknown>): DocumentTemplate => 
   contentText: template.content_text === undefined ? undefined : asString(template.content_text),
   createdBy: template.created_by ? String(template.created_by) : 'system',
   updatedBy: template.updated_by ? String(template.updated_by) : 'system',
-  createdAt: template.created_at ?? new Date().toISOString(),
-  updatedAt: template.updated_at ?? new Date().toISOString(),
-  isDefault: template.is_default ?? true,
+  createdAt: asString(template.created_at, new Date().toISOString()),
+  updatedAt: asString(template.updated_at, new Date().toISOString()),
+  isDefault: template.is_default === undefined ? undefined : asBoolean(template.is_default, false),
   templateType: asOneOf(template.template_type, ['document', 'minute', 'treatment'] as const, 'document'),
   actionType:
     template.action_type === null || template.action_type === undefined
       ? undefined
       : asOneOf(template.action_type, ['minute', 'approve', 'any'] as const, 'any'),
-  isActive: template.is_active ?? true,
+  isActive: template.is_active === undefined ? undefined : asBoolean(template.is_active, true),
 });
 
 /**
