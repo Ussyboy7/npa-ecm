@@ -271,71 +271,121 @@ const buildQuery = (params: Record<string, string | number | boolean | undefined
   return query.toString();
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const asString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+};
+
+const asStringOrNull = (value: unknown): string | null => {
+  if (value === null) return null;
+  if (value === undefined) return null;
+  return asString(value);
+};
+
+const asBoolean = (value: unknown, fallback = false): boolean => (typeof value === 'boolean' ? value : fallback);
+
+const asNumber = (value: unknown, fallback = 0): number => (typeof value === 'number' ? value : fallback);
+
+const asOneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => {
+  if (typeof value !== 'string') return fallback;
+  return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+};
+
+const asStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+
+const asDivisionDetailOrNull = (value: unknown): SLAConfiguration['divisionDetail'] => {
+  if (!isRecord(value)) return null;
+  return {
+    id: asString(value.id),
+    name: asString(value.name),
+    code: asString(value.code),
+  };
+};
+
+const asDivisionsDetailArray = (value: unknown): { id: string; name: string; code: string }[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .map((v) => ({ id: asString(v.id), name: asString(v.name), code: asString(v.code) }));
+};
+
 // Transform snake_case API response to camelCase
 const mapSLAConfiguration = (data: Record<string, unknown>): SLAConfiguration => ({
-  id: data.id,
-  name: data.name,
-  priority: data.priority,
-  priorityDisplay: data.priority_display,
-  correspondenceType: data.correspondence_type,
-  correspondenceTypeDisplay: data.correspondence_type_display,
-  targetDays: data.target_days,
-  warningThresholdPercent: data.warning_threshold_percent,
-  criticalThresholdPercent: data.critical_threshold_percent,
-  division: data.division,
-  divisionDetail: data.division_detail,
-  isActive: data.is_active,
-  description: data.description,
-  createdAt: data.created_at,
-  updatedAt: data.updated_at,
+  id: asString(data.id),
+  name: asString(data.name),
+  priority: asOneOf(data.priority, ['urgent', 'high', 'medium', 'low'] as const, 'medium'),
+  priorityDisplay: asString(data.priority_display),
+  correspondenceType: asOneOf(
+    data.correspondence_type,
+    ['all', 'incoming', 'outgoing', 'internal', 'memo'] as const,
+    'all'
+  ),
+  correspondenceTypeDisplay: asString(data.correspondence_type_display),
+  targetDays: asNumber(data.target_days, 0),
+  warningThresholdPercent: asNumber(data.warning_threshold_percent, 75),
+  criticalThresholdPercent: asNumber(data.critical_threshold_percent, 90),
+  division: (() => {
+    if (data.division === null) return null;
+    if (isRecord(data.division)) return asString(data.division.id);
+    return asStringOrNull(data.division);
+  })(),
+  divisionDetail: data.division_detail ? asDivisionDetailOrNull(data.division_detail) : null,
+  isActive: asBoolean(data.is_active, true),
+  description: asString(data.description),
+  createdAt: asString(data.created_at),
+  updatedAt: asString(data.updated_at),
 });
 
 const mapEscalationRule = (data: Record<string, unknown>): EscalationRule => ({
-  id: data.id,
-  name: data.name,
-  description: data.description,
-  triggerType: data.trigger_type,
-  triggerTypeDisplay: data.trigger_type_display,
-  triggerConditions: data.trigger_conditions || {},
-  actionType: data.action_type,
-  actionTypeDisplay: data.action_type_display,
-  actionConfig: data.action_config || {},
-  emailSubjectTemplate: data.email_subject_template,
-  emailBodyTemplate: data.email_body_template,
-  isActive: data.is_active,
-  priorityOrder: data.priority_order,
-  cooldownHours: data.cooldown_hours,
-  divisions: data.divisions || [],
-  divisionsDetail: data.divisions_detail || [],
-  escalationCount: data.escalation_count || 0,
-  createdAt: data.created_at,
-  updatedAt: data.updated_at,
+  id: asString(data.id),
+  name: asString(data.name),
+  description: asString(data.description),
+  triggerType: asString(data.trigger_type),
+  triggerTypeDisplay: asString(data.trigger_type_display),
+  triggerConditions: isRecord(data.trigger_conditions) ? data.trigger_conditions : {},
+  actionType: asString(data.action_type),
+  actionTypeDisplay: asString(data.action_type_display),
+  actionConfig: isRecord(data.action_config) ? data.action_config : {},
+  emailSubjectTemplate: asString(data.email_subject_template),
+  emailBodyTemplate: asString(data.email_body_template),
+  isActive: asBoolean(data.is_active, true),
+  priorityOrder: asNumber(data.priority_order, 0),
+  cooldownHours: asNumber(data.cooldown_hours, 0),
+  divisions: asStringArray(data.divisions),
+  divisionsDetail: asDivisionsDetailArray(data.divisions_detail),
+  escalationCount: asNumber(data.escalation_count, 0),
+  createdAt: asString(data.created_at),
+  updatedAt: asString(data.updated_at),
 });
 
 const mapEscalation = (data: Record<string, unknown>): Escalation => ({
-  id: data.id,
-  correspondence: data.correspondence,
-  correspondenceReference: data.correspondence_reference,
-  correspondenceSubject: data.correspondence_subject,
-  rule: data.rule,
-  ruleName: data.rule_name,
-  triggeredAt: data.triggered_at,
-  triggerReason: data.trigger_reason,
-  actionTaken: data.action_taken,
-  actionDetails: data.action_details || {},
-  notifiedEmails: data.notified_emails || [],
-  status: data.status,
-  statusDisplay: data.status_display,
-  acknowledgedAt: data.acknowledged_at,
-  acknowledgedBy: data.acknowledged_by,
-  acknowledgedByName: data.acknowledged_by_name,
-  resolvedAt: data.resolved_at,
-  resolvedBy: data.resolved_by,
-  resolvedByName: data.resolved_by_name,
-  resolutionNotes: data.resolution_notes,
-  errorMessage: data.error_message,
-  createdAt: data.created_at,
-  updatedAt: data.updated_at,
+  id: asString(data.id),
+  correspondence: asString(data.correspondence),
+  correspondenceReference: asString(data.correspondence_reference),
+  correspondenceSubject: asString(data.correspondence_subject),
+  rule: data.rule === null ? null : asStringOrNull(data.rule),
+  ruleName: data.rule_name === null ? null : asStringOrNull(data.rule_name),
+  triggeredAt: asString(data.triggered_at),
+  triggerReason: asString(data.trigger_reason),
+  actionTaken: asString(data.action_taken),
+  actionDetails: isRecord(data.action_details) ? data.action_details : {},
+  notifiedEmails: asStringArray(data.notified_emails),
+  status: asOneOf(data.status, ['pending', 'resolved', 'failed', 'sent', 'acknowledged'] as const, 'pending'),
+  statusDisplay: asString(data.status_display),
+  acknowledgedAt: asStringOrNull(data.acknowledged_at),
+  acknowledgedBy: asStringOrNull(data.acknowledged_by),
+  acknowledgedByName: asStringOrNull(data.acknowledged_by_name),
+  resolvedAt: asStringOrNull(data.resolved_at),
+  resolvedBy: asStringOrNull(data.resolved_by),
+  resolvedByName: asStringOrNull(data.resolved_by_name),
+  resolutionNotes: asStringOrNull(data.resolution_notes),
+  errorMessage: asStringOrNull(data.error_message),
+  createdAt: asString(data.created_at),
+  updatedAt: asString(data.updated_at),
 });
 
 // =============================================================================
@@ -352,8 +402,9 @@ export const fetchSLAConfigurations = async (params?: {
     correspondence_type: params?.correspondenceType,
     is_active: params?.isActive,
   });
-  const response = await apiFetch<unknown[]>(`/analytics/sla-config/?${query}`);
-  return response.map(mapSLAConfiguration);
+  const response = await apiFetch<unknown>(`/analytics/sla-config/?${query}`);
+  const rows = Array.isArray(response) ? response : [];
+  return rows.filter(isRecord).map(mapSLAConfiguration);
 };
 
 export const fetchSLAConfiguration = async (id: string): Promise<SLAConfiguration> => {
@@ -409,10 +460,10 @@ export const fetchSLATargets = async (): Promise<SLATargets> => {
   try {
     const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
     return {
-      urgent: response.urgent ?? 48,   // 2 days = 48 hours
-      high: response.high ?? 72,        // 3 days = 72 hours
-      medium: response.medium ?? 120,   // 5 days = 120 hours
-      low: response.low ?? 168,         // 7 days = 168 hours
+      urgent: asNumber(response.urgent, 48), // 2 days = 48 hours
+      high: asNumber(response.high, 72), // 3 days = 72 hours
+      medium: asNumber(response.medium, 120), // 5 days = 120 hours
+      low: asNumber(response.low, 168), // 7 days = 168 hours
     };
   } catch {
     // Return defaults if API fails (in hours)
@@ -426,15 +477,17 @@ export const updateSLATargets = async (targets: SLATargets): Promise<{ updated: 
     body: JSON.stringify(targets),
   });
   return {
-    updated: response.updated.map(mapSLAConfiguration),
+    updated: (Array.isArray(response.updated) ? response.updated : []).filter(isRecord).map(mapSLAConfiguration),
   };
 };
 
 export const fetchSLAChoices = async (): Promise<SLAChoices> => {
   const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/choices/');
   return {
-    priorities: response.priorities || [],
-    correspondenceTypes: response.correspondence_types || [],
+    priorities: Array.isArray(response.priorities) ? (response.priorities as SLAChoices['priorities']) : [],
+    correspondenceTypes: Array.isArray(response.correspondence_types)
+      ? (response.correspondence_types as SLAChoices['correspondenceTypes'])
+      : [],
   };
 };
 
@@ -452,8 +505,9 @@ export const fetchEscalationRules = async (params?: {
     action_type: params?.actionType,
     is_active: params?.isActive,
   });
-  const response = await apiFetch<unknown[]>(`/analytics/escalation-rules/?${query}`);
-  return response.map(mapEscalationRule);
+  const response = await apiFetch<unknown>(`/analytics/escalation-rules/?${query}`);
+  const rows = Array.isArray(response) ? response : [];
+  return rows.filter(isRecord).map(mapEscalationRule);
 };
 
 export const fetchEscalationRule = async (id: string): Promise<EscalationRule> => {
@@ -522,19 +576,30 @@ export const testEscalationRule = async (id: string): Promise<EscalationRuleTest
   const response = await apiFetch<Record<string, unknown>>(`/analytics/escalation-rules/${id}/test/`, {
     method: 'POST',
   });
+  const matches = Array.isArray(response.matches)
+    ? response.matches
+        .filter(isRecord)
+        .map((m) => ({
+          id: asString(m.id),
+          reference: asString(m.reference),
+          subject: asString(m.subject),
+          priority: asString(m.priority),
+          division: m.division === null ? null : asStringOrNull(m.division),
+        }))
+    : [];
   return {
-    ruleId: response.rule_id,
-    ruleName: response.rule_name,
-    matchesCount: response.matches_count,
-    matches: response.matches,
+    ruleId: asString(response.rule_id),
+    ruleName: asString(response.rule_name),
+    matchesCount: asNumber(response.matches_count, matches.length),
+    matches,
   };
 };
 
 export const fetchEscalationRuleChoices = async (): Promise<EscalationRuleChoices> => {
   const response = await apiFetch<Record<string, unknown>>('/analytics/escalation-rules/choices/');
   return {
-    triggerTypes: response.trigger_types || [],
-    actionTypes: response.action_types || [],
+    triggerTypes: Array.isArray(response.trigger_types) ? (response.trigger_types as EscalationRuleChoices['triggerTypes']) : [],
+    actionTypes: Array.isArray(response.action_types) ? (response.action_types as EscalationRuleChoices['actionTypes']) : [],
   };
 };
 
@@ -548,8 +613,9 @@ export const fetchEscalations = async (params?: {
   correspondence?: string;
 }): Promise<Escalation[]> => {
   const query = buildQuery(params || {});
-  const response = await apiFetch<unknown[]>(`/analytics/escalations/?${query}`);
-  return response.map(mapEscalation);
+  const response = await apiFetch<unknown>(`/analytics/escalations/?${query}`);
+  const rows = Array.isArray(response) ? response : [];
+  return rows.filter(isRecord).map(mapEscalation);
 };
 
 export const fetchEscalation = async (id: string): Promise<Escalation> => {
@@ -575,13 +641,13 @@ export const resolveEscalation = async (id: string, resolutionNotes?: string): P
 export const fetchEscalationSummary = async (): Promise<EscalationSummary> => {
   const response = await apiFetch<Record<string, unknown>>('/analytics/escalations/summary/');
   return {
-    total: response.total,
-    pending: response.pending,
-    sent: response.sent,
-    acknowledged: response.acknowledged,
-    resolvedToday: response.resolved_today,
-    triggeredThisWeek: response.triggered_this_week,
-    active: response.active,
+    total: asNumber(response.total, 0),
+    pending: asNumber(response.pending, 0),
+    sent: asNumber(response.sent, 0),
+    acknowledged: asNumber(response.acknowledged, 0),
+    resolvedToday: asNumber(response.resolved_today, 0),
+    triggeredThisWeek: asNumber(response.triggered_this_week, 0),
+    active: asNumber(response.active, 0),
   };
 };
 
