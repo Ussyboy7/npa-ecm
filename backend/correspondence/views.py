@@ -2634,6 +2634,51 @@ class MinuteViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    @action(detail=False, methods=["get"], url_path="pending-approvals")
+    def pending_approvals(self, request):
+        """
+        Return pending approval minutes for the authenticated user.
+
+        Frontend expects: { results: [...] }
+        """
+        user = request.user
+        qs = (
+            Minute.objects.select_related("correspondence")
+            .filter(
+                to_user=user,
+                purpose="approval",
+                is_recalled=False,
+                correspondence__is_deleted=False,
+            )
+            .exclude(correspondence__status=Correspondence.Status.COMPLETED)
+            .order_by("-created_at")
+        )
+
+        page_size_raw = request.query_params.get("page_size")
+        if page_size_raw:
+            try:
+                page_size = max(1, min(int(page_size_raw), 1000))
+                qs = qs[:page_size]
+            except (TypeError, ValueError):
+                pass
+
+        results = [
+            {
+                "id": str(m.id),
+                "correspondenceId": str(m.correspondence_id),
+                "correspondence": {
+                    "id": str(m.correspondence_id),
+                    "subject": m.correspondence.subject,
+                    "reference_number": m.correspondence.reference_number,
+                },
+                "due_date": m.response_deadline.isoformat() if m.response_deadline else None,
+                "created_at": m.created_at.isoformat() if getattr(m, "created_at", None) else None,
+            }
+            for m in qs
+        ]
+
+        return Response({"results": results})
+
     def _find_office_recipient(self, office, preferred_user=None):
         """
         Find the appropriate recipient for an office.

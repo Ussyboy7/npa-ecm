@@ -416,3 +416,19 @@ class OfficeMembershipViewSet(viewsets.ModelViewSet):
     filterset_fields = ["office", "user", "assignment_role", "is_primary", "is_active"]
     search_fields = ["user__username", "user__first_name", "user__last_name", "office__name", "office__code"]
     ordering_fields = ["created_at", "starts_at", "ends_at"]
+
+    def _ensure_super_admin(self):
+        if not self.request.user.is_superuser:
+            raise PermissionDenied("Only super administrators may modify office memberships.")
+
+    def perform_create(self, serializer):
+        self._ensure_super_admin()
+        serializer.save()
+
+    def perform_update(self, serializer):
+        self._ensure_super_admin()
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._ensure_super_admin()
+        super().perform_destroy(instance)

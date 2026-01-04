@@ -136,6 +136,9 @@ interface OrganizationContextType {
   addAssignment: (assignment: Omit<AssistantAssignment, 'id'>) => Promise<AssistantAssignment>;
   updateAssignment: (id: string, updates: Partial<AssistantAssignment>) => Promise<AssistantAssignment>;
   deleteAssignment: (id: string) => Promise<void>;
+  addOfficeMembership: (membership: Omit<OfficeMembership, 'id' | 'officeName'>) => Promise<OfficeMembership>;
+  updateOfficeMembership: (id: string, updates: Partial<Omit<OfficeMembership, 'id' | 'officeName'>>) => Promise<OfficeMembership>;
+  deleteOfficeMembership: (id: string) => Promise<void>;
   resetOrganizationData: () => void;
   refreshOrganizationData: () => Promise<void>;
   isSyncing: boolean;
@@ -864,6 +867,66 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     []
   );
 
+  const applyOfficeMembershipUpdate = useCallback((membership: OfficeMembership) => {
+    setOfficeMemberships((prev) => upsertById(prev, membership));
+  }, []);
+
+  const addOfficeMembership = async (
+    membership: Omit<OfficeMembership, 'id' | 'officeName'>,
+  ): Promise<OfficeMembership> => {
+    const response = await apiFetch<Record<string, unknown>>('/organization/office-memberships/', {
+      method: 'POST',
+      body: JSON.stringify({
+        office: membership.officeId,
+        user: membership.userId,
+        assignment_role: membership.assignmentRole,
+        is_primary: membership.isPrimary,
+        can_register: membership.canRegister,
+        can_route: membership.canRoute,
+        can_approve: membership.canApprove,
+        starts_at: membership.startsAt,
+        ends_at: membership.endsAt,
+        is_active: membership.isActive,
+      }),
+    });
+    const created = mapApiOfficeMembership(response);
+    applyOfficeMembershipUpdate(created);
+    return created;
+  };
+
+  const updateOfficeMembership = async (
+    id: string,
+    updates: Partial<Omit<OfficeMembership, 'id' | 'officeName'>>,
+  ): Promise<OfficeMembership> => {
+    const response = await apiFetch<Record<string, unknown>>(`/organization/office-memberships/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(
+        cleanPayload({
+          office: updates.officeId,
+          user: updates.userId,
+          assignment_role: updates.assignmentRole,
+          is_primary: updates.isPrimary,
+          can_register: updates.canRegister,
+          can_route: updates.canRoute,
+          can_approve: updates.canApprove,
+          starts_at: updates.startsAt,
+          ends_at: updates.endsAt,
+          is_active: updates.isActive,
+        }),
+      ),
+    });
+    const updated = mapApiOfficeMembership(response);
+    applyOfficeMembershipUpdate(updated);
+    return updated;
+  };
+
+  const deleteOfficeMembership = async (id: string): Promise<void> => {
+    await apiFetch(`/organization/office-memberships/${id}/`, {
+      method: 'DELETE',
+    });
+    setOfficeMemberships((prev) => prev.filter((m) => m.id !== id));
+  };
+
   const buildDelegationPayload = (assignment: Omit<AssistantAssignment, 'id'> | Partial<AssistantAssignment>) => {
     const permissions = ('permissions' in assignment && assignment.permissions) ? assignment.permissions : [];
     const type = 'type' in assignment ? assignment.type : undefined;
@@ -1008,6 +1071,9 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         addAssignment,
         updateAssignment,
         deleteAssignment,
+        addOfficeMembership,
+        updateOfficeMembership,
+        deleteOfficeMembership,
         resetOrganizationData,
         refreshOrganizationData,
         isSyncing,

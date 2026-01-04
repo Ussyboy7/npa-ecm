@@ -19,6 +19,8 @@ import { Separator } from "@/components/ui/separator";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { GRADE_LEVELS, type User } from "@/lib/npa-structure";
 import { toast } from "@/hooks/use-toast";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { Plus, Trash2 } from "lucide-react";
 
 interface UserEditDialogProps {
   open: boolean;
@@ -53,10 +55,42 @@ const EMPTY_VALUE = "__none";
 const GRADE_LEVEL_OPTIONS = GRADE_LEVELS.map((grade) => ({ code: grade.code, label: grade.name }));
 
 export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps) => {
-  const { directorates, divisions, departments, users, updateUser, addUser, roles } = useOrganization();
+  const {
+    directorates,
+    divisions,
+    departments,
+    users,
+    updateUser,
+    addUser,
+    roles,
+    offices,
+    officeMemberships,
+    addOfficeMembership,
+    updateOfficeMembership,
+    deleteOfficeMembership,
+  } = useOrganization();
+  const { currentUser } = useCurrentUser();
   const [formData, setFormData] = useState<FormState & { username?: string; firstName?: string; lastName?: string; password?: string }>(defaultState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [isManagingOffices, setIsManagingOffices] = useState(false);
+  const [newMembership, setNewMembership] = useState<{
+    officeId: string;
+    assignmentRole: string;
+    isPrimary: boolean;
+    isActive: boolean;
+    canRegister: boolean;
+    canRoute: boolean;
+    canApprove: boolean;
+  }>({
+    officeId: "",
+    assignmentRole: "principal",
+    isPrimary: true,
+    isActive: true,
+    canRegister: true,
+    canRoute: true,
+    canApprove: true,
+  });
 
   useEffect(() => {
     if (user && open) {
@@ -119,6 +153,20 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
   );
 
   const selectedUserName = user?.name ?? "";
+
+  const isSuperAdmin = Boolean(currentUser?.isSuperuser || currentUser?.systemRole === "Super Admin");
+
+  const userMemberships = useMemo(() => {
+    if (!user) return [];
+    return officeMemberships.filter((m) => String(m.userId) === String(user.id));
+  }, [officeMemberships, user?.id]);
+
+  const officeOptions = useMemo(() => {
+    return offices
+      .filter((o) => o.isActive)
+      .map((o) => ({ value: o.id, label: `${o.name} (${o.code})` }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [offices]);
 
   // Real-time duplicate checks
   const emailDuplicate = useMemo(() => {
@@ -629,6 +677,333 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
               </div>
             </div>
           </div>
+
+          {/* Office Memberships (Edit Mode only) */}
+          {user && (
+            <>
+              <Separator />
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold mb-1">Office Memberships</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Office Inbox/Outbox and Office Cases visibility depends on having an active office membership.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsManagingOffices((v) => !v)}
+                    disabled={!isSuperAdmin}
+                  >
+                    {isManagingOffices ? "Done" : "Manage"}
+                  </Button>
+                </div>
+
+                {!isSuperAdmin && (
+                  <p className="text-xs text-muted-foreground">
+                    Only Super Admin can edit office memberships.
+                  </p>
+                )}
+
+                {userMemberships.length === 0 ? (
+                  <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                    No office memberships assigned.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {userMemberships.map((m) => (
+                      <div key={m.id} className="rounded-md border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">
+                              {m.officeName ?? offices.find((o) => o.id === m.officeId)?.name ?? "Office"}
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              <Badge variant="secondary" className="text-xs">
+                                {m.assignmentRole}
+                              </Badge>
+                              {m.isPrimary && (
+                                <Badge variant="outline" className="text-xs">
+                                  Primary
+                                </Badge>
+                              )}
+                              {!m.isActive && (
+                                <Badge variant="destructive" className="text-xs">
+                                  Inactive
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+
+                          {isManagingOffices && isSuperAdmin && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await deleteOfficeMembership(m.id);
+                                  toast({ title: "Office membership removed" });
+                                } catch (error: unknown) {
+                                  toast({
+                                    title: "Remove failed",
+                                    description: error instanceof Error ? error.message : "Unable to remove membership",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+
+                        {isManagingOffices && isSuperAdmin && (
+                          <div className="grid grid-cols-2 gap-3 mt-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Assignment Role</Label>
+                              <Select
+                                value={m.assignmentRole}
+                                onValueChange={(value) =>
+                                  void updateOfficeMembership(m.id, { assignmentRole: value }).catch((error: unknown) => {
+                                    toast({
+                                      title: "Update failed",
+                                      description: error instanceof Error ? error.message : "Unable to update membership",
+                                      variant: "destructive",
+                                    });
+                                  })
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="principal">principal</SelectItem>
+                                  <SelectItem value="acting">acting</SelectItem>
+                                  <SelectItem value="staff">staff</SelectItem>
+                                  <SelectItem value="secretariat">secretariat</SelectItem>
+                                  <SelectItem value="registry">registry</SelectItem>
+                                  <SelectItem value="support">support</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs">Primary</Label>
+                                <Switch
+                                  checked={m.isPrimary}
+                                  onCheckedChange={(checked) =>
+                                    void updateOfficeMembership(m.id, { isPrimary: checked }).catch((error: unknown) => {
+                                      toast({
+                                        title: "Update failed",
+                                        description: error instanceof Error ? error.message : "Unable to update membership",
+                                        variant: "destructive",
+                                      });
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs">Active</Label>
+                                <Switch
+                                  checked={m.isActive}
+                                  onCheckedChange={(checked) =>
+                                    void updateOfficeMembership(m.id, { isActive: checked }).catch((error: unknown) => {
+                                      toast({
+                                        title: "Update failed",
+                                        description: error instanceof Error ? error.message : "Unable to update membership",
+                                        variant: "destructive",
+                                      });
+                                    })
+                                  }
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs">Can Register</Label>
+                                <Switch
+                                  checked={m.canRegister}
+                                  onCheckedChange={(checked) =>
+                                    void updateOfficeMembership(m.id, { canRegister: checked }).catch((error: unknown) => {
+                                      toast({
+                                        title: "Update failed",
+                                        description: error instanceof Error ? error.message : "Unable to update membership",
+                                        variant: "destructive",
+                                      });
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs">Can Route</Label>
+                                <Switch
+                                  checked={m.canRoute}
+                                  onCheckedChange={(checked) =>
+                                    void updateOfficeMembership(m.id, { canRoute: checked }).catch((error: unknown) => {
+                                      toast({
+                                        title: "Update failed",
+                                        description: error instanceof Error ? error.message : "Unable to update membership",
+                                        variant: "destructive",
+                                      });
+                                    })
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <Label className="text-xs">Can Approve</Label>
+                                <Switch
+                                  checked={m.canApprove}
+                                  onCheckedChange={(checked) =>
+                                    void updateOfficeMembership(m.id, { canApprove: checked }).catch((error: unknown) => {
+                                      toast({
+                                        title: "Update failed",
+                                        description: error instanceof Error ? error.message : "Unable to update membership",
+                                        variant: "destructive",
+                                      });
+                                    })
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {isManagingOffices && isSuperAdmin && (
+                  <div className="rounded-md border p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium text-sm">Add Office Membership</div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={async () => {
+                          if (!newMembership.officeId) {
+                            toast({ title: "Select an office first", variant: "destructive" });
+                            return;
+                          }
+                          setIsSubmitting(true);
+                          try {
+                            await addOfficeMembership({
+                              officeId: newMembership.officeId,
+                              userId: user.id,
+                              assignmentRole: newMembership.assignmentRole,
+                              isPrimary: newMembership.isPrimary,
+                              isActive: newMembership.isActive,
+                              canRegister: newMembership.canRegister,
+                              canRoute: newMembership.canRoute,
+                              canApprove: newMembership.canApprove,
+                            });
+                            toast({ title: "Office membership added" });
+                            setNewMembership((prev) => ({ ...prev, officeId: "" }));
+                          } catch (error: unknown) {
+                            toast({
+                              title: "Add failed",
+                              description: error instanceof Error ? error.message : "Unable to add membership",
+                              variant: "destructive",
+                            });
+                          } finally {
+                            setIsSubmitting(false);
+                          }
+                        }}
+                        disabled={isSubmitting}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Office</Label>
+                        <Select
+                          value={newMembership.officeId}
+                          onValueChange={(value) => setNewMembership((prev) => ({ ...prev, officeId: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select office" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {officeOptions.map((o) => (
+                              <SelectItem key={o.value} value={o.value}>
+                                {o.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs">Assignment Role</Label>
+                        <Select
+                          value={newMembership.assignmentRole}
+                          onValueChange={(value) => setNewMembership((prev) => ({ ...prev, assignmentRole: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="principal">principal</SelectItem>
+                            <SelectItem value="acting">acting</SelectItem>
+                            <SelectItem value="staff">staff</SelectItem>
+                            <SelectItem value="secretariat">secretariat</SelectItem>
+                            <SelectItem value="registry">registry</SelectItem>
+                            <SelectItem value="support">support</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                        <Label className="text-xs">Primary</Label>
+                        <Switch
+                          checked={newMembership.isPrimary}
+                          onCheckedChange={(checked) => setNewMembership((prev) => ({ ...prev, isPrimary: checked }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                        <Label className="text-xs">Active</Label>
+                        <Switch
+                          checked={newMembership.isActive}
+                          onCheckedChange={(checked) => setNewMembership((prev) => ({ ...prev, isActive: checked }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                        <Label className="text-xs">Can Register</Label>
+                        <Switch
+                          checked={newMembership.canRegister}
+                          onCheckedChange={(checked) => setNewMembership((prev) => ({ ...prev, canRegister: checked }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                        <Label className="text-xs">Can Route</Label>
+                        <Switch
+                          checked={newMembership.canRoute}
+                          onCheckedChange={(checked) => setNewMembership((prev) => ({ ...prev, canRoute: checked }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+                        <Label className="text-xs">Can Approve</Label>
+                        <Switch
+                          checked={newMembership.canApprove}
+                          onCheckedChange={(checked) => setNewMembership((prev) => ({ ...prev, canApprove: checked }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
