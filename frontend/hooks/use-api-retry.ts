@@ -39,6 +39,8 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
 export const useApiRetry = (options: RetryOptions = {}) => {
   const config = { ...DEFAULT_OPTIONS, ...options };
 
+  const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
   const fetchWithRetry = useCallback(
     async <T>(
       fetchFn: () => Promise<T>,
@@ -52,11 +54,28 @@ export const useApiRetry = (options: RetryOptions = {}) => {
           throw error;
         }
 
+        const status =
+          isRecord(error) && typeof error.status === 'number'
+            ? error.status
+            : undefined;
+        const errorName =
+          error instanceof Error
+            ? error.name
+            : isRecord(error) && typeof error.name === 'string'
+              ? error.name
+              : undefined;
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : isRecord(error) && typeof error.message === 'string'
+              ? error.message
+              : undefined;
+
         const isRetryable =
           attempt < config.maxRetries &&
-          (error?.status
-            ? config.retryableStatuses.includes(error.status)
-            : error?.name !== 'AbortError' && !error?.message?.includes('401'));
+          (typeof status === 'number'
+            ? config.retryableStatuses.includes(status)
+            : errorName !== 'AbortError' && !errorMessage?.includes('401'));
 
         if (!isRetryable) {
           throw error;

@@ -87,7 +87,7 @@ export function useSidebarCounts() {
         console.error('[useSidebarCounts] Error fetching counts:', err);
         setError(errorMessage);
         // Keep showing cached counts on error
-        setCounts(cachedCounts);
+        setCounts(cached ? cached.counts : DEFAULT_COUNTS);
       }
     } finally {
       if (!signal.aborted) {
@@ -150,8 +150,8 @@ export function useSidebarCounts() {
         globalSubscribers.forEach(sub => sub(response));
         
         return response;
-      } catch (err: Record<string, unknown>) {
-        if (err.name === 'AbortError') return DEFAULT_COUNTS;
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') return DEFAULT_COUNTS;
         
         // On error, use cached value if available
         if (cached) {

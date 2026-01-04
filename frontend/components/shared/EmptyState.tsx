@@ -5,8 +5,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+type EmptyStateIconName = 'file' | 'search' | 'inbox';
+
 interface EmptyStateProps {
-  icon?: 'file' | 'search' | 'inbox' | React.ReactNode;
+  icon?: EmptyStateIconName | React.ReactNode;
   title?: string;
   message?: string;
   actionLabel?: string;
@@ -19,7 +21,7 @@ const iconMap = {
   file: FileX,
   search: Search,
   inbox: Inbox,
-};
+} satisfies Record<EmptyStateIconName, typeof FileX>;
 
 export const EmptyState = ({
   icon = 'file',
@@ -30,8 +32,9 @@ export const EmptyState = ({
   variant = 'default',
   className,
 }: EmptyStateProps) => {
-  const IconComponent = typeof icon === 'string' ? iconMap[icon] : null;
-  const CustomIcon = typeof icon !== 'string' ? icon : null;
+  const isNamedIcon = typeof icon === 'string' && icon in iconMap;
+  const IconComponent = isNamedIcon ? iconMap[icon as EmptyStateIconName] : null;
+  const CustomIcon = isNamedIcon ? null : icon;
 
   const variantClasses = {
     default: 'border-border bg-card',
