@@ -441,6 +441,5 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
 
 DigitalSealPreview.displayName = "DigitalSealPreview";
 
-// Export both named and default for compatibility
-export { DigitalSealPreview };
+// Export default for compatibility
 export default DigitalSealPreview;

@@ -156,8 +156,8 @@ export function TwoFactorVerificationModal({
       
       // Focus input
       setTimeout(() => emailInputRef.current?.focus(), 100);
-    } catch (err: Record<string, unknown>) {
-      setError(err.message || "Failed to send verification code");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to send verification code");
     } finally {
       setSending(false);
     }
@@ -192,8 +192,8 @@ export function TwoFactorVerificationModal({
         setRemainingAttempts(response.remaining_attempts ?? null);
         setOtpCode("");
       }
-    } catch (err: Record<string, unknown>) {
-      setError(err.message || "Verification failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
       setVerifying(false);
     }
@@ -233,8 +233,8 @@ export function TwoFactorVerificationModal({
         setError(response.error || "Invalid code");
         setTotpCode("");
       }
-    } catch (err: Record<string, unknown>) {
-      setError(err.message || "Verification failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Verification failed");
       setTotpCode("");
     } finally {
       setVerifying(false);
@@ -256,8 +256,8 @@ export function TwoFactorVerificationModal({
       
       setSetupData(response);
       setShowSetup(true);
-    } catch (err: Record<string, unknown>) {
-      setError(err.message || "Failed to setup authenticator");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to setup authenticator");
     } finally {
       setSending(false);
     }
