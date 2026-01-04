@@ -43,6 +43,8 @@ import { fetchWorkspaces, type DocumentWorkspace } from "@/lib/dms-storage";
 import { filterUsersBySearch } from "@/lib/routing-utils";
 import { CorrespondenceRoutingView } from "./CorrespondenceRoutingView";
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 interface ShareDocumentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -158,17 +160,21 @@ export const ShareDocumentDialog = ({
     const fetchPermissions = async () => {
       try {
         if (!hasTokens()) return;
-        const payload = await apiFetch<Record<string, unknown>>(`/dms/permissions/?document=${document.id}`);
-        const results = Array.isArray(payload) ? payload : (payload?.results || []);
-        const permissions: DocumentPermission[] = results.map((p: Record<string, unknown>) => ({
-          id: String(p.id),
-          access: p.access || 'read',
-          divisionIds: (p.division_ids || []).map(String),
-          departmentIds: (p.department_ids || []).map(String),
+        const payload = await apiFetch<unknown>(`/dms/permissions/?document=${document.id}`);
+        const rows = Array.isArray(payload)
+          ? payload
+          : isRecord(payload) && Array.isArray(payload.results)
+            ? payload.results
+            : [];
+        const permissions: DocumentPermission[] = rows.filter(isRecord).map((p) => ({
+          id: String(p.id ?? ''),
+          access: ((typeof p.access === 'string' ? p.access : 'read') as PermissionAccess) ?? 'read',
+          divisionIds: Array.isArray(p.division_ids) ? p.division_ids.map(String) : [],
+          departmentIds: Array.isArray(p.department_ids) ? p.department_ids.map(String) : [],
           gradeLevels: Array.isArray(p.grade_levels) ? p.grade_levels.map(String) : [],
-          userIds: (p.user_ids || []).map(String),
-          createdAt: p.created_at,
-          updatedAt: p.updated_at,
+          userIds: Array.isArray(p.user_ids) ? p.user_ids.map(String) : [],
+          createdAt: typeof p.created_at === 'string' ? p.created_at : undefined,
+          updatedAt: typeof p.updated_at === 'string' ? p.updated_at : undefined,
         }));
         setExistingPermissions(permissions);
       } catch (error: unknown) {
@@ -1087,17 +1093,21 @@ export const ShareDocumentDialog = ({
       });
       
       // Refresh permissions list
-      const payload = await apiFetch<Record<string, unknown>>(`/dms/permissions/?document=${document.id}`);
-      const results = Array.isArray(payload) ? payload : (payload?.results || []);
-      const permissions: DocumentPermission[] = results.map((p: Record<string, unknown>) => ({
-        id: String(p.id),
-        access: p.access || 'read',
-        divisionIds: (p.division_ids || []).map(String),
-        departmentIds: (p.department_ids || []).map(String),
+      const payload = await apiFetch<unknown>(`/dms/permissions/?document=${document.id}`);
+      const rows = Array.isArray(payload)
+        ? payload
+        : isRecord(payload) && Array.isArray(payload.results)
+          ? payload.results
+          : [];
+      const permissions: DocumentPermission[] = rows.filter(isRecord).map((p) => ({
+        id: String(p.id ?? ''),
+        access: ((typeof p.access === 'string' ? p.access : 'read') as PermissionAccess) ?? 'read',
+        divisionIds: Array.isArray(p.division_ids) ? p.division_ids.map(String) : [],
+        departmentIds: Array.isArray(p.department_ids) ? p.department_ids.map(String) : [],
         gradeLevels: Array.isArray(p.grade_levels) ? p.grade_levels.map(String) : [],
-        userIds: (p.user_ids || []).map(String),
-        createdAt: p.created_at,
-        updatedAt: p.updated_at,
+        userIds: Array.isArray(p.user_ids) ? p.user_ids.map(String) : [],
+        createdAt: typeof p.created_at === 'string' ? p.created_at : undefined,
+        updatedAt: typeof p.updated_at === 'string' ? p.updated_at : undefined,
       }));
       setExistingPermissions(permissions);
       
@@ -1130,17 +1140,21 @@ export const ShareDocumentDialog = ({
       });
       
       // Refresh permissions list
-      const payload = await apiFetch<Record<string, unknown>>(`/dms/permissions/?document=${document.id}`);
-      const results = Array.isArray(payload) ? payload : (payload?.results || []);
-      const permissions: DocumentPermission[] = results.map((p: Record<string, unknown>) => ({
-        id: String(p.id),
-        access: p.access || 'read',
-        divisionIds: (p.division_ids || []).map(String),
-        departmentIds: (p.department_ids || []).map(String),
+      const payload = await apiFetch<unknown>(`/dms/permissions/?document=${document.id}`);
+      const rows = Array.isArray(payload)
+        ? payload
+        : isRecord(payload) && Array.isArray(payload.results)
+          ? payload.results
+          : [];
+      const permissions: DocumentPermission[] = rows.filter(isRecord).map((p) => ({
+        id: String(p.id ?? ''),
+        access: ((typeof p.access === 'string' ? p.access : 'read') as PermissionAccess) ?? 'read',
+        divisionIds: Array.isArray(p.division_ids) ? p.division_ids.map(String) : [],
+        departmentIds: Array.isArray(p.department_ids) ? p.department_ids.map(String) : [],
         gradeLevels: Array.isArray(p.grade_levels) ? p.grade_levels.map(String) : [],
-        userIds: (p.user_ids || []).map(String),
-        createdAt: p.created_at,
-        updatedAt: p.updated_at,
+        userIds: Array.isArray(p.user_ids) ? p.user_ids.map(String) : [],
+        createdAt: typeof p.created_at === 'string' ? p.created_at : undefined,
+        updatedAt: typeof p.updated_at === 'string' ? p.updated_at : undefined,
       }));
       setExistingPermissions(permissions);
       
@@ -2341,7 +2355,12 @@ export const ShareDocumentDialog = ({
                               <Label className="text-xs text-muted-foreground flex items-center gap-1">
                                 <FileText className="h-3 w-3" /> Purpose
                               </Label>
-                              <Select value={correspondencePurpose} onValueChange={(v: Record<string, unknown>) => setCorrespondencePurpose(v)}>
+                              <Select
+                                value={correspondencePurpose}
+                                onValueChange={(v: string) =>
+                                  setCorrespondencePurpose(v as 'action' | 'approval' | 'information' | 'comment')
+                                }
+                              >
                                 <SelectTrigger className="h-9">
                                   <SelectValue />
                                 </SelectTrigger>

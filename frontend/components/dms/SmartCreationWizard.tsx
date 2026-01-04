@@ -69,12 +69,6 @@ export const SmartCreationWizard = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   
-  // Filter departments based on selected division
-  const filteredDepartments = useMemo(() => {
-    if (!defaultDivisionId) return activeDepartments;
-    return activeDepartments.filter((dept) => dept.divisionId === defaultDivisionId);
-  }, [defaultDivisionId, activeDepartments]);
-  
   // Project metadata
   const [projectName, setProjectName] = useState('');
   const [projectDescription, setProjectDescription] = useState('');
@@ -89,6 +83,12 @@ export const SmartCreationWizard = ({
   const [defaultTags, setDefaultTags] = useState('');
   const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<string[]>([]);
   const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
+  
+  // Filter departments based on selected division
+  const filteredDepartments = useMemo(() => {
+    if (!defaultDivisionId) return activeDepartments;
+    return activeDepartments.filter((dept) => dept.divisionId === defaultDivisionId);
+  }, [defaultDivisionId, activeDepartments]);
   
   // Clear department when division changes
   useEffect(() => {
