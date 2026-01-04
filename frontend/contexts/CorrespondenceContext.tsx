@@ -1,6 +1,6 @@
 import { logError, logInfo } from '@/lib/client-logger';
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
-import { Correspondence, Minute } from '@/lib/npa-structure';
+import { Correspondence, Minute, MinuteSignaturePayload } from '@/lib/npa-structure';
 import {
   loadCorrespondence,
   loadMinutes,
@@ -26,13 +26,41 @@ interface CorrespondenceContextType {
 
 const CorrespondenceContext = createContext<CorrespondenceContextType | undefined>(undefined);
 
-const unwrapResults = <T,>(payload: unknown): T[] => {
-  if (Array.isArray(payload)) return payload as T[];
-  if (payload && typeof payload === 'object' && 'results' in payload) {
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const unwrapResults = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) return payload;
+  if (isRecord(payload) && 'results' in payload) {
     const results = (payload as { results?: unknown }).results;
-    if (Array.isArray(results)) return results as T[];
+    if (Array.isArray(results)) return results;
   }
   return [];
+};
+
+const asString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+};
+
+const asStringOptional = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'string') return value;
+  return String(value);
+};
+
+const asBoolean = (value: unknown, fallback = false): boolean => (typeof value === 'boolean' ? value : fallback);
+
+const asNumberOptional = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
+
+const asOneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => {
+  if (typeof value !== 'string') return fallback;
+  return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+};
+
+const asOneOfOptional = <T extends string>(value: unknown, allowed: readonly T[]): T | undefined => {
+  if (typeof value !== 'string') return undefined;
+  return (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
 };
 
 const normalizeId = (value: unknown): string | undefined => {
@@ -43,250 +71,322 @@ const normalizeId = (value: unknown): string | undefined => {
   return String(value);
 };
 
-export const mapApiCorrespondence = (item: Record<string, unknown>): Correspondence => ({
-  id: String(item.id as string),
-  referenceNumber: item.reference_number ?? '',
-  subject: item.subject ?? '',
-  documentType: item.document_type ?? 'letter',
-  senderReference: item.sender_reference ?? '',
-  letterDate: item.letter_date ?? undefined,
-  dispatchDate: item.dispatch_date ?? undefined,
-  source: item.source ?? 'internal',
-  receivedDate: item.received_date ?? '',
-  recipientName: item.recipient_name ?? '',
-  remarks: item.remarks ?? '',
-  completedAt: item.completed_at ?? undefined,
-  senderName: item.sender_name ?? '',
-  senderOrganization: item.sender_organization ?? '',
-  status: item.status as string ?? 'pending',
-  priority: item.priority ?? 'medium',
-  divisionId: normalizeId(item.division ?? item.division_id),
-  divisionName: item.division_name ?? (typeof item.division === 'object' && item.division ? item.division.name : undefined),
-  departmentId: normalizeId(item.department ?? item.department_id),
-  departmentName: item.department_name ?? (typeof item.department === 'object' && item.department ? item.department.name : undefined),
-  currentApproverId: normalizeId(item.current_approver ?? item.current_approver_id),
-  createdById: normalizeId(item.created_by ?? item.created_by_id),
-  currentApproverName:
-    typeof item.current_approver === 'object' && item.current_approver
-      ? (() => {
-          const fullName = `${item.current_approver.first_name ?? ''} ${item.current_approver.last_name ?? ''}`.trim();
-          if (fullName.length > 0) return fullName;
-          return item.current_approver.username ?? '';
-        })()
-      : undefined,
-  createdByName:
-    typeof item.created_by === 'object' && item.created_by
-      ? (() => {
-          const fullName = `${item.created_by.first_name ?? ''} ${item.created_by.last_name ?? ''}`.trim();
-          if (fullName.length > 0) return fullName;
-          return item.created_by.username ?? '';
-        })()
-      : undefined,
-  direction: item.direction ?? 'upward',
-  owningOfficeId: normalizeId(item.owning_office ?? item.owning_office_id),
-  owningOfficeName:
-    item.owning_office_name ??
-    (typeof item.owning_office === 'object' && item.owning_office ? item.owning_office.name : undefined),
-  currentOfficeId: normalizeId(item.current_office ?? item.current_office_id),
-  currentOfficeName:
-    item.current_office_name ??
-    (typeof item.current_office === 'object' && item.current_office ? item.current_office.name : undefined),
-  attachments: Array.isArray(item.attachments)
-    ? item.attachments.map((attachment: Record<string, unknown>) => ({
-        id: normalizeId(attachment.id) ?? `${item.id as string}-att-${Math.random().toString(36).slice(2)}`,
-        fileName: attachment.file_name ?? 'Attachment',
-        fileType: attachment.file_type ?? undefined,
-        fileSize: typeof attachment.file_size === 'number' ? attachment.file_size : undefined,
-        fileUrl: attachment.file_url ?? undefined,
-        createdAt: attachment.created_at ?? undefined,
-        updatedAt: attachment.updated_at ?? undefined,
-      }))
-    : [],
-  distribution: Array.isArray(item.distribution)
-    ? item.distribution.map((recipient: Record<string, unknown>) => {
-        const recipientType = recipient.recipient_type ?? 'division';
-        return {
-          id: normalizeId(recipient.id) ?? `${item.id as string}-dist-${Math.random().toString(36).slice(2)}`,
-          type:
-            recipientType === 'directorate'
-              ? 'directorate'
-              : recipientType === 'department'
-              ? 'department'
-              : recipientType === 'user'
-              ? 'user'
-              : 'division',
-          userId: recipientType === 'user' ? normalizeId(recipient.user ?? recipient.user_id) : undefined,
-          directorateId: normalizeId(recipient.directorate),
-          divisionId: normalizeId(recipient.division),
-          departmentId: normalizeId(recipient.department),
-          name:
-            recipient.user_name ??
-            recipient.directorate_name ??
-            recipient.division_name ??
-            recipient.department_name ??
-            undefined,
-          addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
-          addedByName:
-            typeof recipient.added_by === 'object' && recipient.added_by
+export const mapApiCorrespondence = (item: Record<string, unknown>): Correspondence => {
+  const currentApprover = isRecord(item.current_approver) ? item.current_approver : undefined;
+  const createdBy = isRecord(item.created_by) ? item.created_by : undefined;
+  const division = isRecord(item.division) ? item.division : undefined;
+  const department = isRecord(item.department) ? item.department : undefined;
+  const owningOffice = isRecord(item.owning_office) ? item.owning_office : undefined;
+  const currentOffice = isRecord(item.current_office) ? item.current_office : undefined;
+  const completionPackage = isRecord(item.completion_package) ? item.completion_package : undefined;
+  const routingMetadata = isRecord(item.routing_metadata) ? item.routing_metadata : undefined;
+
+  const currentApproverName = currentApprover
+    ? (() => {
+        const fullName = `${asString(currentApprover.first_name, '')} ${asString(currentApprover.last_name, '')}`.trim();
+        if (fullName.length > 0) return fullName;
+        return asStringOptional(currentApprover.username);
+      })()
+    : undefined;
+
+  const createdByName = createdBy
+    ? (() => {
+        const fullName = `${asString(createdBy.first_name, '')} ${asString(createdBy.last_name, '')}`.trim();
+        if (fullName.length > 0) return fullName;
+        return asStringOptional(createdBy.username);
+      })()
+    : undefined;
+
+  const attachments = Array.isArray(item.attachments)
+    ? item.attachments
+        .filter(isRecord)
+        .map((attachment) => ({
+          id: normalizeId(attachment.id) ?? `${asString(item.id, 'cor')}-att-${Math.random().toString(36).slice(2)}`,
+          fileName: asString(attachment.file_name, 'Attachment'),
+          fileType: asStringOptional(attachment.file_type),
+          fileSize: asNumberOptional(attachment.file_size),
+          fileUrl: asStringOptional(attachment.file_url),
+          createdAt: asStringOptional(attachment.created_at),
+          updatedAt: asStringOptional(attachment.updated_at),
+        }))
+    : [];
+
+  const distribution = Array.isArray(item.distribution)
+    ? item.distribution
+        .filter(isRecord)
+        .map((recipient) => {
+          const recipientTypeRaw = asString(recipient.recipient_type, 'division');
+          const recipientType = asOneOf(recipientTypeRaw, ['directorate', 'department', 'user', 'division'] as const, 'division');
+          const addedBy = isRecord(recipient.added_by) ? recipient.added_by : undefined;
+
+          return {
+            id: normalizeId(recipient.id) ?? `${asString(item.id, 'cor')}-dist-${Math.random().toString(36).slice(2)}`,
+            type: recipientType,
+            userId: recipientType === 'user' ? normalizeId(recipient.user ?? recipient.user_id) : undefined,
+            directorateId: normalizeId(recipient.directorate),
+            divisionId: normalizeId(recipient.division),
+            departmentId: normalizeId(recipient.department),
+            name:
+              asStringOptional(recipient.user_name) ??
+              asStringOptional(recipient.directorate_name) ??
+              asStringOptional(recipient.division_name) ??
+              asStringOptional(recipient.department_name) ??
+              undefined,
+            addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
+            addedByName: addedBy
               ? (() => {
-                  const fullName = `${recipient.added_by.first_name ?? ''} ${recipient.added_by.last_name ?? ''}`.trim();
+                  const fullName = `${asString(addedBy.first_name, '')} ${asString(addedBy.last_name, '')}`.trim();
                   if (fullName.length > 0) return fullName;
-                  return recipient.added_by.username ?? undefined;
+                  return asStringOptional(addedBy.username);
                 })()
               : undefined,
-          addedAt: recipient.created_at ?? undefined,
-          purpose: recipient.purpose ?? undefined,
-        };
-      })
-    : [],
-  archiveLevel: item.archive_level ?? undefined,
-  linkedDocumentIds: Array.isArray(item.linked_documents)
-    ? item.linked_documents.map((doc: Record<string, unknown>) => (typeof doc === 'string' ? doc : doc.id))
-    : [],
-  createdAt: item.created_at ?? undefined,
-  updatedAt: item.updated_at ?? undefined,
-  completionPackage: item.completion_package
-    ? {
-        documentId: item.completion_package.document_id,
-        title: item.completion_package.title,
-        fileUrl: item.completion_package.file_url,
-        generatedAt: item.completion_package.generated_at,
-      }
-    : null,
-  completionSummaryGeneratedAt: item.completion_summary_generated_at ?? undefined,
-  // Routing concept metadata
-  flowType: item.flow_type ?? undefined,
-  isInward: item.is_inward ?? undefined,
-  isOutward: item.is_outward ?? undefined,
-  isInternal: item.is_internal ?? undefined,
-  isExternal: item.is_external ?? undefined,
-  routingMetadata: item.routing_metadata ?? undefined,
-  // Parallel routing fields
-  workflowState: item.workflow_state ?? undefined,
-  activeParallelBranches: typeof item.active_parallel_branches === 'number' ? item.active_parallel_branches : undefined,
-  completedParallelBranches: typeof item.completed_parallel_branches === 'number' ? item.completed_parallel_branches : undefined,
-});
+            addedAt: asStringOptional(recipient.created_at),
+            purpose: asOneOfOptional(recipient.purpose, ['information', 'action'] as const),
+          };
+        })
+    : [];
+
+  const linkedDocumentIds = Array.isArray(item.linked_documents)
+    ? item.linked_documents.map((doc) => normalizeId(doc)).filter((id): id is string => Boolean(id))
+    : [];
+
+  const flowType = asOneOfOptional(
+    item.flow_type,
+    ['inward-internal', 'inward-external', 'outward-internal', 'outward-external'] as const
+  );
+
+  const workflowState = asOneOfOptional(item.workflow_state, ['sequential', 'parallel', 'merged', 'waiting_merge'] as const);
+
+  const routingMetadataTyped =
+    routingMetadata &&
+    typeof routingMetadata.flowType === 'string' &&
+    typeof routingMetadata.isInward === 'boolean' &&
+    typeof routingMetadata.isOutward === 'boolean' &&
+    typeof routingMetadata.isInternal === 'boolean' &&
+    typeof routingMetadata.isExternal === 'boolean' &&
+    typeof routingMetadata.should_appear_in_office_inbox === 'boolean' &&
+    typeof routingMetadata.should_appear_in_office_outbox === 'boolean' &&
+    typeof routingMetadata.description === 'string'
+      ? {
+          flowType: routingMetadata.flowType,
+          isInward: routingMetadata.isInward,
+          isOutward: routingMetadata.isOutward,
+          isInternal: routingMetadata.isInternal,
+          isExternal: routingMetadata.isExternal,
+          should_appear_in_office_inbox: routingMetadata.should_appear_in_office_inbox,
+          should_appear_in_office_outbox: routingMetadata.should_appear_in_office_outbox,
+          description: routingMetadata.description,
+        }
+      : undefined;
+
+  return {
+    id: asString(item.id),
+    referenceNumber: asString(item.reference_number),
+    subject: asString(item.subject),
+    documentType: asStringOptional(item.document_type),
+    senderReference: asStringOptional(item.sender_reference),
+    letterDate: asStringOptional(item.letter_date),
+    dispatchDate: asStringOptional(item.dispatch_date),
+    source: asOneOf(item.source, ['internal', 'external'] as const, 'internal'),
+    receivedDate: asString(item.received_date),
+    recipientName: asStringOptional(item.recipient_name),
+    remarks: asStringOptional(item.remarks),
+    completedAt: asStringOptional(item.completed_at),
+    senderName: asString(item.sender_name),
+    senderOrganization: asString(item.sender_organization),
+    senderEmail: asStringOptional(item.sender_email),
+    senderPhone: asStringOptional(item.sender_phone),
+    status: asOneOf(item.status, ['pending', 'in-progress', 'completed', 'archived'] as const, 'pending'),
+    priority: asOneOf(item.priority, ['low', 'medium', 'high', 'urgent'] as const, 'medium'),
+    divisionId: normalizeId(item.division ?? item.division_id),
+    divisionName: asStringOptional(item.division_name) ?? (division ? asStringOptional(division.name) : undefined),
+    departmentId: normalizeId(item.department ?? item.department_id),
+    departmentName: asStringOptional(item.department_name) ?? (department ? asStringOptional(department.name) : undefined),
+    directorateId: normalizeId(item.directorate ?? item.directorate_id),
+    currentApproverId: normalizeId(item.current_approver ?? item.current_approver_id),
+    createdById: normalizeId(item.created_by ?? item.created_by_id),
+    direction: asOneOf(item.direction, ['upward', 'downward'] as const, 'upward'),
+    currentApproverName,
+    createdByName,
+    owningOfficeId: normalizeId(item.owning_office ?? item.owning_office_id),
+    owningOfficeName: asStringOptional(item.owning_office_name) ?? (owningOffice ? asStringOptional(owningOffice.name) : undefined),
+    currentOfficeId: normalizeId(item.current_office ?? item.current_office_id),
+    currentOfficeName: asStringOptional(item.current_office_name) ?? (currentOffice ? asStringOptional(currentOffice.name) : undefined),
+    attachments,
+    distribution,
+    archiveLevel: asOneOfOptional(item.archive_level, ['department', 'division', 'directorate'] as const),
+    linkedDocumentIds,
+    completionPackage: completionPackage
+      ? {
+          documentId: asString(completionPackage.document_id),
+          title: asString(completionPackage.title),
+          fileUrl: asStringOptional(completionPackage.file_url),
+          generatedAt: asStringOptional(completionPackage.generated_at),
+        }
+      : null,
+    completionSummaryGeneratedAt: asStringOptional(item.completion_summary_generated_at),
+    caseId: asStringOptional(item.case_id),
+    workflowState,
+    activeParallelBranches: asNumberOptional(item.active_parallel_branches),
+    completedParallelBranches: asNumberOptional(item.completed_parallel_branches),
+    flowType,
+    isInward: typeof item.is_inward === 'boolean' ? item.is_inward : undefined,
+    isOutward: typeof item.is_outward === 'boolean' ? item.is_outward : undefined,
+    isInternal: typeof item.is_internal === 'boolean' ? item.is_internal : undefined,
+    isExternal: typeof item.is_external === 'boolean' ? item.is_external : undefined,
+    routingMetadata: routingMetadataTyped,
+    createdAt: asStringOptional(item.created_at),
+    updatedAt: asStringOptional(item.updated_at),
+  };
+};
 
 const mapApiMinute = (item: Record<string, unknown>): Minute => {
+  const userObj = isRecord(item.user) ? item.user : undefined;
+  const performedByObj = isRecord(item.performed_by) ? item.performed_by : undefined;
+  const fromOfficeObj = isRecord(item.from_office) ? item.from_office : undefined;
+  const toOfficeObj = isRecord(item.to_office) ? item.to_office : undefined;
+  const toUserObj = isRecord(item.to_user) ? item.to_user : undefined;
+  const sealDataObj = isRecord(item.seal_data) ? item.seal_data : undefined;
+
   // Extract user system role name (not UUID)
-  let userSystemRole: string | undefined = undefined;
-  if (typeof item.user === 'object' && item.user) {
-    // Prefer system_role_name (the role name string)
-    userSystemRole = item.user.system_role_name ?? undefined;
-    // Fallback to system_role.name if it's an object
-    if (!userSystemRole && item.user.system_role && typeof item.user.system_role === 'object' && item.user.system_role.name) {
-      userSystemRole = item.user.system_role.name;
-    }
-    // Never use the UUID - if it looks like a UUID, set to undefined
-    if (userSystemRole && userSystemRole.includes('-') && userSystemRole.length > 30) {
-      userSystemRole = undefined;
-    }
+  let userSystemRole: string | undefined = userObj ? asStringOptional(userObj.system_role_name) : undefined;
+  const userSystemRoleObj = userObj && isRecord(userObj.system_role) ? userObj.system_role : undefined;
+  if (!userSystemRole && userSystemRoleObj) {
+    userSystemRole = asStringOptional(userSystemRoleObj.name);
   }
-  
+  // Never use the UUID - if it looks like a UUID, set to undefined
+  if (userSystemRole && userSystemRole.includes('-') && userSystemRole.length > 30) {
+    userSystemRole = undefined;
+  }
+
+  const signaturePayload = isRecord(item.signature_payload) ? item.signature_payload : undefined;
+  const signature: MinuteSignaturePayload | undefined = signaturePayload
+    ? (() => {
+        const imageData = asStringOptional(signaturePayload.imageData ?? signaturePayload.image_data);
+        const appliedAt = asStringOptional(signaturePayload.appliedAt ?? signaturePayload.applied_at);
+        if (!imageData || !appliedAt) return undefined;
+        return {
+          imageData,
+          appliedAt,
+          fileName: asStringOptional(signaturePayload.fileName ?? signaturePayload.file_name),
+          templateId: asStringOptional(signaturePayload.templateId ?? signaturePayload.template_id),
+          templateType: asOneOfOptional(signaturePayload.templateType ?? signaturePayload.template_type, [
+            'approval',
+            'minute',
+            'forward',
+            'treatment',
+          ] as const),
+          renderedText: asStringOptional(signaturePayload.renderedText ?? signaturePayload.rendered_text),
+        };
+      })()
+    : undefined;
+
+  const assistantTypeUpper = typeof item.assistant_type === 'string' ? item.assistant_type.toUpperCase() : undefined;
+  const assistantType = assistantTypeUpper === 'TA' ? 'TA' : assistantTypeUpper === 'PA' ? 'PA' : undefined;
+
   return {
-    id: String(item.id as string),
-    correspondenceId: item.correspondence ?? item.correspondence_id ?? '',
+    id: asString(item.id),
+    correspondenceId: asString(item.correspondence ?? item.correspondence_id, ''),
     userId: normalizeId(item.user ?? item.user_id) ?? '',
-    userName:
-      typeof item.user === 'object' && item.user
-        ? (() => {
-            const fullName = `${item.user.first_name ?? ''} ${item.user.last_name ?? ''}`.trim();
-            if (fullName.length > 0) return fullName;
-            return item.user.username ?? '';
-          })()
-        : undefined,
-    userEmail: typeof item.user === 'object' ? item.user.email ?? undefined : undefined,
-    userSystemRole: userSystemRole,
-    gradeLevel: item.grade_level ?? '',
-    actionType: item.action_type ?? 'minute',
-    minuteText: item.minute_text ?? '',
-    direction: item.direction ?? 'downward',
-    stepNumber: item.step_number ?? 1,
-    timestamp: item.timestamp ?? new Date().toISOString(),
-    actedBySecretary: item.acted_by_secretary ?? false,
-    actedByAssistant: item.acted_by_assistant ?? false,
-    assistantType: item.assistant_type ?? undefined,
+    userName: userObj
+      ? (() => {
+          const fullName = `${asString(userObj.first_name, '')} ${asString(userObj.last_name, '')}`.trim();
+          if (fullName.length > 0) return fullName;
+          return asStringOptional(userObj.username) ?? undefined;
+        })()
+      : undefined,
+    userEmail: userObj ? asStringOptional(userObj.email) : undefined,
+    userSystemRole,
+    gradeLevel: asString(item.grade_level),
+    actionType: asOneOf(item.action_type, ['minute', 'forward', 'approve', 'reject', 'treat'] as const, 'minute'),
+    minuteText: asString(item.minute_text),
+    direction: asOneOf(item.direction, ['upward', 'downward'] as const, 'downward'),
+    stepNumber: asNumberOptional(item.step_number) ?? 1,
+    timestamp: asStringOptional(item.timestamp) ?? new Date().toISOString(),
+    actedBySecretary: asBoolean(item.acted_by_secretary, false),
+    actedByAssistant: asBoolean(item.acted_by_assistant, false),
+    assistantType,
     performedById: normalizeId(item.performed_by ?? item.performed_by_id),
     performedByName:
-      item.performed_by_name ??
-      (typeof item.performed_by === 'object' && item.performed_by
-        ? `${item.performed_by.first_name ?? ''} ${item.performed_by.last_name ?? ''}`.trim() || item.performed_by.username
+      asStringOptional(item.performed_by_name) ??
+      (performedByObj
+        ? `${asString(performedByObj.first_name, '')} ${asString(performedByObj.last_name, '')}`.trim() ||
+          asStringOptional(performedByObj.username)
         : undefined),
-    readAt: item.read_at ?? undefined,
-    mentions: Array.isArray(item.mentions) ? item.mentions : [],
-    signature: item.signature_payload ?? undefined,
+    readAt: asStringOptional(item.read_at),
+    mentions: Array.isArray(item.mentions) ? item.mentions.filter((m): m is string => typeof m === 'string') : [],
+    signature,
     fromOfficeId: normalizeId(item.from_office ?? item.from_office_id),
-    fromOfficeName:
-      item.from_office_name ??
-      (typeof item.from_office === 'object' && item.from_office ? item.from_office.name : undefined),
+    fromOfficeName: asStringOptional(item.from_office_name) ?? (fromOfficeObj ? asStringOptional(fromOfficeObj.name) : undefined),
     toOfficeId: normalizeId(item.to_office ?? item.to_office_id),
-    toOfficeName:
-      item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? item.to_office.name : undefined),
+    toOfficeName: asStringOptional(item.to_office_name) ?? (toOfficeObj ? asStringOptional(toOfficeObj.name) : undefined),
     toUserId: normalizeId(item.to_user ?? item.to_user_id),
     toUserName:
-      item.to_user_name ??
-      (typeof item.to_user === 'object' && item.to_user
+      asStringOptional(item.to_user_name) ??
+      (toUserObj
         ? (() => {
-            const fullName = `${item.to_user.first_name ?? ''} ${item.to_user.last_name ?? ''}`.trim();
+            const fullName = `${asString(toUserObj.first_name, '')} ${asString(toUserObj.last_name, '')}`.trim();
             if (fullName.length > 0) return fullName;
-            return item.to_user.username ?? '';
+            return asStringOptional(toUserObj.username);
           })()
         : undefined),
     // Recall/Edit fields
-    isEdited: item.is_edited ?? false,
-    editedAt: item.edited_at ?? undefined,
-    editWindowExpiresAt: item.edit_window_expires_at ?? undefined,
-    isOpened: item.is_opened ?? false,
-    openedAt: item.opened_at ?? undefined,
-    originalMinuteText: item.original_minute_text ?? undefined,
-    editHistory: Array.isArray(item.edit_history) ? item.edit_history : [],
-    canBeEdited: item.can_be_edited ?? false,
-    isRecalled: item.is_recalled ?? false,
-    recalledAt: item.recalled_at ?? undefined,
-    recallReason: item.recall_reason ?? undefined,
-    canBeRecalled: item.can_be_recalled ?? false,
+    isEdited: asBoolean(item.is_edited, false),
+    editedAt: asStringOptional(item.edited_at),
+    editWindowExpiresAt: asStringOptional(item.edit_window_expires_at),
+    isOpened: asBoolean(item.is_opened, false),
+    openedAt: asStringOptional(item.opened_at),
+    originalMinuteText: asStringOptional(item.original_minute_text),
+    editHistory: Array.isArray(item.edit_history) ? (item.edit_history as Minute['editHistory']) : [],
+    canBeEdited: asBoolean(item.can_be_edited, false),
+    isRecalled: asBoolean(item.is_recalled, false),
+    recalledAt: asStringOptional(item.recalled_at),
+    recallReason: asStringOptional(item.recall_reason),
+    canBeRecalled: asBoolean(item.can_be_recalled, false),
     // Purpose-based routing
-    purpose: item.purpose ?? 'action',
-    requiresResponse: item.requires_response ?? true,
-    responseDeadline: item.response_deadline ?? undefined,
+    purpose: asOneOfOptional(item.purpose, ['action', 'information', 'comment', 'approval'] as const) ?? 'action',
+    requiresResponse: typeof item.requires_response === 'boolean' ? item.requires_response : undefined,
+    responseDeadline: asStringOptional(item.response_deadline),
     // Parallel routing fields
-    routingType: item.routing_type ?? 'sequential',
+    routingType: asOneOfOptional(item.routing_type, ['sequential', 'parallel', 'broadcast'] as const),
     parallelGroupId: normalizeId(item.parallel_group_id),
-    isParallelBranch: item.is_parallel_branch ?? false,
+    isParallelBranch: typeof item.is_parallel_branch === 'boolean' ? item.is_parallel_branch : undefined,
     parentMinuteId: normalizeId(item.parent_minute ?? item.parent_minute_id),
-    mergeStrategy: item.merge_strategy ?? 'all',
+    mergeStrategy: asOneOfOptional(item.merge_strategy, ['all', 'independent', 'any', 'majority'] as const),
     // Additional minutes/instructions
-    minuteType: item.minute_type ?? 'routing',
-    isAdditional: item.is_additional ?? false,
+    minuteType: asOneOfOptional(item.minute_type, ['routing', 'instruction', 'clarification', 'addendum'] as const),
+    isAdditional: typeof item.is_additional === 'boolean' ? item.is_additional : undefined,
     relatesToMinuteId: normalizeId(item.relates_to_minute ?? item.relates_to_minute_id),
     // Digital seal data (for executive approvals)
     sealApplied: normalizeId(item.seal_applied ?? item.seal_applied_id),
-    sealData: item.seal_data ? {
-      id: String(item.seal_data.id),
-      serialNumber: item.seal_data.serial_number ?? '',
-      verificationUrl: item.seal_data.verification_url ?? '',
-      sealedBy: item.seal_data.sealed_by ?? '',
-      officeName: item.seal_data.office_name ?? '',
-      officeTitle: item.seal_data.office_title ?? '',
-      sealedAt: item.seal_data.sealed_at ?? '',
-      isValid: item.seal_data.is_valid ?? true,
-      sealImageUrl: item.seal_data.seal_image_url ?? undefined,
-      signatureImageUrl: item.seal_data.signature_image_url ?? undefined,
-    } : undefined,
+    sealData: sealDataObj
+      ? {
+          id: asString(sealDataObj.id),
+          serialNumber: asString(sealDataObj.serial_number),
+          verificationUrl: asString(sealDataObj.verification_url),
+          sealedBy: asString(sealDataObj.sealed_by),
+          officeName: asString(sealDataObj.office_name),
+          officeTitle: asString(sealDataObj.office_title),
+          sealedAt: asString(sealDataObj.sealed_at),
+          isValid: typeof sealDataObj.is_valid === 'boolean' ? sealDataObj.is_valid : true,
+          sealImageUrl: asStringOptional(sealDataObj.seal_image_url),
+          signatureImageUrl: asStringOptional(sealDataObj.signature_image_url),
+        }
+      : undefined,
   };
 };
 
 const mapApiDelegation = (item: Record<string, unknown>): Delegation => ({
-  id: String(item.id as string),
-  correspondenceId: item.correspondence ? String(item.correspondence) : '',
+  id: asString(item.id),
+  correspondenceId: asStringOptional(item.correspondence) ?? '',
   principalId: normalizeId(item.principal ?? item.principal_id) ?? '',
   executiveId: normalizeId(item.principal ?? item.principal_id) ?? '', // Legacy
   assistantId: normalizeId(item.assistant ?? item.assistant_id) ?? '',
-  assistantType: (item.assistant_type ?? 'PA').toUpperCase() === 'TA' ? 'TA' : 'PA',
-  delegationNotes: item.notes ?? '',
-  delegatedAt: item.created_at ?? new Date().toISOString(),
+  assistantType: asString(item.assistant_type, 'PA').toUpperCase() === 'TA' ? 'TA' : 'PA',
+  delegationNotes: asString(item.notes),
+  delegatedAt: asStringOptional(item.created_at) ?? new Date().toISOString(),
   status: item.active === false ? 'revoked' : 'active',
-  completedAt: item.completed_at ?? undefined,
+  completedAt: asStringOptional(item.completed_at),
 });
 
 const buildCorrespondencePatchPayload = (updates: Partial<Correspondence>): Record<string, unknown> => {
@@ -395,9 +495,10 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         apiFetch('/correspondence/delegations/?page_size=100'),
       ]);
 
-      const correspondenceList = unwrapResults<Record<string, unknown>>(correspondenceRaw).map(mapApiCorrespondence);
-      const minutesList = unwrapResults<Record<string, unknown>>(minutesRaw).map(mapApiMinute);
-      const delegationsList = unwrapResults<Record<string, unknown>>(delegationsRaw)
+      const correspondenceList = unwrapResults(correspondenceRaw).filter(isRecord).map(mapApiCorrespondence);
+      const minutesList = unwrapResults(minutesRaw).filter(isRecord).map(mapApiMinute);
+      const delegationsList = unwrapResults(delegationsRaw)
+        .filter(isRecord)
         .map(mapApiDelegation)
         .filter((delegation) => delegation.correspondenceId);
 

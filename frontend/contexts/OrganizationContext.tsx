@@ -200,14 +200,30 @@ type UpdateUserInput = {
 
 export const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
 
-const unwrapResults = <T,>(payload: unknown): T[] => {
-  if (Array.isArray(payload)) return payload as T[];
-  if (payload && typeof payload === 'object' && 'results' in payload) {
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const unwrapResults = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) return payload;
+  if (isRecord(payload) && 'results' in payload) {
     const results = (payload as { results?: unknown }).results;
-    if (Array.isArray(results)) return results as T[];
+    if (Array.isArray(results)) return results;
   }
   return [];
 };
+
+const asString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+};
+
+const asStringOptional = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'string') return value;
+  return String(value);
+};
+
+const asBoolean = (value: unknown, fallback = false): boolean => (typeof value === 'boolean' ? value : fallback);
 
 const normalizeId = (value: unknown): string | undefined => {
   if (value === null || value === undefined) return undefined;
@@ -223,20 +239,20 @@ const normalizeId = (value: unknown): string | undefined => {
 };
 
 const mapApiUserToUser = (user: Record<string, unknown>): User => {
-  const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim();
+  const fullName = `${asString(user.first_name, '')} ${asString(user.last_name, '')}`.trim();
   // system_role is now a ForeignKey (UUID), but we need the name for display
   // Backend returns system_role_name for the role name
   // Ensure we never use the UUID as the role name - only use system_role_name
   // system_role is now a ForeignKey (UUID), but we need the name for display
   // Backend returns system_role_name for the role name - ALWAYS use this
-  let roleName = user.system_role_name ?? '';
+  let roleName = asString(user.system_role_name, '');
   
   // UUID pattern to detect if we accidentally got a UUID instead of a name
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   
   // If system_role_name is missing or is a UUID, try to get it from system_role object
-  if ((!roleName || uuidPattern.test(roleName)) && user.system_role && typeof user.system_role === 'object' && user.system_role.name) {
-    roleName = user.system_role.name;
+  if ((!roleName || uuidPattern.test(roleName)) && isRecord(user.system_role)) {
+    roleName = asString(user.system_role.name, '');
   }
   
   // Final check: if roleName is still a UUID or empty, set to empty string
@@ -245,56 +261,56 @@ const mapApiUserToUser = (user: Record<string, unknown>): User => {
     roleName = '';
   }
   return {
-    id: String(user.id ?? user.username),
-    username: user.username ?? undefined,
-    name: fullName.length > 0 ? fullName : user.username ?? 'User',
-    email: user.email ?? '',
-    employeeId: user.employee_id ?? '',
-    gradeLevel: user.grade_level ?? '',
+    id: asString(user.id ?? user.username),
+    username: asStringOptional(user.username),
+    name: fullName.length > 0 ? fullName : asString(user.username, 'User'),
+    email: asString(user.email),
+    employeeId: asString(user.employee_id),
+    gradeLevel: asString(user.grade_level),
     systemRole: roleName, // Use role name for display, never the UUID
     directorate: normalizeId(user.directorate ?? user.directorate_id),
     division: normalizeId(user.division ?? user.division_id),
     department: normalizeId(user.department ?? user.department_id),
     avatar: undefined,
-    active: user.is_active ?? true,
-    isSuperuser: user.is_superuser ?? false,
+    active: asBoolean(user.is_active, true),
+    isSuperuser: asBoolean(user.is_superuser, false),
   };
 };
 
 const mapApiDirectorate = (item: Record<string, unknown>): Directorate => ({
-  id: String(item.id as string),
-  name: item.name ?? 'Directorate',
-  code: item.code ?? `DIR-${String(item.id as string).slice(0, 6).toUpperCase()}`,
-  shortName: item.short_name ?? item.shortName ?? undefined,
-  description: item.description ?? '',
+  id: asString(item.id),
+  name: asString(item.name, 'Directorate'),
+  code: asString(item.code, `DIR-${asString(item.id).slice(0, 6).toUpperCase()}`),
+  shortName: asStringOptional(item.short_name ?? item.shortName),
+  description: asString(item.description),
   executiveDirectorId: normalizeId(item.executive_director ?? item.executive_director_id),
-  isActive: item.is_active ?? true,
+  isActive: asBoolean(item.is_active, true),
 });
 
 const mapApiDivision = (item: Record<string, unknown>): Division => ({
-  id: String(item.id as string),
-  name: item.name ?? 'Division',
-  code: item.code ?? `DIV-${String(item.id as string).slice(0, 6).toUpperCase()}`,
-  shortName: item.short_name ?? item.shortName ?? undefined,
+  id: asString(item.id),
+  name: asString(item.name, 'Division'),
+  code: asString(item.code, `DIV-${asString(item.id).slice(0, 6).toUpperCase()}`),
+  shortName: asStringOptional(item.short_name ?? item.shortName),
   directorateId: normalizeId(item.directorate ?? item.directorate_id) ?? '',
   generalManagerId:
     item.general_manager === null || item.general_manager === undefined
       ? item.general_manager
-      : String(item.general_manager ?? item.general_manager_id ?? ''),
-  isActive: item.is_active ?? true,
+      : asString(item.general_manager ?? item.general_manager_id ?? ''),
+  isActive: asBoolean(item.is_active, true),
 });
 
 const mapApiDepartment = (item: Record<string, unknown>): Department => ({
-  id: String(item.id as string),
-  name: item.name ?? 'Department',
-  code: item.code ?? `DEPT-${String(item.id as string).slice(0, 6).toUpperCase()}`,
-  shortName: item.short_name ?? item.shortName ?? undefined,
+  id: asString(item.id),
+  name: asString(item.name, 'Department'),
+  code: asString(item.code, `DEPT-${asString(item.id).slice(0, 6).toUpperCase()}`),
+  shortName: asStringOptional(item.short_name ?? item.shortName),
   divisionId: normalizeId(item.division ?? item.division_id) ?? '',
   assistantGeneralManagerId:
     item.head_of_department === null || item.head_of_department === undefined
       ? item.head_of_department
-      : String(item.head_of_department ?? item.head_of_department_id ?? ''),
-  isActive: item.is_active ?? true,
+      : asString(item.head_of_department ?? item.head_of_department_id ?? ''),
+  isActive: asBoolean(item.is_active, true),
 });
 
 const mapApiDelegation = (item: Record<string, unknown>): AssistantAssignment => {
@@ -303,10 +319,13 @@ const mapApiDelegation = (item: Record<string, unknown>): AssistantAssignment =>
   if (item.can_forward) permissions.push('forward');
   if (item.can_approve) permissions.push('approve');
 
+  const principal = isRecord(item.principal) ? item.principal : undefined;
+  const assistant = isRecord(item.assistant) ? item.assistant : undefined;
+
   return {
-    id: String(item.id as string),
-    executiveId: item.principal_id ?? item.principal?.id ?? '',
-    assistantId: item.assistant_id ?? item.assistant?.id ?? '',
+    id: asString(item.id),
+    executiveId: asString(item.principal_id ?? (principal ? principal.id : undefined)),
+    assistantId: asString(item.assistant_id ?? (assistant ? assistant.id : undefined)),
     type: item.can_approve ? 'TA' : 'PA',
     specialization: undefined,
     permissions: permissions.length > 0 ? permissions : ['view'],
@@ -314,44 +333,44 @@ const mapApiDelegation = (item: Record<string, unknown>): AssistantAssignment =>
 };
 
 const mapApiRole = (item: Record<string, unknown>): Role => ({
-  id: String(item.id as string),
-  name: item.name ?? 'Role',
-  description: item.description ?? '',
-  isActive: item.is_active ?? true,
-  permissions: item.permissions ?? {},
-  userCount: item.user_count ?? 0,
-  createdAt: item.created_at,
-  updatedAt: item.updated_at,
+  id: asString(item.id),
+  name: asString(item.name, 'Role'),
+  description: asString(item.description),
+  isActive: asBoolean(item.is_active, true),
+  permissions: (isRecord(item.permissions) ? (item.permissions as Record<string, boolean>) : {}) ?? {},
+  userCount: typeof item.user_count === 'number' ? item.user_count : 0,
+  createdAt: asStringOptional(item.created_at),
+  updatedAt: asStringOptional(item.updated_at),
 });
 
 const mapApiOffice = (item: Record<string, unknown>): Office => ({
-  id: String(item.id as string),
-  name: item.name ?? 'Office',
-  code: item.code ?? `OFF-${String(item.id as string).slice(0, 6).toUpperCase()}`,
-  officeType: item.office_type ?? 'custom',
+  id: asString(item.id),
+  name: asString(item.name, 'Office'),
+  code: asString(item.code, `OFF-${asString(item.id).slice(0, 6).toUpperCase()}`),
+  officeType: asString(item.office_type, 'custom'),
   directorateId: normalizeId(item.directorate ?? item.directorate_id),
   divisionId: normalizeId(item.division ?? item.division_id),
   departmentId: normalizeId(item.department ?? item.department_id),
   parentId: normalizeId(item.parent ?? item.parent_id),
-  description: item.description ?? '',
-  isActive: item.is_active ?? true,
-  allowExternalIntake: item.allow_external_intake ?? true,
-  allowLateralRouting: item.allow_lateral_routing ?? true,
+  description: asString(item.description),
+  isActive: asBoolean(item.is_active, true),
+  allowExternalIntake: asBoolean(item.allow_external_intake, true),
+  allowLateralRouting: asBoolean(item.allow_lateral_routing, true),
 });
 
 const mapApiOfficeMembership = (item: Record<string, unknown>): OfficeMembership => ({
-  id: String(item.id as string),
+  id: asString(item.id),
   officeId: normalizeId(item.office ?? item.office_id) ?? '',
-  officeName: item.office_name ?? item.office?.name ?? '',
+  officeName: asStringOptional(item.office_name) ?? (isRecord(item.office) ? asStringOptional(item.office.name) : undefined),
   userId: normalizeId(item.user ?? item.user_id) ?? '',
-  assignmentRole: item.assignment_role ?? 'staff',
-  isPrimary: item.is_primary ?? false,
-  canRegister: item.can_register ?? false,
-  canRoute: item.can_route ?? true,
-  canApprove: item.can_approve ?? false,
-  startsAt: item.starts_at ?? undefined,
-  endsAt: item.ends_at ?? undefined,
-  isActive: item.is_active ?? true,
+  assignmentRole: asString(item.assignment_role, 'staff'),
+  isPrimary: asBoolean(item.is_primary, false),
+  canRegister: asBoolean(item.can_register, false),
+  canRoute: asBoolean(item.can_route, true),
+  canApprove: asBoolean(item.can_approve, false),
+  startsAt: asStringOptional(item.starts_at),
+  endsAt: asStringOptional(item.ends_at),
+  isActive: asBoolean(item.is_active, true),
 });
 
 const cleanPayload = (payload: Record<string, unknown>) =>
@@ -494,14 +513,16 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     setIsSyncing(true);
     try {
       // Fetch all users with pagination
-      let allUsers: unknown[] = [];
+      let allUsers: Record<string, unknown>[] = [];
       let page = 1;
       let hasMore = true;
       const requestedPageSize = 1000;
       
       while (hasMore) {
-        const usersResponse = await apiFetch(`/accounts/users/?is_active=true&page_size=${requestedPageSize}&page=${page}&ordering=username`);
-        const pageUsers = unwrapResults<Record<string, unknown>>(usersResponse);
+        const usersResponse = await apiFetch(
+          `/accounts/users/?is_active=true&page_size=${requestedPageSize}&page=${page}&ordering=username`
+        );
+        const pageUsers = unwrapResults(usersResponse).filter(isRecord);
         allUsers = [...allUsers, ...pageUsers];
         
         logInfo(`Fetched page ${page}:`, { 
@@ -555,13 +576,13 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         apiFetch('/organization/office-memberships/?ordering=office__name&page_size=500'),
       ]);
 
-      const apiDirectorates = unwrapResults<Record<string, unknown>>(directoratesRaw).map(mapApiDirectorate);
-      const apiDivisions = unwrapResults<Record<string, unknown>>(divisionsRaw).map(mapApiDivision);
-      const apiDepartments = unwrapResults<Record<string, unknown>>(departmentsRaw).map(mapApiDepartment);
-      const apiDelegations = unwrapResults<Record<string, unknown>>(delegationsRaw).map(mapApiDelegation);
-      const apiRoles = unwrapResults<Record<string, unknown>>(rolesRaw).map(mapApiRole);
-      const apiOffices = unwrapResults<Record<string, unknown>>(officesRaw).map(mapApiOffice);
-      const apiOfficeMemberships = unwrapResults<Record<string, unknown>>(officeMembershipsRaw).map(mapApiOfficeMembership);
+      const apiDirectorates = unwrapResults(directoratesRaw).filter(isRecord).map(mapApiDirectorate);
+      const apiDivisions = unwrapResults(divisionsRaw).filter(isRecord).map(mapApiDivision);
+      const apiDepartments = unwrapResults(departmentsRaw).filter(isRecord).map(mapApiDepartment);
+      const apiDelegations = unwrapResults(delegationsRaw).filter(isRecord).map(mapApiDelegation);
+      const apiRoles = unwrapResults(rolesRaw).filter(isRecord).map(mapApiRole);
+      const apiOffices = unwrapResults(officesRaw).filter(isRecord).map(mapApiOffice);
+      const apiOfficeMemberships = unwrapResults(officeMembershipsRaw).filter(isRecord).map(mapApiOfficeMembership);
 
       const sortedDirectorates = sortByName(apiDirectorates);
       const sortedDivisions = sortByName(apiDivisions);
