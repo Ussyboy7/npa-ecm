@@ -1,5 +1,7 @@
 /** API client for seal verification. */
 
+import { logError, logInfo } from '@/lib/client-logger';
+
 const getApiBaseUrl = (): string => {
   // Get API base URL - works across local/stag/prod environments
   let apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api';

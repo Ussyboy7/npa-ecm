@@ -1,4 +1,4 @@
-import { logError } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import { apiFetch } from '@/lib/api-client';
 
 // ==========================================
