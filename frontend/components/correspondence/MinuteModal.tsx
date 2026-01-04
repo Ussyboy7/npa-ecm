@@ -213,6 +213,11 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     [getUserOfficeInfo],
   );
 
+  const activeOffices = useMemo(() => offices.filter((office) => office.isActive), [offices]);
+  const officeOptions = useMemo(
+    () => activeOffices.slice().sort((a, b) => a.name.localeCompare(b.name)),
+    [activeOffices],
+  );
   const officeOptionsForRouting = useMemo(
     () =>
       officeOptions.map((o) => ({
@@ -223,12 +228,6 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         divisionId: o.divisionId ?? undefined,
       })),
     [officeOptions],
-  );
-
-  const activeOffices = useMemo(() => offices.filter((office) => office.isActive), [offices]);
-  const officeOptions = useMemo(
-    () => activeOffices.slice().sort((a, b) => a.name.localeCompare(b.name)),
-    [activeOffices],
   );
 
   // Filtered divisions for office filter (based on selected directorate)
