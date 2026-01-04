@@ -458,8 +458,7 @@ export const DocumentCreateDialog = ({
           sensitivity,
           divisionId,
           departmentId,
-          // dms query API uses free-text search, not a dedicated referenceNumber filter
-          search: referenceNumber.trim() || undefined,
+          referenceNumber: referenceNumber.trim() || undefined,
           tags: uniqueTags,
           authorId: currentUser.id,
           workspaceIds: selectedWorkspaceIds.length > 0 ? selectedWorkspaceIds : undefined,

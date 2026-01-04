@@ -48,7 +48,7 @@ export function CorrespondenceRoutingView({
   const filteredUsers = useMemo(() => {
     if (!personSearchQuery.trim()) return [];
     const baseUsers = users
-      .filter((u) => u.isActive !== false)
+      .filter((u) => (u.active ?? true))
       .filter((u) => (currentUser ? u.id !== currentUser.id : true));
     return filterUsersBySearch(baseUsers, personSearchQuery, {
       includeDivision: true,

@@ -160,9 +160,17 @@ export const DocumentCommentsDialog = ({
     } catch (error: unknown) {
       logError('Error adding comment:', error);
       // Check if backend returned a validation error
-      const backendError = error?.response?.data?.content?.[0] || 
-                          error?.response?.data?.detail || 
-                          error?.message;
+      const backendError =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' &&
+              error !== null &&
+              'response' in error &&
+              typeof (error as { response?: unknown }).response === 'object' &&
+              (error as { response?: { data?: unknown } }).response?.data &&
+              typeof (error as { response: { data: { detail?: unknown } } }).response.data.detail === 'string'
+            ? (error as { response: { data: { detail: string } } }).response.data.detail
+            : undefined;
       
       if (backendError && (backendError.includes('empty') || backendError.includes('required'))) {
         toast.error(backendError);

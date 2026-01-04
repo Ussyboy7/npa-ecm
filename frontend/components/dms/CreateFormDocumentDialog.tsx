@@ -173,8 +173,16 @@ export function CreateFormDocumentDialog({
       setSelectedTemplateId("");
     } catch (error: unknown) {
       logError("[FormDialog] Error creating form document:", error);
-      const errorMessage = error?.message || error?.error || "Failed to create form document";
-      logError("[FormDialog] Error details:", { error, errorMessage, stack: error?.stack });
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' &&
+              error !== null &&
+              'error' in error &&
+              typeof (error as { error?: unknown }).error === 'string'
+            ? (error as { error: string }).error
+            : "Failed to create form document";
+      logError("[FormDialog] Error details:", { error, errorMessage });
       toast.error(errorMessage);
     } finally {
       logInfo('[FormDialog] Finished creating form document');

@@ -200,6 +200,31 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     return { office, division, directorate };
   }, [officeMemberships, offices, findUserById]);
 
+  // RoutingSection expects a narrower shape
+  const getUserOfficeInfoForRouting = useCallback(
+    (userId: string): { office?: { name: string }; division?: { name: string } } | null => {
+      const info = getUserOfficeInfo(userId);
+      if (!info) return null;
+      return {
+        office: info.office ? { name: info.office.name } : undefined,
+        division: info.division ? { name: info.division.name } : undefined,
+      };
+    },
+    [getUserOfficeInfo],
+  );
+
+  const officeOptionsForRouting = useMemo(
+    () =>
+      officeOptions.map((o) => ({
+        id: o.id,
+        name: o.name,
+        officeType: o.officeType ?? undefined,
+        directorateId: o.directorateId ?? undefined,
+        divisionId: o.divisionId ?? undefined,
+      })),
+    [officeOptions],
+  );
+
   const activeOffices = useMemo(() => offices.filter((office) => office.isActive), [offices]);
   const officeOptions = useMemo(
     () => activeOffices.slice().sort((a, b) => a.name.localeCompare(b.name)),
@@ -1555,7 +1580,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             onOfficeFilterDivisionChange={setOfficeFilterDivision}
             purpose={purpose}
             onPurposeChange={setPurpose}
-            offices={officeOptions}
+            offices={officeOptionsForRouting}
             directorates={directorates}
             divisions={divisions}
             users={activeDirectoryUsers}
@@ -1563,7 +1588,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             approverList={approverList}
             suggestedNext={suggestedNext}
             findUserById={findUserById}
-            getUserOfficeInfo={getUserOfficeInfo}
+            getUserOfficeInfo={getUserOfficeInfoForRouting}
           />
 
           {/* Minute Templates Section */}

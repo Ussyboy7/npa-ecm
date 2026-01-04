@@ -85,7 +85,7 @@ export const WorkspaceManagementDialog = ({
       onWorkspaceChange();
     } catch (error: unknown) {
       logError("Failed to create workspace", error);
-      toast.error(error?.response?.data?.detail || "Failed to create workspace");
+      toast.error(error instanceof Error ? error.message : "Failed to create workspace");
     } finally {
       setLoading(false);
     }
@@ -111,7 +111,7 @@ export const WorkspaceManagementDialog = ({
       onWorkspaceChange();
     } catch (error: unknown) {
       logError("Failed to update workspace", error);
-      toast.error(error?.response?.data?.detail || "Failed to update workspace");
+      toast.error(error instanceof Error ? error.message : "Failed to update workspace");
     } finally {
       setLoading(false);
     }
@@ -131,7 +131,7 @@ export const WorkspaceManagementDialog = ({
       onWorkspaceChange();
     } catch (error: unknown) {
       logError("Failed to delete workspace", error);
-      toast.error(error?.response?.data?.detail || "Failed to delete workspace");
+      toast.error(error instanceof Error ? error.message : "Failed to delete workspace");
     } finally {
       setLoading(false);
     }
