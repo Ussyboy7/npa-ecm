@@ -48,6 +48,7 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
   showTemplateSelector = true,
   disabled = false,
 }) => {
+  const router = useRouter();
   const isExecutiveApproval = actionType === 'approve' && isExecutive;
   const isNonExecutiveApproval = actionType === 'approve' && !isExecutive;
 

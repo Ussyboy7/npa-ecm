@@ -383,7 +383,7 @@ export const RoutingSection = ({
             <Label className="text-xs text-muted-foreground flex items-center gap-1">
               <FileText className="h-3 w-3" /> Purpose
             </Label>
-            <Select value={purpose} onValueChange={(v: Record<string, unknown>) => onPurposeChange(v)}>
+            <Select value={purpose} onValueChange={(v: string) => onPurposeChange(v as typeof purpose)}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>

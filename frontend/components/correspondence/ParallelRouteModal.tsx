@@ -315,7 +315,7 @@ export const ParallelRouteModal = ({
             {/* Merge Strategy */}
             <div className="space-y-2">
               <Label>Merge Strategy *</Label>
-              <Select value={mergeStrategy} onValueChange={(v: Record<string, unknown>) => setMergeStrategy(v)}>
+              <Select value={mergeStrategy} onValueChange={(v: string) => setMergeStrategy(v as typeof mergeStrategy)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -459,8 +459,8 @@ export const ParallelRouteModal = ({
                             <Label className="text-xs">Purpose</Label>
                             <Select
                               value={recipient.purpose}
-                              onValueChange={(v: Record<string, unknown>) =>
-                                updateRecipient(recipient.id, { purpose: v })
+                              onValueChange={(v: string) =>
+                                updateRecipient(recipient.id, { purpose: v as typeof recipient.purpose })
                               }
                             >
                               <SelectTrigger className="h-8">
