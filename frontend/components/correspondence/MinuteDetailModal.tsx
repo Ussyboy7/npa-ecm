@@ -492,8 +492,8 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                             dist.division_name ||
                             dist.department_name ||
                             'Unknown';
-                          const recipientType = dist.recipient_type || 'division';
-                          const purpose = dist.purpose || 'information';
+                          const recipientType = String(dist.recipient_type ?? 'division');
+                          const purpose = dist.purpose ? String(dist.purpose) : '';
                           
                           return (
                             <div
@@ -502,7 +502,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                             >
                               <div className="flex items-center gap-2 flex-1 min-w-0">
                                 <Badge variant="outline" className="text-xs">
-                                  {recipientName}
+                                  {String(recipientName)}
                                 </Badge>
                                 <Badge variant="secondary" className="text-xs">
                                   {recipientType.charAt(0).toUpperCase() + recipientType.slice(1)}

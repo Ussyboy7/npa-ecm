@@ -1075,7 +1075,13 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                   body: JSON.stringify(parallelMinutePayload),
                 });
                 
-                const minuteId = parallelMinuteResponse?.id;
+                const rawMinuteId = parallelMinuteResponse?.id;
+                const minuteId =
+                  typeof rawMinuteId === 'string'
+                    ? rawMinuteId
+                    : typeof rawMinuteId === 'number'
+                      ? String(rawMinuteId)
+                      : undefined;
                 if (minuteId && recipientUserId) {
                   recipientToMinuteMap.set(recipientUserId, minuteId);
                 }
@@ -1084,7 +1090,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               }),
             );
             
-            parallelMinuteIds.push(...parallelMinutes.filter(Boolean));
+            parallelMinuteIds.push(...parallelMinutes.filter((id): id is string => Boolean(id) && typeof id === 'string'));
             logInfo('[MinuteModal] Parallel minutes created', {
               minuteIds: parallelMinuteIds,
               recipientMap: Object.fromEntries(recipientToMinuteMap),
@@ -1406,8 +1412,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 Direction {!isMD && '*'}
               </Label>
               {canChooseDirection ? (
-                <RadioGroup value={selectedDirection} onValueChange={(v: Record<string, unknown>) => {
-                  setSelectedDirection(v);
+                <RadioGroup value={selectedDirection} onValueChange={(v: string) => {
+                  setSelectedDirection(v as 'upward' | 'downward');
                   setForwardTo(''); // Reset forward to when direction changes
                 }}>
                   <div className="flex items-center space-x-2">

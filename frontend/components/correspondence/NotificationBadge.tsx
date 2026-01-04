@@ -12,14 +12,23 @@ import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 
+type NotificationItem = {
+  id: string;
+  type: 'urgent' | 'progress' | 'minute';
+  title: string;
+  message: string;
+  timestamp: string;
+  correspondenceId: string;
+};
+
 export const NotificationBadge = () => {
   const { correspondence, minutes, getMinutesByCorrespondenceId } = useCorrespondence();
-  const [notifications, setNotifications] = useState<unknown[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     // Generate notifications from correspondence data
-    const notifs: unknown[] = [];
+    const notifs: NotificationItem[] = [];
     const now = new Date();
 
     correspondence.forEach(item => {
