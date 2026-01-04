@@ -1,6 +1,6 @@
 "use client";
 
-import { logError } from '@/lib/client-logger';
+import { logError, logInfo } from '@/lib/client-logger';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,

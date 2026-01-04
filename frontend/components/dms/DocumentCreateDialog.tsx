@@ -243,9 +243,9 @@ export const DocumentCreateDialog = ({
         const result = await queryDocuments({ 
           page: 1, 
           pageSize: 100,
-          referenceNumber: referenceNumber.trim(),
+          search: referenceNumber.trim(),
         });
-        const exists = result.documents.some((doc) => 
+        const exists = result.results.some((doc) => 
           doc.referenceNumber?.toLowerCase() === referenceNumber.trim().toLowerCase()
         );
         setReferenceNumberExists(exists);
@@ -277,21 +277,24 @@ export const DocumentCreateDialog = ({
   useEffect(() => {
     if (!currentUser) return;
     setIsLoadingTemplates(true);
-    try {
-      const available = await getTemplatesForUser(currentUser);
-      setTemplates(available);
-      if (!selectedTemplateId) {
-        const defaultTemplate = await getDefaultTemplateForUser(currentUser);
-        if (defaultTemplate) {
-          setSelectedTemplateId(defaultTemplate.id);
+    const loadTemplates = async () => {
+      try {
+        const available = await getTemplatesForUser(currentUser);
+        setTemplates(available);
+        if (!selectedTemplateId) {
+          const defaultTemplate = await getDefaultTemplateForUser(currentUser);
+          if (defaultTemplate) {
+            setSelectedTemplateId(defaultTemplate.id);
+          }
         }
+      } catch (error: unknown) {
+        logError('Failed to load templates:', error);
+        setTemplates([]);
+      } finally {
+        setIsLoadingTemplates(false);
       }
-    } catch (error: unknown) {
-      logError('Failed to load templates:', error);
-      setTemplates([]);
-    } finally {
-      setIsLoadingTemplates(false);
-    }
+    };
+    loadTemplates();
   }, [currentUser, selectedTemplateId]);
 
   useEffect(() => {
@@ -455,7 +458,8 @@ export const DocumentCreateDialog = ({
           sensitivity,
           divisionId,
           departmentId,
-          referenceNumber: referenceNumber.trim() || undefined,
+          // dms query API uses free-text search, not a dedicated referenceNumber filter
+          search: referenceNumber.trim() || undefined,
           tags: uniqueTags,
           authorId: currentUser.id,
           workspaceIds: selectedWorkspaceIds.length > 0 ? selectedWorkspaceIds : undefined,

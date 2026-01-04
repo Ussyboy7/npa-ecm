@@ -47,11 +47,15 @@ export function CorrespondenceRoutingView({
   // Filter users for person routing
   const filteredUsers = useMemo(() => {
     if (!personSearchQuery.trim()) return [];
-    return filterUsersBySearch(users, personSearchQuery, {
-      includeInactive: false,
-      excludeCurrentUser: true,
+    const baseUsers = users
+      .filter((u) => u.isActive !== false)
+      .filter((u) => (currentUser ? u.id !== currentUser.id : true));
+    return filterUsersBySearch(baseUsers, personSearchQuery, {
+      includeDivision: true,
+      includeDepartment: true,
+      includeEmail: true,
     }).slice(0, 10);
-  }, [users, personSearchQuery]);
+  }, [users, personSearchQuery, currentUser]);
 
   // Filter offices
   const filteredOffices = useMemo(() => {

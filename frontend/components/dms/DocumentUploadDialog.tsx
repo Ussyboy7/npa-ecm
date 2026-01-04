@@ -1,6 +1,6 @@
 "use client";
 
-import { logError } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, useCallback, useRef, startTransition } from 'react';
 import {
   Dialog,
@@ -363,7 +363,12 @@ export const DocumentUploadDialog = ({
         }
       } catch (error: unknown) {
         // Handle 404 gracefully - endpoint may not be available yet
-        if (error?.status === 404) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'status' in error &&
+          (error as { status?: unknown }).status === 404
+        ) {
           logWarn('Templates endpoint not available, continuing without templates');
           setTemplates([]);
         } else {

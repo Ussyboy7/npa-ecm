@@ -75,9 +75,9 @@ export function CreateFormDocumentDialog({
         const result = await queryDocuments({ 
           page: 1, 
           pageSize: 100,
-          referenceNumber: referenceNumber.trim(),
+          search: referenceNumber.trim(),
         });
-        const exists = result.documents.some((doc) => 
+        const exists = result.results.some((doc) => 
           doc.referenceNumber?.toLowerCase() === referenceNumber.trim().toLowerCase()
         );
         setReferenceNumberExists(exists);
