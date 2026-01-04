@@ -2401,7 +2401,8 @@ export const ShareDocumentDialog = ({
                           const recipientOffice = officeMemberships.find(
                             (m) => m.userId === correspondenceRecipient && m.isPrimary && m.isActive
                           );
-                          const office = recipientOffice ? offices.find(o => o.id === recipientOffice.officeId) : undefined;
+                          const recipientOfficeId = recipientOffice?.officeId;
+                          const office = recipientOfficeId ? offices.find((o) => o.id === recipientOfficeId) : undefined;
                           return (
                             <div className="space-y-2">
                               <Label className="text-xs text-muted-foreground">
