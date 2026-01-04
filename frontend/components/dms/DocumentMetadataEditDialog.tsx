@@ -157,7 +157,7 @@ export const DocumentMetadataEditDialog = ({
       setCheckingReferenceNumber(true);
       try {
         const result = await queryDocuments({ 
-          referenceNumber: metadataDraft.referenceNumber.trim(),
+          search: metadataDraft.referenceNumber.trim(),
           page: 1,
           pageSize: 1,
         });
@@ -304,9 +304,16 @@ export const DocumentMetadataEditDialog = ({
     } catch (error: unknown) {
       logError('Failed to update metadata', error);
       const errorMessage =
-        error?.response?.data?.detail ||
-        error?.response?.data?.title?.[0] ||
-        'Unable to update document';
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' &&
+              error !== null &&
+              'response' in error &&
+              typeof (error as { response?: unknown }).response === 'object' &&
+              (error as { response?: { data?: unknown } }).response?.data &&
+              typeof (error as { response: { data: { detail?: unknown } } }).response.data.detail === 'string'
+            ? (error as { response: { data: { detail: string } } }).response.data.detail
+            : 'Unable to update document';
       toast.error(errorMessage);
     } finally {
       setSavingMetadata(false);

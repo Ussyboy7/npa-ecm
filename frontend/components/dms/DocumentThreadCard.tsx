@@ -29,6 +29,8 @@ interface ThreadDocument {
   };
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThreadCardProps) => {
   const router = useRouter();
   const [parentDocument, setParentDocument] = useState<ThreadDocument | null>(null);
@@ -43,16 +45,20 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
       // Load parent document if parentDocumentId is provided
       if (parentDocumentId) {
         try {
-          const parent = await apiFetch(`/dms/documents/${parentDocumentId}/`);
-          setParentDocument({
-            id: parent.id,
-            title: parent.title,
-            reference_number: parent.reference_number || 'N/A',
-            status: parent.status,
-            created_at: parent.created_at,
-            updated_at: parent.updated_at,
-            author: parent.author,
-          });
+          const parent = await apiFetch<unknown>(`/dms/documents/${parentDocumentId}/`);
+          if (isRecord(parent)) {
+            setParentDocument({
+              id: String(parent.id ?? ''),
+              title: typeof parent.title === 'string' ? parent.title : 'Untitled',
+              reference_number: typeof parent.reference_number === 'string' ? parent.reference_number : 'N/A',
+              status: typeof parent.status === 'string' ? parent.status : 'draft',
+              created_at: typeof parent.created_at === 'string' ? parent.created_at : new Date().toISOString(),
+              updated_at: typeof parent.updated_at === 'string' ? parent.updated_at : new Date().toISOString(),
+              author: isRecord(parent.author)
+                ? { id: String(parent.author.id ?? ''), name: String(parent.author.name ?? 'Unknown') }
+                : undefined,
+            });
+          }
         } catch (error: unknown) {
           logError('Failed to load parent document:', error);
         }
@@ -60,21 +66,30 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
       
       // Load child documents (response documents)
       try {
-        const response = await apiFetch(`/dms/documents/?parent_document=${documentId}&page_size=100`);
-        const children = (response.results || response || []).map((doc: Record<string, unknown>) => ({
-          id: doc.id,
-          title: doc.title,
-          reference_number: doc.reference_number || 'N/A',
-          status: doc.status,
-          created_at: doc.created_at,
-          updated_at: doc.updated_at,
-          author: doc.author,
-        }));
+        const response = await apiFetch<unknown>(`/dms/documents/?parent_document=${documentId}&page_size=100`);
+        const rows = Array.isArray(response)
+          ? response
+          : isRecord(response) && Array.isArray(response.results)
+            ? response.results
+            : [];
+        const children = rows
+          .filter(isRecord)
+          .map((doc) => ({
+            id: String(doc.id ?? ''),
+            title: typeof doc.title === 'string' ? doc.title : 'Untitled',
+            reference_number: typeof doc.reference_number === 'string' ? doc.reference_number : 'N/A',
+            status: typeof doc.status === 'string' ? doc.status : 'draft',
+            created_at: typeof doc.created_at === 'string' ? doc.created_at : new Date().toISOString(),
+            updated_at: typeof doc.updated_at === 'string' ? doc.updated_at : new Date().toISOString(),
+            author: isRecord(doc.author)
+              ? { id: String(doc.author.id ?? ''), name: String(doc.author.name ?? 'Unknown') }
+              : undefined,
+          }));
         setChildDocuments(children);
       } catch (error: unknown) {
         logError('Failed to load child documents:', error);
       }
-      } catch (error: unknown) {
+    } catch (error: unknown) {
       logError('Failed to load thread documents:', error);
       toast.error('Failed to load document thread');
     } finally {
@@ -93,7 +108,7 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
     try {
       await loadThreadDocuments();
       toast.success('Document thread refreshed');
-      } catch (error: unknown) {
+    } catch (error: unknown) {
       toast.error('Failed to refresh document thread');
     } finally {
       setIsRefreshing(false);

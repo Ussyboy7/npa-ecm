@@ -17,10 +17,10 @@ import { apiFetch } from '@/lib/api-client';
 import type { DocumentRecord, DocumentWorkspace } from '@/lib/dms-storage';
 
 const mapWorkspace = (item: Record<string, unknown>): DocumentWorkspace => ({
-  id: String(item.id as string),
-  name: item.name ?? 'Workspace',
-  description: item.description ?? undefined,
-  color: item.color ?? '#2563eb',
+  id: String(item.id ?? ''),
+  name: typeof item.name === 'string' ? item.name : 'Workspace',
+  description: typeof item.description === 'string' ? item.description : undefined,
+  color: typeof item.color === 'string' ? item.color : '#2563eb',
   memberIds: Array.isArray(item.member_ids)
     ? item.member_ids.map(String)
     : Array.isArray(item.members)
@@ -92,7 +92,7 @@ export const CollaborationPanel = ({
       toast.info('Workspace added to document');
     } catch (error: unknown) {
       logError('Failed to create workspace', error);
-      toast.error(error?.response?.data?.detail || 'Failed to create workspace');
+      toast.error(error instanceof Error ? error.message : 'Failed to create workspace');
     } finally {
       setCreating(false);
     }
