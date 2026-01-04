@@ -29,6 +29,7 @@ import { getLegalHolds, createLegalHold, checkLegalHold } from '@/lib/records-st
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/correspondence-helpers';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { logError } from '@/lib/client-logger';
 
 import type { LegalHold } from '@/lib/records-storage';
 

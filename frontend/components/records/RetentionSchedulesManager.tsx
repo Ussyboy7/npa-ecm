@@ -25,6 +25,7 @@ import { getRetentionSchedules } from '@/lib/records-storage';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/correspondence-helpers';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { logError } from '@/lib/client-logger';
 
 import type { RetentionSchedule } from '@/lib/records-storage';
 
@@ -48,7 +49,7 @@ export const RetentionSchedulesManager = () => {
     try {
       setLoading(true);
       
-      const params: unknown = {};
+      const params: { record_type?: string } = {};
       if (typeFilter !== 'all') {
         params.record_type = typeFilter;
       }

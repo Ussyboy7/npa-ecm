@@ -25,6 +25,7 @@ import { getDispositions, approveDisposition } from '@/lib/records-storage';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/correspondence-helpers';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { logError } from '@/lib/client-logger';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,7 +71,7 @@ export const DispositionsManager = () => {
     try {
       setLoading(true);
       
-      const params: unknown = {};
+      const params: { status?: string } = {};
       if (statusFilter !== 'all') {
         params.status = statusFilter;
       }
@@ -91,6 +92,7 @@ export const DispositionsManager = () => {
   }, [loadDispositions]);
 
   const handleApprove = useCallback(async () => {
+    if (!selectedDisposition) return;
 
     try {
       setApprovingId(selectedDisposition.id);

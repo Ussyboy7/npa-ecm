@@ -208,8 +208,8 @@ export const RetentionPolicyManager = () => {
                     <Label htmlFor="trigger_event">Trigger Event *</Label>
                     <Select
                       value={formData.trigger_event}
-                      onValueChange={(value: Record<string, unknown>) =>
-                        setFormData({ ...formData, trigger_event: value })
+                      onValueChange={(value: string) =>
+                        setFormData({ ...formData, trigger_event: value as typeof formData.trigger_event })
                       }
                     >
                       <SelectTrigger>
@@ -230,8 +230,8 @@ export const RetentionPolicyManager = () => {
                     <Label htmlFor="applies_to">Applies To *</Label>
                     <Select
                       value={formData.applies_to}
-                      onValueChange={(value: Record<string, unknown>) =>
-                        setFormData({ ...formData, applies_to: value })
+                      onValueChange={(value: string) =>
+                        setFormData({ ...formData, applies_to: value as typeof formData.applies_to })
                       }
                     >
                       <SelectTrigger>
@@ -249,8 +249,8 @@ export const RetentionPolicyManager = () => {
                     <Label htmlFor="disposition_action">Disposition Action *</Label>
                     <Select
                       value={formData.disposition_action}
-                      onValueChange={(value: Record<string, unknown>) =>
-                        setFormData({ ...formData, disposition_action: value })
+                      onValueChange={(value: string) =>
+                        setFormData({ ...formData, disposition_action: value as typeof formData.disposition_action })
                       }
                     >
                       <SelectTrigger>
