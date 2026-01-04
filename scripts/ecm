@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/ecm <command> <env> [options] [-- docker args]
+
+Commands:
+  up|start <env>        Start the stack (wraps scripts/start-stack.sh)
+  down|stop <env>       Stop the stack (wraps scripts/stop-stack.sh)
+  restart <env>         Restart the stack (wraps scripts/restart-stack.sh)
+  status <env>          Show container status (docker compose ps)
+  logs <env> [svc]      Show logs (optionally for a service)
+  health <env>          Check backend health (and frontend unless --no-frontend)
+  migrate <env>         Run Django migrations (manage.py migrate --noinput)
+
+Environments:
+  local | stag | prod
+
+Examples:
+  scripts/ecm up local
+  scripts/ecm up stag -- --build
+  scripts/ecm restart prod --prune
+  scripts/ecm logs stag nginx_stag
+  scripts/ecm health stag --timeout 10
+  scripts/ecm migrate prod
+USAGE
+}
+
+if [[ $# -lt 2 ]]; then
+  usage
+  exit 1
+fi
+
+COMMAND="$1"
+ENVIRONMENT="$2"
+shift 2 || true
+
+case "$COMMAND" in
+  up|start)
+    exec "${SCRIPT_DIR}/start-stack.sh" "$ENVIRONMENT" "$@"
+    ;;
+  down|stop)
+    exec "${SCRIPT_DIR}/stop-stack.sh" "$ENVIRONMENT" "$@"
+    ;;
+  restart)
+    exec "${SCRIPT_DIR}/restart-stack.sh" "$ENVIRONMENT" "$@"
+    ;;
+  status)
+    # Reuse stack-utils compose detection
+    # shellcheck source=/dev/null
+    source "${SCRIPT_DIR}/stack-utils.sh"
+    stack_init_env "$ENVIRONMENT"
+    exec stack_compose ps
+    ;;
+  logs)
+    # shellcheck source=/dev/null
+    source "${SCRIPT_DIR}/stack-utils.sh"
+    stack_init_env "$ENVIRONMENT"
+    if [[ $# -gt 0 ]]; then
+      exec stack_compose logs "$@"
+    else
+      exec stack_compose logs
+    fi
+    ;;
+  health)
+    exec "${SCRIPT_DIR}/check-health.sh" "$ENVIRONMENT" "$@"
+    ;;
+  migrate)
+    # shellcheck source=/dev/null
+    source "${SCRIPT_DIR}/stack-utils.sh"
+    stack_init_env "$ENVIRONMENT"
+    exec stack_backend_manage migrate --noinput
+    ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    usage
+    exit 1
+    ;;
+esac
+
+

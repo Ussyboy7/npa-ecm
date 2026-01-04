@@ -96,11 +96,11 @@ ssh user@staging-server "cd /opt/npa-ecm && ./deploy-staging.sh"
 
 ### Health Check Script
 
-The `scripts/health-check.sh` script provides comprehensive health monitoring:
+Use the unified stack command for health checks:
 
 ```bash
 # Run health checks
-./scripts/health-check.sh
+./scripts/ecm health stag
 
 # Output includes:
 # - Docker service status
@@ -281,13 +281,13 @@ pip install --upgrade -r requirements.txt
 ### Monitoring Maintenance
 ```bash
 # Check logs
-docker-compose logs -f
+./scripts/ecm logs stag
 
 # Monitor resources
 docker stats
 
 # Health check
-./scripts/health-check.sh
+./scripts/ecm health stag
 ```
 
 ## 📚 Troubleshooting
@@ -297,7 +297,7 @@ docker stats
 #### Deployment Failures
 ```bash
 # Check deployment logs
-docker-compose logs backend_stag
+./scripts/ecm logs stag backend_stag
 
 # Verify environment variables
 docker exec backend_stag env

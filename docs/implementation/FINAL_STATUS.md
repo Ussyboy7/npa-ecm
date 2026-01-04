@@ -111,7 +111,7 @@ sudo port install tesseract poppler
 
 ```bash
 # Check system status
-./scripts/quick-status.sh
+./scripts/ecm status local
 
 # Verify dependencies
 ./scripts/verify-dependencies.sh

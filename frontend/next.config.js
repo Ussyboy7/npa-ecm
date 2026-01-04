@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: [],
+  output: 'standalone',
   images: {
     remotePatterns: [
       {

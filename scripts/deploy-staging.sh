@@ -19,6 +19,27 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 STAGING_DIR="$PROJECT_ROOT"
 DOCKER_COMPOSE_FILE="docker-compose.stag.yml"
 
+# Compose command (docker compose vs docker-compose)
+COMPOSE_CMD=()
+detect_compose_cmd() {
+    if [[ ${#COMPOSE_CMD[@]} -gt 0 ]]; then
+        return 0
+    fi
+    if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+        COMPOSE_CMD=(docker compose)
+    elif command -v docker-compose >/dev/null 2>&1; then
+        COMPOSE_CMD=(docker-compose)
+    else
+        error "Docker Compose is not installed. Please install Docker Desktop or the docker-compose plugin."
+        exit 1
+    fi
+}
+
+compose() {
+    detect_compose_cmd
+    "${COMPOSE_CMD[@]}" -f "$DOCKER_COMPOSE_FILE" "$@"
+}
+
 # Create logs directory if it doesn't exist
 mkdir -p "${STAGING_DIR}/logs"
 
@@ -46,7 +67,7 @@ pre_deployment_checks() {
     log "🔍 Running pre-deployment checks..."
 
     # Check if required files exist
-    local required_files=("$DOCKER_COMPOSE_FILE" "backend/Dockerfile.prod" "frontend/Dockerfile.prod")
+    local required_files=("$DOCKER_COMPOSE_FILE" "backend/Dockerfile.prod" "frontend/Dockerfile.stag")
     for file in "${required_files[@]}"; do
         if [[ ! -f "$file" ]]; then
             error "Required file missing: $file"
@@ -55,7 +76,7 @@ pre_deployment_checks() {
     done
 
     # Validate Docker Compose configuration
-    if ! docker-compose -f "$DOCKER_COMPOSE_FILE" config --quiet; then
+    if ! compose config --quiet; then
         error "Invalid Docker Compose configuration"
         exit 1
     fi
@@ -74,7 +95,7 @@ backup_current_deployment() {
     # Backup database if it exists
     if docker ps | grep -q "ecm-postgres-stag"; then
         log "Backing up PostgreSQL database..."
-        docker exec ecm-postgres-stag pg_dump -U npa_user npa_ecm_stag > "${backup_dir}/database_backup.sql" 2>/dev/null || warning "Database backup failed"
+        docker exec ecm-postgres-stag pg_dump -U ecmadmin npa_ecm_stag > "${backup_dir}/database_backup.sql" 2>/dev/null || warning "Database backup failed"
     fi
 
     # Backup Docker Compose configuration
@@ -91,7 +112,7 @@ stop_services() {
         cd "$STAGING_DIR"
         # IMPORTANT: Do NOT use -v flag - this would remove volumes and wipe the database!
         # Only stop containers, preserve volumes to keep database data
-        docker-compose -f "$DOCKER_COMPOSE_FILE" down --timeout 30 || warning "Some containers failed to stop gracefully"
+        compose down --timeout 30 || warning "Some containers failed to stop gracefully"
         cd - > /dev/null
     fi
 
@@ -121,7 +142,7 @@ deploy_services() {
     cd "$STAGING_DIR"
 
     # Start services
-    docker-compose -f "$DOCKER_COMPOSE_FILE" up -d --build
+    compose up -d --build
 
     # Wait for services to be healthy
     log "⏳ Waiting for services to start..."
@@ -143,7 +164,7 @@ run_health_checks() {
         local healthy=true
 
         # Check PostgreSQL
-        if ! docker exec ecm-postgres-stag pg_isready -U npa_user -d npa_ecm_stag >/dev/null 2>&1; then
+        if ! docker exec ecm-postgres-stag pg_isready -U ecmadmin -d npa_ecm_stag >/dev/null 2>&1; then
             warning "PostgreSQL is not healthy"
             healthy=false
         fi
@@ -240,7 +261,7 @@ rollback() {
 
         # Restart services from backup
         cd "$STAGING_DIR"
-        docker-compose -f "$DOCKER_COMPOSE_FILE" up -d
+        compose up -d
         cd - > /dev/null
 
         success "Rollback completed"

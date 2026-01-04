@@ -1,28 +1,31 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Accept build arguments for Next.js public environment variables
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_ENVIRONMENT
+
+# Expose them during build (NEXT_PUBLIC_* is baked into the client bundle)
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_ENVIRONMENT=$NEXT_PUBLIC_ENVIRONMENT
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
 RUN npm run build
 
+# Minimal runtime image using Next.js standalone output
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-COPY --from=builder /app/package.json /app/package-lock.json ./
-RUN npm ci --omit=dev
+# Copy standalone server and required files (no runtime npm install)
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/public ./public
 
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/next.config.js ./
-COPY --from=builder /app/tsconfig.json ./
-COPY --from=builder /app/tailwind.config.ts ./
-COPY --from=builder /app/postcss.config.js ./
-COPY --from=builder /app/eslint.config.js ./
-COPY --from=builder /app/components.json ./
-
+USER node
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["node", "server.js"]

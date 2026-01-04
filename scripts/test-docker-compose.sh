@@ -37,20 +37,22 @@ test_compose_config() {
     for file in "${compose_files[@]}"; do
         if [[ -f "$file" ]]; then
             log "Testing $file..."
-            if command -v docker-compose >/dev/null 2>&1; then
+            if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+                if docker compose -f "$file" config --quiet; then
+                    success "✓ $file configuration is valid"
+                else
+                    error "✗ $file configuration is invalid"
+                    return 1
+                fi
+            elif command -v docker-compose >/dev/null 2>&1; then
                 if docker-compose -f "$file" config --quiet; then
                     success "✓ $file configuration is valid"
                 else
-                    # Special handling for dev file that might be from different project
-                    if [[ "$file" == "docker-compose.local.yml" ]]; then
-                        warning "! $file may be from different project (DMS), skipping validation"
-                    else
-                        error "✗ $file configuration is invalid"
-                        return 1
-                    fi
+                    error "✗ $file configuration is invalid"
+                    return 1
                 fi
             else
-                warning "! docker-compose command not available, skipping validation"
+                warning "! Docker Compose command not available, skipping validation"
             fi
         else
             warning "! $file not found"
@@ -70,7 +72,7 @@ test_docker_images() {
     fi
 
     # Check if required base images are available
-    local base_images=("postgres:15-alpine" "redis:7-alpine" "nginx:alpine" "node:20-alpine" "python:3.11-slim")
+    local base_images=("postgres:16-alpine" "redis:7-alpine" "nginx:alpine" "node:20-alpine" "python:3.13-slim")
 
     for image in "${base_images[@]}"; do
         if docker images "$image" --format "table {{.Repository}}:{{.Tag}}" 2>/dev/null | grep -q "$image"; then
@@ -129,7 +131,7 @@ test_networking() {
     log "🔍 Testing networking configuration..."
 
     # Check if required ports are available (basic check)
-    local ports=(5432 6379 8000 3000 80 9091 3002)
+    local ports=(5432 6379 8000 3000 80 4646 8002 3002)
 
     for port in "${ports[@]}"; do
         if lsof -i :"$port" >/dev/null 2>&1; then
@@ -144,7 +146,7 @@ test_networking() {
 test_volumes() {
     log "🔍 Testing volume mount points..."
 
-    local volume_paths=("nginx/stag.conf" "monitoring/prometheus.yml")
+    local volume_paths=("nginx/stag.conf" "nginx/prod.conf" "monitoring/prometheus.yml")
 
     for path in "${volume_paths[@]}"; do
         if [[ -f "$path" ]]; then
@@ -223,7 +225,7 @@ main() {
         echo ""
         log "Next steps:"
         log "1. Run './scripts/deploy-staging.sh' to deploy to staging"
-        log "2. Run './scripts/health-check.sh' to verify deployment"
+        log "2. Run './scripts/ecm health stag' to verify deployment"
         log "3. Access the application at http://172.16.0.46:4646"
         exit 0
     else

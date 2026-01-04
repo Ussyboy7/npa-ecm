@@ -5,6 +5,32 @@ Scripts to automate code quality improvements and maintenance tasks.
 
 ---
 
+## Stack / Docker Scripts (Recommended)
+
+For day-to-day Docker stack management, use the single entrypoint:
+
+```bash
+./scripts/ecm <command> <env> [options]
+```
+
+Examples:
+
+```bash
+./scripts/ecm up local
+./scripts/ecm up stag -- --build
+./scripts/ecm restart prod --prune
+./scripts/ecm status stag
+./scripts/ecm logs stag nginx_stag
+./scripts/ecm health stag --timeout 10
+./scripts/ecm migrate prod
+```
+
+Notes:
+- `env` is one of: `local`, `stag`, `prod`
+- If you get “permission denied”, run `chmod +x scripts/ecm` once, or use `bash scripts/ecm ...`.
+
+---
+
 ## Scripts
 
 ### 1. `replace-console-statements.js`

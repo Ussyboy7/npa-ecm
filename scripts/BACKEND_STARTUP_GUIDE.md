@@ -75,7 +75,7 @@ This will:
 
 ```bash
 # Start entire stack (includes backend with Daphne and Celery workers)
-./scripts/start-docker-local.sh
+./scripts/ecm up local
 ```
 
 The stack includes:
@@ -87,7 +87,7 @@ The stack includes:
 
 ```bash
 # Start staging stack
-./scripts/start-docker-stag.sh
+./scripts/ecm up stag
 ```
 
 The stack includes:
@@ -99,7 +99,7 @@ The stack includes:
 
 ```bash
 # Start production stack
-./scripts/start-docker-prod.sh
+./scripts/ecm up prod
 ```
 
 The stack includes:
@@ -171,7 +171,7 @@ cd frontend && npm run dev
 **Option 3: Docker Compose**
 ```bash
 # Start everything with Docker
-./scripts/start-docker-local.sh
+./scripts/ecm up local
 ```
 
 ## Troubleshooting
