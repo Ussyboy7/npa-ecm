@@ -42,7 +42,15 @@ export const ShareWithDepartmentButton = ({
       onShared();
     } catch (error: unknown) {
       logError('Failed to share with department', error);
-      const errorMessage = error?.message || error?.detail || 'Failed to share with department';
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' &&
+              error !== null &&
+              'detail' in error &&
+              typeof (error as { detail?: unknown }).detail === 'string'
+            ? (error as { detail: string }).detail
+            : 'Failed to share with department';
       toast.error(errorMessage);
     } finally {
       setIsSharing(false);

@@ -789,7 +789,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       });
 
       // Update original correspondence
-      const correspondenceUpdate: unknown = {
+      const correspondenceUpdate: Record<string, unknown> = {
         direction: 'upward',
         status: 'in-progress',
       };
@@ -911,7 +911,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       });
     } catch (error: unknown) {
       // Don't show error if request was cancelled
-      if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+      if ((error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted')))) {
         setIsSubmitting(false);
         setShowConfirmation(false);
         return;
@@ -1081,8 +1081,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
                 <FileText className="h-4 w-4 text-muted-foreground" />
                 Response Type *
               </Label>
-              <RadioGroup value={responseType} onValueChange={(v: Record<string, unknown>) => {
-                setResponseType(v);
+              <RadioGroup value={responseType} onValueChange={(v: string) => {
+                setResponseType(v as typeof responseType);
                 // Reset document selection when switching away from existing-document
                 if (v !== 'existing-document') {
                   setSelectedDocumentId(null);
