@@ -218,10 +218,17 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       
       // Handle unified search results (when search_type is 'all')
       if (searchType === 'all' && isUnifiedSearchResult(result)) {
+        const unifiedResult = result;
         const newResults = [
-          ...(unifiedResult.documents?.results || []).filter(isRecord).map((r) => ({ ...r, _type: 'document' })),
-          ...(unifiedResult.correspondence?.results || []).filter(isRecord).map((r) => ({ ...r, _type: 'correspondence' })),
-          ...(unifiedResult.cases?.results || []).filter(isRecord).map((r) => ({ ...r, _type: 'case' })),
+          ...(unifiedResult.documents?.results || [])
+            .filter(isRecord)
+            .map((r: Record<string, unknown>) => ({ ...r, _type: 'document' })),
+          ...(unifiedResult.correspondence?.results || [])
+            .filter(isRecord)
+            .map((r: Record<string, unknown>) => ({ ...r, _type: 'correspondence' })),
+          ...(unifiedResult.cases?.results || [])
+            .filter(isRecord)
+            .map((r: Record<string, unknown>) => ({ ...r, _type: 'case' })),
         ];
         const combinedResults: SearchResult = {
           results: resetPage ? newResults : [...(results?.results || []), ...newResults],
@@ -310,8 +317,16 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       return;
     }
 
-    const exportData = results.results.map((result: Record<string, unknown>) => {
+    const exportData = results.results
+      .filter(isRecord)
+      .map((result) => {
       const resultType = result._type || (result.document_type ? 'document' : result.case_type ? 'case' : 'correspondence');
+      const author =
+        typeof result.author === 'string'
+          ? result.author
+          : isRecord(result.author) && typeof (result.author as Record<string, unknown>).name === 'string'
+            ? String((result.author as Record<string, unknown>).name)
+            : '';
       return {
         type: resultType,
         title: result.title || result.subject || result.case_number || 'Untitled',
@@ -319,7 +334,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
         status: result.status || '',
         sensitivity: result.sensitivity || '',
         priority: result.priority || '',
-        author: typeof result.author === 'object' ? result.author?.name : result.author || '',
+        author,
         created_at: result.created_at || result.received_date || '',
         snippet: result._search_snippet || result.search_snippet || result.description || result.body || '',
       };
@@ -918,13 +933,22 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                     <FileText className="h-4 w-4 text-muted-foreground" />
                                   )}
                                   <Badge variant="outline" className="text-xs">
-                                    {isCase ? 'Case' : isCorrespondence ? 'Correspondence' : (result.document_type || 'Document')}
+                                    {isCase
+                                      ? 'Case'
+                                      : isCorrespondence
+                                        ? 'Correspondence'
+                                        : (typeof result.document_type === 'string' ? result.document_type : 'Document')}
                                   </Badge>
-                                  {(result.reference_number || (isCase && result.case_number)) && (
+                                  {(() => {
+                                    const ref = isCase ? result.case_number : result.reference_number;
+                                    const refText =
+                                      typeof ref === 'string' || typeof ref === 'number' ? String(ref) : '';
+                                    return refText ? (
                                     <span className="text-xs text-muted-foreground">
-                                      {isCase ? result.case_number : result.reference_number}
+                                        {refText}
                                     </span>
-                                  )}
+                                    ) : null;
+                                  })()}
                                 </div>
                                 <h4 className="font-medium text-base mb-1">
                                   {highlightText(String(result.title ?? result.subject ?? result.case_number ?? 'Untitled'), query)}
@@ -933,7 +957,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                 {result._search_snippet || result.search_snippet ? (
                                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                                     {highlightText(String(result._search_snippet ?? result.search_snippet ?? ''), query)}
-                                    {(result._match_field || result.match_field) && (
+                                    {Boolean(result._match_field ?? result.match_field) && (
                                       <span className="text-xs text-muted-foreground/70 ml-2">
                                         (matched in {String(result._match_field ?? result.match_field ?? '')})
                                       </span>
@@ -945,9 +969,9 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                   </p>
                                 ) : null}
                                 {/* Show case number for cases */}
-                                {isCase && result.case_number && (
+                                {isCase && (typeof result.case_number === 'string' || typeof result.case_number === 'number') && (
                                   <p className="text-xs text-muted-foreground mt-1">
-                                    Case: {result.case_number}
+                                    Case: {String(result.case_number)}
                                   </p>
                                 )}
                                 <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -967,7 +991,11 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                       {result.priority}
                                     </Badge>
                                   )}
-                                  {result.author && (
+                                  {(
+                                    typeof result.author === 'string' ||
+                                    (isRecord(result.author) &&
+                                      typeof (result.author as Record<string, unknown>).name === 'string')
+                                  ) && (
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                       <User className="h-3 w-3" />
                                       <span>

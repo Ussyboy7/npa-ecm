@@ -2420,9 +2420,9 @@ export const ShareDocumentDialog = ({
                                         <p className="text-xs text-muted-foreground">
                                           {recipientUser?.systemRole} • {recipientUser?.gradeLevel}
                                         </p>
-                                        {office && (
+                                        {typeof office?.name === 'string' && (
                                           <p className="text-xs text-muted-foreground truncate">
-                                            {office.name}
+                                            {office?.name}
                                           </p>
                                         )}
                                       </div>

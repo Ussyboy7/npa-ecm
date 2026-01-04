@@ -836,7 +836,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       return existing;
     }
 
-    const response = await apiFetch(`/accounts/users/${id}/`, {
+    const response = await apiFetch<Record<string, unknown>>(`/accounts/users/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -877,7 +877,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const addAssignment = async (assignment: Omit<AssistantAssignment, 'id'>) => {
     const payload = buildDelegationPayload(assignment);
-    const response = await apiFetch('/correspondence/delegations/', {
+    const response = await apiFetch<Record<string, unknown>>('/correspondence/delegations/', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -895,7 +895,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     const merged = { ...existing, ...updates };
     const payload = buildDelegationPayload(merged);
     
-    const response = await apiFetch(`/correspondence/delegations/${id}/`, {
+    const response = await apiFetch<Record<string, unknown>>(`/correspondence/delegations/${id}/`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
     });
@@ -913,7 +913,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   };
 
   const addRole = async (role: CreateRoleInput): Promise<Role> => {
-    const response = await apiFetch('/organization/roles/', {
+    const response = await apiFetch<Record<string, unknown>>('/organization/roles/', {
       method: 'POST',
       body: JSON.stringify({
         name: role.name,
@@ -929,7 +929,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
   const updateRole = async (id: string, updates: UpdateRoleInput): Promise<Role | null> => {
     try {
-      const response = await apiFetch(`/organization/roles/${id}/`, {
+      const response = await apiFetch<Record<string, unknown>>(`/organization/roles/${id}/`, {
         method: 'PATCH',
         body: JSON.stringify({
           name: updates.name,
