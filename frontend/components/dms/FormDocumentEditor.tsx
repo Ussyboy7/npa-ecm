@@ -131,9 +131,11 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
       // Auto-generate PDF if all signatures are complete and no PDF exists yet
       if (finalPendingSigs.length === 0 && finalAllSigs.length > 0) {
-        const hasPdfVersion = doc.document?.versions?.some((v: Record<string, unknown>) => 
-          v.file_type === 'application/pdf' && (v.notes?.includes('Generated PDF') || v.notes?.includes('Auto-generated'))
-        );
+        const hasPdfVersion = doc.document?.versions?.some((v: Record<string, unknown>) => {
+          const fileType = typeof v.file_type === 'string' ? v.file_type : '';
+          const notes = typeof v.notes === 'string' ? v.notes : '';
+          return fileType === 'application/pdf' && (notes.includes('Generated PDF') || notes.includes('Auto-generated'));
+        });
         if (!hasPdfVersion && doc.status === "awaiting_signatures") {
           // Auto-generate PDF
           try {
@@ -174,16 +176,21 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
         const mappedVersions = versions.map((v: Record<string, unknown>) => {
           logInfo('[FormDocumentEditor] Mapping version:', { id: v.id, file_name: v.file_name, file_type: v.file_type, notes: v.notes });
           return {
-            id: v.id,
+            id: String(v.id ?? ''),
             documentId: documentId,
-            versionNumber: v.version_number ?? 1,
-            fileName: v.file_name ?? 'file',
-            fileType: v.file_type ?? 'application/octet-stream',
-            fileSize: v.file_size ?? 0,
-            fileUrl: v.file_url,
-            uploadedBy: v.uploaded_by?.id ? String(v.uploaded_by.id) : (v.uploaded_by ? String(v.uploaded_by) : ''),
-            uploadedAt: v.uploaded_at ?? new Date().toISOString(),
-            notes: v.notes,
+            versionNumber: typeof v.version_number === 'number' ? v.version_number : 1,
+            fileName: typeof v.file_name === 'string' ? v.file_name : 'file',
+            fileType: typeof v.file_type === 'string' ? v.file_type : 'application/octet-stream',
+            fileSize: typeof v.file_size === 'number' ? v.file_size : 0,
+            fileUrl: typeof v.file_url === 'string' ? v.file_url : undefined,
+            uploadedBy:
+              typeof v.uploaded_by === 'object' && v.uploaded_by !== null && 'id' in (v.uploaded_by as Record<string, unknown>)
+                ? String((v.uploaded_by as Record<string, unknown>).id ?? '')
+                : v.uploaded_by
+                  ? String(v.uploaded_by)
+                  : '',
+            uploadedAt: typeof v.uploaded_at === 'string' ? v.uploaded_at : new Date().toISOString(),
+            notes: typeof v.notes === 'string' ? v.notes : undefined,
           };
         }) as DocumentVersion[];
         
@@ -247,8 +254,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
       });
     } catch (error: unknown) {
       logError("[FormDocumentEditor] Error loading form document:", error);
-      const errorMessage = error?.message || "Failed to load form document";
-      logError("[FormDocumentEditor] Error details:", { error, errorMessage, stack: error?.stack });
+      const errorMessage = error instanceof Error ? error.message : "Failed to load form document";
+      logError("[FormDocumentEditor] Error details:", { error, errorMessage });
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -665,6 +672,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                 variant="default"
                                 size="sm"
                                 onClick={() => {
+                                  if (!generatedPdf.fileUrl) return;
                                   const link = document.createElement('a');
                                   link.href = generatedPdf.fileUrl;
                                   link.download = generatedPdf.fileName || 'form-document.pdf';
@@ -796,6 +804,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => {
+                                    if (!doc.fileUrl) return;
                                     const link = document.createElement('a');
                                     link.href = doc.fileUrl;
                                     link.download = doc.fileName || 'document';
