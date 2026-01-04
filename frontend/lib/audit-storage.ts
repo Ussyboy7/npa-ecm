@@ -27,35 +27,49 @@ export interface ActivityLog {
   timestamp: string;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+const asString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+};
+const asStringOptional = (value: unknown): string | undefined => {
+  if (value === null || value === undefined) return undefined;
+  return asString(value);
+};
+const asBoolean = (value: unknown, fallback = false): boolean => (typeof value === 'boolean' ? value : fallback);
+const asOneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => {
+  if (typeof value !== 'string') return fallback;
+  return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+};
+
 // Map API response (snake_case) to frontend interface (camelCase)
 const mapApiLog = (log: Record<string, unknown>): ActivityLog => ({
-  id: String(log.id),
-  user: log.user ? String(log.user) : undefined,
-  userName: log.user_name ?? undefined,
-  userEmail: log.user_email ?? undefined,
-  ipAddress: log.ip_address ?? undefined,
-  userAgent: log.user_agent ?? undefined,
-  action: log.action ?? '',
-  actionDisplay: log.action_display ?? log.action ?? '',
-  severity: log.severity ?? 'info',
-  severityDisplay: log.severity_display ?? log.severity ?? 'Info',
-  objectType: log.object_type ?? undefined,
-  objectId: log.object_id ? String(log.object_id) : undefined,
-  objectRepr: log.object_repr ?? undefined,
-  module: log.module ?? undefined,
-  description: log.description ?? '',
-  metadata: log.metadata ?? {},
-  success: log.success ?? true,
-  errorMessage: log.error_message ?? undefined,
-  timestamp: log.timestamp ?? new Date().toISOString(),
+  id: asString(log.id),
+  user: log.user ? asStringOptional(log.user) : undefined,
+  userName: asStringOptional(log.user_name),
+  userEmail: asStringOptional(log.user_email),
+  ipAddress: asStringOptional(log.ip_address),
+  userAgent: asStringOptional(log.user_agent),
+  action: asString(log.action),
+  actionDisplay: asStringOptional(log.action_display) ?? asString(log.action),
+  severity: asOneOf(log.severity, ['info', 'warning', 'error', 'critical'] as const, 'info'),
+  severityDisplay: asStringOptional(log.severity_display) ?? asString(log.severity, 'Info'),
+  objectType: asStringOptional(log.object_type),
+  objectId: log.object_id ? asStringOptional(log.object_id) : undefined,
+  objectRepr: asStringOptional(log.object_repr),
+  module: asStringOptional(log.module),
+  description: asString(log.description),
+  metadata: isRecord(log.metadata) ? log.metadata : {},
+  success: asBoolean(log.success, true),
+  errorMessage: asStringOptional(log.error_message),
+  timestamp: asStringOptional(log.timestamp) ?? new Date().toISOString(),
 });
 
 // Unwrap paginated results
-const unwrapResults = (data: Record<string, unknown>): unknown[] => {
+const unwrapResults = (data: unknown): unknown[] => {
   if (Array.isArray(data)) return data;
-  if (data && typeof data === 'object' && 'results' in data) {
-    return Array.isArray(data.results) ? data.results : [];
-  }
+  if (isRecord(data) && Array.isArray(data.results)) return data.results;
   return [];
 };
 
@@ -104,27 +118,27 @@ export const getActivityLogs = async (params?: {
   const query = queryParams.toString();
   const endpoint = `/audit/logs${query ? `?${query}` : ''}`;
   try {
-    const response = await apiFetch<Record<string, unknown> | { results: unknown[]; count?: number; next?: string | null; previous?: string | null }>(endpoint);
+    const response = await apiFetch<unknown>(endpoint);
     
     // Handle paginated response
-    if (response && typeof response === 'object' && 'results' in response) {
+    if (isRecord(response) && Array.isArray(response.results)) {
       return {
-        results: Array.isArray(response.results) ? response.results.map(mapApiLog) : [],
-        count: response.count as number ?? 0,
-        next: response.next ?? null,
-        previous: response.previous ?? null,
+        results: response.results.filter(isRecord).map(mapApiLog),
+        count: typeof response.count === 'number' ? response.count : 0,
+        next: typeof response.next === 'string' ? response.next : null,
+        previous: typeof response.previous === 'string' ? response.previous : null,
       };
     }
     
     // Handle non-paginated response (array)
     const rawLogs = unwrapResults(response);
     return {
-      results: rawLogs.map(mapApiLog),
+      results: rawLogs.filter(isRecord).map(mapApiLog),
       count: rawLogs.length,
       next: null,
       previous: null,
     };
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     // Silently fail - audit logs are not critical for functionality
     logWarn('Failed to fetch audit logs:', error);
     return { results: [], count: 0, next: null, previous: null };

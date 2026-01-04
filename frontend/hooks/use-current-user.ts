@@ -6,15 +6,18 @@ import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
 import { apiFetch, hasOriginalTokens, hasTokens } from "@/lib/api-client";
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
 const toOptionalString = (value: unknown): string | undefined => {
   if (value === null || value === undefined) return undefined;
   return String(value);
 };
 
 const mapApiUserToUser = (data: Record<string, unknown>): User => {
-  const name = `${data.first_name ?? ""} ${data.last_name ?? ""}`.trim();
+  const name = `${toOptionalString(data.first_name) ?? ""} ${toOptionalString(data.last_name) ?? ""}`.trim();
   // system_role is now a ForeignKey (UUID), but backend returns system_role_name for display
-  let roleName = data.system_role_name ?? (data.system_role?.name ?? "");
+  const systemRoleObj = isRecord(data.system_role) ? data.system_role : undefined;
+  let roleName = toOptionalString(data.system_role_name) ?? (systemRoleObj ? toOptionalString(systemRoleObj.name) : undefined) ?? "";
   // UUID pattern to detect if we accidentally got a UUID instead of a name
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   // Never use UUID as role name
@@ -23,18 +26,18 @@ const mapApiUserToUser = (data: Record<string, unknown>): User => {
   }
   return {
     id: String(data.id ?? data.username),
-    username: data.username ?? undefined,
-    name: name.length > 0 ? name : data.username ?? "User",
-    email: data.email ?? "",
-    employeeId: data.employee_id ?? "",
-    gradeLevel: data.grade_level ?? "",
+    username: typeof data.username === "string" ? data.username : toOptionalString(data.username),
+    name: name.length > 0 ? name : (typeof data.username === "string" ? data.username : "User"),
+    email: typeof data.email === "string" ? data.email : String(data.email ?? ""),
+    employeeId: typeof data.employee_id === "string" ? data.employee_id : String(data.employee_id ?? ""),
+    gradeLevel: typeof data.grade_level === "string" ? data.grade_level : String(data.grade_level ?? ""),
     directorate: toOptionalString(data.directorate ?? data.directorate_id),
     division: toOptionalString(data.division ?? data.division_id),
     department: toOptionalString(data.department ?? data.department_id),
     systemRole: roleName, // Use role name for display
     avatar: undefined,
-    active: data.is_active ?? true,
-    isSuperuser: data.is_superuser ?? false,
+    active: typeof data.is_active === "boolean" ? data.is_active : true,
+    isSuperuser: typeof data.is_superuser === "boolean" ? data.is_superuser : false,
   };
 };
 
@@ -81,8 +84,8 @@ export const useCurrentUser = () => {
       }
 
       try {
-        const response = await apiFetch("/accounts/auth/me/");
-        const user = mapApiUserToUser(response);
+        const response = await apiFetch<unknown>("/accounts/auth/me/");
+        const user = isRecord(response) ? mapApiUserToUser(response) : null;
         globalUserState.user = user;
         globalUserState.hydrated = true;
         globalUserState.loading = false;

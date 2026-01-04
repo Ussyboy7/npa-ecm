@@ -27,22 +27,41 @@ export interface DocumentTemplate {
   isActive?: boolean;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+const asString = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return fallback;
+  return String(value);
+};
+const asStringOrNull = (value: unknown): string | null => {
+  if (value === null) return null;
+  if (value === undefined) return null;
+  return asString(value);
+};
+const asOneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => {
+  if (typeof value !== 'string') return fallback;
+  return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+};
+
 // Map API response (snake_case) to frontend interface (camelCase)
 const mapApiTemplate = (template: Record<string, unknown>): DocumentTemplate => ({
   id: String(template.id),
-  scope: template.scope,
-  scopeId: template.scope_id ?? null,
-  title: template.title,
-  description: template.description ?? undefined,
-  contentHtml: template.content_html,
-  contentText: template.content_text ?? undefined,
+  scope: asOneOf(template.scope, ['organization', 'directorate', 'division', 'department', 'user'] as const, 'organization'),
+  scopeId: asStringOrNull(template.scope_id),
+  title: asString(template.title),
+  description: template.description === undefined ? undefined : asString(template.description),
+  contentHtml: asString(template.content_html),
+  contentText: template.content_text === undefined ? undefined : asString(template.content_text),
   createdBy: template.created_by ? String(template.created_by) : 'system',
   updatedBy: template.updated_by ? String(template.updated_by) : 'system',
   createdAt: template.created_at ?? new Date().toISOString(),
   updatedAt: template.updated_at ?? new Date().toISOString(),
   isDefault: template.is_default ?? true,
-  templateType: template.template_type ?? 'document',
-  actionType: template.action_type ?? undefined,
+  templateType: asOneOf(template.template_type, ['document', 'minute', 'treatment'] as const, 'document'),
+  actionType:
+    template.action_type === null || template.action_type === undefined
+      ? undefined
+      : asOneOf(template.action_type, ['minute', 'approve', 'any'] as const, 'any'),
   isActive: template.is_active ?? true,
 });
 
@@ -68,16 +87,16 @@ export const getTemplates = async (params?: {
 
     const query = queryParams.toString();
     const endpoint = `/correspondence/templates/${query ? `?${query}` : ''}`;
-    const response = await apiFetch<Record<string, unknown>>(endpoint);
+    const response = await apiFetch<unknown>(endpoint);
 
     if (Array.isArray(response)) {
-      return response.map(mapApiTemplate);
+      return response.filter(isRecord).map(mapApiTemplate);
     }
-    if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
-      return response.results.map(mapApiTemplate);
+    if (isRecord(response) && Array.isArray(response.results)) {
+      return response.results.filter(isRecord).map(mapApiTemplate);
     }
     return [];
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     logError('Failed to get templates', error);
     return [];
   }
@@ -165,7 +184,7 @@ export const updateTemplate = async (
   }
 
   try {
-    const payload: unknown = {};
+    const payload: Record<string, unknown> = {};
     if (data.title !== undefined) payload.title = data.title;
     if (data.description !== undefined) payload.description = data.description ?? '';
     if (data.contentHtml !== undefined) payload.content_html = data.contentHtml;
@@ -182,7 +201,7 @@ export const updateTemplate = async (
     });
 
     return mapApiTemplate(response);
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     logError('Failed to update template', error);
     throw error;
   }
@@ -200,7 +219,7 @@ export const deleteTemplate = async (id: string): Promise<void> => {
     await apiFetch(`/correspondence/templates/${id}/`, {
       method: 'DELETE',
     });
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     logError('Failed to delete template', error);
     throw error;
   }

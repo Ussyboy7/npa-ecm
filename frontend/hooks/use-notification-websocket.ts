@@ -75,7 +75,7 @@ class WebSocketManager {
     }
   }
 
-  connect(user: Record<string, unknown>) {
+  connect(user: User | null) {
     if (!this.enabled || !user || this.maxAttemptsReached || this.isConnecting) {
       return;
     }

@@ -46,6 +46,8 @@ export interface Delegation {
   expiresAt?: string;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 const mapApiCorrespondenceDelegationToFrontend = (
   api: ApiCorrespondenceDelegation
 ): Delegation => ({
@@ -72,14 +74,18 @@ export async function getCorrespondenceDelegations(params?: {
     if (params?.correspondence) queryParams.append('correspondence', params.correspondence);
     if (params?.status) queryParams.append('status', params.status);
 
-    const response = await apiFetch<ApiCorrespondenceDelegation[]>(
+    const response = await apiFetch<unknown>(
       `/correspondence/correspondence-delegations/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
     );
     
     // Handle both array and paginated response
-    const delegations = Array.isArray(response) ? response : (response.results || []);
+    const delegations = Array.isArray(response)
+      ? (response as ApiCorrespondenceDelegation[])
+      : isRecord(response) && Array.isArray(response.results)
+        ? (response.results as ApiCorrespondenceDelegation[])
+        : [];
     return delegations.map(mapApiCorrespondenceDelegationToFrontend);
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     logError('Failed to fetch correspondence delegations from backend', error);
     return [];
   }
@@ -97,7 +103,7 @@ export async function getDelegationByCorrespondence(
       status: 'active',
     });
     return delegations[0] || null;
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     logError(`Failed to fetch delegation for correspondence ${correspondenceId}`, error);
     return null;
   }
@@ -110,7 +116,7 @@ export async function createCorrespondenceDelegation(
   data: Omit<Delegation, 'id' | 'delegatedAt' | 'status'>
 ): Promise<Delegation> {
   try {
-    const apiData: unknown = {
+    const apiData: Record<string, unknown> = {
       correspondence_id: data.correspondenceId!,
       assistant_id: data.assistantId.toString(),
       notes: data.delegationNotes || '',
@@ -129,7 +135,7 @@ export async function createCorrespondenceDelegation(
     );
 
     return mapApiCorrespondenceDelegationToFrontend(response);
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     logError('Failed to create correspondence delegation on backend', error);
     throw error;
   }
@@ -158,7 +164,7 @@ export async function updateCorrespondenceDelegation(
     );
 
     return mapApiCorrespondenceDelegationToFrontend(response);
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     logError(`Failed to update correspondence delegation ${id} on backend`, error);
     throw error;
   }
@@ -192,7 +198,7 @@ export async function getDelegationsByAssistant(
   try {
     const delegations = await getCorrespondenceDelegations({ status: 'active' });
     return delegations.filter((d) => d.assistantId.toString() === assistantId.toString());
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     logError(`Failed to fetch delegations for assistant ${assistantId}`, error);
     return [];
   }
