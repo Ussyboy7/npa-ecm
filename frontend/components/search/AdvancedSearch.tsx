@@ -18,6 +18,10 @@ import {
   getSearchHistory,
   type SearchRequest,
   type SearchResult,
+  type SearchResponse,
+  type UnifiedSearchResult,
+  type SavedSearch,
+  type SearchHistory,
 } from '@/lib/search-storage';
 import { logError } from '@/lib/client-logger';
 import { useDebounce } from '@/hooks/use-debounce';
@@ -34,10 +38,14 @@ interface AdvancedSearchProps {
   context?: 'all' | 'documents' | 'correspondence' | 'cases';
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+const isUnifiedSearchResult = (value: unknown): value is UnifiedSearchResult =>
+  isRecord(value) && ('documents' in value || 'correspondence' in value || 'cases' in value);
+
 export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps) => {
   const { divisions, departments, users, offices } = useOrganization();
   const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState<SearchRequest['filters']>({});
+  const [filters, setFilters] = useState<NonNullable<SearchRequest['filters']>>({});
   const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'cases' | 'all'>(
     context === 'all' || !context ? 'all' : context
   );
@@ -45,8 +53,8 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
-  const [savedSearches, setSavedSearches] = useState<unknown[]>([]);
-  const [searchHistory, setSearchHistory] = useState<unknown[]>([]);
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
   const [page, setPage] = useState(0);
   const pageSize = 50;
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -55,21 +63,27 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
   const debouncedQuery = useDebounce(query, 300);
 
   // Keyboard shortcuts
-  useKeyboardShortcuts({
-    'mod+k': (e) => {
-      e.preventDefault();
-      // Focus search input
-      const searchInput = document.querySelector('input[placeholder*="Search by title"]') as HTMLInputElement;
-      if (searchInput) {
-        searchInput.focus();
-      }
+  useKeyboardShortcuts([
+    {
+      key: 'k',
+      ctrl: true,
+      action: () => {
+        const searchInput = document.querySelector(
+          'input[placeholder*="Search by title"], input[placeholder*="Search by title, reference number"]',
+        ) as HTMLInputElement | null;
+        searchInput?.focus();
+      },
+      description: 'Focus search (Cmd/Ctrl+K)',
     },
-    'Escape': (e) => {
-      if (showFilters) {
-        setShowFilters(false);
-      }
+    {
+      key: 'Escape',
+      action: () => {
+        if (showFilters) setShowFilters(false);
+      },
+      preventDefault: false,
+      description: 'Close filters (Esc)',
     },
-  });
+  ]);
 
   useEffect(() => {
     // Cancel previous suggestions request
@@ -100,14 +114,18 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const urlQuery = params.get('q');
-      const urlSearchType = params.get('search_type') as 'documents' | 'correspondence' | 'all' | null;
-      const urlFilters: SearchRequest['filters'] = {};
+      const urlSearchType = params.get('search_type') as 'documents' | 'correspondence' | 'cases' | 'all' | null;
+      const urlFilters: NonNullable<SearchRequest['filters']> = {};
       
       // Parse filter parameters
       params.forEach((value, key) => {
         if (key.startsWith('filters[') && key.endsWith(']')) {
           const filterKey = key.slice(8, -1);
-          urlFilters[filterKey as keyof SearchRequest['filters']] = value;
+          if (filterKey === 'tags') {
+            urlFilters.tags = value.split(',').map((v) => v.trim()).filter(Boolean);
+          } else {
+            (urlFilters as Record<string, unknown>)[filterKey] = value;
+          }
         }
       });
       
@@ -192,34 +210,31 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
         search_type: searchType,
       };
 
-      const result = await search(searchRequest, controller.signal);
+      const result: SearchResponse = await search(searchRequest, controller.signal);
       
       if (controller.signal.aborted) {
         return;
       }
       
       // Handle unified search results (when search_type is 'all')
-      if (searchType === 'all' && typeof result === 'object' && result !== null && 'documents' in result && 'correspondence' in result) {
-        const unifiedResult = result as { documents?: { results?: unknown[] }; correspondence?: { results?: unknown[] } };
+      if (searchType === 'all' && isUnifiedSearchResult(result)) {
         const newResults = [
-          ...(unifiedResult.documents?.results || []).map((r: Record<string, unknown>) => ({ ...r, _type: 'document' })),
-          ...(unifiedResult.correspondence?.results || []).map((r: Record<string, unknown>) => ({ ...r, _type: 'correspondence' })),
-          ...(unifiedResult.cases?.results || []).map((r: Record<string, unknown>) => ({ ...r, _type: 'case' }))
+          ...(unifiedResult.documents?.results || []).filter(isRecord).map((r) => ({ ...r, _type: 'document' })),
+          ...(unifiedResult.correspondence?.results || []).filter(isRecord).map((r) => ({ ...r, _type: 'correspondence' })),
+          ...(unifiedResult.cases?.results || []).filter(isRecord).map((r) => ({ ...r, _type: 'case' })),
         ];
         const combinedResults: SearchResult = {
           results: resetPage ? newResults : [...(results?.results || []), ...newResults],
-          total_count: unifiedResult.total_count,
+          total_count: unifiedResult.total_count ?? newResults.length,
           limit: pageSize,
           offset: currentPage * pageSize,
-          has_more: unifiedResult.documents?.has_more || unifiedResult.correspondence?.has_more || unifiedResult.cases?.has_more,
+          has_more: Boolean(unifiedResult.has_more ?? unifiedResult.documents?.has_more ?? unifiedResult.correspondence?.has_more ?? unifiedResult.cases?.has_more),
         };
         setResults(combinedResults);
       } else {
-        const newResults = resetPage ? result.results : [...(results?.results || []), ...result.results];
-        setResults({
-          ...result,
-          results: newResults,
-        });
+        const typed = result as SearchResult;
+        const newResults = resetPage ? typed.results : [...(results?.results || []), ...typed.results];
+        setResults({ ...typed, results: newResults });
       }
       } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -272,12 +287,20 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     setSuggestions([]);
   };
 
-  const handleHistoryClick = (historyItem: Record<string, unknown>) => {
+  const handleHistoryClick = (historyItem: SearchHistory) => {
     setQuery(historyItem.query);
-    if (historyItem.filters) {
-      const { search_type, ...otherFilters } = historyItem.filters;
-      if (search_type) setSearchType(search_type);
-      setFilters(otherFilters);
+    if (historyItem.filters && typeof historyItem.filters === 'object') {
+      const searchTypeFromFilters = (historyItem.filters as Record<string, unknown>).search_type;
+      if (
+        searchTypeFromFilters === 'documents' ||
+        searchTypeFromFilters === 'correspondence' ||
+        searchTypeFromFilters === 'cases' ||
+        searchTypeFromFilters === 'all'
+      ) {
+        setSearchType(searchTypeFromFilters);
+      }
+      const { search_type: _ignored, ...otherFilters } = historyItem.filters as Record<string, unknown>;
+      setFilters(otherFilters as NonNullable<SearchRequest['filters']>);
     }
   };
 
@@ -745,7 +768,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                     <ScrollArea className="h-32">
                       {searchHistory.map((item) => (
                         <button
-                          key={item.id as string}
+                          key={item.id}
                           className="w-full text-left text-sm py-1 hover:text-primary"
                           onClick={() => handleHistoryClick(item)}
                         >
@@ -769,14 +792,22 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                     <ScrollArea className="h-32">
                       {savedSearches.map((item) => (
                         <button
-                          key={item.id as string}
+                          key={item.id}
                           className="w-full text-left text-sm py-1 hover:text-primary"
                           onClick={() => {
                             setQuery(item.query);
                             if (item.filters) {
-                              const { search_type, ...otherFilters } = item.filters;
-                              if (search_type) setSearchType(search_type);
-                              setFilters(otherFilters);
+                              const searchTypeFromFilters = (item.filters as Record<string, unknown>).search_type;
+                              if (
+                                searchTypeFromFilters === 'documents' ||
+                                searchTypeFromFilters === 'correspondence' ||
+                                searchTypeFromFilters === 'cases' ||
+                                searchTypeFromFilters === 'all'
+                              ) {
+                                setSearchType(searchTypeFromFilters);
+                              }
+                              const { search_type: _ignored, ...otherFilters } = item.filters as Record<string, unknown>;
+                              setFilters(otherFilters as NonNullable<SearchRequest['filters']>);
                             }
                           }}
                         >
@@ -841,18 +872,21 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
               <>
                 <ScrollArea className="h-96">
                   <div className="space-y-2">
-                    {results.results.map((result: Record<string, unknown>, idx: number) => {
+                    {results.results.map((raw, idx) => {
+                      if (!isRecord(raw)) return null;
+                      const result = raw as Record<string, unknown>;
                       const resultType = result._type || (result.document_type ? 'document' : result.case_type ? 'case' : 'correspondence');
                       const isCorrespondence = resultType === 'correspondence';
                       const isCase = resultType === 'case';
                       
                       return (
                         <Card
-                          key={result.id || idx}
+                          key={typeof result.id === 'string' || typeof result.id === 'number' ? String(result.id) : String(idx)}
                           className="cursor-pointer hover:bg-accent transition-colors"
                           onClick={() => {
                             if (isCase) {
-                              window.location.href = `/cases/${result.id}`;
+                              const id = typeof result.id === 'string' || typeof result.id === 'number' ? String(result.id) : '';
+                              window.location.href = `/cases/${id}`;
                             } else {
                               onResultSelect?.(result);
                             }
@@ -863,7 +897,8 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                             if (e.key === 'Enter' || e.key === ' ') {
                               e.preventDefault();
                               if (isCase) {
-                                window.location.href = `/cases/${result.id}`;
+                                const id = typeof result.id === 'string' || typeof result.id === 'number' ? String(result.id) : '';
+                                window.location.href = `/cases/${id}`;
                               } else {
                                 onResultSelect?.(result);
                               }

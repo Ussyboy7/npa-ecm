@@ -35,6 +35,24 @@ export interface SearchResult {
   has_more: boolean;
 }
 
+export interface UnifiedSearchBucket {
+  results?: unknown[];
+  total_count?: number;
+  has_more?: boolean;
+}
+
+export interface UnifiedSearchResult {
+  documents?: UnifiedSearchBucket;
+  correspondence?: UnifiedSearchBucket;
+  cases?: UnifiedSearchBucket;
+  total_count?: number;
+  limit?: number;
+  offset?: number;
+  has_more?: boolean;
+}
+
+export type SearchResponse = SearchResult | UnifiedSearchResult;
+
 export interface SavedSearch {
   id: string;
   name: string;
@@ -62,9 +80,9 @@ export interface SearchHistory {
 /**
  * Perform advanced search.
  */
-export const search = async (request: SearchRequest, signal?: AbortSignal): Promise<SearchResult> => {
+export const search = async (request: SearchRequest, signal?: AbortSignal): Promise<SearchResponse> => {
   try {
-    const response = await apiFetch<SearchResult>('/search/operations/search/', {
+    const response = await apiFetch<SearchResponse>('/search/operations/search/', {
       method: 'POST',
       body: JSON.stringify(request),
       signal,
