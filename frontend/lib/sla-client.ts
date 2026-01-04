@@ -129,8 +129,8 @@ export interface Escalation {
   resolvedAt: string | null;
   resolvedBy: string | null;
   resolvedByName: string | null;
-  resolutionNotes: string;
-  errorMessage: string;
+  resolutionNotes: string | null;
+  errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
 }

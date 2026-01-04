@@ -202,8 +202,14 @@ function transformApiCorrespondenceLink(api: ApiCaseCorrespondenceLink): CaseCor
       id: api.correspondence.id,
       referenceNumber: api.correspondence.reference_number || '',
       subject: api.correspondence.subject || '',
-      status: api.correspondence.status || 'pending',
-      // Add other fields as needed
+      status: (api.correspondence.status as 'pending' | 'in-progress' | 'completed' | 'archived') || 'pending',
+      // Fill required fields with safe defaults (case link only returns partial correspondence)
+      source: 'internal',
+      receivedDate: '',
+      senderName: '',
+      senderOrganization: '',
+      priority: 'medium',
+      direction: 'upward',
     } : undefined,
     isPrimary: api.is_primary || false,
     notes: api.notes,
@@ -262,7 +268,8 @@ export async function getCaseById(caseId: string, signal?: AbortSignal): Promise
     correspondence: (apiCase.correspondence || []).map(transformApiCorrespondenceLink),
     documents: (apiCase.documents || []).map(transformApiDocumentLink),
     forms: (apiCase.forms || []).map(transformApiFormLink),
-    activities: apiCase.activities || [],
+    // Backend may return mixed activity shapes; keep empty until we implement a mapper.
+    activities: [],
   };
 }
 

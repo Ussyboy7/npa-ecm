@@ -1,6 +1,8 @@
 import { apiFetch } from '../api-client';
 import { logError } from '@/lib/client-logger';
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 export interface DraftFileMetadata {
   id: string;
   name: string;
@@ -77,12 +79,16 @@ export async function getDrafts(params?: {
     if (params?.correspondence) queryParams.append('correspondence', params.correspondence);
     if (params?.draft_type) queryParams.append('draft_type', params.draft_type);
 
-    const response = await apiFetch<ApiDraft[]>(
+    const response = await apiFetch<unknown>(
       `/correspondence/drafts/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
     );
     
     // Handle both array and paginated response
-    const drafts = Array.isArray(response) ? response : (response.results || []);
+    const drafts = Array.isArray(response)
+      ? (response as ApiDraft[])
+      : isRecord(response) && Array.isArray(response.results)
+        ? (response.results as ApiDraft[])
+        : [];
     return drafts.map(mapApiDraftToFrontend);
   } catch (error: unknown) {
     logError('Failed to fetch drafts from backend', error);

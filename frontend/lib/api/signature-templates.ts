@@ -1,6 +1,8 @@
 import { apiFetch } from '../api-client';
 import { logError } from '@/lib/client-logger';
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
 export interface ApiSignatureTemplate {
   id: string;
   name: string;
@@ -71,11 +73,15 @@ export async function getSignatureTemplates(params?: {
     if (params?.style) queryParams.append('style', params.style);
     if (params?.default_apply !== undefined) queryParams.append('default_apply', String(params.default_apply));
 
-    const response = await apiFetch<ApiSignatureTemplate[]>(
+    const response = await apiFetch<unknown>(
       `/accounts/signature-templates/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
     );
     
-    const templates = Array.isArray(response) ? response : (response.results || []);
+    const templates = Array.isArray(response)
+      ? (response as ApiSignatureTemplate[])
+      : isRecord(response) && Array.isArray(response.results)
+        ? (response.results as ApiSignatureTemplate[])
+        : [];
     return templates.map(mapApiTemplateToFrontend);
   } catch (error: unknown) {
     logError('Failed to fetch signature templates from backend', error);
