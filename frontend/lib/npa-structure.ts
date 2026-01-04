@@ -296,6 +296,11 @@ export type User = {
   active: boolean;
   username?: string;
   isSuperuser?: boolean;
+  /**
+   * Role-driven permissions returned by the backend (derived from Role.permissions).
+   * Keys use snake_case IDs (e.g. "can_register_correspondence") to match role config.
+   */
+  rolePermissions?: Record<string, boolean>;
 };
 
 export function getGradeLevels(): GradeLevel[] {

@@ -260,6 +260,13 @@ const mapApiUserToUser = (user: Record<string, unknown>): User => {
   if (!roleName || uuidPattern.test(roleName)) {
     roleName = '';
   }
+  const permissionsRaw = isRecord(user.permissions) ? user.permissions : undefined;
+  const rolePermissions =
+    permissionsRaw
+      ? (Object.fromEntries(
+          Object.entries(permissionsRaw).map(([key, value]) => [key, Boolean(value)]),
+        ) as Record<string, boolean>)
+      : undefined;
   return {
     id: asString(user.id ?? user.username),
     username: asStringOptional(user.username),
@@ -274,6 +281,7 @@ const mapApiUserToUser = (user: Record<string, unknown>): User => {
     avatar: undefined,
     active: asBoolean(user.is_active, true),
     isSuperuser: asBoolean(user.is_superuser, false),
+    rolePermissions,
   };
 };
 

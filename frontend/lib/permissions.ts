@@ -90,7 +90,13 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
     isStaffII ||
     isStaffIII;
 
-  profile.canRegisterCorrespondence = canRegisterByGrade;
+  // Prefer backend-driven permission when available (Role.permissions["can_register_correspondence"]).
+  // Fall back to legacy grade-based behavior if the backend hasn't been updated yet.
+  if (typeof user.rolePermissions?.can_register_correspondence === "boolean") {
+    profile.canRegisterCorrespondence = user.rolePermissions.can_register_correspondence;
+  } else {
+    profile.canRegisterCorrespondence = canRegisterByGrade;
+  }
 
   // Disallow registration for AssistantManager and management grades, but allow superadmin
   // Also check for common superadmin indicators as additional fallback
@@ -101,8 +107,11 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
     role?.toLowerCase().includes('super') ||
     role?.toLowerCase().includes('admin');
   
-  if (!isSuperAdminFallback && (isAssistantManager || managementGrades)) {
-    profile.canRegisterCorrespondence = false;
+  // If backend is driving registration permission, do not apply legacy grade restrictions.
+  if (typeof user.rolePermissions?.can_register_correspondence !== "boolean") {
+    if (!isSuperAdminFallback && (isAssistantManager || managementGrades)) {
+      profile.canRegisterCorrespondence = false;
+    }
   }
   
   // Ensure superadmin always has registration permission

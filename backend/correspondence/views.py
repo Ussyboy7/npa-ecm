@@ -210,6 +210,34 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         return qs.filter(is_deleted=False)
 
     def create(self, request, *args, **kwargs):
+        # Server-side permission enforcement for correspondence registration/creation.
+        # Frontend should be allowed to drive this via Role.permissions['can_register_correspondence'].
+        # We also allow users who have an active office membership with can_register=True (registry staff).
+        user = request.user
+        try:
+            from organization.models import OfficeMembership
+            role = getattr(user, "system_role", None)
+            role_perms = getattr(role, "permissions", None) if role else None
+            role_allows = bool(role_perms.get("can_register_correspondence", False)) if isinstance(role_perms, dict) else False
+            membership_allows = OfficeMembership.objects.filter(user=user, is_active=True, can_register=True).exists()
+            if not (getattr(user, "is_superuser", False) or role_allows or membership_allows):
+                raise PermissionDenied(
+                    {
+                        "detail": "Registration restricted. Your role does not permit registering correspondence.",
+                        "code": "registration_restricted",
+                    }
+                )
+        except PermissionDenied:
+            raise
+        except Exception:
+            # If anything unexpected happens while evaluating permissions, fail closed.
+            raise PermissionDenied(
+                {
+                    "detail": "Registration restricted due to permission evaluation error.",
+                    "code": "registration_restricted",
+                }
+            )
+
         # Extract file attachments from request (before serializer processes data)
         attachments = request.FILES.getlist('attachments', [])
         

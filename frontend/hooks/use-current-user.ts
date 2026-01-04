@@ -24,6 +24,15 @@ const mapApiUserToUser = (data: Record<string, unknown>): User => {
   if (uuidPattern.test(roleName)) {
     roleName = "";
   }
+  const permissionsRaw = isRecord(data.permissions) ? data.permissions : undefined;
+  const rolePermissions =
+    permissionsRaw
+      ? (Object.fromEntries(
+          Object.entries(permissionsRaw)
+            .filter(([key]) => typeof key === "string")
+            .map(([key, value]) => [key, Boolean(value)]),
+        ) as Record<string, boolean>)
+      : undefined;
   return {
     id: String(data.id ?? data.username),
     username: typeof data.username === "string" ? data.username : toOptionalString(data.username),
@@ -38,6 +47,7 @@ const mapApiUserToUser = (data: Record<string, unknown>): User => {
     avatar: undefined,
     active: typeof data.is_active === "boolean" ? data.is_active : true,
     isSuperuser: typeof data.is_superuser === "boolean" ? data.is_superuser : false,
+    rolePermissions,
   };
 };
 
