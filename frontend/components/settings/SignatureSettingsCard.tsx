@@ -272,12 +272,33 @@ export const SignatureSettingsCard = () => {
       
       // Provide specific error messages
       let errorMessage = 'Failed to upload signature. Please try again.';
-      if (error?.response?.status === 413) {
+      const status =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as { response?: unknown }).response === 'object' &&
+        (error as { response?: { status?: unknown } }).response !== null &&
+        typeof (error as { response?: { status?: unknown } }).response?.status === 'number'
+          ? (error as { response?: { status?: number } }).response?.status
+          : undefined;
+      const detail =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as { response?: unknown }).response === 'object' &&
+        (error as { response?: { data?: unknown } }).response !== null &&
+        typeof (error as { response?: { data?: { detail?: unknown } } }).response?.data === 'object' &&
+        (error as { response?: { data?: { detail?: unknown } } }).response?.data !== null &&
+        typeof (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail === 'string'
+          ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : undefined;
+
+      if (status === 413) {
         errorMessage = 'File is too large. Please use a smaller image file.';
-      } else if (error?.response?.status === 400) {
-        errorMessage = error?.response?.data?.detail || 'Invalid file format. Please check your file and try again.';
-      } else if (error?.message) {
-        errorMessage = (error instanceof Error ? error.message : "Unknown error");
+      } else if (status === 400) {
+        errorMessage = detail || 'Invalid file format. Please check your file and try again.';
+      } else if (error instanceof Error && error.message) {
+        errorMessage = error.message;
       }
       
       setErrors(prev => ({ ...prev, file: errorMessage }));
@@ -299,7 +320,7 @@ export const SignatureSettingsCard = () => {
       });
     } catch (error: unknown) {
       logError('Failed to delete signature', error);
-      const errorMessage = error?.message || 'Failed to delete signature. Please try again.';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete signature. Please try again.';
       toast.error(errorMessage);
     }
   }, []);
@@ -340,7 +361,7 @@ export const SignatureSettingsCard = () => {
       }
     } catch (error: unknown) {
       logError('Failed to save settings', error);
-      const errorMessage = error?.message || 'Failed to save settings. Please try again.';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save settings. Please try again.';
       toast.error(errorMessage);
     } finally {
       setIsSaving(false);
@@ -384,8 +405,9 @@ export const SignatureSettingsCard = () => {
     setShowExportDialog(false);
   }, [signature, sealOfficeName, sealOfficeTitle, sealPrefix, require2fa]);
 
-  const handleImportSettings = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleImportSettings = useCallback((event: Event) => {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0];
     if (!file) return;
     
     const reader = new FileReader();
@@ -406,7 +428,7 @@ export const SignatureSettingsCard = () => {
       }
     };
     reader.readAsText(file);
-    event.target.value = '';
+    if (input) input.value = '';
   }, []);
 
   const handleDownloadSeal = useCallback(() => {
@@ -825,9 +847,7 @@ export const SignatureSettingsCard = () => {
                               checked={require2fa}
                               onCheckedChange={(checked) => {
                                 setRequire2fa(checked);
-                                if (checked && !currentUser?.has2FA) {
-                                  setShow2FADialog(true);
-                                }
+                                if (checked) setShow2FADialog(true);
                               }}
                               aria-label="Require 2FA for seal"
                             />

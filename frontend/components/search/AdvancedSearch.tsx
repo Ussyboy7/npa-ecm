@@ -892,21 +892,21 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                   )}
                                 </div>
                                 <h4 className="font-medium text-base mb-1">
-                                  {highlightText(result.title || result.subject || result.case_number || 'Untitled', query)}
+                                  {highlightText(String(result.title ?? result.subject ?? result.case_number ?? 'Untitled'), query)}
                                 </h4>
                                 {/* Show snippet if available, otherwise show description/body */}
                                 {result._search_snippet || result.search_snippet ? (
                                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                    {highlightText(result._search_snippet || result.search_snippet || '', query)}
+                                    {highlightText(String(result._search_snippet ?? result.search_snippet ?? ''), query)}
                                     {(result._match_field || result.match_field) && (
                                       <span className="text-xs text-muted-foreground/70 ml-2">
-                                        (matched in {result._match_field || result.match_field})
+                                        (matched in {String(result._match_field ?? result.match_field ?? '')})
                                       </span>
                                     )}
                                   </p>
                                 ) : (result.description || result.body) ? (
                                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                    {highlightText(result.description || result.body || '', query)}
+                                    {highlightText(String(result.description ?? result.body ?? ''), query)}
                                   </p>
                                 ) : null}
                                 {/* Show case number for cases */}
@@ -916,18 +916,18 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                   </p>
                                 )}
                                 <div className="flex flex-wrap items-center gap-2 mt-2">
-                                  {result.status && (
+                                  {typeof result.status === 'string' && (
                                     <Badge variant="outline" className="text-xs">
                                       {result.status}
                                     </Badge>
                                   )}
-                                  {result.sensitivity && (
+                                  {typeof result.sensitivity === 'string' && (
                                     <Badge variant="outline" className="text-xs">
                                       <Shield className="h-3 w-3 mr-1" />
                                       {result.sensitivity}
                                     </Badge>
                                   )}
-                                  {result.priority && (
+                                  {typeof result.priority === 'string' && (
                                     <Badge variant="outline" className="text-xs capitalize">
                                       {result.priority}
                                     </Badge>
@@ -935,13 +935,30 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                                   {result.author && (
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                       <User className="h-3 w-3" />
-                                      <span>{typeof result.author === 'object' ? result.author.name : result.author}</span>
+                                      <span>
+                                        {typeof result.author === 'string'
+                                          ? result.author
+                                          : typeof result.author === 'object' &&
+                                            result.author !== null &&
+                                            'name' in result.author &&
+                                            typeof (result.author as { name?: unknown }).name === 'string'
+                                            ? (result.author as { name: string }).name
+                                            : ''}
+                                      </span>
                                     </div>
                                   )}
-                                  {(result.created_at || result.received_date) && (
+                                  {(typeof result.created_at === 'string' || typeof result.received_date === 'string') && (
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                       <Calendar className="h-3 w-3" />
-                                      <span>{formatDate(result.created_at || result.received_date)}</span>
+                                      <span>
+                                        {formatDate(
+                                          typeof result.created_at === 'string'
+                                            ? result.created_at
+                                            : typeof result.received_date === 'string'
+                                              ? result.received_date
+                                              : ''
+                                        )}
+                                      </span>
                                     </div>
                                   )}
                                 </div>
