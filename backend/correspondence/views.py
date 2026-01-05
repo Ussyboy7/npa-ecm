@@ -2354,17 +2354,29 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         division_id = getattr(user, "division_id", None)
         directorate_id = getattr(user, "directorate_id", None)
 
+        # Debug logging
+        print(f"DEBUG: User {user.username} - allowed_levels: {allowed_levels}")
+        print(f"DEBUG: User {user.username} - department_id: {department_id}, division_id: {division_id}, directorate_id: {directorate_id}")
+
         filters = Q()
         if Correspondence.ArchiveLevel.DEPARTMENT in allowed_levels and department_id:
             filters |= Q(department_id=department_id)
+            print(f"DEBUG: Added department filter: {department_id}")
         if Correspondence.ArchiveLevel.DIVISION in allowed_levels and division_id:
             filters |= Q(division_id=division_id)
+            print(f"DEBUG: Added division filter: {division_id}")
         if Correspondence.ArchiveLevel.DIRECTORATE in allowed_levels and directorate_id:
             filters |= Q(division__directorate_id=directorate_id)
+            print(f"DEBUG: Added directorate filter: {directorate_id}")
 
         if not filters:
+            print(f"DEBUG: No filters applied for user {user.username}")
             return queryset.none()
-        return queryset.filter(filters)
+
+        filtered_queryset = queryset.filter(filters)
+        count = filtered_queryset.count()
+        print(f"DEBUG: Filtered queryset count for user {user.username}: {count}")
+        return filtered_queryset
 
     def _get_department_records_queryset(self, user):
         queryset = self.base_queryset.filter(
