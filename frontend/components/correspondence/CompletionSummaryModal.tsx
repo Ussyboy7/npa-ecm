@@ -18,6 +18,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Card, CardContent } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   FileCheck,
   Send,
@@ -464,10 +466,12 @@ export const CompletionSummaryModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent
+        className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5 text-success" />
+            <FileCheck className="h-5 w-5 text-primary" />
             Complete & Archive Correspondence
           </DialogTitle>
           <DialogDescription>
@@ -475,7 +479,36 @@ export const CompletionSummaryModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <ScrollArea className="max-h-[calc(95vh-220px)] sm:max-h-[calc(90vh-220px)] pr-4">
+          <div className="space-y-6 py-2">
+          {/* Document Summary */}
+          <Card className="bg-muted/50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <FileText className="h-5 w-5 text-primary mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm mb-1">{correspondence.subject}</p>
+                  <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+                    <span>Ref: {correspondence.referenceNumber}</span>
+                    <span>•</span>
+                    <span>Received: {new Date(correspondence.receivedDate).toLocaleDateString()}</span>
+                    <span>•</span>
+                    <span>Processing: {calculateProcessingTime(correspondence.receivedDate)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={
+                    correspondence.priority === 'urgent' ? 'destructive' :
+                    correspondence.priority === 'high' ? 'default' :
+                    'secondary'
+                  }>
+                    {correspondence.priority}
+                  </Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Auto-Generated Summary */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -560,15 +593,17 @@ export const CompletionSummaryModal = ({
           </div>
 
           {/* Participants Selection */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <Label>
-                  Notify Participants ({selectedStakeholders.length} of {stakeholders.length} selected)
-                  <span className="text-muted-foreground text-xs font-normal ml-1">*</span>
-                </Label>
-              </div>
+          <Card>
+            <CardContent className="p-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-primary" />
+                    <Label>
+                      Notify Participants ({selectedStakeholders.length} of {stakeholders.length} selected)
+                      <span className="text-muted-foreground text-xs font-normal ml-1">*</span>
+                    </Label>
+                  </div>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -635,69 +670,67 @@ export const CompletionSummaryModal = ({
                 {stakeholdersError}
               </p>
             )}
-            <p className="text-xs text-muted-foreground">
-              All selected participants will receive an email notification with the completion summary and attachments.
-            </p>
-          </div>
+                <p className="text-xs text-muted-foreground">
+                  All selected participants will receive an email notification with the completion summary and attachments.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Email Notification Preview */}
-          <div className="p-4 bg-success/10 border border-success/20 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <Send className="h-4 w-4 text-success" />
-              <p className="text-sm font-semibold">Notification Preview</p>
-            </div>
-            <div className="space-y-1 text-xs text-muted-foreground">
-              <p><strong>Subject:</strong> Correspondence Completed - {correspondence.referenceNumber}</p>
-              <p><strong>Recipients:</strong> {selectedStakeholders.length} participant(s)</p>
-              <p className="mt-2 pt-2 border-t border-success/20">
-                This notification will include the completion summary, minute thread, and any attachments.
-              </p>
-            </div>
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Send className="h-4 w-4 text-primary" />
+                <Label>Notification Preview</Label>
+              </div>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p><strong>Subject:</strong> Correspondence Completed - {correspondence.referenceNumber}</p>
+                <p><strong>Recipients:</strong> {selectedStakeholders.length} participant(s)</p>
+                <p className="mt-2 pt-2 border-t">
+                  This notification will include the completion summary, minute thread, and any attachments.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
           </div>
-        </div>
+        </ScrollArea>
 
         <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleExportPDF}
             disabled={isExporting || isSubmitting}
+            className="gap-2"
             aria-label="Export summary as PDF"
           >
-            {isExporting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Exporting...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4 mr-2" />
-                Export Summary
-              </>
-            )}
+            <Download className="h-4 w-4" />
+            Export Summary
+            {isExporting && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
           </Button>
           <div className="flex gap-3">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting || isExporting}
               aria-label="Cancel archiving"
             >
               Cancel
             </Button>
-            <Button 
-              onClick={handleSendSummary} 
+            <Button
+              onClick={handleSendSummary}
               disabled={isSubmitting || isExporting || noneSelected}
-              className="bg-gradient-success"
+              className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
               aria-label="Complete correspondence and notify participants"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Completing...
                 </>
               ) : (
                 <>
-                  <FileCheck className="h-4 w-4 mr-2" />
+                  <FileCheck className="h-4 w-4" />
                   Complete & Notify
                 </>
               )}
