@@ -2388,7 +2388,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if division_id:
             backward_compat_filters |= Q(division_id=division_id)
         if directorate_id:
-            backward_compat_filters |= Q(directorate_id=directorate_id)
+            backward_compat_filters |= Q(division__directorate_id=directorate_id)
 
         # Include items added by this user
         user_added_filters = Q(added_by=user)
