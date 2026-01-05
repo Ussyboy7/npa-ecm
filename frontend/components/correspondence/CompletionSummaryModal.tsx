@@ -148,13 +148,26 @@ export const CompletionSummaryModal = ({
     setIsSubmitting(true);
     try {
       // Update correspondence status to completed via API
+      const updateData: Record<string, unknown> = {
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        archive_level: 'department', // Set default archive level for completed correspondence
+      };
+
+      // Only set organizational fields if they're not already set
+      if (!correspondence.division?.id) {
+        updateData.division = currentUser?.division?.id;
+      }
+      if (!correspondence.department?.id) {
+        updateData.department = currentUser?.department?.id;
+      }
+      if (!correspondence.directorate?.id) {
+        updateData.directorate = currentUser?.directorate?.id;
+      }
+
       await apiFetch(`/correspondence/items/${correspondence.id}/`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-          archive_level: 'department', // Set default archive level for completed correspondence
-        }),
+        body: JSON.stringify(updateData),
       });
 
       await syncFromApi();
