@@ -2358,24 +2358,58 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         print(f"DEBUG: User {user.username} - allowed_levels: {allowed_levels}")
         print(f"DEBUG: User {user.username} - department_id: {department_id}, division_id: {division_id}, directorate_id: {directorate_id}")
 
-        filters = Q()
+        # For users with archive access, also include correspondence that doesn't have organizational associations
+        # but has been completed/archived (for backward compatibility)
+        base_filters = Q()
+
+        # Add organizational filters
+        org_filters = Q()
         if Correspondence.ArchiveLevel.DEPARTMENT in allowed_levels and department_id:
-            filters |= Q(department_id=department_id)
+            org_filters |= Q(department_id=department_id)
             print(f"DEBUG: Added department filter: {department_id}")
         if Correspondence.ArchiveLevel.DIVISION in allowed_levels and division_id:
-            filters |= Q(division_id=division_id)
+            org_filters |= Q(division_id=division_id)
             print(f"DEBUG: Added division filter: {division_id}")
         if Correspondence.ArchiveLevel.DIRECTORATE in allowed_levels and directorate_id:
-            filters |= Q(division__directorate_id=directorate_id)
+            org_filters |= Q(division__directorate_id=directorate_id)
             print(f"DEBUG: Added directorate filter: {directorate_id}")
 
-        if not filters:
+        # Include correspondence that either:
+        # 1. Has proper organizational associations, OR
+        # 2. Doesn't have organizational associations but was added by this user or their office
+        if org_filters:
+            base_filters |= org_filters
+
+        # For backward compatibility: include correspondence without org associations
+        # that might be accessible to this user
+        backward_compat_filters = Q()
+        if department_id:
+            backward_compat_filters |= Q(department_id=department_id)
+        if division_id:
+            backward_compat_filters |= Q(division_id=division_id)
+        if directorate_id:
+            backward_compat_filters |= Q(directorate_id=directorate_id)
+
+        # Include items added by this user
+        user_added_filters = Q(added_by=user)
+
+        # Combine all filters
+        if base_filters or backward_compat_filters or user_added_filters:
+            combined_filters = base_filters | backward_compat_filters | user_added_filters
+        else:
             print(f"DEBUG: No filters applied for user {user.username}")
             return queryset.none()
 
-        filtered_queryset = queryset.filter(filters)
+        filtered_queryset = queryset.filter(combined_filters).distinct()
         count = filtered_queryset.count()
         print(f"DEBUG: Filtered queryset count for user {user.username}: {count}")
+
+        # Additional debug: show a few examples
+        if count > 0:
+            sample_items = filtered_queryset[:3]
+            for item in sample_items:
+                print(f"DEBUG: Sample item - {item.reference_number}: division={item.division_id}, department={item.department_id}, archive_level={item.archive_level}")
+
         return filtered_queryset
 
     def _get_department_records_queryset(self, user):
