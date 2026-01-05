@@ -153,6 +153,7 @@ export const CompletionSummaryModal = ({
         body: JSON.stringify({
           status: 'completed',
           completed_at: new Date().toISOString(),
+          archive_level: 'department', // Set default archive level for completed correspondence
         }),
       });
 
