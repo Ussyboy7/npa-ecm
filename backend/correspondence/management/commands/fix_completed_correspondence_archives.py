@@ -44,17 +44,17 @@ class Command(BaseCommand):
                 self.stdout.write(f"  - Setting archive_level for {corr.reference_number}")
 
             # Try to set organizational associations based on routing or creator
-            if not corr.division_id:
+            if not corr.division:
                 # Try to get division from the user who added this correspondence
-                if hasattr(corr, 'added_by') and corr.added_by and corr.added_by.division_id:
+                if hasattr(corr, 'added_by') and corr.added_by and corr.added_by.division:
                     corr.division = corr.added_by.division
                     needs_update = True
                     update_fields.append('division')
                     self.stdout.write(f"  - Setting division from creator for {corr.reference_number}")
                 # Or try to get from routing history
-                elif corr.distributions.exists():
+                elif hasattr(corr, 'distribution_set') and corr.distribution_set.exists():
                     # Get the first distribution's recipient's division
-                    first_dist = corr.distributions.first()
+                    first_dist = corr.distribution_set.first()
                     if first_dist and hasattr(first_dist, 'recipient_office') and first_dist.recipient_office:
                         office = first_dist.recipient_office
                         if office.division:
@@ -63,19 +63,15 @@ class Command(BaseCommand):
                             update_fields.append('division')
                             self.stdout.write(f"  - Setting division from routing for {corr.reference_number}")
 
-            if not corr.department_id and corr.division_id:
+            if not corr.department and corr.division:
                 # Try to get department from the division's general manager or from routing
-                if corr.division.general_manager and corr.division.general_manager.department_id:
+                if corr.division.general_manager and corr.division.general_manager.department:
                     corr.department = corr.division.general_manager.department
                     needs_update = True
                     update_fields.append('department')
                     self.stdout.write(f"  - Setting department from division GM for {corr.reference_number}")
 
-            if not corr.directorate_id and corr.division_id:
-                corr.directorate = corr.division.directorate
-                needs_update = True
-                update_fields.append('directorate')
-                self.stdout.write(f"  - Setting directorate from division for {corr.reference_number}")
+            # Note: Correspondence model doesn't have directorate field, only division/department
 
             if needs_update:
                 if not dry_run:
