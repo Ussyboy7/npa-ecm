@@ -1739,7 +1739,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         response.data["summary"] = summary
         return response
 
-    @action(detail=False, methods=["get"], url_path="archive-records")
+    @action(detail=False, methods=["get"], url_path="archive-records", filter_backends=[])
     def archive_records(self, request):
         user = request.user
         base_queryset = self._get_archived_queryset(user)
