@@ -2358,12 +2358,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if Correspondence.ArchiveLevel.DEPARTMENT in allowed_levels and department_id:
             filters |= Q(department_id=department_id)
         if Correspondence.ArchiveLevel.DIVISION in allowed_levels and division_id:
-            filters |= Q(division_id=division_id, division__general_manager=user)
+            filters |= Q(division_id=division_id)
         if Correspondence.ArchiveLevel.DIRECTORATE in allowed_levels and directorate_id:
-            filters |= Q(
-                division__directorate_id=directorate_id,
-                division__directorate__executive_director=user,
-            )
+            filters |= Q(division__directorate_id=directorate_id)
 
         if not filters:
             return queryset.none()
