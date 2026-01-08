@@ -155,14 +155,14 @@ export const CompletionSummaryModal = ({
       };
 
       // Only set organizational fields if they're not already set
-      if (!correspondence.division?.id) {
-        updateData.division = currentUser?.division?.id;
+      if (!correspondence.divisionId) {
+        updateData.division = currentUser?.division;
       }
-      if (!correspondence.department?.id) {
-        updateData.department = currentUser?.department?.id;
+      if (!correspondence.departmentId) {
+        updateData.department = currentUser?.department;
       }
-      if (!correspondence.directorate?.id) {
-        updateData.directorate = currentUser?.directorate?.id;
+      if (!correspondence.directorateId) {
+        updateData.directorate = currentUser?.directorate;
       }
 
       await apiFetch(`/correspondence/items/${correspondence.id}/`, {
