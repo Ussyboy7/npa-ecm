@@ -87,6 +87,9 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(self.style.WARNING("Skipping demo data creation (no users available)"))
                 
+        # Set up role permissions
+        self._setup_role_permissions()
+
         self.stdout.write(self.style.SUCCESS("Demo data seeding complete."))
 
     def _load_structure_data(self) -> dict:
@@ -2114,3 +2117,14 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(f'Project cases ensured. Total cases: {total_cases}')
         )
+
+    def _setup_role_permissions(self):
+        """Set up default permissions for all system roles."""
+        self.stdout.write(self.style.MIGRATE_HEADING("Setting up role permissions"))
+
+        # Import the setup_role_permissions command and call it
+        from organization.management.commands.setup_role_permissions import Command as SetupCommand
+        setup_cmd = SetupCommand()
+        # Run it with the same stdout
+        setup_cmd.stdout = self.stdout
+        setup_cmd.handle()
