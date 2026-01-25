@@ -29,6 +29,7 @@ DEFAULT_ALLOWED_EXTENSIONS: tuple[str, ...] = (
     'jpg',
     'jpeg',
     'png',
+    'html',
 )
 
 DEFAULT_ALLOWED_MIME_TYPES: tuple[str, ...] = (
@@ -44,6 +45,7 @@ DEFAULT_ALLOWED_MIME_TYPES: tuple[str, ...] = (
     'application/rtf',
     'image/jpeg',
     'image/png',
+    'text/html', 
 )
 
 MAX_UPLOAD_SIZE_BYTES = getattr(settings, 'MAX_UPLOAD_SIZE_BYTES', 30 * 1024 * 1024)
