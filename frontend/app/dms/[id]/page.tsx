@@ -501,7 +501,7 @@ const DocumentDetailPage = () => {
                     // Map distribution (reuse normalizeId function defined above)
                     const distribution = Array.isArray(corrResponse.distribution)
                       ? corrResponse.distribution.map((recipient: Record<string, unknown>) => {
-                          const recipientType = (recipient.recipient_type && typeof recipient.recipient_type === 'string' && ['division', 'department', 'directorate', 'user'].includes(recipient.recipient_type)) ? recipient.recipient_type as 'division' | 'department' | 'directorate' | 'user' : 'division';
+                          const recipientType = (recipient.recipient_type && typeof recipient.recipient_type === 'string' && ['office', 'division', 'department', 'directorate', 'user'].includes(recipient.recipient_type)) ? recipient.recipient_type as 'office' | 'division' | 'department' | 'directorate' | 'user' : 'division';
                           return {
                             id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
                             type: recipientType as 'division' | 'department' | 'directorate' | 'user',
@@ -869,21 +869,26 @@ const DocumentDetailPage = () => {
                   });
               
               // Map distribution (reuse normalizeId function defined above)
-              const distribution = Array.isArray(corrResponse.distribution)
+                  const distribution = Array.isArray(corrResponse.distribution)
                 ? corrResponse.distribution.map((recipient: Record<string, unknown>) => {
                     const recipientType = recipient.recipient_type ?? 'division';
                     return {
                       id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
                       type:
+                        recipientType === 'office'
+                          ? 'office'
+                          :
                         recipientType === 'directorate'
                           ? 'directorate'
                           : recipientType === 'department'
                           ? 'department'
                           : 'division',
+                      officeId: normalizeId(recipient.office),
                       directorateId: normalizeId(recipient.directorate),
                       divisionId: normalizeId(recipient.division),
                       departmentId: normalizeId(recipient.department),
                       name:
+                        recipient.office_name as string ??
                         recipient.directorate_name as string ??
                         recipient.division_name as string ??
                         recipient.department_name as string ??
@@ -1526,6 +1531,7 @@ const DocumentDetailPage = () => {
             </DialogHeader>
             {(() => {
               const user = userLookup.get(selectedAccessLog.userId);
+              const displayUserName = user?.name ?? selectedAccessLog.userName ?? 'Unknown User';
               const actionLabel =
                 selectedAccessLog.action === 'download'
                   ? 'Downloaded'
@@ -1577,7 +1583,7 @@ const DocumentDetailPage = () => {
                       <UserIcon className="h-5 w-5 text-muted-foreground" />
                       <div className="flex-1">
                         <p className="text-sm font-medium">User</p>
-                        <p className="text-sm text-muted-foreground">{user?.name ?? 'Unknown User'}</p>
+                        <p className="text-sm text-muted-foreground">{displayUserName}</p>
                         {user?.gradeLevel && (
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {user.gradeLevel}

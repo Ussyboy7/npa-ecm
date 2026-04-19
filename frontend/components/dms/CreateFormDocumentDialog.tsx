@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, startTransition, useMemo } from "react";
+import { useState, useEffect, startTransition, useMemo, useRef } from "react";
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,7 @@ export function CreateFormDocumentDialog({
   const [departmentId, setDepartmentId] = useState<string | undefined>(currentUser?.department);
   const [checkingReferenceNumber, setCheckingReferenceNumber] = useState(false);
   const [referenceNumberExists, setReferenceNumberExists] = useState(false);
+  const titleTouchedRef = useRef(false);
   
   // Filter departments based on selected division
   const filteredDepartments = useMemo(() => {
@@ -94,6 +95,8 @@ export function CreateFormDocumentDialog({
   useEffect(() => {
     if (open) {
       loadTemplates();
+      setDivisionId(currentUser?.division);
+      setDepartmentId(currentUser?.department);
       // If an initial template is provided, pre-select it
       if (initialTemplate) {
         setSelectedTemplateId(initialTemplate.id);
@@ -102,7 +105,7 @@ export function CreateFormDocumentDialog({
     }
     // Don't reset state in useEffect - it causes blocking
     // State will be reset when dialog opens next time if needed
-  }, [open, initialTemplate]);
+  }, [open, initialTemplate, currentUser?.division, currentUser?.department]);
   
   // Reset state only when dialog closes, with a delay
   useEffect(() => {
@@ -113,10 +116,15 @@ export function CreateFormDocumentDialog({
         setTitle("");
         setDescription("");
         setReferenceNumber("");
+        setReferenceNumberExists(false);
+        setCheckingReferenceNumber(false);
+        setDivisionId(currentUser?.division);
+        setDepartmentId(currentUser?.department);
+        titleTouchedRef.current = false;
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [open]);
+  }, [open, currentUser?.division, currentUser?.department]);
 
   const loadTemplates = async () => {
     try {
@@ -144,6 +152,11 @@ export function CreateFormDocumentDialog({
 
     if (!title.trim()) {
       toast.error("Please enter a title");
+      return;
+    }
+
+    if (referenceNumberExists) {
+      toast.error("This reference number already exists. Please use a unique reference number.");
       return;
     }
 
@@ -198,10 +211,10 @@ export function CreateFormDocumentDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5 text-primary" />
-            Create Form Document
+            Start Form
           </DialogTitle>
           <DialogDescription>
-            Create a new form document from a template. Fill in the details below to get started.
+            Start a new form from a template. Fill in the details below to begin.
           </DialogDescription>
         </DialogHeader>
 
@@ -218,21 +231,23 @@ export function CreateFormDocumentDialog({
                   Loading templates...
                 </div>
               ) : (
-                <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <Select
+                  value={selectedTemplateId}
+                  onValueChange={(value) => {
+                    setSelectedTemplateId(value);
+                    const template = templates.find((t) => t.id === value);
+                    if (template && !titleTouchedRef.current) {
+                      setTitle(template.name);
+                    }
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a form template" />
                   </SelectTrigger>
                   <SelectContent>
                     {templates.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{template.name}</span>
-                          {template.description && (
-                            <span className="text-xs text-muted-foreground">
-                              {template.description}
-                            </span>
-                          )}
-                        </div>
+                        <span className="font-medium">{template.name}</span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -258,7 +273,10 @@ export function CreateFormDocumentDialog({
                 <Input
                   id="title"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => {
+                    titleTouchedRef.current = true;
+                    setTitle(e.target.value);
+                  }}
                   placeholder="Enter form document title"
                   aria-required="true"
                 />
@@ -374,11 +392,15 @@ export function CreateFormDocumentDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={creating} className="w-full sm:w-auto">
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={creating || !selectedTemplateId || !title.trim()} className="w-full sm:w-auto">
+          <Button
+            onClick={handleCreate}
+            disabled={creating || checkingReferenceNumber || referenceNumberExists || !selectedTemplateId || !title.trim()}
+            className="w-full sm:w-auto"
+          >
             {creating ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -388,8 +410,8 @@ export function CreateFormDocumentDialog({
             ) : (
               <>
                 <FileText className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Create Form</span>
-                <span className="sm:hidden">Create</span>
+                <span className="hidden sm:inline">Start Form</span>
+                <span className="sm:hidden">Start</span>
               </>
             )}
           </Button>
@@ -398,4 +420,3 @@ export function CreateFormDocumentDialog({
     </Dialog>
   );
 }
-

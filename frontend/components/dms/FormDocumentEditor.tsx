@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import { LinkDocumentDialog } from "@/components/correspondence/LinkDocumentDial
 import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { FormTemplate } from "@/lib/types/forms";
+import { getWorkflowCollectedFieldNames, isSignatureFileField } from "@/lib/forms/field-classification";
 import { createDocumentVersion, type DocumentVersion } from "@/lib/dms-storage";
 import { Input } from "@/components/ui/input";
 import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPreviewModal";
@@ -43,6 +44,19 @@ interface FormDocumentEditorProps {
 }
 
 export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentEditorProps) {
+  const MAX_SUPPORTING_DOC_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+  const ALLOWED_SUPPORTING_DOC_TYPES = [
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/plain",
+    "text/csv",
+  ];
   const { currentUser } = useCurrentUser();
   const [formDoc, setFormDoc] = useState<FormDocumentType | null>(null);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
@@ -64,6 +78,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
   const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("form");
+  const supportingFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadFormDocument();
@@ -321,6 +336,24 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
     }
   };
 
+  const handleSubmitForSignatures = async () => {
+    if (!formDoc || formDoc.status === "completed" || formDoc.signature_workflow) return;
+
+    try {
+      setSaving(true);
+      await updateFormDocument(formDocumentId, {
+        form_data: formData,
+        status: "in_progress",
+      });
+      setShowSignatureWorkflow(true);
+    } catch (error: unknown) {
+      logError("Error preparing form for signature routing:", error);
+      toast.error("Failed to prepare form for signatures");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSign = (signature: FormSignature) => {
     if (!workflow) {
       toast.error("Workflow not found");
@@ -370,7 +403,8 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
   // Calculate form completion
   const fields = template.structure?.fields || [];
-  const requiredFields = fields.filter(f => f.required);
+  const workflowCollectedFieldNames = getWorkflowCollectedFieldNames(fields);
+  const requiredFields = fields.filter((field) => field.required && !workflowCollectedFieldNames.has(field.name));
   const filledRequiredFields = requiredFields.filter(f => {
     const value = formData[f.name];
     return value !== undefined && value !== null && value !== "";
@@ -378,63 +412,70 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
   const completionPercentage = requiredFields.length > 0
     ? Math.round((filledRequiredFields.length / requiredFields.length) * 100)
     : 100;
+  const signatureFields = fields.filter((field) => isSignatureFileField(field));
+  const supportsSignatures = signatureFields.length > 0;
+  const signedCount = allSignatures.filter((signature) => signature.status === "signed").length;
+  const signatureCompletionPercentage = allSignatures.length > 0
+    ? (signedCount / allSignatures.length) * 100
+    : 0;
 
   return (
     <div className="space-y-4">
       {/* Compact Header with Status and Actions */}
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
+        <CardHeader className="pb-2">
+          <div className="flex items-start justify-between gap-3">
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <FileText className="h-5 w-5 text-primary" />
-                <div>
-                  <CardTitle className="text-lg">{formDoc.document.title}</CardTitle>
+              <div className="flex items-start gap-2.5 mb-1.5">
+                <FileText className="h-4 w-4 text-primary mt-0.5" />
+                <div className="min-w-0">
+                  <CardTitle className="text-base leading-tight truncate">{formDoc.document.title}</CardTitle>
                   {template && (
-                    <CardDescription className="mt-0.5">{template.name}</CardDescription>
+                    <CardDescription className="mt-0.5 text-xs truncate">{template.name}</CardDescription>
                   )}
                 </div>
               </div>
               {/* Progress Bar */}
               {formDoc.status !== "completed" && (
-                <div className="mt-3 space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                <div className="mt-1.5 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
                     <span className="text-muted-foreground">Form Completion</span>
                     <span className="font-medium">{completionPercentage}%</span>
                   </div>
                   <Progress 
                     value={completionPercentage} 
-                    className="h-2"
+                    className="h-1.5"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    {filledRequiredFields.length} of {requiredFields.length} required fields completed
+                  <p className="text-[11px] text-muted-foreground">
+                    {filledRequiredFields.length} of {requiredFields.length} required editable fields completed
                   </p>
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 ml-4">
-              <Badge variant={statusBadge.variant} className="text-sm">
-                <StatusIcon className="h-3 w-3 mr-1.5" />
+            <div className="flex items-center gap-2">
+              <Badge variant={statusBadge.variant} className="text-xs h-6">
+                <StatusIcon className="h-3 w-3 mr-1" />
                 {statusBadge.label}
               </Badge>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center justify-end gap-1.5 flex-wrap">
             <Button 
               onClick={handleSave} 
               disabled={saving || formDoc.status === "completed"}
               size="sm"
+              className="h-8 text-xs px-2.5"
             >
               {saving ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                   Save Form
                 </>
               )}
@@ -445,8 +486,9 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                 variant="default" 
                 onClick={() => handleSign(pendingSignatures[0])}
                 size="sm"
+                className="h-8 text-xs px-2.5"
               >
-                <PenTool className="h-4 w-4 mr-2" />
+                <PenTool className="h-3.5 w-3.5 mr-1.5" />
                 Sign ({pendingSignatures.length} pending)
               </Button>
             )}
@@ -457,18 +499,21 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                   variant="outline" 
                   onClick={() => setShowForwardDialog(true)}
                   size="sm"
+                  className="h-8 text-xs px-2.5"
                 >
-                  <Send className="h-4 w-4 mr-2" />
+                  <Send className="h-3.5 w-3.5 mr-1.5" />
                   Forward
                 </Button>
-                {!formDoc.signature_workflow && (
+                {!formDoc.signature_workflow && supportsSignatures && (
                   <Button 
                     variant="outline" 
-                    onClick={() => setShowSignatureWorkflow(true)}
+                    onClick={handleSubmitForSignatures}
                     size="sm"
+                    disabled={saving}
+                    className="h-8 text-xs px-2.5"
                   >
-                    <PenTool className="h-4 w-4 mr-2" />
-                    Route for Signatures
+                    <PenTool className="h-3.5 w-3.5 mr-1.5" />
+                    Submit for Signatures
                   </Button>
                 )}
               </>
@@ -481,16 +526,18 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                   onClick={handleGeneratePdf} 
                   disabled={saving}
                   size="sm"
+                  className="h-8 text-xs px-2.5"
                 >
-                  <FileDown className="h-4 w-4 mr-2" />
+                  <FileDown className="h-3.5 w-3.5 mr-1.5" />
                   Generate PDF
                 </Button>
                 <Button 
                   variant="outline" 
                   onClick={() => setShowLinkCorrespondence(true)}
                   size="sm"
+                  className="h-8 text-xs px-2.5"
                 >
-                  <LinkIcon className="h-4 w-4 mr-2" />
+                  <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
                   Link Correspondence
                 </Button>
               </>
@@ -501,8 +548,9 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                 onClick={handleMarkCompleted} 
                 disabled={saving}
                 size="sm"
+                className="h-8 text-xs px-2.5"
               >
-                <CheckCircle2 className="h-4 w-4 mr-2" />
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />
                 Mark Completed
               </Button>
             )}
@@ -620,9 +668,15 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   <PenTool className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-base font-medium mb-1">No signature workflow initiated</p>
-                  <p className="text-sm mb-6">Route the form for signatures to begin the workflow</p>
-                  {formDoc && (formDoc.status === "draft" || formDoc.status === "in_progress") && (
+                  <p className="text-base font-medium mb-1">
+                    {supportsSignatures ? "No signature workflow initiated" : "No signature fields configured"}
+                  </p>
+                  <p className="text-sm mb-6">
+                    {supportsSignatures
+                      ? "Route the form for signatures to begin the workflow"
+                      : "This template has no signature fields. Add signature fields in the form template to enable routing."}
+                  </p>
+                  {formDoc && supportsSignatures && (formDoc.status === "draft" || formDoc.status === "in_progress") && (
                     <Button
                       variant="default"
                       onClick={() => setShowSignatureWorkflow(true)}
@@ -698,18 +752,38 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                       Attach supporting files, receipts, or other documents related to this form
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      <strong>Note:</strong> Form versions are used to store the final PDF (auto-generated when all signatures complete) and supporting documents. The PDF is saved as a version and can be linked to correspondence for dispatch.
+                      <strong>Note:</strong> Accepted formats: PDF, images, Word, Excel, TXT, CSV. Max file size: 10MB each.
                     </p>
                   </div>
                   {formDoc.status !== "completed" && (
-                    <label className="cursor-pointer">
+                    <div>
                       <Input
+                        ref={supportingFileInputRef}
                         type="file"
                         multiple
+                        accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.txt,.csv"
                         className="hidden"
                         onChange={async (e) => {
                           const files = Array.from(e.target.files || []);
                           if (files.length === 0) return;
+                          const invalidTypeFiles = files.filter(
+                            (file) => file.type && !ALLOWED_SUPPORTING_DOC_TYPES.includes(file.type)
+                          );
+                          const oversizedFiles = files.filter(
+                            (file) => file.size > MAX_SUPPORTING_DOC_SIZE_BYTES
+                          );
+
+                          if (invalidTypeFiles.length > 0) {
+                            toast.error(`Unsupported file type: ${invalidTypeFiles[0].name}`);
+                            e.target.value = '';
+                            return;
+                          }
+
+                          if (oversizedFiles.length > 0) {
+                            toast.error(`File exceeds 10MB: ${oversizedFiles[0].name}`);
+                            e.target.value = '';
+                            return;
+                          }
 
                           setUploadingAttachment(true);
                           try {
@@ -748,6 +822,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                         size="sm"
                         disabled={uploadingAttachment}
                         className="gap-2"
+                        onClick={() => supportingFileInputRef.current?.click()}
                       >
                         {uploadingAttachment ? (
                           <>
@@ -761,7 +836,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                           </>
                         )}
                       </Button>
-                    </label>
+                    </div>
                   )}
                 </div>
 
@@ -827,81 +902,79 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
             {/* Timeline Tab */}
             <TabsContent value="timeline" className="mt-0 space-y-6 pt-4">
-              {/* Completion Details Section */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-semibold">Completion Details</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">Form Status</p>
-                        <div className="flex items-center gap-2">
-                          <StatusIcon className="h-4 w-4" />
-                          <p className="text-sm font-medium">{statusBadge.label}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">Form Completion</p>
-                        <div className="flex items-center gap-2">
-                          <Progress value={completionPercentage} className="flex-1 h-2" />
-                          <p className="text-sm font-medium">{completionPercentage}%</p>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {filledRequiredFields.length} of {requiredFields.length} required fields
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  {workflow && (
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="space-y-2">
-                          <p className="text-xs text-muted-foreground">Signature Progress</p>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium">
-                              {allSignatures.filter(s => s.status === "signed").length} / {allSignatures.length} signed
-                            </p>
-                          </div>
-                          <Progress 
-                            value={(allSignatures.filter(s => s.status === "signed").length / allSignatures.length) * 100} 
-                            className="h-2" 
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">Supporting Documents</p>
-                        <p className="text-sm font-medium">
-                          {supportingDocuments.length} document{supportingDocuments.length !== 1 ? 's' : ''}
-                          {generatedPdf && ' + 1 PDF'}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-
               {/* Signature Workflow Timeline */}
               {workflow && allSignatures.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  {/* Completion Details Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-base font-semibold">Completion Details</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">Form Status</p>
+                            <div className="flex items-center gap-2">
+                              <StatusIcon className="h-4 w-4" />
+                              <p className="text-sm font-medium">{statusBadge.label}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">Form Completion</p>
+                            <div className="flex items-center gap-2">
+                              <Progress value={completionPercentage} className="flex-1 h-2" />
+                              <p className="text-sm font-medium">{completionPercentage}%</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {filledRequiredFields.length} of {requiredFields.length} required editable fields
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">Signature Progress</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium">
+                                {signedCount} / {allSignatures.length} signed
+                              </p>
+                            </div>
+                            <Progress 
+                              value={signatureCompletionPercentage}
+                              className="h-2" 
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">Supporting Documents</p>
+                            <p className="text-sm font-medium">
+                              {supportingDocuments.length} document{supportingDocuments.length !== 1 ? 's' : ''}
+                              {generatedPdf && ' + 1 PDF'}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between">
                     <h3 className="text-base font-semibold">Signature Workflow Timeline</h3>
                     <Badge variant="outline">
-                      {allSignatures.filter(s => s.status === "signed").length} / {allSignatures.length} completed
+                      {signedCount} / {allSignatures.length} completed
                     </Badge>
                   </div>
                   <div className="max-h-[600px] overflow-y-auto pr-2">
                     <ol className="relative border-s-2 border-border ml-4 space-y-6">
-                      {allSignatures
+                      {[...allSignatures]
                         .sort((a, b) => a.order - b.order || new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                         .map((signature) => {
                           const isSigned = signature.status === "signed";
@@ -999,16 +1072,16 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
               ) : (
                 <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
                   <Clock className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                  <p className="text-base font-medium mb-1">No signature workflow timeline available</p>
-                  <p className="text-sm mb-6">Start a signature workflow to see the timeline</p>
-                  {formDoc && (formDoc.status === "draft" || formDoc.status === "in_progress") && (
+                  <p className="text-base font-medium mb-1">No signature workflow started</p>
+                  <p className="text-sm mb-6">Submit this form for signatures to start the timeline.</p>
+                  {formDoc && supportsSignatures && (formDoc.status === "draft" || formDoc.status === "in_progress") && (
                     <Button
                       variant="default"
-                      onClick={() => setShowSignatureWorkflow(true)}
+                      onClick={handleSubmitForSignatures}
                       className="gap-2"
                     >
                       <PenTool className="h-4 w-4" />
-                      Route for Signatures
+                      Submit for Signatures
                     </Button>
                   )}
                 </div>
@@ -1085,4 +1158,3 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
     </div>
   );
 }
-

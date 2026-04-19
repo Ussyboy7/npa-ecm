@@ -4,12 +4,12 @@ import { DashboardLayout } from '@/components/DashboardLayout';
 import { AdvancedSearch } from '@/components/search/AdvancedSearch';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Mail, Briefcase } from 'lucide-react';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 
-export default function SearchPage() {
+function SearchForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [context, setContext] = useState<'all' | 'documents' | 'correspondence' | 'cases'>('all');
@@ -98,6 +98,14 @@ export default function SearchPage() {
         </div>
       </DashboardLayout>
     </ErrorBoundary>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <SearchForm />
+    </Suspense>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -17,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Archive,
   Search,
@@ -28,10 +28,8 @@ import {
   CheckCircle2,
   FileArchive,
   Filter,
-  Loader2,
   Building2,
-  Layers,
-  FolderTree,
+  ChevronRight,
   FileText,
   RefreshCw,
   Download,
@@ -39,7 +37,6 @@ import {
   Eye,
   ExternalLink,
   Copy,
-  AlertCircle,
 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
@@ -54,6 +51,35 @@ import { logError } from '@/lib/client-logger';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+  registryQueueSearchStatsShellContentClass,
+  registryQueueSearchInputWrapClass,
+} from '@/components/shared/registry-queue-styles';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: '#ef4444',
@@ -77,7 +103,7 @@ type UserScope = {
   officeIds: string[];
 };
 
-const RecordsArchivePage = () => {
+const RecordsArchiveForm = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser, hydrated } = useCurrentUser();
@@ -85,6 +111,17 @@ const RecordsArchivePage = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Initialize filters from URL params or localStorage
+  // Clear any invalid stored filters (empty strings or invalid UUIDs)
+  if (typeof window !== 'undefined') {
+    const invalidKeys = ['division', 'department', 'directorate'];
+    invalidKeys.forEach(key => {
+      const stored = localStorage.getItem(`records_filter_${key}`);
+      if (stored && (stored === '""' || stored === '"' || stored === '' || !stored.match(/^[a-f0-9-]+$/i))) {
+        localStorage.removeItem(`records_filter_${key}`);
+      }
+    });
+  }
+  
   const getInitialFilter = (key: string, defaultValue: string | string[]): string | string[] => {
     if (typeof window === 'undefined') return defaultValue;
     const urlParam = searchParams.get(key);
@@ -116,6 +153,10 @@ const RecordsArchivePage = () => {
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>(() => getInitialFilter('priorities', []) as string[]);
   const [selectedDirections, setSelectedDirections] = useState<string[]>(() => getInitialFilter('directions', []) as string[]);
   const [selectedArchiveLevel, setSelectedArchiveLevel] = useState<string>(() => getInitialFilter('archiveLevel', 'all') as string);
+  const [hasCompletionPackage, setHasCompletionPackage] = useState<boolean>(() => {
+    const saved = localStorage?.getItem('records_filter_hasCompletionPackage');
+    return saved === 'true';
+  });
   const [sortBy, setSortBy] = useState<string>(() => getInitialFilter('sortBy', 'completed') as string);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (getInitialFilter('sortOrder', 'desc') as 'asc' | 'desc'));
   const [showFilters, setShowFilters] = useState(false);
@@ -279,8 +320,9 @@ const RecordsArchivePage = () => {
     if (selectedPriorities.length > 0) count++;
     if (selectedDirections.length > 0) count++;
     if (selectedArchiveLevel !== 'all') count++;
+    if (hasCompletionPackage) count++;
     return count;
-  }, [selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel]);
+  }, [selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage]);
 
   const togglePriority = (priority: string) => {
     setSelectedPriorities((prev) =>
@@ -306,6 +348,13 @@ const RecordsArchivePage = () => {
     setSelectedPriorities([]);
     setSelectedDirections([]);
     setSelectedArchiveLevel('all');
+    setHasCompletionPackage(false);
+    
+    // Clear localStorage
+    if (typeof window !== 'undefined') {
+      const keys = ['search', 'directorate', 'division', 'department', 'year', 'dateRange', 'priorities', 'directions', 'archiveLevel', 'hasCompletionPackage'];
+      keys.forEach(key => localStorage.removeItem(`records_filter_${key}`));
+    }
   };
 
   // Persist filters to localStorage
@@ -320,9 +369,10 @@ const RecordsArchivePage = () => {
     localStorage.setItem('records_filter_priorities', JSON.stringify(selectedPriorities));
     localStorage.setItem('records_filter_directions', JSON.stringify(selectedDirections));
     localStorage.setItem('records_filter_archiveLevel', JSON.stringify(selectedArchiveLevel));
+    localStorage.setItem('records_filter_hasCompletionPackage', JSON.stringify(hasCompletionPackage));
     localStorage.setItem('records_filter_sortBy', JSON.stringify(sortBy));
     localStorage.setItem('records_filter_sortOrder', JSON.stringify(sortOrder));
-  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, sortBy, sortOrder]);
+  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder]);
 
   // Sync filters with URL
   useEffect(() => {
@@ -336,6 +386,7 @@ const RecordsArchivePage = () => {
     if (selectedPriorities.length > 0) params.set('priorities', selectedPriorities.join(','));
     if (selectedDirections.length > 0) params.set('directions', selectedDirections.join(','));
     if (selectedArchiveLevel !== 'all') params.set('archiveLevel', selectedArchiveLevel);
+    if (hasCompletionPackage) params.set('hasCompletionPackage', 'true');
     if (sortBy !== 'completed') params.set('sortBy', sortBy);
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
     if (pagination.page > 1) params.set('page', String(pagination.page));
@@ -343,7 +394,7 @@ const RecordsArchivePage = () => {
 
     const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, sortBy, sortOrder, pagination.page, pagination.pageSize]);
+  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder, pagination.page, pagination.pageSize]);
 
   // Debounced search
   useEffect(() => {
@@ -354,7 +405,7 @@ const RecordsArchivePage = () => {
   // Reset page when filters change
   useEffect(() => {
     pagination.setPage(1);
-  }, [debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, sortBy, sortOrder]);
+  }, [debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder]);
   
   // Sync pagination with URL
   useEffect(() => {
@@ -380,7 +431,7 @@ const RecordsArchivePage = () => {
   }, []);
 
   const fetchRecords = useCallback(async () => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser?.id) return;
 
 
     // Cancel previous request
@@ -399,24 +450,8 @@ const RecordsArchivePage = () => {
         page_size: String(pagination.pageSize),
       });
 
-      // Add scope parameters
-      if (selectedDirectorate !== 'all') {
-        params.append('directorate', selectedDirectorate);
-      } else if (userScope.directorateIds.length > 0 && userScope.level !== 'directorate') {
-        userScope.directorateIds.forEach((id) => params.append('directorate', id));
-      }
-
-      if (selectedDivision !== 'all') {
-        params.append('division', selectedDivision);
-      } else if (selectedDirectorate === 'all' && userScope.divisionIds.length > 0) {
-        userScope.divisionIds.forEach((id) => params.append('division', id));
-      }
-
-      if (selectedDepartment !== 'all') {
-        params.append('department', selectedDepartment);
-      } else if (selectedDivision === 'all' && selectedDirectorate === 'all' && userScope.departmentIds.length > 0) {
-        userScope.departmentIds.forEach((id) => params.append('department', id));
-      }
+      // Note: Don't send division/department params - backend handles scoping automatically
+      // This avoids UUID validation errors with large number of IDs
 
       // Add other filters
       if (debouncedSearch) params.append('search', debouncedSearch);
@@ -448,6 +483,9 @@ const RecordsArchivePage = () => {
       }
       if (selectedArchiveLevel !== 'all') {
         params.append('archive_level', selectedArchiveLevel);
+      }
+      if (hasCompletionPackage) {
+        params.append('has_completion_package', 'true');
       }
       params.append('sort_by', sortBy);
       params.append('sort_order', sortOrder);
@@ -509,7 +547,7 @@ const RecordsArchivePage = () => {
         setRefreshing(false);
       }
     }
-  }, [hydrated, currentUser, pagination.page, pagination.pageSize, debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, customDateFrom, customDateTo, selectedPriorities, selectedDirections, selectedArchiveLevel, sortBy, sortOrder, userScope]);
+  }, [hydrated, currentUser, pagination.page, pagination.pageSize, debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, customDateFrom, customDateTo, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder, userScope]);
 
   // Store fetchRecords ref
   useEffect(() => {
@@ -567,9 +605,12 @@ const RecordsArchivePage = () => {
       if (selectedArchiveLevel !== 'all') {
         params.append('archive_level', selectedArchiveLevel);
       }
+      if (hasCompletionPackage) {
+        params.append('has_completion_package', 'true');
+      }
       params.append('status', 'completed');
       params.append('status', 'archived');
-      params.append('page_size', '10000'); // Large number to get all
+      params.append('page_size', '1000'); // Reasonable limit for export
 
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/archive-records/?${params.toString()}`);
       const allRecords = Array.isArray(response.results) ? response.results : [];
@@ -643,100 +684,171 @@ const RecordsArchivePage = () => {
     const directorate = corr.directorateId ? directorates.find((item) => item.id as string === corr.directorateId) : null;
     const archiveLevel = corr.archiveLevel || 'department';
     const levelLabel = archiveLevel === 'directorate' ? 'Directorate' : archiveLevel === 'division' ? 'Division' : 'Department';
+    const orgParts: string[] = [];
+    if (directorate?.name) orgParts.push(directorate.name);
+    if (division?.name) orgParts.push(division.name);
+    if (department?.name) orgParts.push(department.name);
+    const orgPath = orgParts.join(' → ');
 
     return (
-      <div className="group relative">
-        <Link
-          href={`/correspondence/${corr.id}`}
-          className="block p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all"
-        >
-          <div className="flex items-start gap-4">
-            <div className="p-3 rounded-lg bg-muted"><FileArchive className="h-5 w-5 text-muted-foreground" /></div>
-            <div className="flex-1 min-w-0 space-y-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                  <h4 className="font-semibold text-foreground truncate">{corr.subject}</h4>
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <Badge variant={getPriorityBadgeVariant(corr.priority)}>{corr.priority.toUpperCase()}</Badge>
-                    <Badge variant="outline" className="gap-1">
-                      {corr.direction === 'downward' ? (<><ArrowDown className="h-3 w-3 text-info" />Downward</>) : (<><ArrowUp className="h-3 w-3 text-success" />Upward</>)}
-                    </Badge>
-                    <Badge variant="secondary" className="gap-1 text-success bg-success/10">
-                      <CheckCircle2 className="h-3 w-3" />{corr.status === 'archived' ? 'Archived' : 'Completed'}
-                    </Badge>
-                    <Badge variant="outline" className={archiveLevel === 'directorate' ? 'bg-primary/10 text-primary' : archiveLevel === 'division' ? 'bg-info/10 text-info' : ''}>
-                      {levelLabel} Record
-                    </Badge>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDateShort(corr.completedAt || corr.receivedDate)}</span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/correspondence/${corr.id}`} className="flex items-center">
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => {
-                        e.preventDefault();
-                        window.open(`/correspondence/${corr.id}`, '_blank');
-                      }}>
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Open in New Tab
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => {
-                        e.preventDefault();
-                        navigator.clipboard.writeText(corr.referenceNumber || '');
-                        toast.success('Reference number copied to clipboard');
-                      }}>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy Reference
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={(e) => {
-                        e.preventDefault();
-                        navigator.clipboard.writeText(window.location.origin + `/correspondence/${corr.id}`);
-                        toast.success('Link copied to clipboard');
-                      }}>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy Link
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
-              <div className="space-y-1 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" /><span>From: {corr.senderName || 'Unknown'}</span></div>
-                <div className="flex items-center gap-2"><FileText className="h-3.5 w-3.5" /><span>Ref: {corr.referenceNumber || 'N/A'}</span></div>
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5" />
-                  <span>
-                    {directorate?.name && `${directorate.name} → `}
-                    {division?.name && `${division.name}`}
-                    {department?.name && ` → ${department.name}`}
-                  </span>
-                </div>
-              </div>
-            </div>
+      <ListRowCard
+        density="compact"
+        href={`/correspondence/${corr.id}`}
+        leading={(
+          <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-muted')}>
+            <FileArchive className={cn(correspondenceQueueLeadingIconClass, 'text-muted-foreground')} />
           </div>
-        </Link>
-      </div>
+        )}
+        actions={(
+          <>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  aria-label="Open record"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    router.push(`/correspondence/${corr.id}`);
+                  }}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">Open record</TooltipContent>
+            </Tooltip>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  aria-label="More actions"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link href={`/correspondence/${corr.id}`} className="flex items-center">
+                    <Eye className="mr-2 h-4 w-4" />
+                    View Details
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.open(`/correspondence/${corr.id}`, '_blank');
+                  }}
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Open in New Tab
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void navigator.clipboard.writeText(corr.referenceNumber || '');
+                    toast.success('Reference number copied to clipboard');
+                  }}
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Reference
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void navigator.clipboard.writeText(`${window.location.origin}/correspondence/${corr.id}`);
+                    toast.success('Link copied to clipboard');
+                  }}
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Link
+                </DropdownMenuItem>
+                {corr.completionPackage?.fileUrl ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.preventDefault();
+                        window.open(corr.completionPackage?.fileUrl, '_blank');
+                      }}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download Completion Package
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )}
+      >
+        <h4 className={correspondenceQueueSubjectClass}>{corr.subject}</h4>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            <Badge variant={getPriorityBadgeVariant(corr.priority)} className={correspondenceQueueBadgeClass}>
+              {corr.priority.toUpperCase()}
+            </Badge>
+            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+              {corr.direction === 'downward' ? (
+                <><ArrowDown className="h-2.5 w-2.5 text-info" />Downward</>
+              ) : (
+                <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
+              )}
+            </Badge>
+            <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, 'gap-0.5 text-success bg-success/10')}>
+              <CheckCircle2 className="h-2.5 w-2.5" />
+              {corr.status === 'archived' ? 'Archived' : 'Completed'}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
+                correspondenceQueueBadgeClass,
+                archiveLevel === 'directorate'
+                  ? 'bg-primary/10 text-primary'
+                  : archiveLevel === 'division'
+                    ? 'bg-info/10 text-info'
+                    : '',
+              )}
+            >
+              {levelLabel} Record
+            </Badge>
+          </div>
+          <span className={correspondenceQueueDateClass}>
+            {formatDateShort(corr.completedAt || corr.receivedDate)}
+          </span>
+        </div>
+        <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+          <span className={correspondenceQueueMetaItemClass}>
+            <UserIcon className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">From: {corr.senderName || 'Unknown'}</span>
+          </span>
+          <span className={correspondenceQueueMetaItemClass}>
+            <FileText className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">Ref: {corr.referenceNumber || 'N/A'}</span>
+          </span>
+          {orgPath ? (
+            <span className={correspondenceQueueMetaItemClass}>
+              <Building2 className={correspondenceQueueMetaIconClass} />
+              <span className="truncate">{orgPath}</span>
+            </span>
+          ) : null}
+        </div>
+      </ListRowCard>
     );
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser) {
     return (
       <ErrorBoundary>
         <DashboardLayout>
           <div className="container mx-auto p-6 space-y-6">
-            <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading records…</CardContent></Card>
+            <LoadingState message="Loading records…" />
           </div>
         </DashboardLayout>
       </ErrorBoundary>
@@ -750,7 +862,7 @@ const RecordsArchivePage = () => {
           {/* Header */}
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold">Records & Archive</h1>
+              <h1 className="text-3xl font-bold">Records & Archives</h1>
               <p className="text-muted-foreground mt-1">
                 Completed correspondence within your {getScopeLabel().toLowerCase()} scope
               </p>
@@ -797,7 +909,7 @@ const RecordsArchivePage = () => {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Archive Filters</CardTitle>
+                <CardTitle className="text-lg">Records & Archives Filters</CardTitle>
                 {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
               </div>
             </CardHeader>
@@ -906,6 +1018,22 @@ const RecordsArchivePage = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label className="text-sm font-medium mb-2 block">Completion Package</Label>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="hasCompletionPackage"
+                      checked={hasCompletionPackage}
+                      onCheckedChange={(checked) => setHasCompletionPackage(checked === true)}
+                    />
+                    <label
+                      htmlFor="hasCompletionPackage"
+                      className="text-sm text-muted-foreground cursor-pointer"
+                    >
+                      Has Completion Package
+                    </label>
+                  </div>
+                </div>
 
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Priority</Label>
@@ -966,79 +1094,67 @@ const RecordsArchivePage = () => {
           </Card>
         )}
 
-        {/* Search */}
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by subject, reference, sender..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-primary/10"><Archive className="h-6 w-6 text-primary" /></div>
-                <div><p className="text-sm text-muted-foreground">Total Records</p><p className="text-2xl font-semibold">{summary.total}</p></div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-secondary/50"><Calendar className="h-6 w-6 text-muted-foreground" /></div>
-                <div><p className="text-sm text-muted-foreground">This Year</p><p className="text-2xl font-semibold">{summary.thisYear}</p></div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-success/10"><CheckCircle2 className="h-6 w-6 text-success" /></div>
-                <div><p className="text-sm text-muted-foreground">Completed</p><p className="text-2xl font-semibold">{summary.completed}</p></div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-muted"><Archive className="h-6 w-6 text-muted-foreground" /></div>
-                <div><p className="text-sm text-muted-foreground">Archived</p><p className="text-2xl font-semibold">{summary.archived}</p></div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error Loading Records</AlertTitle>
-            <AlertDescription className="flex items-center justify-between">
-              <span>{error}</span>
-              <Button variant="outline" size="sm" onClick={handleRefresh} className="ml-4">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
+        {/* Search + summary stats (shared shell) */}
+        <Card>
+          <CardContent className={registryQueueSearchStatsShellContentClass}>
+            <div className={registryQueueSearchInputWrapClass}>
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by subject, reference, sender..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: 'Total Records', value: summary.total, icon: Archive, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+                { label: 'This Year', value: summary.thisYear, icon: Calendar, bgClass: 'bg-secondary/50', iconClass: 'text-muted-foreground' },
+                { label: 'Completed', value: summary.completed, icon: CheckCircle2, bgClass: 'bg-success/10', iconClass: 'text-success' },
+                { label: 'Archived', value: summary.archived, icon: Archive, bgClass: 'bg-muted', iconClass: 'text-muted-foreground' },
+              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+                <Card key={label}>
+                  <CardContent className={registryQueueStatCardContentClass}>
+                    <div className="flex items-center gap-4">
+                      <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                      </div>
+                      <div>
+                        <p className={registryQueueStatLabelClass}>{label}</p>
+                        <p className={registryQueueStatValueClass}>{value}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {loading && !refreshing ? (
-          <Card><CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading records…</CardContent></Card>
+          <LoadingState message="Loading records…" />
+        ) : error ? (
+          <ErrorState
+            title="Error loading records"
+            message={error}
+            onRetry={handleRefresh}
+            retryLabel="Retry"
+            variant="inline"
+          />
         ) : records.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Archive className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-sm text-muted-foreground mb-2">{debouncedSearch || activeFilterCount > 0 ? 'No records match your filters' : 'No records found in your scope'}</p>
-              {(debouncedSearch || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">Clear Filters</Button>}
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={<Archive className={registryQueueEmptyIconClass} />}
+            title={debouncedSearch || activeFilterCount > 0 ? 'No records match your filters' : 'No records in your scope'}
+            message={
+              debouncedSearch || activeFilterCount > 0
+                ? 'Try adjusting your search or filters.'
+                : 'Completed and archived correspondence in your access scope will appear here.'
+            }
+            actionLabel={debouncedSearch || activeFilterCount > 0 ? 'Clear Filters' : undefined}
+            onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+          />
         ) : (
-          <div className="space-y-3">
+          <div className={correspondenceQueueListStackClass}>
             {records.map((corr) => (
               <RecordCard key={corr.id} corr={corr} />
             ))}
@@ -1059,6 +1175,12 @@ const RecordsArchivePage = () => {
     </ErrorBoundary>
   );
 };
+
+const RecordsArchivePage = () => (
+  <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+    <RecordsArchiveForm />
+  </Suspense>
+);
 
 export default RecordsArchivePage;
 

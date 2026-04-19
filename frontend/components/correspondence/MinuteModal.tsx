@@ -35,6 +35,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { toast } from 'sonner';
+import { ensureSealImageCached } from "@/lib/seal-cache";
 import {
   MessageSquare,
   Send,
@@ -141,7 +142,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   const { assistantAssignments, users: organizationUsers, offices, officeMemberships, directorates, divisions } = useOrganization();
   
   // Use shared signature hook (after activeUser is available)
-  const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences } = useSignature({
+  const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences, isLoading: isSignatureLoading } = useSignature({
     userId: activeUser?.id,
     autoLoad: true,
   });
@@ -419,6 +420,18 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   // Cleanup: Cancel ongoing requests when modal closes
   useEffect(() => {
     if (!isOpen) {
+      if (typeof document !== "undefined") {
+        try {
+          document.body.style.removeProperty('pointer-events');
+          document.body.style.removeProperty('overflow');
+          document.body.style.removeProperty('padding-right');
+          document.documentElement.style.removeProperty('overflow');
+          document.body.removeAttribute('data-scroll-locked');
+          document.body.removeAttribute('data-radix-scroll-lock');
+        } catch {
+          // ignore
+        }
+      }
       // Cancel any ongoing requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -427,6 +440,18 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     }
     return () => {
       // Cleanup on unmount
+      if (typeof document !== "undefined") {
+        try {
+          document.body.style.removeProperty('pointer-events');
+          document.body.style.removeProperty('overflow');
+          document.body.style.removeProperty('padding-right');
+          document.documentElement.style.removeProperty('overflow');
+          document.body.removeAttribute('data-scroll-locked');
+          document.body.removeAttribute('data-radix-scroll-lock');
+        } catch {
+          // ignore
+        }
+      }
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -921,6 +946,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           if (entry.type === 'user') {
             return `user:${entry.userId ?? entry.id}`;
           }
+          if (entry.type === 'office') {
+            return `office:${entry.officeId ?? entry.id}`;
+          }
           const targetId =
             entry.type === 'directorate'
               ? entry.directorateId ?? entry.id
@@ -934,6 +962,8 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
         let key: string;
         if (entry.type === 'user') {
           key = `user:${entry.userId ?? entry.id}`;
+        } else if (entry.type === 'office') {
+          key = `office:${entry.officeId ?? entry.id}`;
         } else {
           const targetId =
             entry.type === 'directorate'
@@ -977,6 +1007,22 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       });
       
       const createdMinuteId = minuteResponse?.id;
+
+      if (actionType === "approve") {
+        const sealData = (minuteResponse?.seal_data as Record<string, unknown>) || null;
+        const serialNumber = sealData ? (sealData.serial_number as string) : "";
+        if (serialNumber) {
+          void ensureSealImageCached({
+            serialNumber,
+            officeName: (sealData?.office_name as string) || "",
+            officeTitle: (sealData?.office_title as string) || "",
+            sealedBy: (sealData?.sealed_by as string) || "",
+            sealedAt: (sealData?.sealed_at as string) || "",
+            signatureImageUrl: (sealData?.signature_image_url as string | undefined) ?? undefined,
+            existingSealImageUrl: (sealData?.seal_image_url as string | undefined) ?? undefined,
+          });
+        }
+      }
       
       logInfo('[MinuteModal] Minute created', {
         minuteId: createdMinuteId,
@@ -1159,6 +1205,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 correspondence: correspondence.id,
                 recipient_type: recipient.type,
                 user: recipient.type === 'user' ? (recipient.userId || recipient.id) : null,
+                office: recipient.type === 'office' ? (recipient.officeId || recipient.id) : null,
                 directorate:
                   recipient.type === 'directorate'
                     ? recipient.directorateId ?? recipient.id
@@ -1338,7 +1385,12 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     : '';
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent 
         className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6"
       >
@@ -1496,7 +1548,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                       <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
                         <Shield className="h-4 w-4 text-emerald-600" />
                         Executive Approval
-                        {actionType === 'approve' && !userSignature && (
+                        {actionType === 'approve' && !isSignatureLoading && !userSignature && (
                           <AlertCircle className="h-3 w-3 text-destructive" />
                         )}
                       </Label>
@@ -1504,7 +1556,10 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                         <strong className="text-emerald-600 dark:text-emerald-400">Formal approval with digital seal.</strong> Requires signature. 
                         {isExecutive && ' This will apply a digital executive seal to the document.'}
                       </p>
-                      {actionType === 'approve' && !userSignature && (
+                      {actionType === 'approve' && isSignatureLoading && !userSignature && (
+                        <p className="text-xs text-muted-foreground mt-1">Checking signature…</p>
+                      )}
+                      {actionType === 'approve' && !isSignatureLoading && !userSignature && (
                         <p className="text-xs text-destructive mt-1 flex items-center gap-1">
                           <AlertCircle className="h-3 w-3" />
                           Digital signature required for approval
@@ -1541,6 +1596,70 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
               </div>
             )}
           </div>
+
+          {/* Comment / Approval text — above Route To so you write first, then choose recipient */}
+          <Textarea
+            id="minute"
+            placeholder={
+              actionType === 'approve' 
+                ? "Enter your approval comments or decision (this will be included with the digital seal)..."
+                : "Enter your comments, instructions, or recommendations..."
+            }
+            value={minuteText}
+            onChange={(e) => handleTextChange(e.target.value)}
+            className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''} ${
+              actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
+            }`}
+            maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
+            aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
+            aria-required="true"
+            aria-invalid={!!minuteTextError}
+            aria-describedby="minute-text-help minute-text-error"
+          />
+
+          {/* Minute Templates Section (document templates for minute text) */}
+          {(minuteTemplates.length > 0 || minuteText.trim().length > 0) && (
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-between">
+                  <span className="text-sm">Minute Templates</span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="space-y-3 pt-2">
+                  {selectedMinuteTemplate && (
+                    <div className="rounded-md border border-dashed p-2 text-xs bg-background">
+                      <p className="font-medium text-foreground mb-1">{selectedMinuteTemplate.title}</p>
+                      <p className="text-muted-foreground line-clamp-2">
+                        {getTemplatePlainText(selectedMinuteTemplate)}
+                      </p>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      value={newTemplateName}
+                      onChange={(e) => setNewTemplateName(e.target.value)}
+                      placeholder="Save current as template..."
+                      className="flex-1 min-w-[150px] h-8"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSaveMinuteTemplate}
+                      disabled={!minuteText.trim()}
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      Save
+                    </Button>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
 
           {/* Route To - Using extracted RoutingSection component */}
           <RoutingSection
@@ -1588,69 +1707,6 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             suggestedNext={suggestedNext}
             findUserById={findUserById}
             getUserOfficeInfo={getUserOfficeInfoForRouting}
-          />
-
-          {/* Minute Templates Section */}
-          {signatureTemplates.length > 0 && (
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="w-full justify-between">
-                  <span className="text-sm">Minute Templates</span>
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="space-y-3 pt-2">
-                  {selectedMinuteTemplate && (
-                    <div className="rounded-md border border-dashed p-2 text-xs bg-background">
-                      <p className="font-medium text-foreground mb-1">{selectedMinuteTemplate.title}</p>
-                      <p className="text-muted-foreground line-clamp-2">
-                        {getTemplatePlainText(selectedMinuteTemplate)}
-                      </p>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      value={newTemplateName}
-                      onChange={(e) => setNewTemplateName(e.target.value)}
-                      placeholder="Save current as template..."
-                      className="flex-1 min-w-[150px] h-8"
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleSaveMinuteTemplate}
-                      disabled={!minuteText.trim()}
-                    >
-                      <Save className="h-3 w-3 mr-1" />
-                      Save
-                    </Button>
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-
-          <Textarea
-            id="minute"
-            placeholder={
-              actionType === 'approve' 
-                ? "Enter your approval comments or decision (this will be included with the digital seal)..."
-                : "Enter your comments, instructions, or recommendations..."
-            }
-            value={minuteText}
-            onChange={(e) => handleTextChange(e.target.value)}
-            className={`min-h-[120px] resize-none ${minuteTextError ? 'border-destructive' : ''} ${
-              actionType === 'approve' ? 'border-emerald-200 dark:border-emerald-800 focus:border-emerald-500' : ''
-            }`}
-            maxLength={MODAL_CONSTANTS.MINUTE_TEXT.MAX}
-            aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
-            aria-required="true"
-            aria-invalid={!!minuteTextError}
-            aria-describedby="minute-text-help minute-text-error"
           />
 
           {/* Distribution (CC) - Only for Management Level */}
@@ -1795,7 +1851,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 // Fallback to lookup if name is missing
                 let recipientName = recipient.name;
                 if (!recipientName) {
-                  if (recipient.type === 'directorate' && recipient.directorateId) {
+                  if (recipient.type === 'office' && recipient.officeId) {
+                    recipientName = offices.find(o => o.id === recipient.officeId)?.name || 'Office';
+                  } else if (recipient.type === 'directorate' && recipient.directorateId) {
                     recipientName = directorates.find(d => d.id === recipient.directorateId)?.name || 'Directorate';
                   } else if (recipient.type === 'division' && recipient.divisionId) {
                     recipientName = divisions.find(d => d.id === recipient.divisionId)?.name || 'Division';
@@ -1807,8 +1865,9 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
                 }
                 return {
                   id: recipient.id,
-                  type: recipient.type as 'directorate' | 'division' | 'department',
+                  type: recipient.type as 'office' | 'directorate' | 'division' | 'department',
                   name: recipientName,
+                officeId: recipient.officeId,
                 directorateId: recipient.directorateId,
                 divisionId: recipient.divisionId,
                 departmentId: recipient.departmentId,

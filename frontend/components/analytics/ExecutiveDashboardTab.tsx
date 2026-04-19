@@ -33,7 +33,6 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowRight,
-  Award,
   FileText,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -123,7 +122,6 @@ export const ExecutiveDashboardTab = () => {
     );
   }, [divisionPerf?.divisions]);
   const bottlenecks = efficiencyData?.bottlenecks ?? [];
-  const topPerformers = efficiencyData?.staffMetrics?.topPerformers ?? [];
 
   // Chart colors
   const getComplianceColor = (rate: number) => {
@@ -674,33 +672,6 @@ export const ExecutiveDashboardTab = () => {
               </Card>
             </div>
 
-            {/* Top Performers */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Performers</CardTitle>
-                <CardDescription>Staff with highest completion rates</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {topPerformers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No performance data available</p>
-                ) : (
-                  <div className="space-y-4">
-                    {topPerformers.slice(0, 5).map((performer, index) => (
-                      <div key={performer.userId} className="flex items-center gap-4">
-                        <Badge variant={index === 0 ? 'default' : 'secondary'}>#{index + 1}</Badge>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{performer.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {performer.itemsCompleted} completed • Avg {performer.avgResponseDays}d response
-                          </p>
-                        </div>
-                        <Award className="h-5 w-5 text-yellow-500" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
 
@@ -711,4 +682,3 @@ export const ExecutiveDashboardTab = () => {
     </ClientErrorBoundary>
   );
 };
-

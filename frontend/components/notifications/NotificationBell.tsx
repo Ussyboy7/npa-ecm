@@ -27,7 +27,7 @@ export const NotificationBell = () => {
   const isFetchingRef = useRef(false);
 
   // Use WebSocket for real-time updates
-  const { unreadCount: wsUnreadCount, isConnected } = useNotificationWebSocket({
+  const { unreadCount: wsUnreadCount, isConnected, sendMessage } = useNotificationWebSocket({
     enabled: true,
     onNotification: (notification) => {
       // Show toast notification if dropdown is closed
@@ -122,6 +122,16 @@ export const NotificationBell = () => {
     }
     // When disconnected, polling handles all fetching - no duplicate fetch needed
   }, [isConnected, wsUnreadCount]);
+
+  // Resync badge after closing the panel (REST mark-read used to leave WS count stale)
+  useEffect(() => {
+    if (isOpen) return;
+    if (isConnected) {
+      sendMessage({ type: 'get_unread_count' });
+    } else {
+      void getUnreadCount(true).then((count) => setUnreadCount(count));
+    }
+  }, [isOpen, isConnected, sendMessage]);
 
   const ariaLabel = unreadCount > 0 
     ? `Notifications, ${unreadCount} unread` 

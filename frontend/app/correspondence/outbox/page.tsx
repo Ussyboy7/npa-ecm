@@ -20,6 +20,9 @@ import {
   Mail,
   Search,
   Send,
+  Pencil,
+  Undo2,
+  Trash2,
   AlertCircle,
   Clock,
   User as UserIcon,
@@ -28,9 +31,8 @@ import {
   Filter,
   Calendar,
   Building2,
-  ChevronLeft,
-  ChevronRight,
   Loader2,
+  FileText,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -41,8 +43,41 @@ import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { FlowTypeBadge } from '@/components/correspondence/FlowTypeBadge';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import {
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  registryQueueSearchStatsShellContentClass,
+  registryQueueSearchInputWrapClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { cn } from '@/lib/utils';
 import { getDocumentsSharedByUser, type DocumentRecord } from '@/lib/dms-storage';
-import { FileText } from 'lucide-react';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/shared/PaginationControls';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: '#ef4444',
@@ -64,27 +99,38 @@ const OutboxPage = () => {
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['pending', 'in-progress']);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [goToPageInput, setGoToPageInput] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+
+  // Use pagination hook
+  const [count, setCount] = useState(0);
+  const pagination = usePagination({
+    initialPage: 1,
+    initialPageSize: 25,
+    totalCount: count,
+  });
+
   const [outboxItems, setOutboxItems] = useState<Correspondence[]>([]);
   const [sharedDocuments, setSharedDocuments] = useState<DocumentRecord[]>([]);
   const [summary, setSummary] = useState({ total: 0, urgent: 0, pending: 0, inProgress: 0 });
   const [documentCount, setDocumentCount] = useState(0);
-  const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<Correspondence | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedStatuses.length > 0 && !(selectedStatuses.length === 2 && selectedStatuses.includes('pending') && selectedStatuses.includes('in-progress'))) count++;
+    if (selectedStatuses.length > 0) count++;
     if (selectedPriorities.length > 0) count++;
     if (dateFrom) count++;
     if (dateTo) count++;
@@ -100,7 +146,7 @@ const OutboxPage = () => {
   };
 
   const clearAllFilters = () => {
-    setSelectedStatuses(['pending', 'in-progress']);
+    setSelectedStatuses([]);
     setSelectedPriorities([]);
     setDateFrom('');
     setDateTo('');
@@ -113,11 +159,12 @@ const OutboxPage = () => {
   }, [query]);
 
   useEffect(() => {
-    setPage(1);
-  }, [debouncedQuery, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo, pageSize]);
+    pagination.goToFirstPage();
+  }, [debouncedQuery, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo, pagination.pageSize]);
 
   useEffect(() => {
-    if (!hydrated || !currentUser) return;
+    // Fetch data immediately after login (don't wait for currentUser hydration)
+    if (!currentUser?.id) return;
 
     const fetchOutbox = async () => {
       setLoading(true);
@@ -140,8 +187,8 @@ const OutboxPage = () => {
         }
         params.append('sort_by', sortBy);
         params.append('sort_order', sortOrder);
-        params.append('page', String(page));
-        params.append('page_size', String(pageSize));
+        params.append('page', String(pagination.page));
+        params.append('page_size', String(pagination.pageSize));
 
         const [corrResponse, docsResponse] = await Promise.all([
           apiFetch<Record<string, unknown>>(`/correspondence/items/outbox/?${params.toString()}`),
@@ -185,15 +232,93 @@ const OutboxPage = () => {
     };
 
     void fetchOutbox();
-  }, [hydrated, currentUser, debouncedQuery, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo, page, pageSize]);
+  }, [currentUser?.id, debouncedQuery, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey]);
 
-  const pageCount = Math.max(1, Math.ceil(count / pageSize));
+  const handleWithdrawClick = (item: Correspondence) => {
+    const status = item.status as string;
+    if (status !== 'pending' && status !== 'in-progress') {
+      toast.error('Only pending or in-progress correspondence can be withdrawn');
+      return;
+    }
+    setSelectedItem(item);
+    setWithdrawDialogOpen(true);
+  };
 
-  const handleGoToPage = () => {
-    const pageNum = parseInt(goToPageInput, 10);
-    if (pageNum >= 1 && pageNum <= pageCount) {
-      setPage(pageNum);
-      setGoToPageInput('');
+  const confirmWithdraw = async () => {
+    if (!selectedItem || !withdrawReason.trim()) {
+      toast.error('Please provide a reason for withdrawal');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      await apiFetch(`/correspondence/items/${selectedItem.id}/withdraw/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: withdrawReason.trim() }),
+      });
+      toast.success('Correspondence withdrawn successfully. You can edit and resend it later.');
+      setWithdrawDialogOpen(false);
+      setWithdrawReason('');
+      setSelectedItem(null);
+      setRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      let errorMessage = 'Failed to withdraw correspondence';
+      if (err && typeof err === 'object') {
+        const errorObj = err as Record<string, unknown>;
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (errorMessage === 'Failed to withdraw correspondence') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
+      toast.error(`Failed to withdraw: ${errorMessage}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteClick = (item: Correspondence) => {
+    const status = item.status as string;
+    if (status !== 'pending') {
+      toast.error('Only pending correspondence can be deleted');
+      return;
+    }
+    setSelectedItem(item);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedItem) return;
+    setIsProcessing(true);
+    try {
+      await apiFetch(`/correspondence/items/${selectedItem.id}/`, { method: 'DELETE' });
+      toast.success('Correspondence deleted successfully');
+      setDeleteDialogOpen(false);
+      setSelectedItem(null);
+      setRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      let errorMessage = 'Failed to delete correspondence';
+      if (err && typeof err === 'object') {
+        const errorObj = err as Record<string, unknown>;
+        if (errorObj.response && typeof errorObj.response === 'object') {
+          const response = errorObj.response as Record<string, unknown>;
+          if (response.data && typeof response.data === 'object') {
+            const data = response.data as Record<string, unknown>;
+            errorMessage = (data.detail as string) || errorMessage;
+          }
+        }
+        if (errorMessage === 'Failed to delete correspondence') {
+          errorMessage = (errorObj.message as string) || errorMessage;
+        }
+      }
+      toast.error(`Failed to delete: ${errorMessage}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -249,11 +374,11 @@ const OutboxPage = () => {
     );
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">
-          <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading outbox…</CardContent></Card>
+          <LoadingState message="Loading outbox…" />
         </div>
       </DashboardLayout>
     );
@@ -288,7 +413,7 @@ const OutboxPage = () => {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Outbox Filters</CardTitle>
+                <CardTitle className="text-lg">My Outbox Filters</CardTitle>
                 {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
               </div>
             </CardHeader>
@@ -340,126 +465,219 @@ const OutboxPage = () => {
           </Card>
         )}
 
-        {/* Search */}
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by subject, reference, sender..." className="pl-10" />
-        </div>
+        {/* Search + Stats */}
+        <Card>
+          <CardContent className={registryQueueSearchStatsShellContentClass}>
+            <div className={registryQueueSearchInputWrapClass}>
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by subject, reference, sender…"
+                className="pl-10"
+                aria-label="Search outbox"
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {[
+                { label: 'Total items', value: summary.total + documentCount, icon: Mail, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+                { label: 'Pending action', value: summary.pending, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
+                { label: 'In progress', value: summary.inProgress, icon: Send, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+                <Card key={label}>
+                  <CardContent className={registryQueueStatCardContentClass}>
+                    <div className="flex items-center gap-4">
+                      <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                      </div>
+                      <div>
+                        <p className={registryQueueStatLabelClass}>{label}</p>
+                        <p className={registryQueueStatValueClass}>{value}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {[
-            { label: 'Total in Queue', value: summary.total, icon: Mail, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-            { label: 'Shared Documents', value: documentCount, icon: FileText, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-            { label: 'Urgent', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-            { label: 'Pending', value: summary.pending, icon: Clock, bgClass: 'bg-warning/10', iconClass: 'text-warning' },
-            { label: 'In Progress', value: summary.inProgress, icon: Send, bgClass: 'bg-info/10', iconClass: 'text-info' },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
-                  <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {error && <Card><CardContent className="py-4 text-sm text-destructive flex items-center gap-2"><AlertCircle className="h-4 w-4" />{error}</CardContent></Card>}
+        {error && <ErrorState message={error} variant="inline" />}
 
         {/* Outbox Items */}
         {loading ? (
-          <Card><CardContent className="py-12 text-center text-muted-foreground text-sm flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading outbox items...</CardContent></Card>
+          <LoadingState message="Loading outbox items…" />
             ) : outboxItems.length === 0 && sharedDocuments.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-                <Send className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-muted-foreground mb-2">{debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'You have no correspondence or shared documents at the moment.'}</p>
-              {(debouncedQuery || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">Clear Filters</Button>}
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon="inbox"
+            title={debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence or documents'}
+            message={debouncedQuery || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'You have no correspondence or shared documents at the moment.'}
+            actionLabel={debouncedQuery || activeFilterCount > 0 ? 'Clear Filters' : undefined}
+            onAction={debouncedQuery || activeFilterCount > 0 ? clearAllFilters : undefined}
+          />
             ) : (
-          <div className="space-y-3">
+          <div className={correspondenceQueueListStackClass}>
             {outboxItems.map((item) => {
               const division = item.divisionId ? divisions.find((div) => div.id === item.divisionId) : undefined;
               const currentApprover = item.currentApproverId ? organizationUsers.find((user) => user.id === item.currentApproverId) : undefined;
                 const daysPending = calculateDaysPending(item);
 
                 return (
-                <div key={item.id as string} className="border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
-                  <Link href={`/correspondence/${item.id as string}`} className="block">
-                    <div className="flex items-start gap-4">
-                    <div className={`p-3 rounded-lg ${item.priority === 'urgent' ? 'bg-destructive/10' : item.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
-                      <Mail className={`h-5 w-5 ${item.priority === 'urgent' ? 'text-destructive' : item.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3 mb-2">
-                          <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-foreground truncate mb-1">{item.subject}</h3>
-                            <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant={getPriorityColor(item.priority)}>{item.priority.toUpperCase()}</Badge>
-                            <FlowTypeBadge
-                              flowType={item.flowType}
-                              isInward={item.isInward}
-                              isOutward={item.isOutward}
-                              isInternal={item.isInternal}
-                              isExternal={item.isExternal}
-                            />
-                            <Badge variant={getStatusBadgeVariant(item.status as string)}>{(item.status as string).replace('-', ' ')}</Badge>
-                            {daysPending > 0 && <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />{daysPending} day{daysPending === 1 ? '' : 's'} pending</Badge>}
-                          </div>
-                        </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">{item.updatedAt ? formatDateShort(item.updatedAt) : '—'}</span>
-                      </div>
-                        <div className="space-y-1 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /><span>Ref: {item.referenceNumber}</span></div>
-                        {item.senderName && <div className="flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" /><span>From: {item.senderName}</span></div>}
-                        {division && <div className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5" /><span>Division: {division.name}</span></div>}
-                        {currentApprover && <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /><span>Current Approver: {currentApprover.name}</span></div>}
-                      </div>
-                      </div>
-                    </div>
-                  </Link>
-                  {/* Action Menu */}
-                  <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-                    {item.status as string === 'pending' && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          router.push(`/correspondence/register?edit=${item.id as string}`);
-                        }}
-                      >
-                        Edit Draft
-                      </Button>
-                    )}
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        toast.info('Withdraw functionality coming soon');
-                      }}
+                <ListRowCard
+                  key={item.id as string}
+                  density="compact"
+                  href={`/correspondence/${item.id as string}`}
+                  leading={(
+                    <div
+                      className={cn(
+                        correspondenceQueueLeadingBoxClass,
+                        item.priority === 'urgent'
+                          ? 'bg-destructive/10'
+                          : item.priority === 'high'
+                            ? 'bg-warning/10'
+                            : 'bg-primary/10',
+                      )}
                     >
-                      Withdraw
-                    </Button>
-                    {item.status as string === 'pending' && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          toast.info('Delete functionality coming soon');
-                        }}
+                      <Mail
+                        className={cn(
+                          correspondenceQueueLeadingIconClass,
+                          item.priority === 'urgent'
+                            ? 'text-destructive'
+                            : item.priority === 'high'
+                              ? 'text-warning'
+                              : 'text-primary',
+                        )}
+                      />
+                    </div>
+                  )}
+                  actions={(
+                    <>
+                      {item.status as string === 'pending' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              aria-label="Edit draft"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                router.push(`/correspondence/register?edit=${item.id as string}`);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Edit draft</TooltipContent>
+                        </Tooltip>
+                      )}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            aria-label="Withdraw correspondence"
+                            disabled={(item.status as string) !== 'pending' && (item.status as string) !== 'in-progress'}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleWithdrawClick(item);
+                            }}
+                          >
+                            <Undo2 className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          {(item.status as string) === 'pending' || (item.status as string) === 'in-progress'
+                            ? 'Withdraw correspondence'
+                            : 'Only pending or in-progress items can be withdrawn'}
+                        </TooltipContent>
+                      </Tooltip>
+                      {item.status as string === 'pending' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label="Delete draft"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteClick(item);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Delete draft</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </>
+                  )}
+                >
+                  <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{item.subject}</h3>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                      <Badge variant={getPriorityColor(item.priority)} className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none">
+                        {item.priority.toUpperCase()}
+                      </Badge>
+                      <FlowTypeBadge
+                        flowType={item.flowType}
+                        isInward={item.isInward}
+                        isOutward={item.isOutward}
+                        isInternal={item.isInternal}
+                        isExternal={item.isExternal}
+                        compact
+                        className="h-5 gap-0.5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none"
+                      />
+                      <Badge
+                        variant={getStatusBadgeVariant(item.status as string)}
+                        className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none"
                       >
-                        Delete
-                      </Button>
+                        {(item.status as string).replace('-', ' ')}
+                      </Badge>
+                      {daysPending > 0 && (
+                        <Badge variant="outline" className="h-5 gap-0.5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none">
+                          <Clock className="h-2.5 w-2.5" />
+                          {daysPending} day{daysPending === 1 ? '' : 's'} pending
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {item.updatedAt ? formatDateShort(item.updatedAt) : '—'}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5 border-t border-border/60 pt-1.5 text-[11px] leading-tight text-muted-foreground">
+                    <span className="inline-flex max-w-full items-center gap-1">
+                      <Mail className="h-3 w-3 shrink-0 opacity-80" />
+                      <span className="truncate">Ref: {item.referenceNumber}</span>
+                    </span>
+                    {item.senderName && (
+                      <span className="inline-flex max-w-full items-center gap-1">
+                        <UserIcon className="h-3 w-3 shrink-0 opacity-80" />
+                        <span className="truncate">From: {item.senderName}</span>
+                      </span>
+                    )}
+                    {division && (
+                      <span className="inline-flex max-w-full items-center gap-1">
+                        <Building2 className="h-3 w-3 shrink-0 opacity-80" />
+                        <span className="truncate">Division: {division.name}</span>
+                      </span>
+                    )}
+                    {currentApprover && (
+                      <span className="inline-flex max-w-full items-center gap-1">
+                        <Clock className="h-3 w-3 shrink-0 opacity-80" />
+                        <span className="truncate">Current Approver: {currentApprover.name}</span>
+                      </span>
                     )}
                   </div>
-                </div>
+                </ListRowCard>
                 );
             })}
             {sharedDocuments.map(doc => <DocumentCard key={doc.id} doc={doc} />)}
@@ -467,44 +685,98 @@ const OutboxPage = () => {
         )}
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">Showing {count === 0 && documentCount === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count + documentCount, (page - 1) * pageSize + outboxItems.length + sharedDocuments.length)}`} of {count + documentCount} items</p>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground">Per page:</label>
-              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-                <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1 || loading}><ChevronLeft className="h-4 w-4" />Previous</Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
-                let pageNum: number;
-                if (pageCount <= 5) pageNum = i + 1;
-                else if (page <= 3) pageNum = i + 1;
-                else if (page >= pageCount - 2) pageNum = pageCount - 4 + i;
-                else pageNum = page - 2 + i;
-                if (pageNum > pageCount) return null;
-                return <Button key={pageNum} variant={page === pageNum ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pageNum)} disabled={loading}>{pageNum}</Button>;
-              })}
-            </div>
-            {pageCount > 5 && (
-              <div className="flex items-center gap-1">
-                <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
-                <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
-          </div>
+        {count > 0 && (
+          <PaginationControls
+            pagination={pagination}
+            showPageSizeSelector={true}
+            showGoToPage={true}
+            className="border-t border-border/60 pt-4"
+          />
         )}
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
-          </div>
-        </div>
+
+        {/* Withdraw Confirmation Dialog */}
+        <AlertDialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Withdraw Correspondence</AlertDialogTitle>
+              <AlertDialogDescription>
+                Withdrawing this correspondence will cancel it and allow you to edit and resend it later. The correspondence will be marked as withdrawn.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <label htmlFor="withdraw-reason" className="text-sm font-medium">
+                  Reason for Withdrawal <span className="text-destructive">*</span>
+                </label>
+                <Input
+                  id="withdraw-reason"
+                  placeholder="Please provide a reason for withdrawing this correspondence…"
+                  value={withdrawReason}
+                  onChange={(e) => setWithdrawReason(e.target.value)}
+                  className="mt-2"
+                  disabled={isProcessing}
+                />
+              </div>
+              {selectedItem && (
+                <div className="text-sm text-muted-foreground">
+                  <p><strong>Subject:</strong> {selectedItem.subject}</p>
+                  <p><strong>Reference:</strong> {selectedItem.referenceNumber || '—'}</p>
+                </div>
+              )}
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={() => {
+                  setWithdrawReason('');
+                  setSelectedItem(null);
+                }}
+                disabled={isProcessing}
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  void confirmWithdraw();
+                }}
+                disabled={!withdrawReason.trim() || isProcessing}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isProcessing ? 'Withdrawing…' : 'Confirm Withdrawal'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Correspondence</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to permanently delete this draft? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {selectedItem && (
+              <div className="py-4 text-sm text-muted-foreground">
+                <p><strong>Subject:</strong> {selectedItem.subject}</p>
+                <p><strong>Reference:</strong> {selectedItem.referenceNumber || '—'}</p>
+              </div>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setSelectedItem(null)} disabled={isProcessing}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => { e.preventDefault(); void confirmDelete(); }}
+                disabled={isProcessing}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isProcessing ? 'Deleting…' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );

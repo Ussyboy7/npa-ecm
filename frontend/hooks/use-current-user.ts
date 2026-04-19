@@ -4,7 +4,9 @@ import { logWarn } from '@/lib/client-logger';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
-import { apiFetch, hasOriginalTokens, hasTokens } from "@/lib/api-client";
+import { apiFetch, clearTokens, hasOriginalTokens, hasTokens } from "@/lib/api-client";
+
+const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
@@ -65,6 +67,33 @@ let globalUserState: {
 let globalFetchPromise: Promise<User | null> | null = null;
 let globalSubscribers = new Set<(user: User | null, hydrated: boolean) => void>();
 
+/**
+ * Seed current user from server bootstrap to avoid extra /auth/me/ call on first load.
+ * Call early (e.g. useLayoutEffect in AuthScopedProviders) when bootstrap user is available.
+ */
+export const seedFromBootstrapUser = (raw: Record<string, unknown> | null | undefined): void => {
+  if (!raw || typeof raw !== "object") return;
+  if (!hasTokens()) return;
+  const user = mapApiUserToUser(raw);
+  globalUserState.user = user;
+  globalUserState.hydrated = true;
+  globalUserState.loading = false;
+  globalFetchPromise = null;
+  globalSubscribers.forEach((sub) => sub(user, true));
+};
+
+// Allow external modules to subscribe to current user changes without using the hook
+export const subscribeToCurrentUser = (cb: (user: User | null, hydrated: boolean) => void) => {
+  // Call back immediately with current snapshot
+  try {
+    cb(globalUserState.user, globalUserState.hydrated);
+  } catch (e) {
+    // swallow subscriber exceptions to avoid breaking registration
+  }
+  globalSubscribers.add(cb);
+  return () => globalSubscribers.delete(cb);
+};
+
 export const useCurrentUser = () => {
   const organization = useContext(OrganizationContext);
   const users = organization?.users ?? [];
@@ -105,6 +134,17 @@ export const useCurrentUser = () => {
         
         return user;
       } catch (error: unknown) {
+        const status = typeof error === "object" && error && "status" in error
+          ? Number((error as { status?: unknown }).status)
+          : undefined;
+        const message = error instanceof Error ? error.message : String(error ?? "");
+
+        // Stale/invalid token payload can point to a deleted user and return 404 on /auth/me/.
+        // Treat this as an auth reset so app stops retrying with bad tokens.
+        if (status === 404 || message.toLowerCase().includes("user not found")) {
+          clearTokens();
+        }
+
         logWarn("Failed to hydrate current user from API", error);
         globalUserState.user = null;
         globalUserState.hydrated = true;
@@ -131,8 +171,11 @@ export const useCurrentUser = () => {
     };
     globalSubscribers.add(subscriber);
     
-    // If already hydrated, use cached value
-    if (globalUserState.hydrated) {
+    // Force refetch if tokens exist but we have no user (e.g., user just logged in)
+    if (hasTokens() && !globalUserState.user && !globalUserState.loading) {
+      void performGlobalFetch();
+    } else if (globalUserState.hydrated) {
+      // If already hydrated, use cached value
       setRemoteUser(globalUserState.user);
       setHydrated(true);
     } else if (!globalUserState.loading) {
@@ -145,6 +188,17 @@ export const useCurrentUser = () => {
       globalSubscribers.delete(subscriber);
     };
   }, []); // Empty deps - only run once on mount
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      if (globalUserState.loading) return;
+      globalUserState.hydrated = false;
+      void performGlobalFetch();
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(AUTH_CHANGED_EVENT, handler);
+  }, [performGlobalFetch]);
 
   const loadCurrentUser = useCallback(async () => {
     await performGlobalFetch();

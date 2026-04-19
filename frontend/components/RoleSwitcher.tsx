@@ -215,7 +215,7 @@ export const RoleSwitcher = () => {
     setSearchQuery("");
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return null;
   }
 

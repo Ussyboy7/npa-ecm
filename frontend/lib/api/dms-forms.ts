@@ -104,13 +104,19 @@ export async function getFormDocuments(params?: {
   if (params?.executive) queryParams.append("executive", params.executive);
 
   const query = queryParams.toString();
-  const response = await apiFetch<FormDocument[]>(
+  const response = await apiFetch<FormDocument[] | { results?: FormDocument[] }>(
     `${BASE_PATH}/form-documents${query ? `?${query}` : ""}`,
     {
       signal: params?.signal,
     }
   );
-  return Array.isArray(response) ? response : [];
+  if (Array.isArray(response)) {
+    return response;
+  }
+  if (response && typeof response === "object" && Array.isArray(response.results)) {
+    return response.results;
+  }
+  return [];
 }
 
 export async function getFormDocument(id: string): Promise<FormDocument> {
@@ -205,3 +211,16 @@ export async function markFormDocumentCompleted(id: string): Promise<FormDocumen
   });
 }
 
+export async function cloneFormDocument(
+  id: string,
+  payload?: {
+    title?: string;
+    description?: string;
+    reference_number?: string;
+  }
+): Promise<FormDocument> {
+  return apiFetch<FormDocument>(`${BASE_PATH}/form-documents/${id}/clone/`, {
+    method: "POST",
+    body: JSON.stringify(payload || {}),
+  });
+}

@@ -1,23 +1,20 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { apiFetch } from "@/lib/dms-storage";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
-import { Mail, Send, Building2, User as UserIcon, Search, Loader2, AlertTriangle } from "lucide-react";
+import { Send, Loader2 } from "lucide-react";
 import type { DocumentRecord } from "@/lib/dms-storage";
-import { filterUsersBySearch } from "@/lib/routing-utils";
+import { RoutingSection } from "@/components/correspondence/RoutingSection";
+import { getDivisionById } from "@/lib/npa-structure";
 
 interface CorrespondenceRoutingViewProps {
   document: DocumentRecord;
@@ -28,11 +25,11 @@ export function CorrespondenceRoutingView({
   document,
   onComplete,
 }: CorrespondenceRoutingViewProps) {
-  const { users, directorates, divisions, departments, offices, officeMemberships } = useOrganization();
+  const { users, directorates, divisions, offices, officeMemberships } = useOrganization();
   const { currentUser } = useCurrentUser();
-  
+
   const [routeType, setRouteType] = useState<'person' | 'office'>('person');
-  const [recipient, setRecipient] = useState<string>('');
+  const [forwardTo, setForwardTo] = useState<string>('');
   const [targetOfficeId, setTargetOfficeId] = useState<string>('');
   const [personSearchQuery, setPersonSearchQuery] = useState('');
   const [officeSearchQuery, setOfficeSearchQuery] = useState('');
@@ -44,41 +41,47 @@ export function CorrespondenceRoutingView({
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Filter users for person routing
-  const filteredUsers = useMemo(() => {
-    if (!personSearchQuery.trim()) return [];
-    const baseUsers = users
-      .filter((u) => (u.active ?? true))
-      .filter((u) => (currentUser ? u.id !== currentUser.id : true));
-    return filterUsersBySearch(baseUsers, personSearchQuery, {
-      includeDivision: true,
-      includeDepartment: true,
-      includeEmail: true,
-    }).slice(0, 10);
-  }, [users, personSearchQuery, currentUser]);
+  const activeUsers = useMemo(
+    () => users.filter((u) => u.active !== false && u.id !== currentUser?.id),
+    [users, currentUser]
+  );
 
-  // Filter offices
-  const filteredOffices = useMemo(() => {
-    let filtered = offices.filter((o) => o.isActive);
-    
-    if (officeSearchQuery.trim()) {
-      const query = officeSearchQuery.toLowerCase();
-      filtered = filtered.filter((o) =>
-        o.name.toLowerCase().includes(query) ||
-        o.code?.toLowerCase().includes(query)
+  const officeOptionsForRouting = useMemo(
+    () =>
+      offices
+        .filter((o) => o.isActive)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((o) => ({
+          id: o.id,
+          name: o.name,
+          officeType: o.officeType ?? '',
+          directorateId: o.directorateId ?? undefined,
+          divisionId: o.divisionId ?? undefined,
+        })),
+    [offices]
+  );
+
+  const findUserById = useCallback(
+    (id: string) => activeUsers.find((u) => u.id === id),
+    [activeUsers]
+  );
+
+  const getUserOfficeInfo = useCallback(
+    (userId: string): { office?: { name: string }; division?: { name: string } } | null => {
+      const membership = officeMemberships.find(
+        (m) => m.userId === userId && m.isPrimary && m.isActive
       );
-    }
-    
-    if (officeFilterDirectorate !== 'all') {
-      filtered = filtered.filter((o) => o.directorateId === officeFilterDirectorate);
-    }
-    
-    if (officeFilterDivision !== 'all') {
-      filtered = filtered.filter((o) => o.divisionId === officeFilterDivision);
-    }
-    
-    return filtered.slice(0, 20);
-  }, [offices, officeSearchQuery, officeFilterDirectorate, officeFilterDivision]);
+      if (!membership) return null;
+      const office = offices.find((o) => o.id === membership.officeId);
+      const user = findUserById(userId);
+      const division = user?.division ? getDivisionById(user.division) : null;
+      return {
+        office: office ? { name: office.name } : undefined,
+        division: division ? { name: division.name } : undefined,
+      };
+    },
+    [officeMemberships, offices, findUserById]
+  );
 
   const handleSubmit = async () => {
     if (!currentUser) {
@@ -90,7 +93,7 @@ export function CorrespondenceRoutingView({
       toast.error('Please select an office');
       return;
     }
-    if (routeType === 'person' && !recipient) {
+    if (routeType === 'person' && !forwardTo) {
       toast.error('Please select a person');
       return;
     }
@@ -119,7 +122,7 @@ export function CorrespondenceRoutingView({
           formData.append('current_office', targetOfficeId);
         }
       } else {
-        formData.append('current_approver_id', recipient);
+        formData.append('current_approver_id', forwardTo);
       }
 
       const correspondenceResponse = await apiFetch<{ id: string; reference_number?: string }>(
@@ -180,16 +183,6 @@ export function CorrespondenceRoutingView({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-          <Mail className="h-4 w-4 text-primary" />
-          Send Document via Correspondence
-        </h3>
-        <p className="text-xs text-muted-foreground mb-4">
-          Create a correspondence item and route this document to a person or office for action.
-        </p>
-      </div>
-
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="corr-subject">Subject</Label>
@@ -201,177 +194,65 @@ export function CorrespondenceRoutingView({
           />
         </div>
 
+        <RoutingSection
+          routeType={routeType}
+          onRouteTypeChange={(v) => {
+            setRouteType(v);
+            if (v === 'office') {
+              setForwardTo('');
+              setPersonSearchQuery('');
+            } else {
+              setTargetOfficeId('');
+              setOfficeSearchQuery('');
+              setOfficeFilterDirectorate('all');
+              setOfficeFilterDivision('all');
+            }
+          }}
+          forwardTo={forwardTo}
+          onForwardToChange={setForwardTo}
+          forwardToError=""
+          personSearchQuery={personSearchQuery}
+          onPersonSearchQueryChange={setPersonSearchQuery}
+          targetOfficeId={targetOfficeId}
+          onTargetOfficeIdChange={(v) => {
+            setTargetOfficeId(v);
+            setForwardTo('');
+          }}
+          officeSearchQuery={officeSearchQuery}
+          onOfficeSearchQueryChange={setOfficeSearchQuery}
+          officeFilterDirectorate={officeFilterDirectorate}
+          onOfficeFilterDirectorateChange={(v) => {
+            setOfficeFilterDirectorate(v);
+            setOfficeFilterDivision('all');
+          }}
+          officeFilterDivision={officeFilterDivision}
+          onOfficeFilterDivisionChange={setOfficeFilterDivision}
+          purpose={purpose}
+          onPurposeChange={setPurpose}
+          offices={officeOptionsForRouting}
+          directorates={directorates}
+          divisions={divisions}
+          users={activeUsers}
+          assistantList={[]}
+          approverList={activeUsers}
+          suggestedNext={undefined}
+          findUserById={findUserById}
+          getUserOfficeInfo={getUserOfficeInfo}
+        />
+
         <div className="space-y-2">
-          <Label>Route To</Label>
-          <RadioGroup value={routeType} onValueChange={(value) => setRouteType(value as 'person' | 'office')}>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="person" id="route-person" />
-              <Label htmlFor="route-person" className="font-normal cursor-pointer flex items-center gap-2">
-                <UserIcon className="h-4 w-4" />
-                Person
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="office" id="route-office" />
-              <Label htmlFor="route-office" className="font-normal cursor-pointer flex items-center gap-2">
-                <Building2 className="h-4 w-4" />
-                Office
-              </Label>
-            </div>
-          </RadioGroup>
-        </div>
-
-        {routeType === 'person' ? (
-          <div className="space-y-2">
-            <Label htmlFor="person-search">Search Person</Label>
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="person-search"
-                value={personSearchQuery}
-                onChange={(e) => setPersonSearchQuery(e.target.value)}
-                placeholder="Search by name or email..."
-                className="pl-8"
-              />
-            </div>
-            {personSearchQuery && (
-              <ScrollArea className="h-40 border rounded-md">
-                <div className="p-2 space-y-1">
-                  {filteredUsers.length === 0 ? (
-                    <p className="text-xs text-muted-foreground p-2 text-center">No users found</p>
-                  ) : (
-                    filteredUsers.map((user) => (
-                      <div
-                        key={user.id}
-                        className={`p-2 rounded cursor-pointer transition-colors ${
-                          recipient === user.id
-                            ? 'bg-primary/10 border border-primary'
-                            : 'hover:bg-muted'
-                        }`}
-                        onClick={() => setRecipient(user.id)}
-                      >
-                        <p className="text-sm font-medium">{user.name}</p>
-                        {user.email && (
-                          <p className="text-xs text-muted-foreground">{user.email}</p>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </ScrollArea>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-2">
-                <Label>Directorate</Label>
-                <Select value={officeFilterDirectorate} onValueChange={setOfficeFilterDirectorate}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Directorates</SelectItem>
-                    {directorates.map((dir) => (
-                      <SelectItem key={dir.id} value={dir.id}>
-                        {dir.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Division</Label>
-                <Select value={officeFilterDivision} onValueChange={setOfficeFilterDivision}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Divisions</SelectItem>
-                    {divisions
-                      .filter((div) => 
-                        officeFilterDirectorate === 'all' || div.directorateId === officeFilterDirectorate
-                      )
-                      .map((div) => (
-                        <SelectItem key={div.id} value={div.id}>
-                          {div.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="office-search">Search Office</Label>
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="office-search"
-                  value={officeSearchQuery}
-                  onChange={(e) => setOfficeSearchQuery(e.target.value)}
-                  placeholder="Search offices..."
-                  className="pl-8"
-                />
-              </div>
-              {officeSearchQuery && (
-                <ScrollArea className="h-40 border rounded-md">
-                  <div className="p-2 space-y-1">
-                    {filteredOffices.length === 0 ? (
-                      <p className="text-xs text-muted-foreground p-2 text-center">No offices found</p>
-                    ) : (
-                      filteredOffices.map((office) => (
-                        <div
-                          key={office.id}
-                          className={`p-2 rounded cursor-pointer transition-colors ${
-                            targetOfficeId === office.id
-                              ? 'bg-primary/10 border border-primary'
-                              : 'hover:bg-muted'
-                          }`}
-                          onClick={() => setTargetOfficeId(office.id)}
-                        >
-                          <p className="text-sm font-medium">{office.name}</p>
-                          {office.code && (
-                            <p className="text-xs text-muted-foreground">{office.code}</p>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </ScrollArea>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Purpose</Label>
-            <Select value={purpose} onValueChange={(value) => setPurpose(value as typeof purpose)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="action">Action</SelectItem>
-                <SelectItem value="information">Information</SelectItem>
-                <SelectItem value="comment">Comment</SelectItem>
-                <SelectItem value="approval">Approval</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Priority</Label>
-            <Select value={priority} onValueChange={(value) => setPriority(value as typeof priority)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Label>Priority</Label>
+          <Select value={priority} onValueChange={(value) => setPriority(value as typeof priority)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="urgent">Urgent</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="space-y-2">
@@ -386,8 +267,9 @@ export function CorrespondenceRoutingView({
         </div>
 
         <Button
+          type="button"
           onClick={handleSubmit}
-          disabled={isSubmitting || (routeType === 'person' && !recipient) || (routeType === 'office' && !targetOfficeId)}
+          disabled={isSubmitting || (routeType === 'person' && !forwardTo) || (routeType === 'office' && !targetOfficeId)}
           className="w-full"
         >
           {isSubmitting ? (

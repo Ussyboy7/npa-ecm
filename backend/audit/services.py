@@ -6,6 +6,7 @@ import logging
 from typing import Any, Optional
 
 from django.contrib.auth import get_user_model
+from django.db.models import Model, QuerySet
 from django.utils import timezone
 
 from .models import ActivityLog
@@ -16,6 +17,43 @@ logger = logging.getLogger(__name__)
 
 class AuditService:
     """Service for creating audit log entries."""
+
+    @staticmethod
+    def _to_jsonable(value: Any, *, depth: int = 0) -> Any:
+        if depth > 6:
+            return str(value)
+
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+
+        if isinstance(value, (list, tuple, set)):
+            return [AuditService._to_jsonable(v, depth=depth + 1) for v in value]
+
+        if isinstance(value, dict):
+            return {
+                str(k): AuditService._to_jsonable(v, depth=depth + 1)
+                for k, v in value.items()
+            }
+
+        if isinstance(value, QuerySet):
+            return [str(obj.pk) for obj in value]
+
+        if isinstance(value, Model):
+            return {"id": str(value.pk), "repr": str(value)}
+
+        if hasattr(value, "isoformat"):
+            try:
+                return value.isoformat()
+            except Exception:
+                return str(value)
+
+        return str(value)
+
+    @staticmethod
+    def sanitize_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+        if not metadata:
+            return {}
+        return AuditService._to_jsonable(metadata)
 
     @staticmethod
     def get_client_ip(request) -> Optional[str]:
@@ -82,7 +120,7 @@ class AuditService:
             object_repr=object_repr,
             module=module,
             description=description,
-            metadata=metadata or {},
+            metadata=AuditService.sanitize_metadata(metadata),
             success=success,
             error_message=error_message,
         )
@@ -147,6 +185,7 @@ class AuditService:
         description: str = "",
         metadata: dict[str, Any] | None = None,
         success: bool = True,
+        error_message: str = "",
     ):
         """Log user-related activity."""
         # Handle case where user might be None (e.g., during login before authentication)
@@ -167,5 +206,5 @@ class AuditService:
             metadata=metadata,
             request=request,
             success=success,
+            error_message=error_message,
         )
-

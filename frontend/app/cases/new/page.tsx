@@ -77,7 +77,7 @@ const NewCasePage = () => {
   
   // Load draft from localStorage on mount
   useEffect(() => {
-    if (!hydrated) return;
+    if (!currentUser?.id) return;
     
     try {
       const saved = localStorage.getItem(AUTO_SAVE_KEY);
@@ -89,11 +89,11 @@ const NewCasePage = () => {
     } catch (err) {
       logError('Failed to load draft', err);
     }
-  }, [hydrated]);
+  }, []);
   
   // Auto-save to localStorage
   useEffect(() => {
-    if (!hydrated) return;
+    if (!currentUser?.id) return;
     
     // Clear previous timeout
     if (autoSaveTimeoutRef.current) {
@@ -125,7 +125,7 @@ const NewCasePage = () => {
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [formData, hydrated]);
+  }, [formData]);
   
   // Track unsaved changes
   useEffect(() => {
@@ -147,10 +147,10 @@ const NewCasePage = () => {
   }, [hasUnsavedChanges]);
 
   useEffect(() => {
-    if (hydrated && !currentUser) {
+    if (!currentUser) {
       router.push("/login");
     }
-  }, [hydrated, currentUser, router]);
+  }, [currentUser, router]);
 
   const handleChange = (field: keyof Case, value: Case[keyof Case]) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -273,7 +273,7 @@ const NewCasePage = () => {
     };
   }, []);
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return null;
   }
 

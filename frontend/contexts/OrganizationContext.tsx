@@ -4,10 +4,12 @@ import type { User } from '@/lib/npa-structure';
 import { updateOrganizationCache } from '@/lib/npa-structure';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import type { BootstrapData } from '@/lib/server-bootstrap';
 
 // Cache configuration
 const CACHE_KEY = 'org_data_cache';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const USERS_CACHE_DURATION = 60 * 60 * 1000;
 
 interface CachedData {
   timestamp: number;
@@ -22,6 +24,40 @@ interface CachedData {
     assistantAssignments: AssistantAssignment[];
   };
 }
+
+const buildCacheKey = (userId?: string | null) => (
+  userId ? `${CACHE_KEY}:${userId}` : CACHE_KEY
+);
+
+const readCachedData = (userId?: string | null): CachedData | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(buildCacheKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedData;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (typeof parsed.timestamp !== 'number') return null;
+    if (!parsed.data || typeof parsed.data !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedData = (data: CachedData['data'], userId?: string | null) => {
+  if (typeof window === 'undefined') return;
+  const payload: CachedData = { timestamp: Date.now(), data };
+  try {
+    localStorage.setItem(buildCacheKey(userId), JSON.stringify(payload));
+  } catch {
+    // ignore
+  }
+};
+
+const isCacheFresh = (cache: CachedData | null, maxAgeMs: number) => {
+  if (!cache) return false;
+  return Date.now() - cache.timestamp < maxAgeMs;
+};
 
 export interface Directorate {
   id: string;
@@ -199,6 +235,7 @@ type UpdateUserInput = {
   isActive?: boolean;
   email?: string;
   employeeId?: string | null;
+  password?: string;
 };
 
 export const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
@@ -447,7 +484,51 @@ const dedupeUsers = (incoming: User[]): User[] => {
   return sortByName(Array.from(byEmail.values()));
 };
 
-export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+function applyInitialData(
+  data: BootstrapData,
+  setters: {
+    setDirectorates: (v: Directorate[]) => void;
+    setDivisions: (v: Division[]) => void;
+    setDepartments: (v: Department[]) => void;
+    setAssistantAssignments: (v: AssistantAssignment[]) => void;
+    setOffices: (v: Office[]) => void;
+    setOfficeMemberships: (v: OfficeMembership[]) => void;
+    setUsers: (v: User[]) => void;
+    setRoles: (v: Role[]) => void;
+  }
+) {
+  const dirs = data.directorates.filter(isRecord).map(mapApiDirectorate);
+  const divs = data.divisions.filter(isRecord).map(mapApiDivision);
+  const depts = data.departments.filter(isRecord).map(mapApiDepartment);
+  const offs = data.offices.filter(isRecord).map(mapApiOffice);
+  const rols = data.roles.filter(isRecord).map(mapApiRole);
+  const mems = data.officeMemberships.filter(isRecord).map(mapApiOfficeMembership);
+  const usrs = dedupeUsers(data.users.filter(isRecord).map(mapApiUserToUser));
+  const dels = data.assistantAssignments.filter(isRecord).map(mapApiDelegation);
+
+  setters.setDirectorates(sortByName(dirs));
+  setters.setDivisions(sortByName(divs));
+  setters.setDepartments(sortByName(depts));
+  setters.setOffices(sortByName(offs));
+  setters.setRoles(sortByName(rols));
+  setters.setOfficeMemberships(mems);
+  setters.setUsers(sortByName(usrs));
+  setters.setAssistantAssignments(dels);
+
+  updateOrganizationCache({
+    directorates: dirs,
+    divisions: divs,
+    departments: depts,
+    offices: offs,
+    officeMemberships: mems,
+    users: usrs,
+  });
+}
+
+export const OrganizationProvider: React.FC<{
+  children: ReactNode;
+  initialData?: BootstrapData | null;
+}> = ({ children, initialData }) => {
   const [directorates, setDirectorates] = useState<Directorate[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -458,7 +539,52 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
   const [roles, setRoles] = useState<Role[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
-  const { currentUser, hydrated } = useCurrentUser();
+  const { currentUser } = useCurrentUser();
+  const appliedInitialRef = useRef(false);
+
+  useEffect(() => {
+    if (initialData && !appliedInitialRef.current) {
+      appliedInitialRef.current = true;
+      applyInitialData(initialData, {
+        setDirectorates,
+        setDivisions,
+        setDepartments,
+        setAssistantAssignments,
+        setOffices,
+        setOfficeMemberships,
+        setUsers,
+        setRoles,
+      });
+      setHasSynced(true);
+      logInfo('Organization data loaded from server bootstrap');
+    }
+  }, [initialData]);
+
+  useEffect(() => {
+    if (hasSynced) return;
+    if (!hasTokens()) return;
+    const cached = readCachedData(currentUser?.id);
+    if (!isCacheFresh(cached, CACHE_DURATION)) return;
+    const data = cached?.data;
+    if (!data) return;
+    setDirectorates(data.directorates || []);
+    setDivisions(data.divisions || []);
+    setDepartments(data.departments || []);
+    setAssistantAssignments(data.assistantAssignments || []);
+    setOffices(data.offices || []);
+    setOfficeMemberships(data.officeMemberships || []);
+    setUsers(data.users || []);
+    setRoles(data.roles || []);
+    updateOrganizationCache({
+      directorates: data.directorates || [],
+      divisions: data.divisions || [],
+      departments: data.departments || [],
+      offices: data.offices || [],
+      officeMemberships: data.officeMemberships || [],
+      users: data.users || [],
+    });
+    setHasSynced(true);
+  }, [currentUser?.id, hasSynced]);
 
   const applyDirectorateUpdate = useCallback(
     (directorate: Directorate) => {
@@ -514,91 +640,89 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     []
   );
 
+  /** Fetch first page only (server-side pagination). Use for initial load. */
+  const fetchFirstPage = useCallback(
+    async (basePath: string, pageSize = 100): Promise<Record<string, unknown>[]> => {
+      const separator = basePath.includes('?') ? '&' : '?';
+      const response = await apiFetch(`${basePath}${separator}page_size=${pageSize}&page=1`);
+      return unwrapResults(response).filter(isRecord);
+    },
+    []
+  );
+
+  /** Fetch all pages (for manual refresh when user explicitly requests full data). */
+  const fetchAllResults = useCallback(async (basePath: string, pageSize = 100): Promise<Record<string, unknown>[]> => {
+    const collected: Record<string, unknown>[] = [];
+    let page = 1;
+    let hasNext = true;
+    let safetyCounter = 0;
+
+    while (hasNext && safetyCounter < 100) {
+      const separator = basePath.includes('?') ? '&' : '?';
+      const response = await apiFetch(`${basePath}${separator}page_size=${pageSize}&page=${page}`);
+      const rows = unwrapResults(response).filter(isRecord);
+      collected.push(...rows);
+
+      const isPaginated =
+        response && typeof response === 'object' && 'results' in response && 'next' in response;
+      const nextUrl = isPaginated ? (response as { next?: string | null }).next : null;
+      hasNext = Boolean(nextUrl);
+      page += 1;
+      safetyCounter += 1;
+
+      if (!isPaginated) {
+        hasNext = false;
+      }
+    }
+
+    return collected;
+  }, []);
+
   const refreshOrganizationData = useCallback(async () => {
-    if (!hydrated || !currentUser || !hasTokens()) {
-      logInfo('Skipping organization data refresh:', { hydrated, hasCurrentUser: !!currentUser, hasTokens: hasTokens() });
+    if (!currentUser?.id || !hasTokens()) {
+      logInfo('Skipping organization data refresh:', { hasCurrentUser: !!currentUser?.id, hasTokens: hasTokens() });
       return;
     }
 
+    // Manual refresh always runs (admin UI, role switcher, etc.) regardless of bootstrap.
     logInfo('Refreshing organization data...');
     setIsSyncing(true);
     try {
-      // Fetch all users with pagination
-      let allUsers: Record<string, unknown>[] = [];
-      let page = 1;
-      let hasMore = true;
-      const requestedPageSize = 1000;
-      
-      while (hasMore) {
-        const usersResponse = await apiFetch(
-          `/accounts/users/?is_active=true&page_size=${requestedPageSize}&page=${page}&ordering=username`
-        );
-        const pageUsers = unwrapResults(usersResponse).filter(isRecord);
-        allUsers = [...allUsers, ...pageUsers];
-        
-        logInfo(`Fetched page ${page}:`, { 
-          usersOnPage: pageUsers.length, 
-          totalSoFar: allUsers.length,
-          hasNext: usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse 
-            ? !!(usersResponse as { next?: string | null }).next 
-            : false
-        });
-        
-        // Check if there are more pages
-        // A paginated response has 'next' and 'results' properties
-        const isPaginated = usersResponse && typeof usersResponse === 'object' && 'next' in usersResponse && 'results' in usersResponse;
-        const nextUrl = isPaginated ? (usersResponse as { next?: string | null }).next : null;
-        const hasNext = !!nextUrl;
-        
-        // If we got fewer than requested, we're on the last page
-        // Also check if next is null/empty
-        hasMore = hasNext && pageUsers.length >= requestedPageSize;
-        page++;
-        
-        // Safety limit - don't fetch more than 10 pages (10,000 users)
-        if (page > 10) {
-          logInfo('Reached safety limit of 10 pages');
-          break;
-        }
-      }
-      
-      logInfo('Users API response:', { totalFetched: allUsers.length, pages: page - 1 });
-      const apiUsers = dedupeUsers(allUsers.map(mapApiUserToUser));
-      const sortedUsers = sortByName(apiUsers);
-      logInfo('Mapped users:', { count: sortedUsers.length, sample: sortedUsers[0] });
-      setUsers(sortedUsers);
-
-      // Fetch other organization data
+      // Fetch first page only (server-side pagination). Keeps initial load fast.
       const [
-        directoratesRaw,
-        divisionsRaw,
-        departmentsRaw,
+        directoratesRows,
+        divisionsRows,
+        departmentsRows,
         delegationsRaw,
-        rolesRaw,
-        officesRaw,
-        officeMembershipsRaw,
+        rolesRows,
+        officesRows,
+        officeMembershipsRows,
+        usersRows,
       ] = await Promise.all([
-        apiFetch('/organization/directorates/?ordering=name&page_size=500'),
-        apiFetch('/organization/divisions/?ordering=name&page_size=500'),
-        apiFetch('/organization/departments/?ordering=name&page_size=500'),
+        fetchFirstPage('/organization/directorates/?ordering=name'),
+        fetchFirstPage('/organization/divisions/?ordering=name'),
+        fetchFirstPage('/organization/departments/?ordering=name'),
         apiFetch('/correspondence/delegations/'),
-        apiFetch('/organization/roles/?ordering=name'),
-        apiFetch('/organization/offices/?ordering=name&page_size=500'),
-        apiFetch('/organization/office-memberships/?ordering=office__name&page_size=500'),
+        fetchFirstPage('/organization/roles/?ordering=name'),
+        fetchFirstPage('/organization/offices/?ordering=name'),
+        fetchFirstPage('/organization/office-memberships/?ordering=office__name'),
+        fetchFirstPage('/accounts/users/?is_active=true&ordering=username', 200),
       ]);
 
-      const apiDirectorates = unwrapResults(directoratesRaw).filter(isRecord).map(mapApiDirectorate);
-      const apiDivisions = unwrapResults(divisionsRaw).filter(isRecord).map(mapApiDivision);
-      const apiDepartments = unwrapResults(departmentsRaw).filter(isRecord).map(mapApiDepartment);
+      const apiDirectorates = directoratesRows.map(mapApiDirectorate);
+      const apiDivisions = divisionsRows.map(mapApiDivision);
+      const apiDepartments = departmentsRows.map(mapApiDepartment);
       const apiDelegations = unwrapResults(delegationsRaw).filter(isRecord).map(mapApiDelegation);
-      const apiRoles = unwrapResults(rolesRaw).filter(isRecord).map(mapApiRole);
-      const apiOffices = unwrapResults(officesRaw).filter(isRecord).map(mapApiOffice);
-      const apiOfficeMemberships = unwrapResults(officeMembershipsRaw).filter(isRecord).map(mapApiOfficeMembership);
+      const apiRoles = rolesRows.map(mapApiRole);
+      const apiOffices = officesRows.map(mapApiOffice);
+      const apiOfficeMemberships = officeMembershipsRows.map(mapApiOfficeMembership);
+      const apiUsers = dedupeUsers(usersRows.map(mapApiUserToUser));
 
       const sortedDirectorates = sortByName(apiDirectorates);
       const sortedDivisions = sortByName(apiDivisions);
       const sortedDepartments = sortByName(apiDepartments);
       const sortedRoles = sortByName(apiRoles);
+      const sortedUsers = sortByName(apiUsers);
 
       setDirectorates(sortedDirectorates);
       setDivisions(sortedDivisions);
@@ -608,6 +732,8 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       setOffices(sortedOffices);
       setOfficeMemberships(apiOfficeMemberships);
       setRoles(sortedRoles);
+      setUsers(sortedUsers);
+
       updateOrganizationCache({
         directorates: sortedDirectorates,
         divisions: sortedDivisions,
@@ -617,8 +743,24 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
         users: sortedUsers,
       });
 
+      writeCachedData({
+        directorates: sortedDirectorates,
+        divisions: sortedDivisions,
+        departments: sortedDepartments,
+        roles: sortedRoles,
+        offices: sortedOffices,
+        officeMemberships: apiOfficeMemberships,
+        users: sortedUsers,
+        assistantAssignments: apiDelegations,
+      }, currentUser?.id);
+
       setHasSynced(true);
-      logInfo('Organization data loaded successfully:', { users: sortedUsers.length, directorates: sortedDirectorates.length, divisions: sortedDivisions.length, departments: sortedDepartments.length });
+      logInfo('Organization data loaded successfully:', {
+        users: sortedUsers.length,
+        directorates: sortedDirectorates.length,
+        divisions: sortedDivisions.length,
+        departments: sortedDepartments.length,
+      });
     } catch (error: unknown) {
       logError('Failed to load organization data from API', error);
       if (error instanceof Error) {
@@ -627,29 +769,30 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
     } finally {
       setIsSyncing(false);
     }
-  }, [hydrated, currentUser]);
+  }, [currentUser?.id, fetchFirstPage]);
 
   useEffect(() => {
-    if (!hydrated || !currentUser || !hasTokens()) {
-      return;
-    }
+    if (!currentUser?.id || !hasTokens()) return;
+    // Bootstrap is slimmed: no org data. Always fetch org data on client (first page).
+    const hasOrgFromBootstrap = initialData && (initialData.offices?.length > 0 || initialData.directorates?.length > 0);
+    if (hasOrgFromBootstrap) return;
+    void refreshOrganizationData();
+  }, [currentUser?.id, refreshOrganizationData, initialData]);
 
-    if (!hasSynced) {
-      void refreshOrganizationData();
-    }
-  }, [hydrated, currentUser, hasSynced, refreshOrganizationData]);
-
-  // Reset sync flag when user changes (but only once per user ID)
+  // Reset sync flag when user changes (but only on actual user switch, not initial load)
   const lastUserIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (hydrated && currentUser && hasTokens()) {
-      // Only reset if user ID actually changed
-      if (lastUserIdRef.current !== currentUser.id) {
-        lastUserIdRef.current = currentUser.id;
-        setHasSynced(false);
-      }
+    if (!currentUser?.id || !hasTokens()) return;
+    // If we have server bootstrap data, don't reset on first user load (avoids duplicate fetch)
+    if (initialData && lastUserIdRef.current === null) {
+      lastUserIdRef.current = currentUser.id;
+      return;
     }
-  }, [currentUser?.id, hydrated]);
+    if (lastUserIdRef.current !== currentUser.id) {
+      lastUserIdRef.current = currentUser.id;
+      setHasSynced(false);
+    }
+  }, [currentUser?.id, initialData]);
 
   const buildDirectoratePayload = (input: Partial<CreateDirectorateInput>) =>
     cleanPayload({
@@ -703,6 +846,7 @@ export const OrganizationProvider: React.FC<{ children: ReactNode }> = ({ childr
       is_active: input.isActive,
       email: input.email,
       employee_id: input.employeeId === undefined ? undefined : input.employeeId ?? null,
+      password: input.password,
     });
 
   const buildCreateUserPayload = (input: CreateUserInput) =>

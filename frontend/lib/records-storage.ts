@@ -5,6 +5,15 @@
 import { apiFetch } from './api-client';
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 
+function isAbortError(error: unknown): boolean {
+  if (error instanceof Error && error.name === 'AbortError') return true;
+  return (
+    typeof DOMException !== 'undefined' &&
+    error instanceof DOMException &&
+    error.name === 'AbortError'
+  );
+}
+
 export interface RetentionPolicy {
   id: string;
   name: string;
@@ -119,9 +128,9 @@ export const getRetentionPolicies = async (params?: {
     // Fallback to empty array if response is not in expected format
     logWarn('Unexpected response format from getRetentionPolicies:', response);
     return [];
-      } catch (error: unknown) {
+  } catch (error: unknown) {
+    if (isAbortError(error)) return [];
     logError('Failed to get retention policies', error);
-    // Return empty array on error instead of throwing
     return [];
   }
 };

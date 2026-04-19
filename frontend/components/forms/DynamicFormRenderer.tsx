@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { FormTemplate, FormField } from "@/lib/types/forms";
+import { getWorkflowCollectedFieldNames, isSignatureFileField } from "@/lib/forms/field-classification";
 import { cn } from "@/lib/utils";
 
 interface DynamicFormRendererProps {
@@ -18,6 +19,42 @@ interface DynamicFormRendererProps {
   disabled?: boolean;
 }
 
+type RawOption = unknown;
+
+const normalizeOptions = (field: FormField): Array<{ key: string; value: string; label: string }> => {
+  const rawOptions = Array.isArray(field.options) ? (field.options as RawOption[]) : [];
+
+  return rawOptions
+    .map((option, index) => {
+      if (typeof option === "string") {
+        const normalized = option.trim();
+        if (!normalized) return null;
+        return {
+          key: `${field.id}-${normalized}-${index}`,
+          value: normalized,
+          label: normalized,
+        };
+      }
+
+      if (option && typeof option === "object") {
+        const candidate = option as { value?: unknown; label?: unknown };
+        const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
+        const label = typeof candidate.label === "string" ? candidate.label.trim() : "";
+        const resolvedValue = value || label;
+        const resolvedLabel = label || value;
+        if (!resolvedValue) return null;
+        return {
+          key: `${field.id}-${resolvedValue}-${index}`,
+          value: resolvedValue,
+          label: resolvedLabel || resolvedValue,
+        };
+      }
+
+      return null;
+    })
+    .filter((option): option is { key: string; value: string; label: string } => option !== null);
+};
+
 export function DynamicFormRenderer({
   template,
   initialData = {},
@@ -25,17 +62,21 @@ export function DynamicFormRenderer({
   errors = {},
   disabled = false,
 }: DynamicFormRendererProps) {
+  const fields = template.structure?.fields || [];
+  const layout = template.structure?.layout || "single";
+  const workflowCollectedFieldNames = getWorkflowCollectedFieldNames(fields);
   const [formData, setFormData] = useState<Record<string, unknown>>(initialData);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setFormData(initialData);
+    setTouchedFields({});
   }, [initialData]);
 
   // Validate form fields
   useEffect(() => {
     const newErrors: Record<string, string> = {};
-    const fields = template.structure?.fields || [];
     
     fields.forEach((field) => {
       if (field.required && !formData[field.name]) {
@@ -65,30 +106,34 @@ export function DynamicFormRenderer({
     setValidationErrors(newErrors);
   }, [formData, template]);
 
-  const handleFieldChange = (fieldName: string, value: unknown) => {
+  const markFieldTouched = (fieldName: string) => {
+    setTouchedFields((prev) => (prev[fieldName] ? prev : { ...prev, [fieldName]: true }));
+  };
+
+  const handleFieldChange = (fieldName: string, value: unknown, touch = false) => {
     const newData = { ...formData, [fieldName]: value };
     setFormData(newData);
+    if (touch) {
+      markFieldTouched(fieldName);
+    }
     onChange?.(newData);
   };
 
   const renderField = (field: FormField) => {
     const fieldValue = formData[field.name];
-    const fieldError = errors[field.name] || validationErrors[field.name];
+    const fieldError = errors[field.name] || (touchedFields[field.name] ? validationErrors[field.name] : undefined);
     const isRequired = field.required ?? false;
-    const isFilled = fieldValue !== undefined && fieldValue !== null && fieldValue !== "";
-    const showValidation = !disabled && (fieldError || (isRequired && !isFilled));
 
-    // Check if this field is part of signature workflow (signature-related fields)
-    const isSignatureRelatedField = 
-      field.name.toLowerCase().includes("signature") ||
-      field.name.toLowerCase().includes("_name") && (
-        field.name.toLowerCase().includes("pm_") ||
-        field.name.toLowerCase().includes("procurement_") ||
-        field.name.toLowerCase().includes("audit_")
-      ) ||
-      field.name.toLowerCase().includes("_pn") ||
-      field.name.toLowerCase().includes("_designation") ||
-      field.name.toLowerCase().includes("personnel");
+    const isSignatureField = isSignatureFileField(field);
+    const isWorkflowCollectedField = workflowCollectedFieldNames.has(field.name);
+    const normalizedOptions = normalizeOptions(field);
+    const isWideField =
+      field.type === "textarea" || field.type === "file" || field.type === "radio" || field.type === "checkbox";
+    const fieldContainerClass = cn(
+      "space-y-1.5",
+      layout === "multi-column" && isWideField && "md:col-span-2"
+    );
+    const fieldLabelClass = "text-sm leading-5 min-h-5 inline-flex items-center";
 
     const baseProps = {
       id: field.id,
@@ -97,16 +142,16 @@ export function DynamicFormRenderer({
     };
 
     // If this is a signature-related field, show message instead of input
-    if (isSignatureRelatedField && field.type !== "file") {
+    if (isWorkflowCollectedField && !isSignatureField) {
       return (
-        <div key={field.id} className="space-y-2">
+        <div key={field.id} className={fieldContainerClass}>
           <Label htmlFor={field.id}>
             {field.label}
             {isRequired && <span className="text-destructive ml-1">*</span>}
           </Label>
-          <div className="border rounded-md p-4 bg-muted/30">
+          <div className="border rounded-md p-3 bg-muted/30">
             <p className="text-sm text-muted-foreground">
-              {disabled 
+              {disabled
                 ? "This information will be collected from the signer through the workflow system."
                 : "This information will be collected from the signer when they provide their signature through the workflow system. You do not need to fill it here."}
             </p>
@@ -121,16 +166,17 @@ export function DynamicFormRenderer({
       case "email":
       case "url":
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id}>
-              {field.label}
-              {isRequired && <span className="text-destructive ml-1">*</span>}
-            </Label>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label htmlFor={field.id} className={fieldLabelClass}>
+            {field.label}
+            {isRequired && <span className="text-destructive ml-1">*</span>}
+          </Label>
             <Input
               {...baseProps}
               type={field.type}
               value={(fieldValue as string) || ""}
               onChange={(e) => handleFieldChange(field.name, e.target.value)}
+              onBlur={() => markFieldTouched(field.name)}
               placeholder={field.placeholder}
             />
             {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
@@ -139,8 +185,8 @@ export function DynamicFormRenderer({
 
       case "textarea":
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id}>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label htmlFor={field.id} className={fieldLabelClass}>
               {field.label}
               {isRequired && <span className="text-destructive ml-1">*</span>}
             </Label>
@@ -148,6 +194,7 @@ export function DynamicFormRenderer({
               {...baseProps}
               value={(fieldValue as string) || ""}
               onChange={(e) => handleFieldChange(field.name, e.target.value)}
+              onBlur={() => markFieldTouched(field.name)}
               placeholder={field.placeholder}
               rows={4}
             />
@@ -158,8 +205,8 @@ export function DynamicFormRenderer({
       case "number":
       case "currency":
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id}>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label htmlFor={field.id} className={fieldLabelClass}>
               {field.label}
               {isRequired && <span className="text-destructive ml-1">*</span>}
             </Label>
@@ -171,6 +218,7 @@ export function DynamicFormRenderer({
                 const numValue = e.target.value ? parseFloat(e.target.value) : undefined;
                 handleFieldChange(field.name, numValue);
               }}
+              onBlur={() => markFieldTouched(field.name)}
               placeholder={field.placeholder}
               min={field.validation?.min}
               max={field.validation?.max}
@@ -181,8 +229,8 @@ export function DynamicFormRenderer({
 
       case "date":
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id}>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label htmlFor={field.id} className={fieldLabelClass}>
               {field.label}
               {isRequired && <span className="text-destructive ml-1">*</span>}
             </Label>
@@ -191,6 +239,7 @@ export function DynamicFormRenderer({
               type="date"
               value={(fieldValue as string) || ""}
               onChange={(e) => handleFieldChange(field.name, e.target.value)}
+              onBlur={() => markFieldTouched(field.name)}
             />
             {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
           </div>
@@ -198,8 +247,8 @@ export function DynamicFormRenderer({
 
       case "datetime":
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id}>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label htmlFor={field.id} className={fieldLabelClass}>
               {field.label}
               {isRequired && <span className="text-destructive ml-1">*</span>}
             </Label>
@@ -208,6 +257,7 @@ export function DynamicFormRenderer({
               type="datetime-local"
               value={(fieldValue as string) || ""}
               onChange={(e) => handleFieldChange(field.name, e.target.value)}
+              onBlur={() => markFieldTouched(field.name)}
             />
             {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
           </div>
@@ -215,22 +265,22 @@ export function DynamicFormRenderer({
 
       case "select":
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id}>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label htmlFor={field.id} className={fieldLabelClass}>
               {field.label}
               {isRequired && <span className="text-destructive ml-1">*</span>}
             </Label>
             <Select
               value={(fieldValue as string) || undefined}
-              onValueChange={(value) => handleFieldChange(field.name, value)}
+              onValueChange={(value) => handleFieldChange(field.name, value, true)}
               disabled={disabled}
             >
               <SelectTrigger id={field.id} className={fieldError ? "border-destructive" : ""}>
                 <SelectValue placeholder={field.placeholder || "Select an option"} />
               </SelectTrigger>
               <SelectContent>
-                {field.options?.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
+                {normalizedOptions.map((option) => (
+                  <SelectItem key={option.key} value={option.value}>
                     {option.label}
                   </SelectItem>
                 ))}
@@ -242,8 +292,8 @@ export function DynamicFormRenderer({
 
       case "multiselect":
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id}>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label htmlFor={field.id} className={fieldLabelClass}>
               {field.label}
               {isRequired && <span className="text-destructive ml-1">*</span>}
             </Label>
@@ -251,7 +301,7 @@ export function DynamicFormRenderer({
               value={Array.isArray(fieldValue) ? fieldValue.join(",") : undefined}
               onValueChange={(value) => {
                 const values = value ? value.split(",") : [];
-                handleFieldChange(field.name, values);
+                handleFieldChange(field.name, values, true);
               }}
               disabled={disabled}
             >
@@ -259,8 +309,8 @@ export function DynamicFormRenderer({
                 <SelectValue placeholder={field.placeholder || "Select options"} />
               </SelectTrigger>
               <SelectContent>
-                {field.options?.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
+                {normalizedOptions.map((option) => (
+                  <SelectItem key={option.key} value={option.value}>
                     {option.label}
                   </SelectItem>
                 ))}
@@ -272,37 +322,39 @@ export function DynamicFormRenderer({
 
       case "checkbox":
         return (
-          <div key={field.id} className="flex items-center space-x-2">
+          <div key={field.id} className={fieldContainerClass}>
+            <div className="flex items-center space-x-2 min-h-9 rounded-md border border-border/60 bg-muted/20 px-3">
             <Checkbox
               id={field.id}
               checked={(fieldValue as boolean) || false}
-              onCheckedChange={(checked) => handleFieldChange(field.name, checked)}
+              onCheckedChange={(checked) => handleFieldChange(field.name, checked, true)}
               disabled={disabled}
             />
             <Label
               htmlFor={field.id}
-              className={cn("font-normal", isRequired && "after:content-['*'] after:text-destructive after:ml-1")}
+              className={cn("font-normal text-sm", isRequired && "after:content-['*'] after:text-destructive after:ml-1")}
             >
               {field.label}
             </Label>
+            </div>
             {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
           </div>
         );
 
       case "radio":
         return (
-          <div key={field.id} className="space-y-2">
-            <Label>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label className={fieldLabelClass}>
               {field.label}
               {isRequired && <span className="text-destructive ml-1">*</span>}
             </Label>
             <RadioGroup
               value={(fieldValue as string) || undefined}
-              onValueChange={(value) => handleFieldChange(field.name, value)}
+              onValueChange={(value) => handleFieldChange(field.name, value, true)}
               disabled={disabled}
             >
-              {field.options?.map((option) => (
-                <div key={option.value} className="flex items-center space-x-2">
+              {normalizedOptions.map((option) => (
+                <div key={option.key} className="flex items-center space-x-2">
                   <RadioGroupItem value={option.value} id={`${field.id}_${option.value}`} />
                   <Label htmlFor={`${field.id}_${option.value}`} className="font-normal cursor-pointer">
                     {option.label}
@@ -315,19 +367,16 @@ export function DynamicFormRenderer({
         );
 
       case "file":
-        // Check if this is a signature field
-        const isSignatureField = field.name.toLowerCase().includes("signature");
-        
         if (isSignatureField) {
           // For signature fields, show a message instead of file upload
           // Signatures will be collected through the workflow system
           return (
-            <div key={field.id} className="space-y-2">
-              <Label htmlFor={field.id}>
+            <div key={field.id} className={fieldContainerClass}>
+              <Label htmlFor={field.id} className={fieldLabelClass}>
                 {field.label}
                 {isRequired && <span className="text-destructive ml-1">*</span>}
               </Label>
-              <div className="border rounded-md p-4 bg-muted/30">
+              <div className="border rounded-md p-3 bg-muted/30">
                 <p className="text-sm text-muted-foreground">
                   {disabled 
                     ? "Signature will be collected through the workflow system after form submission."
@@ -341,8 +390,8 @@ export function DynamicFormRenderer({
         
         // For non-signature file fields, show normal file upload
         return (
-          <div key={field.id} className="space-y-2">
-            <Label htmlFor={field.id}>
+          <div key={field.id} className={fieldContainerClass}>
+            <Label htmlFor={field.id} className={fieldLabelClass}>
               {field.label}
               {isRequired && <span className="text-destructive ml-1">*</span>}
             </Label>
@@ -351,8 +400,9 @@ export function DynamicFormRenderer({
               type="file"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                handleFieldChange(field.name, file);
+                handleFieldChange(field.name, file, true);
               }}
+              onBlur={() => markFieldTouched(field.name)}
             />
             {fieldError && <p className="text-sm text-destructive">{fieldError}</p>}
           </div>
@@ -362,18 +412,19 @@ export function DynamicFormRenderer({
         return null;
     }
   };
-
-  const fields = template.structure?.fields || [];
   const sections = template.structure?.sections || [];
-  const layout = template.structure?.layout || "single";
 
-  // Create a map of field names to field objects for quick lookup
-  const fieldMap = new Map(fields.map((f) => [f.name, f]));
+  // Resolve section field references by both field ID and field name.
+  const fieldMap = new Map<string, FormField>();
+  fields.forEach((field) => {
+    fieldMap.set(field.id, field);
+    fieldMap.set(field.name, field);
+  });
 
   // If sections are defined, render by sections
   if (sections.length > 0) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-5">
         {sections.map((section) => {
           // Get fields for this section
           const sectionFields = section.fields
@@ -385,12 +436,10 @@ export function DynamicFormRenderer({
           }
 
           return (
-            <div key={section.id} className="space-y-4">
+            <div key={section.id} className="rounded-lg border bg-card/60 p-4 space-y-4">
               {/* Section Header */}
               {section.title && (
-                <div className="border-b pb-2">
-                  <h3 className="text-lg font-semibold text-foreground">{section.title}</h3>
-                </div>
+                <h3 className="text-base font-semibold text-foreground">{section.title}</h3>
               )}
 
               {/* Certification Statement (special handling) */}
@@ -406,8 +455,9 @@ export function DynamicFormRenderer({
               {/* Section Fields */}
               <div
                 className={cn(
-                  "space-y-4",
-                  layout === "multi-column" && "grid grid-cols-1 md:grid-cols-2 gap-4"
+                  layout === "multi-column"
+                    ? "grid grid-cols-1 md:grid-cols-2 gap-3"
+                    : "space-y-3"
                 )}
               >
                 {sectionFields.map((field) => renderField(field))}
@@ -421,9 +471,14 @@ export function DynamicFormRenderer({
 
   // Fallback: render all fields if no sections defined
   return (
-    <div className={cn("space-y-6", layout === "multi-column" && "grid grid-cols-1 md:grid-cols-2 gap-6")}>
+    <div
+      className={cn(
+        layout === "multi-column"
+          ? "grid grid-cols-1 md:grid-cols-2 gap-3"
+          : "space-y-3"
+      )}
+    >
       {fields.map((field) => renderField(field))}
     </div>
   );
 }
-

@@ -157,6 +157,7 @@ const CorrespondenceInbox = () => {
 
   // Get user's organizational unit IDs for CC/distribution matching
   const userOrgIds = useMemo(() => {
+    const officeIds = new Set<string>();
     const divisionIds = new Set<string>();
     const departmentIds = new Set<string>();
     const directorateIds = new Set<string>();
@@ -165,6 +166,7 @@ const CorrespondenceInbox = () => {
     userOfficeMemberships.forEach((membership) => {
       const office = offices.find((o) => o.id === membership.officeId);
       if (office) {
+        officeIds.add(office.id);
         if (office.divisionId) divisionIds.add(office.divisionId);
         if (office.departmentId) departmentIds.add(office.departmentId);
         if (office.directorateId) directorateIds.add(office.directorateId);
@@ -174,7 +176,7 @@ const CorrespondenceInbox = () => {
     // Note: User type has division/department/directorate as names, not IDs
     // The office memberships above already capture the user's organizational units
 
-    return { divisionIds, departmentIds, directorateIds };
+    return { officeIds, divisionIds, departmentIds, directorateIds };
   }, [userOfficeMemberships, offices, currentUser]);
 
   // Helper to check if user is a CC recipient and get the purpose
@@ -185,6 +187,9 @@ const CorrespondenceInbox = () => {
 
     for (const recipient of corr.distribution) {
       // Check if user's org matches this distribution entry
+      if (recipient.type === 'office' && recipient.officeId && userOrgIds.officeIds.has(recipient.officeId)) {
+        return { isCC: true, purpose: recipient.purpose };
+      }
       if (recipient.type === 'division' && recipient.divisionId && userOrgIds.divisionIds.has(recipient.divisionId)) {
         return { isCC: true, purpose: recipient.purpose };
       }
@@ -280,14 +285,14 @@ const CorrespondenceInbox = () => {
   }, []);
 
   useEffect(() => {
-    if (hydrated && currentUser && !hasCorrespondenceAccess) {
+    if (currentUser?.id && !hasCorrespondenceAccess) {
       router.replace('/inbox');
     }
-  }, [hydrated, currentUser, hasCorrespondenceAccess, router]);
+  }, [currentUser?.id, hasCorrespondenceAccess, router]);
 
   // Memoize fetch function to prevent unnecessary recreations
   const fetchInbox = useCallback(async () => {
-    if (!hydrated || !currentUser || !hasCorrespondenceAccess) {
+    if (!currentUser?.id || !hasCorrespondenceAccess) {
       return;
     }
 
@@ -419,7 +424,6 @@ const CorrespondenceInbox = () => {
       }
     }
   }, [
-    hydrated,
     currentUser,
     hasCorrespondenceAccess,
     selectedOfficeId,
@@ -439,7 +443,7 @@ const CorrespondenceInbox = () => {
 
   // Main effect to trigger fetch
   useEffect(() => {
-    if (!hydrated || !currentUser || !hasCorrespondenceAccess) {
+    if (!currentUser?.id || !hasCorrespondenceAccess) {
       return;
     }
 
@@ -451,7 +455,7 @@ const CorrespondenceInbox = () => {
         abortControllerRef.current.abort();
       }
     };
-  }, [fetchInbox, hydrated, currentUser, hasCorrespondenceAccess]);
+  }, [fetchInbox, currentUser?.id, hasCorrespondenceAccess]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -507,7 +511,7 @@ const CorrespondenceInbox = () => {
       if (dateTo) params.append('date_to', dateTo);
       params.append('sort_by', sortBy);
       params.append('sort_order', sortOrder);
-      params.append('page_size', '10000'); // Get all items
+      params.append('page_size', '1000'); // Reasonable limit for export
 
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/office-inbox/?${params.toString()}`);
       const allItems = Array.isArray(response.results) ? response.results.map(mapApiCorrespondence) : [];
@@ -635,7 +639,7 @@ const CorrespondenceInbox = () => {
     );
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">

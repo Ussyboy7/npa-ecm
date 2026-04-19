@@ -62,7 +62,14 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 # Mark notification as read
                 notification_id = data.get("notification_id")
                 if notification_id:
-                    await self.mark_notification_read(notification_id)
+                    ok = await self.mark_notification_read(notification_id)
+                    if ok:
+                        unread_count = await self.get_unread_count()
+                        await self.send(
+                            text_data=json.dumps(
+                                {"type": "unread_count", "count": unread_count}
+                            )
+                        )
             elif message_type == "get_unread_count":
                 # Send unread count
                 unread_count = await self.get_unread_count()
@@ -110,7 +117,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def mark_notification_read(self, notification_id):
-        """Mark notification as read."""
+        """Mark notification as read. Returns True if a row was updated."""
         try:
             notification = Notification.objects.get(
                 id=notification_id,

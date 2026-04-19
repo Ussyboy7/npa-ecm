@@ -6,7 +6,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { logError } from '@/lib/client-logger';
 import {
-  loadUserSignature,
   fetchUserSignature,
   saveUserSignature,
   ensureDefaultSignatureTemplates,
@@ -87,23 +86,10 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
     setError(null);
 
     try {
-      // First try localStorage (faster)
-      let sig = loadUserSignature(userId);
-
-      // If not in localStorage, try fetching from backend
-      if (!sig) {
-        try {
-          sig = await fetchUserSignature();
-          // Save to localStorage for next time
-          if (sig) {
-            saveUserSignature(userId, sig);
-          }
-        } catch (err) {
-          // Silently fail - signature just won't be available
-          logError('Failed to fetch signature from backend', err);
-        }
+      const sig = await fetchUserSignature();
+      if (sig) {
+        saveUserSignature(userId, sig);
       }
-
       setSignature(sig);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));

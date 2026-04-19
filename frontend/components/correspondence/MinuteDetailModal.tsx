@@ -8,11 +8,15 @@ import { format } from "date-fns";
 import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon, Shield, Paperclip, Download, Eye, ExternalLink, Loader2, Users } from "lucide-react";
 import { Minute, CorrespondenceAttachment, type Correspondence } from "@/lib/npa-structure";
 import { SealBadge } from '@/components/seals/SealBadge';
-import { useState, useEffect } from "react";
+import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
+import { useState, useEffect, useRef } from "react";
 import { apiFetch, getStoredAccessToken } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
 import mammoth from "mammoth";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { logDocumentAccess } from "@/lib/dms-storage";
+import { fetchDocumentById } from "@/lib/dms-storage";
 
 interface MinuteDetailModalProps {
   minute: Minute | null;
@@ -24,7 +28,11 @@ interface MinuteDetailModalProps {
 
 export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, showDelegationInfo = false }: MinuteDetailModalProps) => {
   const router = useRouter();
+  const { currentUser } = useCurrentUser();
   const [responseCorrespondence, setResponseCorrespondence] = useState<Correspondence | null>(null);
+  const [responseLinkedDocumentIds, setResponseLinkedDocumentIds] = useState<string[]>([]);
+  const [linkedDocumentMeta, setLinkedDocumentMeta] = useState<Record<string, { title: string; reference?: string; status?: string }>>({});
+  const [responseLookupDone, setResponseLookupDone] = useState(false);
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<CorrespondenceAttachment | null>(null);
   const [viewAttachment, setViewAttachment] = useState<CorrespondenceAttachment | null>(null);
@@ -34,12 +42,87 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
   const [wordError, setWordError] = useState<string | null>(null);
   const [distribution, setDistribution] = useState<unknown[]>([]);
   const [loadingDistribution, setLoadingDistribution] = useState(false);
+  const [signatureImageSrc, setSignatureImageSrc] = useState<string | null>(null);
+  const [signatureImageError, setSignatureImageError] = useState(false);
+  const signatureObjectUrlRef = useRef<string | null>(null);
 
-  // Load distribution entries for this minute
+  const pickBestResponseCandidate = (
+    results: Record<string, unknown>[],
+    sourceMinute: Minute,
+  ): Record<string, unknown> | undefined => {
+    if (!results.length) return undefined;
+    const minuteTime = new Date(sourceMinute.timestamp).getTime();
+    const withScore = results.map((corr) => {
+      const corrCurrentApprover = corr.current_approver as Record<string, unknown> | string | undefined;
+      const corrCurrentApproverId = typeof corrCurrentApprover === 'object'
+        ? String(corrCurrentApprover?.id ?? '')
+        : String(corrCurrentApprover ?? '');
+      const corrCurrentOffice = corr.current_office as Record<string, unknown> | string | undefined;
+      const corrCurrentOfficeId = typeof corrCurrentOffice === 'object'
+        ? String(corrCurrentOffice?.id ?? '')
+        : String(corrCurrentOffice ?? '');
+      const corrDirection = String(corr.direction ?? '');
+      const corrTime = new Date((corr.created_at || corr.createdAt) as string).getTime();
+      const timeDistance = Number.isFinite(corrTime) ? Math.abs(corrTime - minuteTime) : Number.MAX_SAFE_INTEGER;
+
+      let score = 0;
+      if (sourceMinute.toUserId && corrCurrentApproverId === sourceMinute.toUserId) score += 4;
+      if (sourceMinute.toOfficeId && corrCurrentOfficeId === sourceMinute.toOfficeId) score += 3;
+      if (corrDirection === 'upward') score += 1;
+      if (timeDistance <= 60_000) score += 1;
+
+      return { corr, score, timeDistance };
+    });
+
+    return withScore
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.timeDistance - b.timeDistance;
+      })
+      .find((item) => item.score > 0)?.corr ?? (results[results.length - 1] as Record<string, unknown>);
+  };
+
+  // Load signature image via API when imageData is a URL (avoids CORS/auth issues with /media/)
+  useEffect(() => {
+    if (!open || !minute?.signature?.imageData || minute.signature.imageData.startsWith('data:')) {
+      setSignatureImageSrc(null);
+      setSignatureImageError(false);
+      return;
+    }
+    setSignatureImageError(false);
+    setSignatureImageSrc(null);
+    if (signatureObjectUrlRef.current) {
+      URL.revokeObjectURL(signatureObjectUrlRef.current);
+      signatureObjectUrlRef.current = null;
+    }
+    apiFetch<Blob>(`/correspondence/minutes/${minute.id}/signature-image/`, { responseType: 'blob' })
+      .then((blob) => {
+        if (signatureObjectUrlRef.current) URL.revokeObjectURL(signatureObjectUrlRef.current);
+        const u = URL.createObjectURL(blob);
+        signatureObjectUrlRef.current = u;
+        setSignatureImageSrc(u);
+        setSignatureImageError(false);
+      })
+      .catch(() => {
+        setSignatureImageSrc(null);
+        setSignatureImageError(true);
+      });
+    return () => {
+      if (signatureObjectUrlRef.current) {
+        URL.revokeObjectURL(signatureObjectUrlRef.current);
+        signatureObjectUrlRef.current = null;
+      }
+      setSignatureImageSrc(null);
+    };
+  }, [open, minute?.id, minute?.signature?.imageData]);
+
+  // Load distribution entries for this minute (only those linked to this minute). Also filter by
+  // correspondence when available so we never pull distribution from other correspondences.
   useEffect(() => {
     if (open && minute?.id) {
       setLoadingDistribution(true);
-      apiFetch(`/correspondence/distribution/?minute=${minute.id}`)
+      const qs = `minute=${minute.id}${minute.correspondenceId ? `&correspondence=${minute.correspondenceId}` : ''}`;
+      apiFetch(`/correspondence/distribution/?${qs}`)
         .then((response) => {
           const responseData = response as Record<string, unknown>;
           const results = Array.isArray(responseData) ? responseData : (responseData.results as any[]) || [];
@@ -57,32 +140,73 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
     } else {
       setDistribution([]);
     }
-  }, [open, minute?.id]);
+  }, [open, minute?.id, minute?.correspondenceId]);
 
   // Load response correspondence for treatment minutes
   useEffect(() => {
     if (open && minute && minute.actionType === 'treat' && minute.correspondenceId) {
       setLoadingAttachments(true);
+      setResponseLookupDone(false);
+      setResponseCorrespondence(null);
+      setResponseLinkedDocumentIds([]);
+      setLinkedDocumentMeta({});
       // Find response correspondence that has this correspondence as parent
       apiFetch(`/correspondence/items/?parent_correspondence=${minute.correspondenceId}`)
         .then((response) => {
           const responseData = response as Record<string, unknown>;
-          const results = Array.isArray(responseData) ? responseData : (responseData.results as any[]) || [];
-          // Find the one created around the same time as the minute (within 5 seconds)
-          const minuteTime = new Date(minute.timestamp).getTime();
-          const matching = results.find((corr: Record<string, unknown>) => {
-            const corrTime = new Date((corr.created_at || corr.createdAt) as string).getTime();
-            return Math.abs(corrTime - minuteTime) < 5000; // 5 seconds tolerance
-          });
+          const results = (Array.isArray(responseData) ? responseData : (responseData.results as any[]) || []) as Record<string, unknown>[];
+          let matching = pickBestResponseCandidate(results, minute);
+
+          // Fallback: if parent filter returns nothing, search by parent reference in treatment response.
+          if (!matching) {
+            return apiFetch(`/correspondence/items/${minute.correspondenceId}/`)
+              .then((parent) => {
+                const parentData = parent as Record<string, unknown>;
+                const parentRef = String(parentData.reference_number ?? '').trim();
+                if (!parentRef) return undefined;
+                return apiFetch(`/correspondence/items/?search=${encodeURIComponent(parentRef)}`)
+                  .then((searchResponse) => {
+                    const searchData = searchResponse as Record<string, unknown>;
+                    const searchResults = (Array.isArray(searchData) ? searchData : (searchData.results as any[]) || []) as Record<string, unknown>[];
+                    const candidates = searchResults.filter((corr) => {
+                      const corrId = String(corr.id ?? '');
+                      if (corrId === minute.correspondenceId) return false;
+                      const parentCorr = corr.parent_correspondence as Record<string, unknown> | undefined;
+                      const parentId = String(parentCorr?.id ?? '');
+                      const treatmentResponse = String(corr.treatment_response ?? '').toLowerCase();
+                      const subject = String(corr.subject ?? '').toLowerCase();
+                      const refLower = parentRef.toLowerCase();
+                      return parentId === minute.correspondenceId || treatmentResponse.includes(refLower) || subject.includes(refLower);
+                    });
+                    return pickBestResponseCandidate(candidates, minute);
+                  })
+                  .catch(() => undefined);
+              })
+              .then((fallbackMatch) => {
+                if (!matching && fallbackMatch) matching = fallbackMatch;
+                return matching;
+              });
+          }
+          return matching;
+        })
+        .then((matching) => {
+          if (!matching) return;
+
           if (matching) {
             // Map the API response to the proper format, including attachments
             const mappedCorrespondence = mapApiCorrespondence(matching);
+            const linkedIdsFromRaw = Array.isArray(matching.linked_document_ids)
+              ? matching.linked_document_ids.map((id) => String(id))
+              : Array.isArray(matching.linked_documents)
+                ? matching.linked_documents.map((id) => String(id))
+                : [];
             logInfo('[MinuteDetailModal] Mapped response correspondence:', {
               id: mappedCorrespondence.id,
               attachmentsCount: mappedCorrespondence.attachments?.length || 0,
               attachments: mappedCorrespondence.attachments,
             });
             setResponseCorrespondence(mappedCorrespondence);
+            setResponseLinkedDocumentIds(linkedIdsFromRaw);
           } else {
             logInfo('[MinuteDetailModal] No matching response correspondence found');
           }
@@ -92,11 +216,40 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
         })
         .finally(() => {
           setLoadingAttachments(false);
+          setResponseLookupDone(true);
         });
     } else {
       setResponseCorrespondence(null);
+      setResponseLinkedDocumentIds([]);
+      setResponseLookupDone(false);
+      setLinkedDocumentMeta({});
     }
   }, [open, minute]);
+
+  useEffect(() => {
+    if (!open || responseLinkedDocumentIds.length === 0) return;
+    let cancelled = false;
+
+    void (async () => {
+      const entries = await Promise.all(
+        responseLinkedDocumentIds.map(async (docId) => {
+          try {
+            const doc = await fetchDocumentById(docId);
+            return [docId, { title: doc.title, reference: doc.referenceNumber, status: doc.status }] as const;
+          } catch {
+            return [docId, { title: "Linked Document" }] as const;
+          }
+        }),
+      );
+
+      if (cancelled) return;
+      setLinkedDocumentMeta(Object.fromEntries(entries));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, responseLinkedDocumentIds]);
 
   // Generate PDF blob URL for preview
   useEffect(() => {
@@ -137,6 +290,9 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                        viewAttachment.fileName?.toLowerCase().endsWith('.docx');
     const isWordDoc = viewAttachment.fileType === 'application/msword' || 
                      viewAttachment.fileName?.toLowerCase().endsWith('.doc');
+    const isHtml = viewAttachment.fileType === 'text/html' ||
+      viewAttachment.fileName?.toLowerCase().endsWith('.html') ||
+      viewAttachment.fileName?.toLowerCase().endsWith('.htm');
 
     if (isPDF) {
       setLoadingAttachments(true);
@@ -208,6 +364,36 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
           setWordHtml(null);
           setLoadingAttachments(false);
         });
+    } else if (isHtml) {
+      setLoadingAttachments(true);
+      const token = getStoredAccessToken();
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      fetch(viewAttachment.fileUrl, {
+        credentials: 'include',
+        headers,
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Failed to load HTML document: ${response.status} ${response.statusText}`);
+          }
+          return response.text();
+        })
+        .then((html) => {
+          setWordHtml(html);
+          setWordError(null);
+          setViewPdfBlobUrl(null);
+          setLoadingAttachments(false);
+        })
+        .catch((error) => {
+          logError('Error loading HTML document:', error);
+          setWordError('Failed to render HTML document');
+          setWordHtml(null);
+          setLoadingAttachments(false);
+        });
     } else {
       setViewPdfBlobUrl(null);
       setWordHtml(null);
@@ -222,25 +408,88 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const handleDownload = (attachment: CorrespondenceAttachment) => {
-    if (attachment.fileUrl) {
-      window.open(attachment.fileUrl, '_blank');
+  const resolveResponseDmsTarget = (): { documentId: string; sensitivity: string } | null => {
+    const completionDocId = responseCorrespondence?.completionPackage?.documentId;
+    if (completionDocId) {
+      return { documentId: completionDocId, sensitivity: 'internal' };
+    }
+
+    const linkedDocId = responseCorrespondence?.linkedDocumentIds?.[0];
+    if (linkedDocId) {
+      return { documentId: linkedDocId, sensitivity: 'internal' };
+    }
+
+    return null;
+  };
+
+  const logMinuteAttachmentDmsAccess = async (action: 'view' | 'download' | 'attempted-download') => {
+    if (!currentUser?.id) return;
+    const target = resolveResponseDmsTarget();
+    if (!target) return;
+
+    try {
+      await logDocumentAccess({
+        documentId: target.documentId,
+        userId: currentUser.id,
+        action,
+        sensitivity: target.sensitivity,
+      });
+    } catch (error: unknown) {
+      logWarn('[MinuteDetailModal] Failed to write DMS access log', error);
+    }
+  };
+
+  const handleDownload = async (attachment: CorrespondenceAttachment) => {
+    if (!attachment.fileUrl) {
+      await logMinuteAttachmentDmsAccess('attempted-download');
+      return;
+    }
+    await logMinuteAttachmentDmsAccess('download');
+    const opened = window.open(attachment.fileUrl, '_blank');
+    if (!opened) {
+      await logMinuteAttachmentDmsAccess('attempted-download');
+    }
+  };
+
+  const handleViewLinkedDocument = async (documentId: string) => {
+    try {
+      setLoadingAttachments(true);
+      const document = await fetchDocumentById(documentId);
+      if (!document.versions?.length) {
+        logWarn("Linked document has no versions to preview", { documentId });
+        return;
+      }
+
+      const latestVersion = [...document.versions].sort((a, b) => b.versionNumber - a.versionNumber)[0];
+      if (!latestVersion?.fileUrl) {
+        logWarn("Linked document latest version has no file URL", { documentId, versionId: latestVersion?.id });
+        return;
+      }
+
+      setViewAttachment({
+        id: latestVersion.id,
+        fileName: latestVersion.fileName || document.title,
+        fileType: latestVersion.fileType,
+        fileSize: latestVersion.fileSize,
+        fileUrl: latestVersion.fileUrl,
+      });
+    } catch (error: unknown) {
+      logError("Failed to load linked document preview", error);
+    } finally {
+      setLoadingAttachments(false);
     }
   };
 
   if (!minute) return null;
 
-  // Debug logging
-  if (open) {
-    logInfo('[MinuteDetailModal] Minute data:', {
-      id: minute.id,
-      actionType: minute.actionType,
-      hasSealData: !!minute.sealData,
-      hasSignature: !!minute.signature,
-      sealData: minute.sealData,
-      signature: minute.signature,
-    });
-  }
+  // Only "For Information" (purpose=information) added by THIS minute (minute_id match). Excludes
+  // distribution from other minutes or correspondence-level entries (minute=null) that the user did not add here.
+  const ccEntries = (distribution as Record<string, unknown>[]).filter(
+    (d) =>
+      String(d.purpose ?? '').toLowerCase() === 'information' &&
+      d.minute != null &&
+      String(d.minute) === String(minute.id)
+  );
 
   const getActionColor = (action: string) => {
     switch (action) {
@@ -255,6 +504,9 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+        <DialogDescription id="minute-detail-desc" className="sr-only">
+          View minute content, routing, distribution, and related details.
+        </DialogDescription>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-primary" />
@@ -333,7 +585,10 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50 border border-border">
                   <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                    {minute.minuteText}
+                    {/* For TREAT minutes, show response correspondence treatment response if available */}
+                    {(minute.actionType === 'treat' && responseCorrespondence?.treatmentResponse) 
+                      ? responseCorrespondence.treatmentResponse 
+                      : minute.minuteText}
                   </p>
                 </div>
                 {minute.originalMinuteText && minute.originalMinuteText !== minute.minuteText && (
@@ -470,7 +725,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
               )}
 
               {/* Distribution (CC) Section */}
-              {distribution.length > 0 && (
+              {ccEntries.length > 0 && (
                 <>
                   <Separator />
                   <div>
@@ -485,9 +740,10 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {(distribution as Record<string, unknown>[]).map((dist: Record<string, unknown>) => {
+                        {ccEntries.map((dist: Record<string, unknown>) => {
                           const recipientName = 
                             dist.user_name ||
+                            dist.office_name ||
                             dist.directorate_name ||
                             dist.division_name ||
                             dist.department_name ||
@@ -542,20 +798,30 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                   </div>
                 </>
               ) : minute.signature ? (
-                /* Show signature only if there's no seal */
+                /* Show seal-style preview (signature embedded in seal) when there's no sealData */
                 <>
                   <Separator />
                   <div className="space-y-3">
                     <h4 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
-                      <ImageIcon className="h-4 w-4 text-primary" />
-                      Digital Signature
+                      <Shield className="h-4 w-4 text-emerald-600" />
+                      Digital Executive Seal
                     </h4>
                     <div className="flex flex-col sm:flex-row gap-4">
-                      <div className="p-3 border rounded-lg bg-muted/50">
-                        <img
-                          src={minute.signature.imageData}
-                          alt="Applied digital signature preview"
-                          className="max-h-32 object-contain"
+                      <div className="p-3 border border-emerald-200 dark:border-emerald-800 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 flex items-center justify-center min-h-[200px]">
+                        <DigitalSealPreview
+                          officeName="NIGERIAN PORTS AUTHORITY"
+                          officeTitle="OFFICE OF THE MANAGING DIRECTOR"
+                          serialNumber={minute.id}
+                          signatureImage={
+                            minute.signature.imageData?.startsWith('data:')
+                              ? minute.signature.imageData
+                              : signatureImageError
+                                ? undefined
+                                : signatureImageSrc ?? undefined
+                          }
+                          timestamp={minute.signature.appliedAt}
+                          size={200}
+                          showQR={true}
                         />
                       </div>
                       <div className="text-xs text-muted-foreground space-y-1">
@@ -566,6 +832,9 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                         )}
                         {minute.signature.templateType && (
                           <p>Type: {minute.signature.templateType}</p>
+                        )}
+                        {signatureImageError && (
+                          <p className="text-amber-600 dark:text-amber-500">Signature image could not be loaded; seal shown for reference.</p>
                         )}
                       </div>
                     </div>
@@ -621,7 +890,10 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
-                                onClick={() => setViewAttachment(attachment)}
+                                onClick={() => {
+                                  void logMinuteAttachmentDmsAccess('view');
+                                  setViewAttachment(attachment);
+                                }}
                                 title="View Document"
                               >
                                 <Eye className="h-4 w-4" />
@@ -631,7 +903,10 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                                   variant="ghost"
                                   size="icon"
                                   className="h-8 w-8"
-                                  onClick={() => setPreviewAttachment(attachment)}
+                                  onClick={() => {
+                                    void logMinuteAttachmentDmsAccess('view');
+                                    setPreviewAttachment(attachment);
+                                  }}
                                   title="Quick Preview"
                                 >
                                   <FileText className="h-4 w-4" />
@@ -641,7 +916,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8"
-                                onClick={() => handleDownload(attachment)}
+                                onClick={() => { void handleDownload(attachment); }}
                                 title="Download"
                               >
                                 <Download className="h-4 w-4" />
@@ -661,13 +936,52 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                           </Button>
                         )}
                       </div>
+                    ) : responseLinkedDocumentIds.length > 0 ? (
+                      <div className="space-y-2">
+                        {responseLinkedDocumentIds.map((docId) => (
+                          <div
+                            key={docId}
+                            className="flex items-center justify-between gap-3 p-3 border border-border rounded-lg bg-background hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{linkedDocumentMeta[docId]?.title || "Linked Document"}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {linkedDocumentMeta[docId]?.reference
+                                  ? `${linkedDocumentMeta[docId]?.reference}${linkedDocumentMeta[docId]?.status ? ` • ${linkedDocumentMeta[docId]?.status}` : ''}`
+                                  : `ID: ${docId}`}
+                              </p>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { void handleViewLinkedDocument(docId); }}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
+                          </div>
+                        ))}
+                        {responseCorrespondence?.id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full mt-2"
+                            onClick={() => router.push(`/correspondence/${responseCorrespondence.id}`)}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            View Response Correspondence
+                          </Button>
+                        )}
+                      </div>
                     ) : responseCorrespondence ? (
                       <div className="p-3 rounded-lg bg-muted/30 border border-border border-dashed text-center">
                         <p className="text-sm text-muted-foreground">No attachments found</p>
                       </div>
                     ) : (
                       <div className="p-3 rounded-lg bg-muted/30 border border-border border-dashed text-center">
-                        <p className="text-sm text-muted-foreground">Loading response correspondence...</p>
+                        <p className="text-sm text-muted-foreground">
+                          {responseLookupDone ? 'No response correspondence found for this minute.' : 'Loading response correspondence...'}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -719,7 +1033,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                       variant="outline"
                       size="sm"
                       className="mt-4"
-                      onClick={() => handleDownload(previewAttachment)}
+                      onClick={() => { void handleDownload(previewAttachment); }}
                     >
                       <Download className="h-4 w-4 mr-2" />
                       Download to View
@@ -738,10 +1052,10 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
           <DialogHeader className="space-y-1 px-6 pt-6 flex-shrink-0">
             <DialogTitle className="text-lg font-semibold flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Document View
+              Document Preview
             </DialogTitle>
             <DialogDescription>
-              {viewAttachment?.fileName} • {formatFileSize(viewAttachment?.fileSize)} • {viewAttachment?.fileType || 'Unknown type'}
+              {viewAttachment?.fileName} · Version 1
             </DialogDescription>
           </DialogHeader>
 
@@ -775,7 +1089,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => handleDownload(viewAttachment)}
+                  onClick={() => { void handleDownload(viewAttachment); }}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download to View
@@ -799,7 +1113,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => handleDownload(viewAttachment)}
+                  onClick={() => { void handleDownload(viewAttachment); }}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download to View
@@ -818,12 +1132,18 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
           <DialogFooter className="px-6 pb-6 flex-shrink-0">
             <div className="flex items-center justify-between w-full">
               <div className="text-xs text-muted-foreground">
-                {viewAttachment?.fileName}
+                Previewing uploaded document
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => handleDownload(viewAttachment!)}
+                  onClick={() => window.print()}
+                >
+                  Print
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => { void handleDownload(viewAttachment!); }}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download

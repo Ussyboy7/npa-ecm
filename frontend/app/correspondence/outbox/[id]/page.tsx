@@ -76,8 +76,8 @@ import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
 import { toast } from 'sonner';
-import { logError } from '@/lib/client-logger';
-import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
+import { logError, logWarn } from '@/lib/client-logger';
+import { fetchDocumentById, logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
 import mammoth from 'mammoth';
 import { useCurrentUser } from '@/hooks/use-current-user';
 
@@ -106,9 +106,52 @@ const OutboxDetailPage = () => {
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
   const [withdrawReason, setWithdrawReason] = useState('');
 
+  const resolveOutboxDmsTarget = useCallback((): { documentId: string; sensitivity: string } | null => {
+    const completionDocId = correspondence?.completionPackage?.documentId;
+    if (completionDocId) {
+      return { documentId: completionDocId, sensitivity: 'internal' };
+    }
+
+    const linkedDoc = linkedDocuments[0];
+    if (linkedDoc?.id) {
+      return { documentId: linkedDoc.id, sensitivity: linkedDoc.sensitivity ?? 'internal' };
+    }
+
+    const linkedDocId = correspondence?.linkedDocumentIds?.[0];
+    if (linkedDocId) {
+      return { documentId: linkedDocId, sensitivity: 'internal' };
+    }
+
+    return null;
+  }, [correspondence?.completionPackage?.documentId, correspondence?.linkedDocumentIds, linkedDocuments]);
+
+  const logOutboxDmsAccess = useCallback(async (
+    action: 'view' | 'download' | 'attempted-download',
+    documentIdOverride?: string,
+    sensitivityOverride?: string,
+  ) => {
+    if (!currentUser?.id) return;
+    const target = documentIdOverride
+      ? { documentId: documentIdOverride, sensitivity: sensitivityOverride ?? 'internal' }
+      : resolveOutboxDmsTarget();
+    if (!target) return;
+
+    try {
+      await logDocumentAccess({
+        documentId: target.documentId,
+        userId: currentUser.id,
+        action,
+        sensitivity: target.sensitivity,
+      });
+    } catch (error: unknown) {
+      logWarn('[OutboxDetailPage] Failed to write DMS access log', error);
+    }
+  }, [currentUser?.id, resolveOutboxDmsTarget]);
+
   // Load attachment preview helper - defined before loadData so it can be used
   const loadAttachmentPreview = useCallback(async (index: number, attachment: CorrespondenceAttachment) => {
     if (!attachment?.fileUrl) return;
+    void logOutboxDmsAccess('view');
 
     const fileName = attachment.fileName || '';
     const isPDF = attachment.fileType === 'application/pdf';
@@ -163,7 +206,7 @@ const OutboxDetailPage = () => {
     } finally {
       setDocumentPreviewLoading(false);
     }
-  }, []);
+  }, [logOutboxDmsAccess]);
 
   // Extract loadData as useCallback so it can be called for refresh
   const loadData = useCallback(async () => {
@@ -393,7 +436,11 @@ const OutboxDetailPage = () => {
 
   const handleDownload = async (url: string, fileName: string) => {
     try {
+      await logOutboxDmsAccess('download');
       const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+      }
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -404,8 +451,18 @@ const OutboxDetailPage = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
+      await logOutboxDmsAccess('attempted-download');
       toast.error('Failed to download file');
     }
+  };
+
+  const handleAttachmentDownload = (attachment: CorrespondenceAttachment) => {
+    if (!attachment.fileUrl) {
+      void logOutboxDmsAccess('attempted-download');
+      toast.error('Attachment is missing a downloadable file URL');
+      return;
+    }
+    void handleDownload(attachment.fileUrl, attachment.fileName);
   };
 
   const handleResendReminder = async () => {
@@ -921,6 +978,7 @@ const OutboxDetailPage = () => {
                     <Tabs value={selectedAttachmentIndex.toString()} onValueChange={(val) => {
                       const idx = parseInt(val, 10);
                       setSelectedAttachmentIndex(idx);
+                      void logOutboxDmsAccess('view');
                       const attachment = correspondence.attachments?.[idx];
                       if (attachment && !attachmentPreviews.has(idx)) {
                         void loadAttachmentPreview(idx, attachment);
@@ -951,7 +1009,7 @@ const OutboxDetailPage = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                                  onClick={() => handleAttachmentDownload(attachment)}
                                 >
                                   <Download className="h-4 w-4 mr-2" />
                                   Download File
@@ -972,7 +1030,7 @@ const OutboxDetailPage = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                                  onClick={() => handleAttachmentDownload(attachment)}
                                 >
                                   <Download className="h-4 w-4 mr-2" />
                                   Download File
@@ -984,7 +1042,7 @@ const OutboxDetailPage = () => {
                                 variant="outline"
                                 size="sm"
                                 className="w-full sm:w-auto"
-                                onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                                onClick={() => handleAttachmentDownload(attachment)}
                               >
                                 <Download className="h-4 w-4 mr-2" />
                                 Download {attachment.fileName}
@@ -1015,7 +1073,7 @@ const OutboxDetailPage = () => {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                                onClick={() => handleAttachmentDownload(attachment)}
                               >
                                 <Download className="h-4 w-4 mr-2" />
                                 Download File
@@ -1036,7 +1094,7 @@ const OutboxDetailPage = () => {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                                onClick={() => handleAttachmentDownload(attachment)}
                               >
                                 <Download className="h-4 w-4 mr-2" />
                                 Download File
@@ -1048,7 +1106,7 @@ const OutboxDetailPage = () => {
                               variant="outline"
                               size="sm"
                               className="w-full sm:w-auto"
-                              onClick={() => attachment.fileUrl && handleDownload(attachment.fileUrl, attachment.fileName)}
+                              onClick={() => handleAttachmentDownload(attachment)}
                             >
                               <Download className="h-4 w-4 mr-2" />
                               Download {attachment.fileName}
@@ -1320,7 +1378,14 @@ const OutboxDetailPage = () => {
                             <p className="text-xs text-muted-foreground">{doc.documentType}</p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => router.push(`/dms/${doc.id}`)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            void logOutboxDmsAccess('view', doc.id, doc.sensitivity ?? 'internal');
+                            router.push(`/dms/${doc.id}`);
+                          }}
+                        >
                           <ExternalLink className="h-4 w-4 mr-2" />
                           View
                         </Button>
@@ -1573,4 +1638,3 @@ const OutboxDetailPage = () => {
 };
 
 export default OutboxDetailPage;
-

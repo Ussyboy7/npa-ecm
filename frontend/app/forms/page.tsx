@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import Link from 'next/link';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
@@ -11,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileCheck, Plus, Search, Loader2, FileText, Clock, CheckCircle2, AlertCircle, Users, Send, FileDown, ArrowUpDown, BarChart3, FolderTree, Filter, Download, Inbox } from 'lucide-react';
+import { FileCheck, Plus, Search, FileText, Clock, CheckCircle2, Users, Send, FileDown, Filter, Inbox, MoreHorizontal } from 'lucide-react';
 import { getFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
 import { getFormTemplates, type FormTemplate } from '@/lib/api/forms';
 import { getSignatures } from '@/lib/api/forms';
@@ -23,15 +22,38 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
+import { exportToCSV } from '@/lib/admin-export';
 import { usePagination } from '@/hooks/use-pagination';
-import { FilterPanel, FilterBadgeGroup, type FilterBadge } from '@/components/shared/FilterPanel';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import {
+  registryQueueSearchStatsShellContentClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+  registryQueueSearchInputWrapClass,
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+} from '@/components/shared/registry-queue-styles';
+import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 type FormStatus = 'all' | 'draft' | 'in_progress' | 'awaiting_signatures' | 'completed';
-type TabValue = 'my-forms' | 'templates' | 'pending';
+type TabValue = 'my-forms' | 'pending';
 type SortField = 'updated_at' | 'created_at' | 'title' | 'status';
 type SortOrder = 'asc' | 'desc';
 
@@ -44,14 +66,12 @@ const FormsPage = () => {
   const [activeTab, setActiveTab] = useState<TabValue>('my-forms');
   const [forms, setForms] = useState<FormDocument[]>([]);
   const [allForms, setAllForms] = useState<FormDocument[]>([]); // Store all forms for client-side pagination
-  const [templates, setTemplates] = useState<FormTemplate[]>([]);
-  const [allTemplates, setAllTemplates] = useState<FormTemplate[]>([]); // Store all templates for filter dropdown
+  const [allTemplates, setAllTemplates] = useState<FormTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<FormStatus>('all');
   const [templateFilter, setTemplateFilter] = useState<string>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [executiveFilter, setExecutiveFilter] = useState<string>('all');
   const [executives, setExecutives] = useState<Array<{id: string; name: string; email?: string}>>([]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -126,10 +146,8 @@ const FormsPage = () => {
 
   // Load forms
   useEffect(() => {
-    if (activeTab === 'my-forms' || activeTab === 'pending') {
-      loadForms();
-    }
-  }, [activeTab, statusFilter, templateFilter, executiveFilter, debouncedSearch]);
+    loadForms();
+  }, [activeTab, statusFilter, templateFilter, executiveFilter, debouncedSearch, currentUser?.id]);
 
   // Load pending signatures for current user
   useEffect(() => {
@@ -137,13 +155,6 @@ const FormsPage = () => {
       loadPendingSignatures();
     }
   }, [currentUser, activeTab]);
-
-  // Load templates
-  useEffect(() => {
-    if (activeTab === 'templates') {
-      loadTemplates();
-    }
-  }, [activeTab, categoryFilter, searchQuery]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -270,25 +281,6 @@ const FormsPage = () => {
     }
   }, [pagination.page, pagination.pageSize, sortField, sortOrder, allForms]);
 
-  const loadTemplates = async () => {
-    try {
-      setLoading(true);
-      const params: { category?: string; is_active?: boolean; search?: string } = { is_active: true };
-      if (categoryFilter !== 'all') {
-        params.category = categoryFilter;
-      }
-      if (searchQuery) {
-        params.search = searchQuery;
-      }
-      const data = await getFormTemplates(params);
-      setTemplates(data);
-    } catch (error: unknown) {
-      logError('Failed to load templates', error);
-      toast.error('Failed to load templates');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadPendingSignatures = async () => {
     try {
@@ -310,7 +302,6 @@ const FormsPage = () => {
 
   // Filter forms for pending actions - only show forms where user has pending signature
   const pendingForms = useMemo(() => {
-    if (activeTab !== 'pending') return [];
     return allForms.filter(form => {
       // Only show forms that are awaiting signatures AND user has pending signature
       if (form.status === 'awaiting_signatures' && form.signature_workflow) {
@@ -323,7 +314,7 @@ const FormsPage = () => {
       }
       return false;
     });
-  }, [allForms, activeTab, pendingSignatures]);
+  }, [allForms, pendingSignatures]);
 
   // Get unique templates from all forms for filter dropdown
   const availableTemplates = useMemo(() => {
@@ -334,10 +325,6 @@ const FormsPage = () => {
     });
   }, [allForms, allTemplates]);
 
-  const categories = useMemo(() => {
-    const cats = new Set(templates.map(t => t.category).filter(Boolean));
-    return Array.from(cats);
-  }, [templates]);
   
   // Calculate statistics
   const statistics = useMemo(() => {
@@ -349,51 +336,6 @@ const FormsPage = () => {
       completed: allForms.filter(f => f.status === 'completed').length,
     };
   }, [allForms]);
-  
-  // Calculate active filters
-  const activeFilters: FilterBadge[] = useMemo(() => {
-    const filters: FilterBadge[] = [];
-    
-    if (statusFilter !== 'all') {
-      filters.push({
-        key: 'status',
-        label: `Status: ${statusFilter.replace('_', ' ')}`,
-        value: statusFilter,
-        onClick: () => setStatusFilter('all'),
-      });
-    }
-    
-    if (templateFilter !== 'all') {
-      const template = allTemplates.find(t => t.id === templateFilter);
-      filters.push({
-        key: 'template',
-        label: `Template: ${template?.name || templateFilter}`,
-        value: templateFilter,
-        onClick: () => setTemplateFilter('all'),
-      });
-    }
-    
-    if (isSecretary && executiveFilter !== 'all') {
-      const executive = executives.find(e => e.id === executiveFilter);
-      filters.push({
-        key: 'executive',
-        label: `Executive: ${executive?.name || executiveFilter}`,
-        value: executiveFilter,
-        onClick: () => setExecutiveFilter('all'),
-      });
-    }
-    
-    if (debouncedSearch.trim()) {
-      filters.push({
-        key: 'search',
-        label: `Search: "${debouncedSearch}"`,
-        value: debouncedSearch,
-        onClick: () => setSearchQuery(''),
-      });
-    }
-    
-    return filters;
-  }, [statusFilter, templateFilter, executiveFilter, debouncedSearch, allTemplates, executives, isSecretary]);
   
   const handleClearAllFilters = () => {
     setStatusFilter('all');
@@ -442,23 +384,8 @@ const FormsPage = () => {
     }
   };
 
-  const getStatusBadge = (status: FormDocument['status']) => {
-    switch (status) {
-      case 'draft':
-        return <Badge variant="outline">Draft</Badge>;
-      case 'in_progress':
-        return <Badge variant="secondary">In Progress</Badge>;
-      case 'awaiting_signatures':
-        return <Badge variant="default" className="bg-amber-500">Awaiting Signatures</Badge>;
-      case 'completed':
-        return <Badge variant="default" className="bg-green-500">Completed</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
   const handleCreateForm = (documentId: string) => {
-    router.push(`/dms/${documentId}`);
+    router.push(`/forms/${documentId}`);
   };
 
   const handleTemplateSelect = (template: FormTemplate) => {
@@ -467,91 +394,129 @@ const FormsPage = () => {
   };
 
   const handleExport = async () => {
-    // TODO: Implement export functionality
-    setExporting(true);
-    setTimeout(() => setExporting(false), 1000);
+    if (allForms.length === 0) return;
+    try {
+      setExporting(true);
+      const exportData = allForms.map((form) => ({
+        title: form.document.title,
+        template: form.template?.name || 'No template',
+        status: form.status,
+        reference: form.document.reference_number || '',
+        signature_workflow: form.signature_workflow ? 'Yes' : 'No',
+        updated_at: formatDateTime(form.updated_at),
+        created_at: formatDateTime(form.created_at),
+      }));
+
+      exportToCSV(exportData, [
+        { key: 'title', label: 'Title' },
+        { key: 'template', label: 'Template' },
+        { key: 'status', label: 'Status' },
+        { key: 'reference', label: 'Reference Number' },
+        { key: 'signature_workflow', label: 'Signature Workflow' },
+        { key: 'updated_at', label: 'Updated At' },
+        { key: 'created_at', label: 'Created At' },
+      ], {
+        filename: `forms-export-${new Date().toISOString().split('T')[0]}.csv`,
+      });
+
+      toast.success(`Exported ${exportData.length} forms successfully`);
+    } catch (error: unknown) {
+      logError('Failed to export forms', error);
+      toast.error('Failed to export forms');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const activeFilterCount = useMemo(() => {
     if (activeTab !== 'my-forms') return 0;
     let count = 0;
+    if (debouncedSearch) count++;
     if (statusFilter !== 'all') count++;
     if (templateFilter !== 'all') count++;
     if (executiveFilter !== 'all') count++;
     return count;
-  }, [activeTab, statusFilter, templateFilter, executiveFilter]);
+  }, [activeTab, debouncedSearch, statusFilter, templateFilter, executiveFilter]);
+
+  const hasListFilters =
+    debouncedSearch ||
+    statusFilter !== 'all' ||
+    templateFilter !== 'all' ||
+    executiveFilter !== 'all';
 
   return (
     <ErrorBoundary>
       <ClientErrorBoundary>
         <DashboardLayout>
           <div className="container mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex justify-between items-start">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h1 className="text-3xl font-bold">Forms Library</h1>
-                <p className="text-muted-foreground mt-1">Create, manage, and track form documents</p>
+                <h1 className="text-3xl font-bold text-foreground">Forms Library</h1>
+                <p className="mt-1 max-w-2xl text-muted-foreground">
+                  Create, manage, and track form documents
+                </p>
               </div>
-              <div className="flex gap-2">
-                {activeTab === 'my-forms' && (
-                  <>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => setShowFilters(!showFilters)}
-                      aria-label={`${showFilters ? 'Hide' : 'Show'} filters`}
-                      aria-expanded={showFilters}
-                    >
-                      <Filter className="h-4 w-4 mr-2" /> Filters
-                      {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2" aria-label={`${activeFilterCount} active filters`}>{activeFilterCount}</Badge>}
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={handleExport}
-                      disabled={exporting || forms.length === 0}
-                      aria-label="Export to CSV"
-                    >
-                      {exporting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Exporting...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="h-4 w-4 mr-2" /> Export
-                        </>
-                      )}
-                    </Button>
-                  </>
-                )}
-                <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Form
-                </Button>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <ContextualHelp
-                  title="How to manage forms"
-                  description="Create and manage form documents. Use filters to find specific forms, track signature workflows, and download completed forms."
+                  title="Using the forms library"
+                  description="Start a form from a template, track drafts and signatures, then export when complete. Use filters to narrow by status or template."
                   steps={[
-                    'Create a form from a template to start filling out required information.',
-                    'Route forms for signatures to initiate approval workflows.',
-                    'Track pending actions in the Pending Actions tab.',
-                    'Download completed forms as PDFs for records.',
+                    'Click Start Form or pick a template from the Template Library.',
+                    'Use search and filters to find specific forms in My Forms.',
+                    'Pending Actions lists forms that need your signature.',
                   ]}
                 />
+                <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Start Form
+                </Button>
+                {activeTab === 'my-forms' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowFilters((prev) => !prev)}
+                  >
+                    <Filter className="mr-2 h-4 w-4" />
+                    Filters
+                    {activeFilterCount > 0 && (
+                      <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </Button>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <MoreHorizontal className="mr-2 h-4 w-4" />
+                      More
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => router.push('/forms/templates')}>
+                      Browse Templates
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExport} disabled={exporting || allForms.length === 0}>
+                      {exporting ? 'Exporting…' : 'Export CSV'}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
             <HelpGuideCard
-              title="Forms Library"
-              description="Manage form documents across different categories. Create new forms, view templates, and track forms that need your attention."
-              links={[{ label: 'My Inbox', href: '/inbox' }, { label: 'Help & Guides', href: '/help' }]}
+              title="Workspace guide"
+              description="Work queue for in-progress forms and pending signature actions. Templates live in the Template Library."
+              links={[
+                { label: 'Template Library', href: '/forms/templates' },
+                { label: 'Help & Guides', href: '/help' },
+              ]}
             />
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="space-y-6">
-              <TabsList>
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="my-forms">My Forms</TabsTrigger>
-                <TabsTrigger value="templates">Templates</TabsTrigger>
                 <TabsTrigger value="pending" className="relative">
                   Pending Actions
                   {pendingForms.length > 0 && (
@@ -566,10 +531,12 @@ const FormsPage = () => {
               {activeTab === 'my-forms' && showFilters && (
                 <Card>
                   <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">Form Filters</CardTitle>
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-lg">Form filters</CardTitle>
                       {activeFilterCount > 0 && (
-                        <Button variant="ghost" size="sm" onClick={handleClearAllFilters}>Clear All</Button>
+                        <Button variant="ghost" size="sm" onClick={handleClearAllFilters}>
+                          Clear all
+                        </Button>
                       )}
                     </div>
                   </CardHeader>
@@ -641,288 +608,140 @@ const FormsPage = () => {
                 </Card>
               )}
 
-              {/* Search */}
-              <div className="relative max-w-xl">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input 
-                  placeholder={activeTab === 'templates' ? "Search templates..." : "Search by title, reference..."} 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                  className="pl-10"
-                  aria-label="Search forms"
-                  type="search"
-                />
-              </div>
-
-              {/* Summary Cards - Only for My Forms */}
-              {activeTab === 'my-forms' && (
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  {[
-                    { label: 'Total in Queue', value: statistics.total, icon: Inbox, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-                    { label: 'Draft', value: statistics.draft, icon: FileText, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-                    { label: 'Awaiting Signatures', value: statistics.awaitingSignatures, icon: Users, bgClass: 'bg-amber-500/10', iconClass: 'text-amber-600 dark:text-amber-400' },
-                    { label: 'Completed', value: statistics.completed, icon: CheckCircle2, bgClass: 'bg-green-500/10', iconClass: 'text-green-600 dark:text-green-400' },
-                  ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-                    <Card key={label}>
-                      <CardContent className="p-6">
-                        <div className="flex items-center gap-4">
-                          <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
-                          <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
+              {/* Search + Stats */}
+              <Card>
+                <CardContent className={registryQueueSearchStatsShellContentClass}>
+                  <div className={registryQueueSearchInputWrapClass}>
+                    <Search
+                      className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                      aria-hidden
+                    />
+                    <Input
+                      placeholder="Search by title, reference…"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                      aria-label="Search forms"
+                      type="search"
+                    />
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {[
+                      {
+                        label: 'Total in queue',
+                        value: statistics.total,
+                        icon: Inbox,
+                        bgClass: 'bg-primary/10',
+                        iconClass: 'text-primary',
+                      },
+                      {
+                        label: 'Draft',
+                        value: statistics.draft,
+                        icon: FileText,
+                        bgClass: 'bg-blue-500/10',
+                        iconClass: 'text-blue-600 dark:text-blue-400',
+                      },
+                      {
+                        label: 'Awaiting signatures',
+                        value: statistics.awaitingSignatures,
+                        icon: Users,
+                        bgClass: 'bg-amber-500/10',
+                        iconClass: 'text-amber-600 dark:text-amber-400',
+                      },
+                      {
+                        label: 'Completed',
+                        value: statistics.completed,
+                        icon: CheckCircle2,
+                        bgClass: 'bg-green-500/10',
+                        iconClass: 'text-green-600 dark:text-green-400',
+                      },
+                    ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+                      <Card key={label}>
+                        <CardContent className={registryQueueStatCardContentClass}>
+                          <div className="flex items-center gap-4">
+                            <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                              <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                            </div>
+                            <div>
+                              <p className={registryQueueStatLabelClass}>{label}</p>
+                              <p className={registryQueueStatValueClass}>{value}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* My Forms Tab */}
               <TabsContent value="my-forms" className="space-y-4">
-                
                 {loading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                  </div>
+                  <LoadingState message="Loading forms…" />
                 ) : forms.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-12 text-center">
-                      <FileCheck className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                      <h3 className="text-lg font-semibold mb-2">No forms found</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        {debouncedSearch || statusFilter !== 'all' || templateFilter !== 'all' || executiveFilter !== 'all'
-                          ? 'Try adjusting your filters or search query'
-                          : 'Get started by creating your first form from a template'}
-                      </p>
-                      {!debouncedSearch && statusFilter === 'all' && templateFilter === 'all' && executiveFilter === 'all' && (
-                        <Button onClick={() => setCreateDialogOpen(true)}>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Create Form
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <EmptyState
+                    icon={hasListFilters ? 'search' : 'file'}
+                    title={hasListFilters ? 'No matching forms' : 'No forms yet'}
+                    message={
+                      hasListFilters
+                        ? 'Try adjusting your filters or search query.'
+                        : 'Get started by creating your first form from a template.'
+                    }
+                    actionLabel={!hasListFilters ? 'Start form' : undefined}
+                    onAction={!hasListFilters ? () => setCreateDialogOpen(true) : undefined}
+                    variant="dashed"
+                  />
                 ) : (
                   <>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {forms.map((form) => (
-                      <Card
-                        key={form.id}
-                        className="hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => router.push(`/dms/${form.document.id}`)}
-                      >
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <CardTitle className="text-base truncate">{form.document.title}</CardTitle>
-                              <CardDescription className="mt-1">
-                                {form.template?.name || 'No template'}
-                              </CardDescription>
-                            </div>
-                            {getStatusBadge(form.status)}
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <span>Updated {formatDate(form.updated_at)}</span>
-                          </div>
-                          {form.document.reference_number && (
-                            <div className="text-xs text-muted-foreground">
-                              Ref: {form.document.reference_number}
-                            </div>
-                          )}
-                          {form.signature_workflow && (
-                            <div className="flex items-center gap-2 text-xs">
-                              <Users className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-muted-foreground">Signature workflow active</span>
-                            </div>
-                          )}
-                          {/* TODO: Add case links support for forms if needed */}
-                          <div className="flex items-center gap-2 pt-2 border-t">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/dms/${form.document.id}`);
-                              }}
-                            >
-                              <FileText className="h-3 w-3 mr-1" />
-                              Open
-                            </Button>
-                            {form.status !== 'completed' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedForm(form);
-                                  setForwardDialogOpen(true);
-                                }}
-                              >
-                                <Send className="h-3 w-3" />
-                              </Button>
-                            )}
-                            {form.status === 'completed' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDownloadPdf(form);
-                                }}
-                                title="Download PDF"
-                              >
-                                <FileDown className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                  
-                  {/* Pagination */}
-                  {allForms.length > pagination.pageSize && (
-                    <div className="mt-6">
-                      <PaginationControls
-                        pagination={pagination}
-                        pageSizeOptions={[10, 25, 50, 100]}
-                      />
+                    <div className={correspondenceQueueListStackClass}>
+                      {forms.map((form) => (
+                        <FormListRow
+                          key={form.id}
+                          form={form}
+                          mode="normal"
+                          onOpen={() => router.push(`/forms/${form.document.id}`)}
+                          onForward={() => {
+                            setSelectedForm(form);
+                            setForwardDialogOpen(true);
+                          }}
+                          onDownloadPdf={() => handleDownloadPdf(form)}
+                        />
+                      ))}
                     </div>
-                  )}
+                    {allForms.length > pagination.pageSize && (
+                      <div className="mt-6">
+                        <PaginationControls
+                          pagination={pagination}
+                          pageSizeOptions={[10, 25, 50, 100]}
+                        />
+                      </div>
+                    )}
                   </>
-                )}
-              </TabsContent>
-
-              {/* Templates Tab */}
-              <TabsContent value="templates" className="space-y-4">
-                {loading ? (
-                  <Card><CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading templates…</CardContent></Card>
-                ) : templates.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-12 text-center">
-                      <FileCheck className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                      <p className="text-sm text-muted-foreground mb-2">{debouncedSearch || categoryFilter !== 'all' ? 'No templates match your filters' : 'No form templates are currently available. Contact your administrator to add templates.'}</p>
-                      {(debouncedSearch || categoryFilter !== 'all') && <Button variant="outline" size="sm" onClick={() => { setSearchQuery(''); setCategoryFilter('all'); }} className="mt-4">Clear Filters</Button>}
-                      {!debouncedSearch && categoryFilter === 'all' && (
-                        <Button variant="outline" size="sm" onClick={() => router.push('/settings/templates')} className="mt-4">
-                          Manage Templates
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {templates.map((template) => (
-                      <Card
-                        key={template.id}
-                        className="hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => handleTemplateSelect(template)}
-                      >
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <CardTitle className="text-base">{template.name}</CardTitle>
-                                <Badge variant="outline" className="text-xs">
-                                  {template.category}
-                                </Badge>
-                              </div>
-                              {template.description && (
-                                <CardDescription className="mt-1 line-clamp-2">
-                                  {template.description}
-                                </CardDescription>
-                              )}
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <FileText className="h-3 w-3" />
-                            <span>
-                              {template.structure?.fields?.length || 0} fields
-                            </span>
-                          </div>
-                          <Button
-                            className="w-full"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleTemplateSelect(template);
-                            }}
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Create Form
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
                 )}
               </TabsContent>
 
               {/* Pending Actions Tab */}
               <TabsContent value="pending" className="space-y-4">
                 {loading ? (
-                  <Card><CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading pending actions…</CardContent></Card>
+                  <LoadingState message="Loading pending actions…" />
                 ) : pendingForms.length === 0 ? (
-                  <Card>
-                    <CardContent className="py-12 text-center">
-                      <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-green-500 opacity-50" />
-                      <p className="text-sm text-muted-foreground mb-2">You're all caught up! No forms require your signature or attention at this time.</p>
-                      <Button variant="outline" size="sm" onClick={() => setActiveTab('my-forms')} className="mt-4">
-                        View All Forms
-                      </Button>
-                    </CardContent>
-                  </Card>
+                  <EmptyState
+                    icon="file"
+                    title="All caught up"
+                    message="No forms require your signature or attention."
+                    actionLabel="View all forms"
+                    onAction={() => setActiveTab('my-forms')}
+                    variant="dashed"
+                  />
                 ) : (
-                  <div className="space-y-4">
+                  <div className={correspondenceQueueListStackClass}>
                     {pendingForms.map((form) => (
-                      <Card
+                      <FormListRow
                         key={form.id}
-                        className="hover:shadow-md transition-shadow cursor-pointer border-amber-200"
-                        onClick={() => router.push(`/dms/${form.document.id}`)}
-                      >
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <CardTitle className="text-base flex items-center gap-2">
-                                {form.document.title}
-                                <Badge variant="default" className="bg-amber-500">
-                                  Action Required
-                                </Badge>
-                              </CardTitle>
-                              <CardDescription className="mt-1">
-                                {form.template?.name || 'No template'}
-                              </CardDescription>
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <AlertCircle className="h-3 w-3 text-amber-500" />
-                            <span>
-                              {form.status === 'awaiting_signatures'
-                                ? 'Awaiting your signature'
-                                : 'Requires your input'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <span>Updated {formatDateTime(form.updated_at)}</span>
-                          </div>
-                          <Button
-                            className="w-full"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/dms/${form.document.id}`);
-                            }}
-                          >
-                            <FileText className="h-4 w-4 mr-2" />
-                            Review & Action
-                          </Button>
-                        </CardContent>
-                      </Card>
+                        form={form}
+                        mode="pending"
+                        onOpen={() => router.push(`/forms/${form.document.id}`)}
+                      />
                     ))}
                   </div>
                 )}
@@ -948,6 +767,7 @@ const FormsPage = () => {
               setSelectedForm(null);
             }}
           />
+
       </DashboardLayout>
       </ClientErrorBoundary>
     </ErrorBoundary>
@@ -956,3 +776,155 @@ const FormsPage = () => {
 
 export default FormsPage;
 
+function FormListRow({
+  form,
+  mode,
+  onOpen,
+  onForward,
+  onDownloadPdf,
+}: {
+  form: FormDocument;
+  mode: 'normal' | 'pending';
+  onOpen: () => void;
+  onForward?: () => void;
+  onDownloadPdf?: () => void;
+}) {
+  const leadingBg =
+    form.status === 'completed'
+      ? 'bg-green-500/10'
+      : form.status === 'awaiting_signatures'
+        ? 'bg-amber-500/10'
+        : form.status === 'in_progress'
+          ? 'bg-blue-500/10'
+          : 'bg-cyan-500/10';
+  const leadingIcon =
+    form.status === 'completed'
+      ? 'text-green-600 dark:text-green-400'
+      : form.status === 'awaiting_signatures'
+        ? 'text-amber-600 dark:text-amber-400'
+        : form.status === 'in_progress'
+          ? 'text-blue-600 dark:text-blue-400'
+          : 'text-cyan-600 dark:text-cyan-400';
+
+  const actions = (
+    <div className="flex items-center gap-0.5">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onOpen();
+        }}
+        title={mode === 'pending' ? 'Review & action' : 'Continue form'}
+        aria-label={mode === 'pending' ? 'Review and take action' : 'Continue form'}
+      >
+        <FileText className="h-3.5 w-3.5" />
+      </Button>
+      {mode === 'normal' && form.status !== 'completed' && onForward && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onForward();
+          }}
+          title="Forward form"
+          aria-label="Forward form"
+        >
+          <Send className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      {mode === 'normal' && form.status === 'completed' && onDownloadPdf && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDownloadPdf();
+          }}
+          title="Download PDF"
+          aria-label="Download PDF"
+        >
+          <FileDown className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </div>
+  );
+
+  return (
+    <ListRowCard
+      density="compact"
+      href={`/forms/${form.document.id}`}
+      leading={
+        <div className={cn(correspondenceQueueLeadingBoxClass, leadingBg)}>
+          <FileCheck className={cn(correspondenceQueueLeadingIconClass, leadingIcon)} />
+        </div>
+      }
+      actions={actions}
+    >
+      <h4 className={correspondenceQueueSubjectClass}>{form.document.title}</h4>
+      <p className="text-xs text-muted-foreground truncate mt-0.5">
+        {form.template?.name || 'No template'}
+      </p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <div className="flex flex-wrap items-center gap-1">
+          {mode === 'pending' && (
+            <Badge variant="default" className={cn(correspondenceQueueBadgeClass, 'bg-amber-500')}>
+              Action required
+            </Badge>
+          )}
+          <FormStatusBadge status={form.status} />
+        </div>
+        <span className={correspondenceQueueDateClass}>
+          Updated {formatDateTime(form.updated_at)}
+        </span>
+      </div>
+      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+        <span className={correspondenceQueueMetaItemClass}>
+          <FileText className={correspondenceQueueMetaIconClass} />
+          <span className="truncate">
+            {form.document.reference_number
+              ? `Ref: ${form.document.reference_number}`
+              : `Form ID: ${form.id.slice(0, 8).toUpperCase()}`}
+          </span>
+        </span>
+        <span className={correspondenceQueueMetaItemClass}>
+          <Clock className={correspondenceQueueMetaIconClass} />
+          <span>Created {formatDate(form.created_at)}</span>
+        </span>
+        {form.signature_workflow && (
+          <span className={correspondenceQueueMetaItemClass}>
+            <Users className={correspondenceQueueMetaIconClass} />
+            <span>Signature workflow active</span>
+          </span>
+        )}
+      </div>
+    </ListRowCard>
+  );
+}
+
+function FormStatusBadge({ status }: { status: FormDocument['status'] }) {
+  if (status === 'draft')
+    return <Badge variant="outline" className={correspondenceQueueBadgeClass}>Draft</Badge>;
+  if (status === 'in_progress')
+    return <Badge variant="secondary" className={correspondenceQueueBadgeClass}>In progress</Badge>;
+  if (status === 'awaiting_signatures')
+    return (
+      <Badge variant="default" className={cn(correspondenceQueueBadgeClass, 'bg-amber-500')}>
+        Awaiting signatures
+      </Badge>
+    );
+  if (status === 'completed')
+    return (
+      <Badge variant="default" className={cn(correspondenceQueueBadgeClass, 'bg-green-500')}>
+        Completed
+      </Badge>
+    );
+  return <Badge variant="outline" className={correspondenceQueueBadgeClass}>{status}</Badge>;
+}

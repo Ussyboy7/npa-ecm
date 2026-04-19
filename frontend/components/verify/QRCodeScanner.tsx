@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import jsQR from "jsqr";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -64,21 +65,58 @@ export function QRCodeScanner({ onScan, open, onOpenChange }: QRCodeScannerProps
     setScanning(false);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const extractSerialFromQRData = useCallback((data: string): string => {
+    // QR may contain serial directly, or a URL like /verify/SERIAL or https://.../verify/SERIAL
+    const verifyMatch = data.match(/\/verify\/([^/?]+)/);
+    if (verifyMatch) return verifyMatch[1];
+    // Otherwise treat the whole string as the serial
+    return data.trim();
+  }, []);
 
-    // For now, we'll extract serial from QR code image
-    // In a real implementation, you'd use a QR code decoder library
-    // For this implementation, we'll show a message to manually enter
-    toast.info('QR code image scanning coming soon. Please enter the serial number manually.');
-    onOpenChange(false);
-    
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
+  const handleFileUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          toast.error("Could not process image");
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "attemptBoth",
+        });
+        if (code?.data) {
+          const serial = extractSerialFromQRData(code.data);
+          onScan(serial);
+          onOpenChange(false);
+          toast.success("QR code scanned successfully");
+        } else {
+          toast.error("No QR code found in image. Please try another image or enter manually.");
+        }
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        toast.error("Failed to load image");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      };
+
+      img.src = url;
+    },
+    [onScan, onOpenChange, extractSerialFromQRData]
+  );
 
   const handleClose = () => {
     stopCamera();
@@ -156,7 +194,7 @@ export function QRCodeScanner({ onScan, open, onOpenChange }: QRCodeScannerProps
                 Position the QR code within the frame. Scanning will happen automatically.
               </p>
               <p className="text-xs text-muted-foreground text-center">
-                Note: Automatic QR code detection requires a QR scanner library. For now, please use manual entry or upload.
+                Position the QR code within the frame, or use Upload Image to scan from a file.
               </p>
             </div>
           )}

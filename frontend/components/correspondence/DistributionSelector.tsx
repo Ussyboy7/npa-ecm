@@ -1,30 +1,43 @@
 "use client";
 
-import { useMemo, useState } from 'react';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { useMemo, useState } from "react";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { X, Building2, Users, Info, CheckCircle, MessageSquare, Layers, User as UserIcon, AlertCircle } from 'lucide-react';
-import { useOrganization } from '@/contexts/OrganizationContext';
-import { useCurrentUser } from '@/hooks/use-current-user';
-import { Textarea } from '@/components/ui/textarea';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import type { DistributionRecipient } from '@/lib/npa-structure';
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Building2,
+  User as UserIcon,
+  FileText,
+  CheckCircle,
+  Search,
+  X,
+  AlertCircle,
+} from "lucide-react";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import type { DistributionRecipient, Office, User } from "@/lib/npa-structure";
 
 interface DistributionSelectorProps {
   selectedDistribution: DistributionRecipient[];
   onDistributionChange: (distribution: DistributionRecipient[]) => void;
-  currentDivisionId?: string; // Exclude current division from selection
-  currentDepartmentId?: string; // Exclude current department from selection
+  currentDivisionId?: string;
+  currentDepartmentId?: string;
 }
+
+const recipientKey = (recipient: DistributionRecipient): string => {
+  if (recipient.type === "user") return `user:${recipient.userId ?? recipient.id}`;
+  return `${recipient.type}:${recipient.id}`;
+};
 
 export const DistributionSelector = ({
   selectedDistribution,
@@ -32,174 +45,105 @@ export const DistributionSelector = ({
   currentDivisionId,
   currentDepartmentId,
 }: DistributionSelectorProps) => {
-  const { directorates, divisions, departments, users } = useOrganization();
   const { currentUser } = useCurrentUser();
-  const allDirectorates = useMemo(() => directorates, [directorates]);
-  const allDivisions = useMemo(() => divisions, [divisions]);
-  const allDepartments = useMemo(() => departments, [departments]);
-  const allUsers = useMemo(() => users.filter(u => u.active !== false), [users]);
-  
-  // Check if current user can create parallel routing (executives/principals)
+  const { users, offices, divisions, departments, directorates } = useOrganization();
+
   const canCreateParallelRouting = useMemo(() => {
     if (!currentUser?.gradeLevel) return false;
-    const executiveGrades = ['MDCS', 'EDCS', 'MSS1', 'MSS2', 'MSS3'];
-    return executiveGrades.includes(currentUser.gradeLevel);
+    return ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(currentUser.gradeLevel);
   }, [currentUser?.gradeLevel]);
-  
-  const [selectedType, setSelectedType] = useState<'directorate' | 'division' | 'department' | 'user'>('division');
-  const [selectedId, setSelectedId] = useState<string>('');
-  const [selectedPurpose, setSelectedPurpose] = useState<'information' | 'action'>('information');
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [customMinuteTexts, setCustomMinuteTexts] = useState<Record<string, string>>({});
 
-  const currentDirectorateId = useMemo(() => {
-    if (currentDivisionId) {
-      const currentDivision = allDivisions.find((division) => division.id === currentDivisionId);
-      if (currentDivision) return currentDivision.directorateId;
-    }
-    if (currentDepartmentId) {
-      const currentDepartment = allDepartments.find((department) => department.id === currentDepartmentId);
-      if (currentDepartment) {
-        const parentDivision = allDivisions.find((division) => division.id === currentDepartment.divisionId);
-        return parentDivision?.directorateId;
-      }
-    }
-    return undefined;
-  }, [allDepartments, allDivisions, currentDepartmentId, currentDivisionId]);
+  const [routeType, setRouteType] = useState<"person" | "office">("office");
+  const [purpose, setPurpose] = useState<"information" | "action">("information");
+  const [personSearchQuery, setPersonSearchQuery] = useState("");
+  const [officeFilterDirectorate, setOfficeFilterDirectorate] = useState<string>("all");
+  const [officeFilterDivision, setOfficeFilterDivision] = useState<string>("all");
+  const [lastAdded, setLastAdded] = useState<{ type: "person" | "office"; name: string; meta?: string } | null>(null);
 
-  const availableDirectorates = useMemo(() => {
-    const filtered = allDirectorates
-      .filter((dir) => dir.isActive !== false)
-      .filter((dir) => dir.id !== currentDirectorateId)
-      .filter((dir) => !selectedDistribution.some((recipient) => recipient.type === 'directorate' && recipient.id === dir.id));
+  const selectedKeys = useMemo(() => new Set(selectedDistribution.map(recipientKey)), [selectedDistribution]);
 
-    if (filtered.length > 0) return filtered;
+  const filteredOfficeDivisions = useMemo(() => {
+    if (officeFilterDirectorate === "all") return divisions;
+    return divisions.filter((d) => d.directorateId === officeFilterDirectorate);
+  }, [divisions, officeFilterDirectorate]);
 
-    return allDirectorates
-      .filter((dir) => dir.isActive !== false)
-      .filter((dir) => !selectedDistribution.some((recipient) => recipient.type === 'directorate' && recipient.id === dir.id));
-  }, [allDirectorates, currentDirectorateId, selectedDistribution]);
+  const mapOfficeToRecipient = (office: Office): DistributionRecipient => ({
+    id: office.id,
+    type: "office",
+    officeId: office.id,
+    name: office.name,
+    purpose,
+  });
 
-  const availableDivisions = useMemo(() => {
-    const filtered = allDivisions
-      .filter((division) => division.isActive !== false)
-      .filter((division) => division.id !== currentDivisionId)
-      .filter((division) => !selectedDistribution.some((recipient) => recipient.type === 'division' && recipient.id === division.id));
+  const filteredOfficeOptions = useMemo(() => {
+    let result = offices.filter((o) => o.isActive);
+    if (officeFilterDirectorate !== "all") result = result.filter((o) => o.directorateId === officeFilterDirectorate);
+    if (officeFilterDivision !== "all") result = result.filter((o) => o.divisionId === officeFilterDivision);
 
-    if (filtered.length > 0) return filtered;
+    result = result.filter((o) => {
+      const mapped = mapOfficeToRecipient(o);
+      if (!mapped) return false;
+      return !selectedKeys.has(recipientKey(mapped));
+    });
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [
+    offices,
+    officeFilterDirectorate,
+    officeFilterDivision,
+    selectedKeys,
+    purpose,
+  ]);
 
-    return allDivisions
-      .filter((division) => division.isActive !== false)
-      .filter((division) => !selectedDistribution.some((recipient) => recipient.type === 'division' && recipient.id === division.id));
-  }, [allDivisions, currentDivisionId, selectedDistribution]);
+  const filteredUsers = useMemo(() => {
+    const base = users
+      .filter((u) => u.active !== false && u.id !== currentUser?.id)
+      .filter((u) => !selectedKeys.has(`user:${u.id}`));
+    if (!personSearchQuery.trim()) return base.sort((a, b) => a.name.localeCompare(b.name));
+    const q = personSearchQuery.toLowerCase();
+    return base
+      .filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          (u.systemRole || "").toLowerCase().includes(q) ||
+          (u.email || "").toLowerCase().includes(q),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [users, currentUser?.id, selectedKeys, personSearchQuery]);
 
-  const availableDepartments = useMemo(() => {
-    const filtered = allDepartments
-      .filter((department) => department.isActive !== false)
-      .filter((department) => department.id !== currentDepartmentId)
-      .filter((department) => !selectedDistribution.some((recipient) => recipient.type === 'department' && recipient.id === department.id));
-
-    if (filtered.length > 0) return filtered;
-
-    return allDepartments
-      .filter((department) => department.isActive !== false)
-      .filter((department) => !selectedDistribution.some((recipient) => recipient.type === 'department' && recipient.id === department.id));
-  }, [allDepartments, currentDepartmentId, selectedDistribution]);
-
-  const availableUsers = useMemo(() => {
-    return allUsers
-      .filter((user) => user.id !== currentUser?.id)
-      .filter((user) => !selectedDistribution.some((recipient) => recipient.type === 'user' && recipient.userId === user.id));
-  }, [allUsers, currentUser?.id, selectedDistribution]);
-
-  const handleAdd = () => {
-    if (selectedType === 'user' && !selectedUserId) return;
-    if (selectedType !== 'user' && !selectedId) return;
-
-    let name = '';
-    const newRecipient: DistributionRecipient = {
-      type: selectedType,
-      id: selectedType === 'user' ? selectedUserId : selectedId,
-      userId: selectedType === 'user' ? selectedUserId : undefined,
-      directorateId: selectedType === 'directorate' ? selectedId : undefined,
-      divisionId: selectedType === 'division' ? selectedId : undefined,
-      departmentId: selectedType === 'department' ? selectedId : undefined,
-      purpose: selectedPurpose,
-    };
-
-    if (selectedType === 'user') {
-      const user = allUsers.find((u) => u.id === selectedUserId);
-      name = user?.name ?? '';
-      // Store custom minute text if provided
-      if (selectedPurpose === 'action' && customMinuteTexts[selectedUserId]) {
-        newRecipient.customMinuteText = customMinuteTexts[selectedUserId];
-      }
-    } else if (selectedType === 'directorate') {
-      name = allDirectorates.find((directorate) => directorate.id === selectedId)?.name ?? '';
-    } else if (selectedType === 'division') {
-      const division = allDivisions.find((item) => item.id as string === selectedId);
-      name = division?.name ?? '';
-      newRecipient.directorateId = division?.directorateId;
-    } else {
-      const department = allDepartments.find((item) => item.id as string === selectedId);
-      name = department?.name ?? '';
-      newRecipient.divisionId = department?.divisionId;
-      if (department?.divisionId) {
-        const parentDivision = allDivisions.find((item) => item.id as string === department.divisionId);
-        newRecipient.directorateId = parentDivision?.directorateId;
-      }
-    }
-
-    newRecipient.name = name;
-    onDistributionChange([...selectedDistribution, newRecipient]);
-    setSelectedId('');
-    setSelectedUserId('');
-    if (selectedType === 'user' && selectedPurpose === 'action') {
-      setCustomMinuteTexts(prev => {
-        const next = { ...prev };
-        delete next[selectedUserId];
-        return next;
-      });
-    }
+  const addDistribution = (recipient: DistributionRecipient, meta?: string) => {
+    if (recipient.type === "user" && recipient.purpose === "action" && !canCreateParallelRouting) return;
+    onDistributionChange([...selectedDistribution, recipient]);
+    setLastAdded({
+      type: recipient.type === "user" ? "person" : "office",
+      name: recipient.name || "Recipient",
+      meta,
+    });
   };
 
-  const handleRemove = (id: string, type: DistributionRecipient['type'], userId?: string) => {
-    onDistributionChange(
-      selectedDistribution.filter(d => !(d.id === id && d.type === type && (!userId || d.userId === userId)))
+  const handleSelectUser = (userId: string) => {
+    const user = users.find((u) => u.id === userId);
+    if (!user) return;
+    addDistribution(
+      { id: user.id, type: "user", userId: user.id, name: user.name, purpose },
+      `${user.systemRole || ""}${user.gradeLevel ? ` • ${user.gradeLevel}` : ""}`.trim(),
     );
-    // Clean up custom minute text
-    if (userId && customMinuteTexts[userId]) {
-      setCustomMinuteTexts(prev => {
-        const next = { ...prev };
-        delete next[userId];
-        return next;
-      });
-    }
   };
 
-  const updateCustomMinuteText = (userId: string, text: string) => {
-    setCustomMinuteTexts(prev => ({
-      ...prev,
-      [userId]: text,
-    }));
+  const handleSelectOffice = (officeId: string) => {
+    const office = offices.find((o) => o.id === officeId);
+    if (!office) return;
+    const mapped = mapOfficeToRecipient(office);
+    if (!mapped) return;
+    addDistribution(mapped, (office.officeType || "").toUpperCase());
   };
 
-  const getPurposeIcon = (purpose: 'information' | 'action') => {
-    switch (purpose) {
-      case 'information':
-        return <Info className="h-3 w-3" />;
-      case 'action':
-        return <CheckCircle className="h-3 w-3" />;
-    }
+  const handleRemove = (recipient: DistributionRecipient) => {
+    onDistributionChange(selectedDistribution.filter((item) => recipientKey(item) !== recipientKey(recipient)));
   };
 
-  const getPurposeColor = (purpose: 'information' | 'action') => {
-    switch (purpose) {
-      case 'information':
-        return 'bg-info/10 text-info border-info/20';
-      case 'action':
-        return 'bg-warning/10 text-warning border-warning/20';
-    }
+  const getUserDivisionName = (user: User) => {
+    if (!user.division) return "";
+    return divisions.find((d) => d.id === user.division)?.name || "";
   };
 
   return (
@@ -208,126 +152,150 @@ export const DistributionSelector = ({
         <Building2 className="h-4 w-4 text-muted-foreground" />
         <Label className="text-sm font-semibold">Distribution (CC)</Label>
         <Badge variant="outline" className="text-xs">
-          {selectedDistribution.length} recipient{selectedDistribution.length !== 1 ? 's' : ''}
+          {selectedDistribution.length} recipient{selectedDistribution.length !== 1 ? "s" : ""}
         </Badge>
       </div>
 
-      {/* Add New Recipient */}
       <div className="space-y-3 p-4 border border-border rounded-lg bg-muted/30">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Type</Label>
-            <Select value={selectedType} onValueChange={(value) => {
-              setSelectedType(value as 'directorate' | 'division' | 'department');
-              setSelectedId('');
-            }}>
+            <Label className="text-xs text-muted-foreground">Route Type</Label>
+            <Select value={routeType} onValueChange={(v) => setRouteType(v as "person" | "office")}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="directorate">
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4" />
-                    Directorate
-                  </div>
-                </SelectItem>
-                <SelectItem value="division">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Division
-                  </div>
-                </SelectItem>
-                <SelectItem value="department">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Department
-                  </div>
-                </SelectItem>
-                {canCreateParallelRouting && (
-                  <SelectItem value="user">
-                    <div className="flex items-center gap-2">
-                      <UserIcon className="h-4 w-4" />
-                      User (Creates Parallel Routing)
-                    </div>
-                  </SelectItem>
-                )}
+                <SelectItem value="person">Person</SelectItem>
+                <SelectItem value="office">Office</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              {selectedType === 'directorate'
-                ? 'Directorate'
-                : selectedType === 'division'
-                ? 'Division'
-                : selectedType === 'department'
-                ? 'Department'
-                : 'User'}
+            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+              {routeType === "office" ? <><Building2 className="h-3 w-3" /> Office</> : <><UserIcon className="h-3 w-3" /> Person</>}
             </Label>
-            {selectedType === 'user' ? (
-              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="Select user" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableUsers.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      <div className="flex items-center gap-2">
-                        <span>{user.name}</span>
-                        <span className="text-xs text-muted-foreground">({user.systemRole})</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Select value={selectedId} onValueChange={setSelectedId}>
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder={`Select ${selectedType}`} />
-                </SelectTrigger>
-                <SelectContent>
-                  {selectedType === 'directorate'
-                    ? availableDirectorates.map((directorate) => (
-                        <SelectItem key={directorate.id} value={directorate.id}>
-                          {directorate.name}
-                        </SelectItem>
-                      ))
-                    : selectedType === 'division'
-                    ? availableDivisions.map((division) => (
-                        <SelectItem key={division.id} value={division.id}>
-                          {division.name}
-                        </SelectItem>
-                      ))
-                    : availableDepartments.map((department) => (
-                        <SelectItem key={department.id} value={department.id}>
-                          {department.name}
+            {routeType === "office" ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Select
+                    value={officeFilterDirectorate}
+                    onValueChange={(v) => {
+                      setOfficeFilterDirectorate(v);
+                      setOfficeFilterDivision("all");
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs text-foreground">
+                      <SelectValue placeholder="Directorate" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-foreground">All Directorates</SelectItem>
+                      {directorates.map((d) => (
+                        <SelectItem key={d.id} value={d.id} className="text-foreground">
+                          {d.shortName || d.name}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={officeFilterDivision} onValueChange={setOfficeFilterDivision}>
+                    <SelectTrigger className="h-8 text-xs text-foreground">
+                      <SelectValue placeholder="Division" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-foreground">All Divisions</SelectItem>
+                      {filteredOfficeDivisions.map((d) => (
+                        <SelectItem key={d.id} value={d.id} className="text-foreground">
+                          {d.shortName || d.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Select onValueChange={handleSelectOffice}>
+                  <SelectTrigger className="h-9 text-foreground">
+                    <SelectValue placeholder="Select office" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-[300px]">
+                    {filteredOfficeOptions.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">No offices found</div>
+                    ) : (
+                      filteredOfficeOptions.map((office) => (
+                        <SelectItem key={office.id} value={office.id} className="text-foreground">
+                          <div className="flex items-center justify-between gap-2 w-full">
+                            <span className="text-foreground">{office.name}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase">{office.officeType}</span>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <Select onValueChange={handleSelectUser}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Select person" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border z-50 max-h-[400px] overflow-y-auto">
+                  <div className="p-2 border-b border-border sticky top-0 bg-popover z-10">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by name, role..."
+                        value={personSearchQuery}
+                        onChange={(e) => setPersonSearchQuery(e.target.value)}
+                        className="pl-8 h-8"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  </div>
+                  {filteredUsers.length > 0 ? (
+                    <>
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                        All Recipients ({filteredUsers.length})
+                      </div>
+                      {filteredUsers.slice(0, 30).map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          <div className="flex flex-col">
+                            <span>{user.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {user.systemRole}
+                              {getUserDivisionName(user) ? ` • ${getUserDivisionName(user)}` : ""}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="p-4 text-center text-sm text-muted-foreground">No recipients available</div>
+                  )}
                 </SelectContent>
               </Select>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Purpose</Label>
-            <Select value={selectedPurpose} onValueChange={(value) => {
-              setSelectedPurpose(value as 'information' | 'action');
-            }}>
+            <Label className="text-xs text-muted-foreground flex items-center gap-1">
+              <FileText className="h-3 w-3" /> Purpose
+            </Label>
+            <Select value={purpose} onValueChange={(v) => setPurpose(v as "information" | "action")}>
               <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="information">
-                  <div className="flex items-center gap-2">
-                    <Info className="h-4 w-4" />
-                    For Information
-                  </div>
-                </SelectItem>
                 <SelectItem value="action">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4" />
+                    <CheckCircle className="h-4 w-4 text-warning" />
                     For Action
+                  </div>
+                </SelectItem>
+                <SelectItem value="information">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-info" />
+                    For Information
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -335,94 +303,67 @@ export const DistributionSelector = ({
           </div>
         </div>
 
-        {/* Custom minute text for users with "For Action" */}
-        {selectedType === 'user' && selectedPurpose === 'action' && selectedUserId && (
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">
-              Custom Minute Text <span className="text-muted-foreground/70">(Optional)</span>
-            </Label>
-            <Textarea
-              placeholder="Enter custom minute text for this user (uses main minute text if empty)..."
-              value={customMinuteTexts[selectedUserId] || ''}
-              onChange={(e) => updateCustomMinuteText(selectedUserId, e.target.value)}
-              className="min-h-[80px] resize-none text-sm"
-              maxLength={500}
-            />
-            <p className="text-xs text-muted-foreground">
-              {(customMinuteTexts[selectedUserId] || '').length} / 500 characters
-            </p>
-          </div>
-        )}
-
-        {/* Warning for parallel routing */}
-        {selectedType === 'user' && selectedPurpose === 'action' && (
+        {routeType === "person" && purpose === "action" && !canCreateParallelRouting && (
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="text-xs">
-              This will create a parallel routing branch. The user will receive an actionable minute.
+              Your role cannot create parallel routing for person-based action distribution.
             </AlertDescription>
           </Alert>
         )}
-
-        <Button
-          onClick={handleAdd}
-          disabled={(selectedType === 'user' ? !selectedUserId : !selectedId)}
-          size="sm"
-          variant="outline"
-          className="w-full"
-        >
-          Add to Distribution
-        </Button>
       </div>
 
-      {/* Selected Recipients */}
-      {selectedDistribution.length > 0 && (
+      {lastAdded && (
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">
-            Selected Recipients ({selectedDistribution.length})
+            {lastAdded.type === "office" ? "Selected Office" : "Selected Recipient"}
           </Label>
+          <Card className={lastAdded.type === "office" ? "border-secondary/30 bg-secondary/5" : "border-primary/30 bg-primary/5"}>
+            <CardContent className="p-3">
+              <div className="flex items-center gap-3">
+                <div className={lastAdded.type === "office" ? "h-10 w-10 rounded-full bg-secondary/10 flex items-center justify-center" : "h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center"}>
+                  {lastAdded.type === "office" ? <Building2 className="h-5 w-5 text-secondary-foreground" /> : <UserIcon className="h-5 w-5 text-primary" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{lastAdded.name}</p>
+                  {lastAdded.meta ? <p className="text-xs text-muted-foreground">{lastAdded.meta}</p> : null}
+                  <p className="text-xs text-muted-foreground">
+                    {lastAdded.type === "office" ? "Will be routed to office inbox" : "Added to distribution"}
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs shrink-0">
+                  {lastAdded.type === "office" ? "Office" : "Person"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {selectedDistribution.length > 0 && (
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Selected Recipients ({selectedDistribution.length})</Label>
           <div className="space-y-2">
-            {selectedDistribution.map((recipient, idx) => (
-              <Card key={`${recipient.type}-${recipient.id}-${recipient.userId || ''}-${idx}`} className="border-border">
+            {selectedDistribution.map((recipient, index) => (
+              <Card key={`${recipientKey(recipient)}-${index}`} className="border-border">
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 flex-1">
-                      {recipient.type === 'directorate' ? (
-                        <Layers className="h-4 w-4 text-primary" />
-                      ) : recipient.type === 'division' ? (
-                        <Building2 className="h-4 w-4 text-primary" />
-                      ) : recipient.type === 'department' ? (
-                        <Users className="h-4 w-4 text-secondary" />
-                      ) : (
-                        <UserIcon className="h-4 w-4 text-accent" />
-                      )}
-                      <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      {recipient.type === "user" ? <UserIcon className="h-4 w-4 text-primary" /> : <Building2 className="h-4 w-4 text-primary" />}
+                      <div>
                         <p className="text-sm font-medium">{recipient.name}</p>
-                        <p className="text-xs text-muted-foreground capitalize">
-                          {recipient.type}
-                          {recipient.type === 'user' && recipient.purpose === 'action' && (
-                            <span className="ml-1 text-warning">(Parallel Routing)</span>
-                          )}
-                        </p>
-                        {recipient.customMinuteText && (
-                          <p className="text-xs text-muted-foreground mt-1 italic">
-                            Custom text: {recipient.customMinuteText.substring(0, 50)}...
-                          </p>
-                        )}
+                        <p className="text-xs text-muted-foreground capitalize">{recipient.type}</p>
                       </div>
-                      <Badge
-                        variant="outline"
-                        className={`text-xs gap-1 ${getPurposeColor(recipient.purpose || 'information')}`}
-                      >
-                        {getPurposeIcon(recipient.purpose || 'information')}
-                        {recipient.purpose === 'information' ? 'Info' : 'Action'}
+                      <Badge variant="outline" className="text-xs">
+                        {recipient.purpose === "action" ? "Action" : "Information"}
                       </Badge>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 ml-2"
-                      onClick={() => handleRemove(recipient.id, recipient.type, recipient.userId)}
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleRemove(recipient)}
+                      aria-label="Remove recipient"
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -437,13 +378,10 @@ export const DistributionSelector = ({
       {selectedDistribution.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              No distribution recipients added yet. Add directorates, divisions, or departments to CC.
-            </p>
+            <p className="text-sm text-muted-foreground">No distribution recipients added yet.</p>
           </CardContent>
         </Card>
       )}
     </div>
   );
 };
-

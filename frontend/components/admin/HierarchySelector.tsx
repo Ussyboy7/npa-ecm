@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useOrganization } from "@/contexts/OrganizationContext";
+import { useDirectoratesSearch, useDivisionsSearch, useDepartmentsSearch } from "@/hooks/use-org-search";
 
 interface HierarchySelectorProps {
   directorateId?: string | null;
@@ -24,21 +23,17 @@ export function HierarchySelector({
   onDepartmentChange,
   disabled = false,
 }: HierarchySelectorProps) {
-  const { directorates, divisions, departments } = useOrganization();
+  const { items: directorates, loading: loadingDirectorates } = useDirectoratesSearch({ enabled: true });
+  const { items: divisions, loading: loadingDivisions } = useDivisionsSearch({
+    directorateId: directorateId ?? undefined,
+    enabled: Boolean(directorateId),
+  });
+  const { items: departments, loading: loadingDepartments } = useDepartmentsSearch({
+    divisionId: divisionId ?? undefined,
+    enabled: Boolean(divisionId),
+  });
 
-  const availableDivisions = useMemo(() => {
-    if (!directorateId) return [];
-    return divisions.filter((div) => div.directorateId === directorateId && div.isActive);
-  }, [directorates, divisions, directorateId]);
-
-  const availableDepartments = useMemo(() => {
-    if (!divisionId) return [];
-    return departments.filter((dept) => dept.divisionId === divisionId && dept.isActive);
-  }, [departments, divisionId]);
-
-  const activeDirectorates = useMemo(() => {
-    return directorates.filter((dir) => dir.isActive);
-  }, [directorates]);
+  const activeDirectorates = directorates.filter((dir) => dir.isActive);
 
   return (
     <div className="space-y-4">
@@ -58,11 +53,15 @@ export function HierarchySelector({
             <SelectValue placeholder="Select directorate" />
           </SelectTrigger>
           <SelectContent>
-            {activeDirectorates.map((dir) => (
+            {loadingDirectorates ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
+            ) : (
+            activeDirectorates.map((dir) => (
               <SelectItem key={dir.id} value={dir.id}>
                 {dir.name} ({dir.code})
               </SelectItem>
-            ))}
+            ))
+            )}
           </SelectContent>
         </Select>
       </div>
@@ -82,13 +81,17 @@ export function HierarchySelector({
             <SelectTrigger>
               <SelectValue placeholder="Select division" />
             </SelectTrigger>
-            <SelectContent>
-              {availableDivisions.map((div) => (
+          <SelectContent>
+            {loadingDivisions ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
+            ) : (
+            divisions.filter((div) => div.isActive).map((div) => (
                 <SelectItem key={div.id} value={div.id}>
                   {div.name} ({div.code})
-                </SelectItem>
-              ))}
-            </SelectContent>
+              </SelectItem>
+            ))
+            )}
+          </SelectContent>
           </Select>
         </div>
       )}
@@ -104,13 +107,17 @@ export function HierarchySelector({
             <SelectTrigger>
               <SelectValue placeholder="Select department" />
             </SelectTrigger>
-            <SelectContent>
-              {availableDepartments.map((dept) => (
+          <SelectContent>
+            {loadingDepartments ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
+            ) : (
+            departments.filter((dept) => dept.isActive).map((dept) => (
                 <SelectItem key={dept.id} value={dept.id}>
                   {dept.name} ({dept.code})
-                </SelectItem>
-              ))}
-            </SelectContent>
+              </SelectItem>
+            ))
+            )}
+          </SelectContent>
           </Select>
         </div>
       )}

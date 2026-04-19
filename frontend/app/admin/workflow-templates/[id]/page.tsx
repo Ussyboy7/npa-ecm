@@ -172,7 +172,7 @@ function WorkflowTemplateEditorPageContent() {
     return (
       <DashboardLayout>
         <div className="flex-1 overflow-y-auto">
-          <div className="container max-w-7xl mx-auto p-6">
+          <div className="container mx-auto p-6 space-y-6">
             <div className="flex items-center justify-center min-h-[400px]">
               <div className="text-center space-y-4">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
@@ -189,7 +189,7 @@ function WorkflowTemplateEditorPageContent() {
 
   return (
     <DashboardLayout>
-      <div className="container max-w-7xl mx-auto p-6 space-y-6">
+      <div className="container mx-auto p-6 space-y-6">
           {/* Header Section */}
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -204,7 +204,7 @@ function WorkflowTemplateEditorPageContent() {
                   Back
                 </Button>
                 <div>
-                  <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+                  <h1 className="text-3xl font-bold">
                     {isNew ? "Create Workflow Template" : isClone ? "Clone Workflow Template" : "Edit Workflow Template"}
                   </h1>
                   <p className="text-sm sm:text-base text-muted-foreground mt-1">

@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { toast } from 'sonner';
@@ -195,6 +196,15 @@ export const CaseHeader = ({
         </div>
         {/* Desktop action buttons */}
         <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+          <ContextualHelp
+            title="Case details"
+            description="View and manage this case. Link correspondence, documents, and forms. Update status and generate completion packages when closed."
+            steps={[
+              'Use the tabs to view linked correspondence, documents, forms, comments, and timeline.',
+              'Click Link Correspondence, Link Document, or Link Form to add items to this case.',
+              'Update status as the case progresses; generate a completion package when it is closed.',
+            ]}
+          />
           <Select
             value={caseData.status}
             onValueChange={(value) => onStatusUpdate(value as CaseDetail["status"])}
@@ -312,6 +322,15 @@ export const CaseHeader = ({
         </div>
         {/* Mobile action menu */}
         <div className="md:hidden flex items-center gap-1 flex-shrink-0">
+          <ContextualHelp
+            title="Case details"
+            description="View and manage this case. Link correspondence, documents, and forms. Update status and generate completion packages when closed."
+            steps={[
+              'Use the tabs to view linked correspondence, documents, forms, comments, and timeline.',
+              'Click Link Correspondence, Link Document, or Link Form to add items to this case.',
+              'Update status as the case progresses; generate a completion package when it is closed.',
+            ]}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">

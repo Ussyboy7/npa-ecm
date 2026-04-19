@@ -43,7 +43,7 @@ import {
 } from '@/lib/dms-storage';
 import type { User } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { RichTextEditor } from './RichTextEditor';
+import { QuillEditor } from './QuillEditor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   getTemplatesForUser,
@@ -123,7 +123,6 @@ export const DocumentCreateDialog = ({
   const [checkingReferenceNumber, setCheckingReferenceNumber] = useState(false);
   const [referenceNumberExists, setReferenceNumberExists] = useState(false);
   const [draftRestored, setDraftRestored] = useState(false);
-  const [editorCharacterCount, setEditorCharacterCount] = useState(0);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -387,7 +386,6 @@ export const DocumentCreateDialog = ({
     setUploadProgress(0);
     setDraftRestored(false);
     setReferenceNumberExists(false);
-    setEditorCharacterCount(0);
     if (currentUser) {
       getDefaultTemplateForUser(currentUser).then((defaultTemplate) => {
         setSelectedTemplateId(defaultTemplate ? defaultTemplate.id : null);
@@ -521,6 +519,15 @@ export const DocumentCreateDialog = ({
     if (!open) return;
     
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts if the event didn't originate from an input/textarea/editor
+      const target = e.target as HTMLElement;
+      const isInputField = target instanceof HTMLInputElement || 
+                          target instanceof HTMLTextAreaElement ||
+                          target.classList.contains('ProseMirror') ||
+                          target.closest('.ProseMirror') !== null;
+      
+      if (isInputField) return;
+      
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         if (!isSubmitting) {
@@ -534,7 +541,7 @@ export const DocumentCreateDialog = ({
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, isSubmitting, showTemplateConfirm, showSaveTemplateDialog, handleSubmit, handleClose]);
+  }, [open, isSubmitting, showTemplateConfirm, showSaveTemplateDialog, handleSubmit, handleClose, activeDivisions, divisionId, currentUser]);
 
   const templateTokens = useMemo(() => {
     if (!currentUser) return [];
@@ -599,7 +606,7 @@ export const DocumentCreateDialog = ({
     <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent 
-        className="max-w-5xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[85vh] overflow-hidden p-4 sm:p-6"
+        className="max-w-6xl w-[98vw] sm:w-full h-[95vh] sm:h-[85vh] flex flex-col overflow-hidden p-4 sm:p-6"
         onPointerDownOutside={(e) => {
           if (isSubmitting) e.preventDefault();
         }}
@@ -615,7 +622,7 @@ export const DocumentCreateDialog = ({
           <DialogDescription>Create a new document using the rich text editor</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[65vh] pr-4">
+        <ScrollArea className="flex-1 pr-4">
           <div className="space-y-6 pb-2">
             {/* Draft Restored Notification */}
             {draftRestored && (
@@ -756,7 +763,10 @@ export const DocumentCreateDialog = ({
                     <SelectContent>
                       <SelectItem value="none">Unassigned</SelectItem>
                       {activeDivisions.map((division) => (
-                        <SelectItem key={division.id} value={division.id}
+                        <SelectItem
+                          key={division.id}
+                          value={division.id}
+                          textValue={division.code ? `${division.name} (${division.code})` : division.name}
                           className="flex flex-col items-start gap-1"
                         >
                           <span className="text-sm font-medium">{division.name}</span>
@@ -1021,30 +1031,22 @@ export const DocumentCreateDialog = ({
                     Save as Template
                   </Button>
                 </div>
-                <RichTextEditor
+                <QuillEditor
                   value={editorHtml}
                   onChange={(html, json) => {
                     setEditorHtml(html);
-                    setEditorJson(json);
+                    setEditorJson((json && typeof json === 'object' && !Array.isArray(json)) ? (json as Record<string, unknown>) : null);
                     setTemplateApplied(true);
-                    // Calculate character count (strip HTML tags for accurate count)
-                    const textContent = html.replace(/<[^>]*>/g, '');
-                    setEditorCharacterCount(textContent.length);
                   }}
                   placeholder="Compose your document content..."
                   tokens={templateTokens}
-                  maxCharacters={20000}
+                  showCharacterCount={false}
                 />
-                <div className="flex items-center justify-between">
-                  {validationErrors.content && (
-                    <p className="text-xs text-destructive" role="alert">
-                      {validationErrors.content}
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground ml-auto">
-                    {editorCharacterCount.toLocaleString()} / 20,000 characters
+                {validationErrors.content && (
+                  <p className="text-xs text-destructive" role="alert">
+                    {validationErrors.content}
                   </p>
-                </div>
+                )}
                 <div className="flex items-start gap-2 p-2 bg-muted/50 rounded text-xs">
                   <HelpCircle className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
@@ -1079,7 +1081,7 @@ export const DocumentCreateDialog = ({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0 mt-6">
+        <DialogFooter className="mt-4 flex-shrink-0 flex-col sm:flex-row gap-2 sm:gap-0 border-t border-border pt-4">
           {uploadProgress > 0 && uploadProgress < 100 && (
             <div className="w-full mb-2">
               <Progress value={uploadProgress} className="h-2" />
@@ -1263,4 +1265,3 @@ export const DocumentCreateDialog = ({
     </>
   );
 };
-

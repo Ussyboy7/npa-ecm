@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -19,21 +19,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { FileText, Share2, Clock, AlertCircle, Plus, Loader2, Search, Filter, Scan, Upload } from 'lucide-react';
+import { FileText, Share2, Clock, AlertCircle, Plus, Search, Filter, Scan, Upload, ChevronRight } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { queryDocumentsExtended, getSharedDocuments, getRecentDocuments, type DocumentRecord } from '@/lib/dms-storage';
-import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
+import { queryDocumentsExtended, type DocumentRecord } from '@/lib/dms-storage';
 import { ScanDialog } from '@/components/capture/ScanDialog';
 import { BatchUploadDialog } from '@/components/capture/BatchUploadDialog';
 import Link from 'next/link';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
-export default function MyDocumentsPage() {
+function MyDocumentsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { currentUser, hydrated } = useCurrentUser();
+  const { currentUser } = useCurrentUser();
   const [activeTab, setActiveTab] = useState<string>('my-documents');
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +72,6 @@ export default function MyDocumentsPage() {
   const [dateTo, setDateTo] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [scanDialogOpen, setScanDialogOpen] = useState(false);
   const [batchUploadOpen, setBatchUploadOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,8 +80,9 @@ export default function MyDocumentsPage() {
     myDocuments: 0,
     shared: 0,
     awaiting: 0,
-    recent: 0,
   });
+  const statsRequestRef = useRef(0);
+  const documentsRequestRef = useRef(0);
 
   const pagination = usePagination({
     initialPage: 1,
@@ -67,7 +93,7 @@ export default function MyDocumentsPage() {
   // Get tab from URL or default
   useEffect(() => {
     const tab = searchParams.get('tab') || 'my-documents';
-    if (['my-documents', 'shared', 'awaiting', 'recent'].includes(tab)) {
+    if (['my-documents', 'shared', 'awaiting'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -107,130 +133,143 @@ export default function MyDocumentsPage() {
     setSearchQuery('');
   };
 
-  // Load documents based on active tab
-  useEffect(() => {
-    if (!hydrated || !currentUser) return;
+  const ordering = useMemo(() => {
+    if (sortBy === 'updated') return sortOrder === 'desc' ? '-updated_at' : 'updated_at';
+    if (sortBy === 'created') return sortOrder === 'desc' ? '-created_at' : 'created_at';
+    if (sortBy === 'title') return sortOrder === 'desc' ? '-title' : 'title';
+    return '-updated_at';
+  }, [sortBy, sortOrder]);
 
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const requestId = ++statsRequestRef.current;
+    const loadStats = async () => {
+      try {
+        const [mine, shared, awaiting] = await Promise.all([
+          queryDocumentsExtended({
+            authorId: currentUser.id,
+            page: 1,
+            pageSize: 1,
+            documentTypeIn: ['letter', 'memo', 'circular', 'policy', 'report', 'other'],
+          }),
+          queryDocumentsExtended({
+            sharedWithMe: true,
+            page: 1,
+            pageSize: 1,
+            documentTypeIn: ['letter', 'memo', 'circular', 'policy', 'report', 'other'],
+          }),
+          queryDocumentsExtended({
+            awaitingAction: true,
+            page: 1,
+            pageSize: 1,
+            documentTypeIn: ['letter', 'memo', 'circular', 'policy', 'report', 'other'],
+          }),
+        ]);
+
+        if (requestId !== statsRequestRef.current) return;
+        setStats({
+          myDocuments: mine.count || 0,
+          shared: shared.count || 0,
+          awaiting: awaiting.count || 0,
+        });
+      } catch (error: unknown) {
+        if (requestId !== statsRequestRef.current) return;
+        logError('Failed to load document stats', error);
+      }
+    };
+
+    void loadStats();
+  }, [currentUser?.id]);
+
+  // Load documents based on active tab (server-side filtering/pagination)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const requestId = ++documentsRequestRef.current;
     const loadDocuments = async () => {
       setLoading(true);
       setError(null);
       try {
-        let allDocuments: DocumentRecord[] = [];
-        let totalCount = 0;
-
+        let response: { results: DocumentRecord[]; count: number; next: string | null; previous: string | null } = {
+          results: [],
+          count: 0,
+          next: null,
+          previous: null,
+        };
         switch (activeTab) {
           case 'my-documents':
-            const myDocs = await queryDocumentsExtended({ 
+            response = await queryDocumentsExtended({
               authorId: currentUser.id,
               search: debouncedSearch || undefined,
+              page: pagination.page,
+              pageSize: pagination.pageSize,
+              ordering,
+              dateFrom: dateFrom || undefined,
+              dateTo: dateTo || undefined,
+              statusIn: selectedStatuses.length > 0 ? selectedStatuses : undefined,
+              documentTypeIn: selectedTypes.length > 0 ? selectedTypes : ['letter', 'memo', 'circular', 'policy', 'report', 'other'],
             });
-            allDocuments = Array.isArray(myDocs?.results) ? myDocs.results : [];
-            totalCount = myDocs?.count || 0;
-            setStats(prev => ({ ...prev, myDocuments: totalCount }));
             break;
           case 'shared':
-            const shared = await getSharedDocuments(currentUser.id, {
+            response = await queryDocumentsExtended({
+              sharedWithMe: true,
               search: debouncedSearch || undefined,
+              page: pagination.page,
+              pageSize: pagination.pageSize,
+              ordering,
+              dateFrom: dateFrom || undefined,
+              dateTo: dateTo || undefined,
+              statusIn: selectedStatuses.length > 0 ? selectedStatuses : undefined,
+              documentTypeIn: selectedTypes.length > 0 ? selectedTypes : ['letter', 'memo', 'circular', 'policy', 'report', 'other'],
             });
-            allDocuments = Array.isArray(shared?.results) ? shared.results : [];
-            totalCount = shared?.count || 0;
-            setStats(prev => ({ ...prev, shared: totalCount }));
             break;
           case 'awaiting':
-            // TODO: Implement awaiting action (forms needing signatures)
-            allDocuments = [];
-            totalCount = 0;
+            response = await queryDocumentsExtended({
+              awaitingAction: true,
+              search: debouncedSearch || undefined,
+              page: pagination.page,
+              pageSize: pagination.pageSize,
+              ordering,
+              dateFrom: dateFrom || undefined,
+              dateTo: dateTo || undefined,
+              statusIn: selectedStatuses.length > 0 ? selectedStatuses : undefined,
+              documentTypeIn: selectedTypes.length > 0 ? selectedTypes : ['letter', 'memo', 'circular', 'policy', 'report', 'other'],
+            });
             break;
-          case 'recent':
-            const recent = await getRecentDocuments(currentUser.id, 100);
-            allDocuments = Array.isArray(recent) ? recent : [];
-            totalCount = allDocuments.length;
-            setStats(prev => ({ ...prev, recent: totalCount }));
+          default:
             break;
         }
-        
-        // Apply filters
-        let filtered = allDocuments;
-        if (selectedStatuses.length > 0) {
-          filtered = filtered.filter(doc => selectedStatuses.includes(doc.status));
-        }
-        if (selectedTypes.length > 0) {
-          filtered = filtered.filter(doc => selectedTypes.includes(doc.documentType));
-        }
-        
-        // Date filtering
-        if (dateFrom) {
-          filtered = filtered.filter(doc => {
-            const docDate = new Date(doc.createdAt);
-            return docDate >= new Date(dateFrom);
-          });
-        }
-        if (dateTo) {
-          filtered = filtered.filter(doc => {
-            const docDate = new Date(doc.createdAt);
-            const toDate = new Date(dateTo);
-            toDate.setHours(23, 59, 59, 999);
-            return docDate <= toDate;
-          });
-        }
-        
-        // Sort
-        filtered.sort((a, b) => {
-          let aVal: number | string = 0;
-          let bVal: number | string = 0;
-          
-          if (sortBy === 'updated') {
-            aVal = new Date(a.updatedAt).getTime();
-            bVal = new Date(b.updatedAt).getTime();
-          } else if (sortBy === 'created') {
-            aVal = new Date(a.createdAt).getTime();
-            bVal = new Date(b.createdAt).getTime();
-          } else if (sortBy === 'title') {
-            aVal = a.title.toLowerCase();
-            bVal = b.title.toLowerCase();
-          }
-          
-          if (typeof aVal === 'string' && typeof bVal === 'string') {
-            return sortOrder === 'desc' ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
-          }
-          return sortOrder === 'desc' ? (bVal as number) - (aVal as number) : (aVal as number) - (bVal as number);
-        });
-        
-        // Pagination
-        const startIndex = (pagination.page - 1) * pagination.pageSize;
-        const endIndex = startIndex + pagination.pageSize;
-        const paginated = filtered.slice(startIndex, endIndex);
-        
-        setDocuments(paginated);
-        setCount(filtered.length);
+
+        if (requestId !== documentsRequestRef.current) return;
+        setDocuments(Array.isArray(response.results) ? response.results : []);
+        setCount(response.count || 0);
       } catch (error: unknown) {
+        if (requestId !== documentsRequestRef.current) return;
         logError('Error loading documents:', error);
         setError('Failed to load documents. Please try again.');
         setDocuments([]);
         setCount(0);
       } finally {
-        setLoading(false);
+        if (requestId === documentsRequestRef.current) {
+          setLoading(false);
+        }
       }
     };
 
     loadDocuments();
-  }, [activeTab, currentUser, hydrated, debouncedSearch, selectedStatuses, selectedTypes, dateFrom, dateTo, sortBy, sortOrder, pagination.page, pagination.pageSize]);
+  }, [activeTab, currentUser?.id, debouncedSearch, selectedStatuses, selectedTypes, dateFrom, dateTo, ordering, pagination.page, pagination.pageSize]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     router.push(`/documents?tab=${value}`, { scroll: false });
   };
 
-  const handleDocumentCreated = (document: DocumentRecord) => {
-    setUploadDialogOpen(false);
-    router.push(`/dms/${document.id}`);
-  };
-
-  if (!hydrated) {
+  if (!currentUser?.id) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">
-          <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading documents…</CardContent></Card>
+          <LoadingState message="Loading documents…" />
         </div>
       </DashboardLayout>
     );
@@ -256,13 +295,15 @@ export default function MyDocumentsPage() {
             <Button variant="outline" size="sm" onClick={() => setBatchUploadOpen(true)}>
               <Upload className="h-4 w-4 mr-2" /> Batch Upload
             </Button>
-            <Button size="sm" onClick={() => setUploadDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" /> Create Document
+            <Button size="sm" asChild>
+              <Link href="/documents/new">
+                <Plus className="h-4 w-4 mr-2" /> Create Document
+              </Link>
             </Button>
             <ContextualHelp
               title="Managing your documents"
               description="Organize your documents by category, use filters to find specific items, and create new documents as needed. Use OCR scanning to digitize physical documents."
-              steps={['Use tabs to switch between My Documents, Shared, Awaiting Action, and Recent.', 'Use search and filters to find specific documents.', 'Click any document to view details and take action.', 'Use Scan Document to digitize physical documents with OCR.']}
+              steps={['Use tabs to switch between My Documents, Shared, Awaiting Action, and Recent.', 'Search matches title, reference, description, file text, and tags. Use commas for several tags or words (any match).', 'Click any document to view details and take action.', 'Use Scan Document to digitize physical documents with OCR.']}
             />
           </div>
         </div>
@@ -278,7 +319,7 @@ export default function MyDocumentsPage() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Document Filters</CardTitle>
+                <CardTitle className="text-lg">My Documents Filters</CardTitle>
                 {activeFilterCount > 0 && (
                   <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>
                 )}
@@ -304,7 +345,7 @@ export default function MyDocumentsPage() {
                 <div>
                   <Label className="text-sm font-medium mb-2 block">Type</Label>
                   <div className="flex flex-wrap gap-1">
-                    {['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'].map((type) => (
+                    {['letter', 'memo', 'circular', 'policy', 'report', 'other'].map((type) => (
                       <Badge
                         key={type}
                         variant={selectedTypes.includes(type) ? 'default' : 'outline'}
@@ -350,12 +391,18 @@ export default function MyDocumentsPage() {
         {/* Search */}
         <div className="relative max-w-xl">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search by title, description, or reference..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+          <Input
+            placeholder="Search title, reference, content, or tags (e.g. infrastructure, urgent, budget)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+            aria-label="Search documents"
+          />
         </div>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="my-documents" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
               My Documents
@@ -377,50 +424,56 @@ export default function MyDocumentsPage() {
                 <Badge variant="secondary" className="ml-1">{stats.awaiting > 99 ? '99+' : stats.awaiting}</Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="recent" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Recent
-              {stats.recent > 0 && (
-                <Badge variant="secondary" className="ml-1">{stats.recent > 99 ? '99+' : stats.recent}</Badge>
-              )}
-            </TabsTrigger>
           </TabsList>
 
           {/* Summary Cards */}
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mt-6">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mt-6">
             {[
               { label: 'My Documents', value: stats.myDocuments, icon: FileText, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
               { label: 'Shared with Me', value: stats.shared, icon: Share2, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
               { label: 'Awaiting Action', value: stats.awaiting, icon: AlertCircle, bgClass: 'bg-warning/10', iconClass: 'text-warning' },
-              { label: 'Recent', value: stats.recent, icon: Clock, bgClass: 'bg-info/10', iconClass: 'text-info' },
             ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
               <Card key={label}>
-                <CardContent className="p-6">
+                <CardContent className={registryQueueStatCardContentClass}>
                   <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
-                    <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
+                    <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                      <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                    </div>
+                    <div>
+                      <p className={registryQueueStatLabelClass}>{label}</p>
+                      <p className={registryQueueStatValueClass}>{value}</p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          {error && <Card><CardContent className="py-4 text-sm text-destructive">{error}</CardContent></Card>}
-
           <TabsContent value="my-documents" className="mt-6">
-            <DocumentList documents={documents} loading={loading} emptyMessage="You haven't created any documents yet." />
+            <DocumentList
+              documents={documents}
+              loading={loading}
+              error={error}
+              emptyMessage="You haven't created any documents yet."
+            />
           </TabsContent>
 
           <TabsContent value="shared" className="mt-6">
-            <DocumentList documents={documents} loading={loading} emptyMessage="No documents have been shared with you." />
+            <DocumentList
+              documents={documents}
+              loading={loading}
+              error={error}
+              emptyMessage="No documents have been shared with you."
+            />
           </TabsContent>
 
           <TabsContent value="awaiting" className="mt-6">
-            <DocumentList documents={documents} loading={loading} emptyMessage="No documents awaiting your action." />
-          </TabsContent>
-
-          <TabsContent value="recent" className="mt-6">
-            <DocumentList documents={documents} loading={loading} emptyMessage="No recent documents." />
+            <DocumentList
+              documents={documents}
+              loading={loading}
+              error={error}
+              emptyMessage="No documents awaiting your action."
+            />
           </TabsContent>
         </Tabs>
 
@@ -436,13 +489,6 @@ export default function MyDocumentsPage() {
 
         {currentUser && (
           <>
-            <DocumentUploadDialog
-              open={uploadDialogOpen}
-              onOpenChange={setUploadDialogOpen}
-              mode="create"
-              currentUser={currentUser}
-              onComplete={handleDocumentCreated}
-            />
             <ScanDialog
               open={scanDialogOpen}
               onOpenChange={setScanDialogOpen}
@@ -465,26 +511,45 @@ export default function MyDocumentsPage() {
   );
 }
 
-function DocumentList({ documents, loading, emptyMessage }: { documents: DocumentRecord[]; loading: boolean; emptyMessage: string }) {
+export default function MyDocumentsPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <MyDocumentsForm />
+    </Suspense>
+  );
+}
+
+function DocumentList({
+  documents,
+  loading,
+  error,
+  emptyMessage,
+}: {
+  documents: DocumentRecord[];
+  loading: boolean;
+  error: string | null;
+  emptyMessage: string;
+}) {
   if (loading) {
-    return (
-      <Card><CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading documents…</CardContent></Card>
-    );
+    return <LoadingState message="Loading documents…" />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} variant="inline" />;
   }
 
   if (documents.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-          <p className="text-sm text-muted-foreground mb-2">{emptyMessage}</p>
-        </CardContent>
-      </Card>
+      <EmptyState
+        icon={<FileText className={registryQueueEmptyIconClass} />}
+        title="No documents"
+        message={emptyMessage}
+      />
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className={correspondenceQueueListStackClass}>
       {documents.map((doc) => (
         <DocumentCard key={doc.id} doc={doc} />
       ))}
@@ -493,57 +558,111 @@ function DocumentList({ documents, loading, emptyMessage }: { documents: Documen
 }
 
 function DocumentCard({ doc }: { doc: DocumentRecord }) {
+  const router = useRouter();
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'published': return 'text-success bg-success/10';
-      case 'draft': return 'text-warning bg-warning/10';
-      case 'archived': return 'text-muted-foreground bg-muted';
-      default: return 'text-foreground bg-muted';
+      case 'published':
+        return 'text-success bg-success/10 border-success/20';
+      case 'draft':
+        return 'text-warning bg-warning/10 border-warning/20';
+      case 'archived':
+        return 'text-muted-foreground bg-muted border-border';
+      default:
+        return 'text-foreground bg-muted border-border';
     }
   };
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'letter': return 'bg-blue-500/10 text-blue-600 dark:text-blue-400';
-      case 'memo': return 'bg-green-500/10 text-green-600 dark:text-green-400';
-      case 'circular': return 'bg-purple-500/10 text-purple-600 dark:text-purple-400';
-      case 'policy': return 'bg-orange-500/10 text-orange-600 dark:text-orange-400';
-      case 'report': return 'bg-pink-500/10 text-pink-600 dark:text-pink-400';
-      case 'form': return 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400';
-      default: return 'bg-gray-500/10 text-gray-600 dark:text-gray-400';
+      case 'letter':
+        return 'border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800 dark:text-blue-400';
+      case 'memo':
+        return 'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400';
+      case 'circular':
+        return 'border-purple-200 bg-purple-500/10 text-purple-600 dark:border-purple-800 dark:text-purple-400';
+      case 'policy':
+        return 'border-orange-200 bg-orange-500/10 text-orange-600 dark:border-orange-800 dark:text-orange-400';
+      case 'report':
+        return 'border-pink-200 bg-pink-500/10 text-pink-600 dark:border-pink-800 dark:text-pink-400';
+      case 'form':
+        return 'border-cyan-200 bg-cyan-500/10 text-cyan-600 dark:border-cyan-800 dark:text-cyan-400';
+      default:
+        return 'border-border bg-gray-500/10 text-gray-600 dark:text-gray-400';
     }
   };
 
+  const docType = doc.documentType || 'other';
+
   return (
-    <Link href={`/dms/${doc.id}`} className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer block">
-      <div className="flex items-start gap-4">
-        <div className={`p-3 rounded-lg ${getTypeColor(doc.documentType || 'other')}`}>
-          <FileText className="h-5 w-5" />
+    <ListRowCard
+      density="compact"
+      href={`/dms/${doc.id}`}
+      leading={(
+        <div className={cn(correspondenceQueueLeadingBoxClass, getTypeColor(docType))}>
+          <FileText className={correspondenceQueueLeadingIconClass} />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-3 mb-2">
-            <div className="flex-1 min-w-0">
-              <h4 className="font-semibold text-foreground truncate mb-1">{doc.title}</h4>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="secondary" className={getTypeColor(doc.documentType || 'other')}>
-                  {doc.documentType || 'other'}
-                </Badge>
-                <Badge variant="secondary" className={getStatusColor(doc.status)}>
-                  {doc.status}
-                </Badge>
-              </div>
-            </div>
-            <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDateShort(doc.updatedAt || doc.createdAt)}</span>
-          </div>
-          {doc.description && (
-            <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{doc.description}</p>
-          )}
-          <div className="space-y-1 text-sm text-muted-foreground">
-            {doc.referenceNumber && <div className="flex items-center gap-2"><FileText className="h-3.5 w-3.5" /><span>Ref: {doc.referenceNumber}</span></div>}
-            <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /><span>Created: {formatDateShort(doc.createdAt)}</span></div>
-          </div>
+      )}
+      actions={(
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              aria-label="Open document"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                router.push(`/dms/${doc.id}`);
+              }}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="left">Open document</TooltipContent>
+        </Tooltip>
+      )}
+    >
+      <h4 className={correspondenceQueueSubjectClass}>{doc.title}</h4>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+          <Badge
+            variant="outline"
+            className={cn(correspondenceQueueBadgeClass, 'gap-0.5', getTypeColor(docType))}
+          >
+            <FileText className="h-2.5 w-2.5" />
+            {docType}
+          </Badge>
+          <Badge
+            variant="outline"
+            className={cn(correspondenceQueueBadgeClass, getStatusColor(doc.status))}
+          >
+            {doc.status}
+          </Badge>
         </div>
+        <span className={correspondenceQueueDateClass}>
+          {formatDateShort(doc.updatedAt || doc.createdAt)}
+        </span>
       </div>
-    </Link>
+      {doc.description ? (
+        <p className="mt-1 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
+          {doc.description}
+        </p>
+      ) : null}
+      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+        {doc.referenceNumber ? (
+          <span className={correspondenceQueueMetaItemClass}>
+            <FileText className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">Ref: {doc.referenceNumber}</span>
+          </span>
+        ) : null}
+        <span className={correspondenceQueueMetaItemClass}>
+          <Clock className={correspondenceQueueMetaIconClass} />
+          <span className="truncate">Created: {formatDateShort(doc.createdAt)}</span>
+        </span>
+      </div>
+    </ListRowCard>
   );
 }

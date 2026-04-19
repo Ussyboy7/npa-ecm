@@ -89,7 +89,7 @@ class SearchViewSet(viewsets.ViewSet):
             
             results["results"] = serialized
         elif search_type == "correspondence":
-            results = SearchService.search_correspondence(query, filters, limit, offset)
+            results = SearchService.search_correspondence(query, filters, limit, offset, user=request.user)
             # Serialize correspondence
             from correspondence.serializers import CorrespondenceSerializer
 
@@ -111,7 +111,7 @@ class SearchViewSet(viewsets.ViewSet):
                 query, filters, limit, offset, user=request.user
             )
             corr_results = SearchService.search_correspondence(
-                query, filters, limit, offset
+                query, filters, limit, offset, user=request.user
             )
             case_results = SearchService.search_cases(
                 query, filters, limit, offset, user=request.user

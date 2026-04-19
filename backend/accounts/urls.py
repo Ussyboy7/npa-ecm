@@ -15,6 +15,8 @@ from .views import (
     CurrentUserView, 
     UserViewSet,
     ExecutiveSignatureView,
+    SealSignatureImageView,
+    SealImageUploadView,
     SealVerificationView,
     ApplySealView,
     SignatureTemplateViewSet,
@@ -51,6 +53,8 @@ urlpatterns = [
     
     # Seal endpoints
     path("seal/apply/", ApplySealView.as_view(), name="seal_apply"),
+    path("seal/signature-image/<str:serial_number>/", SealSignatureImageView.as_view(), name="seal_signature_image"),
+    path("seal/image/<str:serial_number>/", SealImageUploadView.as_view(), name="seal_image_upload"),
     path("seal/verify/<str:serial_number>/", SealVerificationView.as_view(), name="seal_verify"),
     
     # 2FA endpoints

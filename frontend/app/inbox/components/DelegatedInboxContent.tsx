@@ -59,7 +59,7 @@ const DelegatedInbox = () => {
   const [completingIds, setCompletingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser?.id) return;
 
     const fetchDelegatedItems = async () => {
       setLoading(true);
@@ -77,7 +77,7 @@ const DelegatedInbox = () => {
     };
 
     void fetchDelegatedItems();
-  }, [hydrated, currentUser]);
+  }, [currentUser?.id]);
 
   const filteredItems = searchQuery
     ? delegatedItems.filter(item =>
@@ -114,7 +114,7 @@ const DelegatedInbox = () => {
     }
   };
 
-  if (!hydrated) {
+  if (!currentUser?.id) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">

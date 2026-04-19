@@ -79,6 +79,7 @@ import {
   AlertTriangle,
   Download,
   FileText,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -214,7 +215,7 @@ export default function SettingsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [showDeleteSignatureDialog, setShowDeleteSignatureDialog] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'appearance' | 'security' | 'signature'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'appearance' | 'security' | 'signature' | 'delegation'>('profile');
 
   const defaultPreferences: UserSignaturePreferences = {
     templateOverrides: {},
@@ -905,6 +906,16 @@ export default function SettingsPage() {
               <ImageIcon className="h-4 w-4 mr-2" />
               Signature
             </TabsTrigger>
+            {/* =============================================================================
+            // DELEGATION TAB - COMMENTED OUT FOR FUTURE USE
+            // Uncomment to enable office delegation settings
+            // Requires backend changes: uncomment delegation fields in Office model and run migrations
+            // =============================================================================
+            <TabsTrigger value="delegation">
+              <Users className="h-4 w-4 mr-2" />
+              Delegation
+            </TabsTrigger>
+            */}
           </TabsList>
 
           {/* Profile Tab */}
@@ -1693,6 +1704,80 @@ export default function SettingsPage() {
           <TabsContent value="signature" className="space-y-4">
             <SignatureSettingsCard />
           </TabsContent>
+
+          {/* DELEGATION TAB - COMMENTED OUT - Use {false && ( ... )} to hide */}
+          {false && (
+          <TabsContent value="delegation" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Office Delegation
+                </CardTitle>
+                <CardDescription>
+                  Manage delegation for your office inbox. When you're away, your designated delegate can act on your behalf.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label>Select Office</Label>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an office to manage delegation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="office-1">MD's Office</SelectItem>
+                      <SelectItem value="office-2">ED Finance Office</SelectItem>
+                      <SelectItem value="office-3">GM ICT Office</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="space-y-1">
+                    <p className="font-medium">Mark as Away</p>
+                    <p className="text-sm text-muted-foreground">When enabled, your delegate can access this office's inbox</p>
+                  </div>
+                  <Switch />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Away Start Date</Label>
+                    <Input type="datetime-local" placeholder="Select start date" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Away End Date</Label>
+                    <Input type="datetime-local" placeholder="Select end date" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Delegate User</Label>
+                  <Select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select delegate" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user-1">GM MDS Officer</SelectItem>
+                      <SelectItem value="user-2">Personal Assistant</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Delegate Role Title</Label>
+                  <Input placeholder="e.g., GM MDS Officer, Acting MD" />
+                </div>
+                <Button><Save className="h-4 w-4 mr-2" />Save Delegation Settings</Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Delegations Where You Are Delegate</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm text-muted-foreground">No active delegations.</div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          )}
         </Tabs>
         
         {/* Dialogs */}

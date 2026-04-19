@@ -65,9 +65,9 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
   }, []);
 
   const handleScan = useCallback(async () => {
-    if (scanMode === 'scanner') {
-      // Placeholder for actual scanner integration
-      toast.info('Scanner integration coming soon. Please use manual upload for now.');
+    if (scanMode === 'scanner' && !scannedFile) {
+      // Scanner mode without file: trigger file picker (many scanners support scan-to-file)
+      fileInputRef.current?.click();
       return;
     }
 
@@ -190,7 +190,7 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="manual">Manual Upload (Upload scanned file)</SelectItem>
-                <SelectItem value="scanner">Scanner Device (Coming soon)</SelectItem>
+                <SelectItem value="scanner">Scanner Device (Scan to file)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -199,12 +199,12 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Scanner device integration is coming soon. For now, please use manual upload to add scanned documents.
+                Select &quot;Choose File&quot; below, then use your scanner&apos;s scan-to-file feature to capture the document. The file picker will let you choose the scanned output.
               </AlertDescription>
             </Alert>
           )}
 
-          {scanMode === 'manual' && (
+          {(scanMode === 'manual' || scanMode === 'scanner') && (
             <>
               {/* File Upload */}
               <div className="space-y-2">

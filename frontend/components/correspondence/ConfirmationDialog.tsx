@@ -15,8 +15,9 @@ import { CheckCircle, Send, User, AlertCircle, Users } from 'lucide-react';
 
 interface DistributionRecipient {
   id?: string;
-  type: 'directorate' | 'division' | 'department';
+  type: 'office' | 'directorate' | 'division' | 'department';
   name?: string;
+  officeId?: string;
   directorateId?: string;
   divisionId?: string;
   departmentId?: string;
@@ -50,7 +51,12 @@ export const ConfirmationDialog = ({
   disabled = false
 }: ConfirmationDialogProps) => {
   return (
-    <AlertDialog open={isOpen} onOpenChange={onClose}>
+    <AlertDialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <AlertDialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
@@ -116,14 +122,16 @@ export const ConfirmationDialog = ({
                       <div className="mt-2 space-y-1.5">
                         {data.distribution.map((recipient, idx) => {
                           const recipientName = recipient.name || 
-                            (recipient.type === 'directorate' ? 'Directorate' : 
+                            (recipient.type === 'office' ? 'Office' :
+                             recipient.type === 'directorate' ? 'Directorate' : 
                              recipient.type === 'division' ? 'Division' : 'Department');
                           const purposeLabel = recipient.purpose === 'action' ? 'Action' : 
                                                recipient.purpose === 'comment' ? 'Comment' : 'Information';
                           return (
                             <div key={recipient.id || idx} className="flex items-center gap-2 text-xs">
                               <Badge variant="outline" className="text-[10px] h-4 flex-shrink-0">
-                                {recipient.type === 'directorate' ? 'Dir' : 
+                                {recipient.type === 'office' ? 'Off' :
+                                 recipient.type === 'directorate' ? 'Dir' : 
                                  recipient.type === 'department' ? 'Dept' : 'Div'}
                               </Badge>
                               <span className="text-muted-foreground flex-1">{recipientName}</span>

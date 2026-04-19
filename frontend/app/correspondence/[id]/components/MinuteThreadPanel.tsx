@@ -20,7 +20,7 @@ import {
 import type { Minute } from '@/lib/npa-structure';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { SealBadge } from '@/components/seals/SealBadge';
-import { logInfo, logWarn } from '@/lib/client-logger';
+import { logWarn } from '@/lib/client-logger';
 
 interface MinuteThreadPanelProps {
   minutes: Minute[];
@@ -71,20 +71,6 @@ export const MinuteThreadPanel = ({
             </div>
           ) : (
             minutes.map((minuteItem, idx) => {
-              // Debug: Log recall status for each minute
-              if (minuteItem.stepNumber === 3) {
-                logInfo('[MinuteThreadPanel] Step 3 minute data:', {
-                  id: minuteItem.id,
-                  stepNumber: minuteItem.stepNumber,
-                  isRecalled: minuteItem.isRecalled,
-                  recalledAt: minuteItem.recalledAt,
-                  canBeRecalled: minuteItem.canBeRecalled,
-                  userId: minuteItem.userId,
-                  activeUserId,
-                  shouldShowRecall: minuteItem.canBeRecalled && !minuteItem.isRecalled && !minuteItem.recalledAt && minuteItem.userId === activeUserId,
-                });
-              }
-              
               const user = lookupUser(minuteItem.userId);
               const ActionIcon = getActionIcon(minuteItem.actionType);
               const isDownward = minuteItem.direction === 'downward';

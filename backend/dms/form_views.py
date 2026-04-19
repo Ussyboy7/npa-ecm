@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.db import transaction
 from django.db.models import Max, Q
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -37,21 +38,22 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
         """Filter queryset based on user permissions."""
         queryset = super().get_queryset()
         user = self.request.user
+        queryset = queryset.filter(document__is_deleted=False)
+
+        if user.is_superuser:
+            return queryset.distinct()
         
         # Check if user is a secretary and if executive filter is provided
         role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
         is_secretary = role_name.lower() == "secretary"
         executive_id = self.request.query_params.get("executive")
         
-        # For now, show all form documents to authenticated users
-        # Can be refined later with proper permission checks
-        # Filter by document permissions
-        # Users can see forms they created, have permission to, or are assigned to sign
-        base_filter = Q(
-            Q(document__author=user) |
-            Q(document__permissions__users=user) |
-            Q(signature_workflow__signatures__assigned_to_user=user) |
-            Q(document__is_deleted=False)  # Only show non-deleted documents
+        # Users can see forms they created, forms explicitly shared with them,
+        # or forms where they are assigned as a signer.
+        base_filter = (
+            Q(document__author=user)
+            | Q(document__permissions__users=user)
+            | Q(signature_workflow__signatures__assigned_to_user=user)
         )
         
         # If secretary is filtering by executive, show forms linked to correspondence
@@ -198,9 +200,12 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
         except Exception as e:
-            import traceback
+            # Log the full error server-side but don't leak to frontend
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"PDF generation failed: {str(e)}", exc_info=True)
             return Response(
-                {"error": f"Failed to generate PDF: {str(e)}", "traceback": traceback.format_exc()},
+                {"error": "Failed to generate PDF. Please try again or contact support."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -212,3 +217,39 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(form_doc)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["post"])
+    def clone(self, request, pk=None):
+        """Create a new draft form document cloned from an existing one."""
+        source_form = self.get_object()
+        source_document = source_form.document
+
+        title = (request.data.get("title") or "").strip()
+        if not title:
+            title = f"{source_document.title} (Copy)"
+
+        description = request.data.get("description", source_document.description)
+        reference_number = (request.data.get("reference_number") or "").strip()
+
+        with transaction.atomic():
+            cloned_document = Document.objects.create(
+                title=title,
+                description=description or "",
+                document_type=Document.DocumentType.FORM,
+                reference_number=reference_number,
+                status=Document.DocumentStatus.DRAFT,
+                sensitivity=source_document.sensitivity,
+                author=request.user,
+                division=source_document.division,
+                department=source_document.department,
+                tags=source_document.tags or [],
+            )
+
+            cloned_form = FormDocument.objects.create(
+                document=cloned_document,
+                template=source_form.template,
+                form_data=source_form.form_data or {},
+                status=FormDocument.FormStatus.DRAFT,
+            )
+
+        serializer = self.get_serializer(cloned_form)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)

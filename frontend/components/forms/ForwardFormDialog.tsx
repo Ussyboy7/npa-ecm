@@ -88,7 +88,7 @@ export function ForwardFormDialog({
 
       // Create notifications for forwarded users
       const notificationPromises: Promise<unknown>[] = [];
-      const actionUrl = `/dms/${form.document.id}`;
+      const actionUrl = `/forms/${form.document.id}`;
       const actionText = actionType === 'review' ? 'review' : actionType === 'input' ? 'provide input on' : 'sign';
       
       if (targetType === 'user' && selectedUsers.length > 0) {
@@ -359,4 +359,3 @@ export function ForwardFormDialog({
     </Dialog>
   );
 }
-

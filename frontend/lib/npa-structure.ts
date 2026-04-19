@@ -84,7 +84,8 @@ export type OfficeMembership = {
 
 export type DistributionRecipient = {
   id: string;
-  type: 'division' | 'department' | 'directorate' | 'user';
+  type: 'office' | 'division' | 'department' | 'directorate' | 'user';
+  officeId?: string;
   directorateId?: string;
   divisionId?: string;
   departmentId?: string;
@@ -111,6 +112,7 @@ export type Correspondence = {
   id: string;
   referenceNumber: string;
   subject: string;
+  treatmentResponse?: string;
   documentType?: string;
   senderReference?: string;
   letterDate?: string;
@@ -142,6 +144,11 @@ export type Correspondence = {
   remarks?: string;
   attachments?: CorrespondenceAttachment[];
   distribution?: DistributionRecipient[];
+  parentCorrespondence?: {
+    id: string;
+    reference_number: string;
+    subject: string;
+  } | null;
   archiveLevel?: 'department' | 'division' | 'directorate';
   linkedDocumentIds?: string[];
   completionPackage?: {
@@ -405,11 +412,29 @@ export type CaseFormLink = {
   updatedAt: string;
 };
 
+export type CaseStatusHistory = {
+  timestamp: string;
+  status: string;
+  previousStatus?: string;
+  changedBy?: {
+    id: string;
+    name: string;
+  };
+};
+
 export type CaseDetail = Case & {
-  correspondence?: CaseCorrespondenceLink[];
+  correspondence?: (CaseCorrespondenceLink & { 
+    linkedAt?: string; 
+    createdById?: string; 
+    createdByName?: string;
+    subject?: string;
+    referenceNumber?: string;
+  })[];
   documents?: CaseDocumentLink[];
   forms?: CaseFormLink[];
   activities?: Minute[];
+  createdByName?: string;
+  statusHistory?: CaseStatusHistory[];
 };
 
 export { updateOrganizationCache } from './organization-cache';

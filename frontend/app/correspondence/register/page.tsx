@@ -1,7 +1,7 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
-import { useMemo, useRef, useReducer, useEffect, useCallback, useState } from 'react';
+import { useMemo, useRef, useReducer, useEffect, useCallback, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -53,7 +53,7 @@ import { RegistrationSummary } from './components/RegistrationSummary';
 // Force dynamic rendering - prevent static generation
 export const dynamic = 'force-dynamic';
 
-const CorrespondenceRegister = () => {
+const CorrespondenceRegisterForm = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('edit');
@@ -206,11 +206,11 @@ const CorrespondenceRegister = () => {
     }
   }, [editId, dispatch]);
 
-  // Trigger load when editId, mounted, and hydrated are ready
+  // Trigger load when editId, mounted, and authentication are ready
   useEffect(() => {
-    if (!editId || !mounted || !hydrated) return;
+    if (!editId || !mounted || !currentUser?.id) return;
     void loadCorrespondenceForEdit();
-  }, [editId, mounted, hydrated, loadCorrespondenceForEdit]);
+  }, [editId, mounted, currentUser?.id, loadCorrespondenceForEdit]);
 
   // Set mounted on client and generate reference number
   useEffect(() => {
@@ -631,7 +631,7 @@ const CorrespondenceRegister = () => {
     );
   }
 
-  if (!mounted || !hydrated || !currentUser) {
+  if (!mounted || !currentUser) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6">
@@ -904,6 +904,12 @@ const CorrespondenceRegister = () => {
     </ErrorBoundary>
   );
 };
+
+const CorrespondenceRegister = () => (
+  <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+    <CorrespondenceRegisterForm />
+  </Suspense>
+);
 
 export default CorrespondenceRegister;
 

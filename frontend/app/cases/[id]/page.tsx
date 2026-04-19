@@ -16,13 +16,16 @@ import { LinkCorrespondenceDialog } from "@/components/cases/LinkCorrespondenceD
 import { LinkDocumentDialog } from "@/components/cases/LinkDocumentDialog";
 import { LinkFormDialog } from "@/components/cases/LinkFormDialog";
 import { CaseHeader } from "./components/CaseHeader";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getCaseById, updateCaseStatus, updateCase, generateCaseCompletionPackage, unlinkCorrespondenceFromCase, unlinkDocumentFromCase, unlinkFormFromCase, exportCase, importCases, getCaseSLAStatus } from "@/lib/api/cases";
 import type { CaseDetail } from "@/lib/npa-structure";
 import { logError } from "@/lib/client-logger";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import { LoadingState } from "@/components/shared/LoadingState";
+import { ErrorState } from "@/components/shared/ErrorState";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { ListRowCard } from "@/components/shared/ListRowCard";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
@@ -71,6 +74,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueSubjectClass,
+  correspondenceQueueBadgeClass,
+  correspondenceQueueListStackClass,
+  registryQueueEmptyIconClass,
+} from "@/components/shared/registry-queue-styles";
+import { cn } from "@/lib/utils";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -111,9 +123,10 @@ const CaseDetailPage = () => {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingCase, setEditingCase] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<CaseDetail>>({});
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (!caseId || !hydrated) {
+    if (!caseId || !currentUser?.id) {
       return;
     }
 
@@ -168,7 +181,7 @@ const CaseDetailPage = () => {
         abortControllerRef.current.abort();
       }
     };
-  }, [hydrated, currentUser, caseId]);
+  }, [hydrated, currentUser, caseId, refreshKey]);
 
   const handleStatusUpdate = async (newStatus: CaseDetail["status"]) => {
     if (!caseData) return;
@@ -321,7 +334,7 @@ const CaseDetailPage = () => {
   };
 
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return null;
   }
 
@@ -329,10 +342,7 @@ const CaseDetailPage = () => {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6">
-          <div className="flex items-center justify-center py-12 gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            <span className="text-muted-foreground">Loading case...</span>
-          </div>
+          <LoadingState message="Loading case…" />
         </div>
       </DashboardLayout>
     );
@@ -342,9 +352,10 @@ const CaseDetailPage = () => {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6">
-          <div className="flex items-center justify-center py-12">
-            <div className="text-destructive">{error || "Case not found"}</div>
-          </div>
+          <ErrorState
+            message={error || "Case not found"}
+            onRetry={() => setRefreshKey((k) => k + 1)}
+          />
         </div>
       </DashboardLayout>
     );
@@ -404,37 +415,39 @@ const CaseDetailPage = () => {
 
         {/* Tabs for Related Items */}
         <Tabs defaultValue="correspondence" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="correspondence" className="gap-2">
+          <div className="overflow-x-auto -mx-1">
+            <TabsList className="inline-flex flex-nowrap w-max min-w-0">
+            <TabsTrigger value="correspondence" className="gap-2 shrink-0">
               <FileText className="h-4 w-4" />
               Correspondence
               <Badge variant="secondary" className="ml-1">
                 {caseData.correspondence?.length || 0}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="documents" className="gap-2">
+            <TabsTrigger value="documents" className="gap-2 shrink-0">
               <FileText className="h-4 w-4" />
               Documents
               <Badge variant="secondary" className="ml-1">
                 {caseData.documents?.length || 0}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="forms" className="gap-2">
+            <TabsTrigger value="forms" className="gap-2 shrink-0">
               <FileText className="h-4 w-4" />
               Forms
               <Badge variant="secondary" className="ml-1">
                 {caseData.forms?.length || 0}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="comments" className="gap-2">
+            <TabsTrigger value="comments" className="gap-2 shrink-0">
               <MessageSquare className="h-4 w-4" />
               Comments
             </TabsTrigger>
-            <TabsTrigger value="timeline" className="gap-2">
+            <TabsTrigger value="timeline" className="gap-2 shrink-0">
               <Clock className="h-4 w-4" />
               Timeline & History
             </TabsTrigger>
           </TabsList>
+          </div>
 
           <TabsContent value="correspondence">
             <Card>
@@ -454,85 +467,67 @@ const CaseDetailPage = () => {
               </CardHeader>
               <CardContent>
                 {!caseData.correspondence || caseData.correspondence.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground mb-4">No correspondence linked to this case</p>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowLinkCorrespondenceDialog(true)}
-                    >
-                      <LinkIcon className="h-4 w-4 mr-2" />
-                      Link Correspondence
-                    </Button>
-                  </div>
+                  <EmptyState
+                    icon={<Mail className={registryQueueEmptyIconClass} />}
+                    title="No correspondence linked"
+                    message="Link correspondence to build the case file."
+                    actionLabel="Link Correspondence"
+                    onAction={() => setShowLinkCorrespondenceDialog(true)}
+                  />
                 ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Reference</TableHead>
-                          <TableHead>Subject</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Primary</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {caseData.correspondence.map((link) => (
-                          <TableRow key={link.id} className="hover:bg-muted/50 transition-colors">
-                            <TableCell className="font-mono text-sm">
-                              {link.correspondence?.referenceNumber || "-"}
-                            </TableCell>
-                            <TableCell className="max-w-[300px]">
-                              <div className="truncate" title={link.correspondence?.subject}>
-                                {link.correspondence?.subject || "-"}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">
-                                {link.correspondence?.status || "-"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {link.isPrimary && (
-                                <Badge variant="default">Primary</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {link.correspondence && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    asChild
-                                  >
-                                    <Link href={`/correspondence/${link.correspondence.id}`}>
-                                      View
-                                    </Link>
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    link.correspondence &&
-                                    handleUnlinkClick(
-                                      "correspondence",
-                                      link.correspondence.id,
-                                      link.correspondence.referenceNumber || link.correspondence.subject || "correspondence"
-                                    )
-                                  }
-                                  className="text-destructive hover:text-destructive"
-                                  title="Unlink correspondence"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className={correspondenceQueueListStackClass}>
+                    {caseData.correspondence.map((link) => (
+                      <ListRowCard
+                        key={link.id}
+                        density="compact"
+                        href={link.correspondence ? `/correspondence/${link.correspondence.id}` : undefined}
+                        leading={
+                          <div className={cn(correspondenceQueueLeadingBoxClass, "bg-primary/10")}>
+                            <Mail className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
+                          </div>
+                        }
+                        actions={
+                          <div className="flex items-center gap-1">
+                            {link.correspondence && (
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/correspondence/${link.correspondence.id}`}>View</Link>
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                link.correspondence &&
+                                handleUnlinkClick(
+                                  "correspondence",
+                                  link.correspondence.id,
+                                  link.correspondence.referenceNumber || link.correspondence.subject || "correspondence"
+                                )
+                              }
+                              className="text-destructive hover:text-destructive"
+                              title="Unlink correspondence"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        }
+                      >
+                        <h4 className={correspondenceQueueSubjectClass}>
+                          {link.correspondence?.subject || "—"}
+                        </h4>
+                        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "font-mono")}>
+                              {link.correspondence?.referenceNumber || "—"}
+                            </Badge>
+                            <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                              {link.correspondence?.status || "—"}
+                            </Badge>
+                            {link.isPrimary && <Badge variant="default" className={correspondenceQueueBadgeClass}>Primary</Badge>}
+                          </div>
+                        </div>
+                      </ListRowCard>
+                    ))}
                   </div>
                 )}
               </CardContent>
@@ -557,88 +552,61 @@ const CaseDetailPage = () => {
               </CardHeader>
               <CardContent>
                 {!caseData.documents || caseData.documents.length === 0 ? (
-                  <div className="text-center py-8">
-                    <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground mb-4">No documents linked to this case</p>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowLinkDocumentDialog(true)}
-                    >
-                      <LinkIcon className="h-4 w-4 mr-2" />
-                      Link Document
-                    </Button>
-                  </div>
+                  <EmptyState
+                    icon={<FileText className={registryQueueEmptyIconClass} />}
+                    title="No documents linked"
+                    message="Link documents to build the case file."
+                    actionLabel="Link Document"
+                    onAction={() => setShowLinkDocumentDialog(true)}
+                  />
                 ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Document</TableHead>
-                          <TableHead>Notes</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {caseData.documents.map((link) => (
-                          <TableRow key={link.id} className="hover:bg-muted/50 transition-colors">
-                            <TableCell className="max-w-[300px]">
-                              <div className="flex items-center gap-2">
-                                <div className="truncate font-medium" title={link.documentTitle}>
-                                  {link.documentTitle || "-"}
-                                </div>
-                                {!link.documentId && (
-                                  <Badge variant="destructive" className="text-xs">
-                                    Missing ID
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                              <div className="truncate" title={link.notes || undefined}>
-                                {link.notes || "-"}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {link.documentId ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    asChild
-                                  >
-                                    <Link href={`/dms/${link.documentId}`}>
-                                      View
-                                    </Link>
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled
-                                    title="Document ID is missing"
-                                  >
-                                    View
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    link.documentId &&
-                                    handleUnlinkClick("document", link.documentId, link.documentTitle || "document")
-                                  }
-                                  disabled={!link.documentId}
-                                  className="text-destructive hover:text-destructive"
-                                  title={link.documentId ? "Unlink document" : "Cannot unlink: missing document ID"}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className={correspondenceQueueListStackClass}>
+                    {caseData.documents.map((link) => (
+                      <ListRowCard
+                        key={link.id}
+                        density="compact"
+                        href={link.documentId ? `/dms/${link.documentId}` : undefined}
+                        leading={
+                          <div className={cn(correspondenceQueueLeadingBoxClass, "bg-primary/10")}>
+                            <FileText className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
+                          </div>
+                        }
+                        actions={
+                          <div className="flex items-center gap-1">
+                            {link.documentId ? (
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/dms/${link.documentId}`}>View</Link>
+                              </Button>
+                            ) : (
+                              <Button variant="ghost" size="sm" disabled title="Document ID is missing">
+                                View
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                link.documentId &&
+                                handleUnlinkClick("document", link.documentId, link.documentTitle || "document")
+                              }
+                              disabled={!link.documentId}
+                              className="text-destructive hover:text-destructive"
+                              title={link.documentId ? "Unlink document" : "Cannot unlink: missing document ID"}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        }
+                      >
+                        <h4 className={correspondenceQueueSubjectClass}>{link.documentTitle || "—"}</h4>
+                        {link.notes && (
+                          <p className="mt-1 text-sm text-muted-foreground line-clamp-1">{link.notes}</p>
+                        )}
+                        {!link.documentId && (
+                          <Badge variant="destructive" className="mt-1 text-xs">Missing ID</Badge>
+                        )}
+                      </ListRowCard>
+                    ))}
                   </div>
                 )}
               </CardContent>
@@ -663,88 +631,61 @@ const CaseDetailPage = () => {
               </CardHeader>
               <CardContent>
                 {!caseData.forms || caseData.forms.length === 0 ? (
-                  <div className="text-center py-8">
-                    <FileCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground mb-4">No forms linked to this case</p>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowLinkFormDialog(true)}
-                    >
-                      <LinkIcon className="h-4 w-4 mr-2" />
-                      Link Form
-                    </Button>
-                  </div>
+                  <EmptyState
+                    icon={<FileCheck className={registryQueueEmptyIconClass} />}
+                    title="No forms linked"
+                    message="Link forms to build the case file."
+                    actionLabel="Link Form"
+                    onAction={() => setShowLinkFormDialog(true)}
+                  />
                 ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Form</TableHead>
-                          <TableHead>Notes</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {caseData.forms.map((link) => (
-                          <TableRow key={link.id} className="hover:bg-muted/50 transition-colors">
-                            <TableCell className="max-w-[300px]">
-                              <div className="flex items-center gap-2">
-                                <div className="truncate font-medium" title={link.formTitle}>
-                                  {link.formTitle || "-"}
-                                </div>
-                                {!link.formDocumentId && (
-                                  <Badge variant="destructive" className="text-xs">
-                                    Missing ID
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                              <div className="truncate" title={link.notes || undefined}>
-                                {link.notes || "-"}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                {link.formDocumentId ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    asChild
-                                  >
-                                    <Link href={`/dms/${link.formDocumentId}`}>
-                                      View
-                                    </Link>
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled
-                                    title="Form document ID is missing"
-                                  >
-                                    View
-                                  </Button>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    link.formDocumentId &&
-                                    handleUnlinkClick("form", link.formDocumentId, link.formTitle || "form")
-                                  }
-                                  disabled={!link.formDocumentId}
-                                  className="text-destructive hover:text-destructive"
-                                  title={link.formDocumentId ? "Unlink form" : "Cannot unlink: missing form document ID"}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className={correspondenceQueueListStackClass}>
+                    {caseData.forms.map((link) => (
+                      <ListRowCard
+                        key={link.id}
+                        density="compact"
+                        href={link.formDocumentId ? `/forms/${link.formDocumentId}` : undefined}
+                        leading={
+                          <div className={cn(correspondenceQueueLeadingBoxClass, "bg-primary/10")}>
+                            <FileCheck className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
+                          </div>
+                        }
+                        actions={
+                          <div className="flex items-center gap-1">
+                            {link.formDocumentId ? (
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/forms/${link.formDocumentId}`}>View</Link>
+                              </Button>
+                            ) : (
+                              <Button variant="ghost" size="sm" disabled title="Form document ID is missing">
+                                View
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                link.formDocumentId &&
+                                handleUnlinkClick("form", link.formDocumentId, link.formTitle || "form")
+                              }
+                              disabled={!link.formDocumentId}
+                              className="text-destructive hover:text-destructive"
+                              title={link.formDocumentId ? "Unlink form" : "Cannot unlink: missing form document ID"}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        }
+                      >
+                        <h4 className={correspondenceQueueSubjectClass}>{link.formTitle || "—"}</h4>
+                        {link.notes && (
+                          <p className="mt-1 text-sm text-muted-foreground line-clamp-1">{link.notes}</p>
+                        )}
+                        {!link.formDocumentId && (
+                          <Badge variant="destructive" className="mt-1 text-xs">Missing ID</Badge>
+                        )}
+                      </ListRowCard>
+                    ))}
                   </div>
                 )}
               </CardContent>
@@ -840,4 +781,3 @@ const CaseDetailPage = () => {
 };
 
 export default CaseDetailPage;
-

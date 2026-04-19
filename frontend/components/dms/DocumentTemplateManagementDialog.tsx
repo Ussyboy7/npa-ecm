@@ -394,7 +394,7 @@ export const DocumentTemplateManagementDialog = ({
                           <SelectItem value="internal">
                             <div className="flex flex-col">
                               <span>Internal</span>
-                              <span className="text-xs text-muted-foreground">All authenticated users • Internal use only</span>
+                              <span className="text-xs text-muted-foreground">Shared with specific departments/divisions/units</span>
                             </div>
                           </SelectItem>
                           <SelectItem value="confidential">

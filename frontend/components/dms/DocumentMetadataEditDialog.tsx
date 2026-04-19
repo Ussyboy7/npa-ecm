@@ -344,7 +344,7 @@ export const DocumentMetadataEditDialog = ({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+        <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" />
@@ -486,7 +486,7 @@ export const DocumentMetadataEditDialog = ({
                       <SelectItem value="internal">
                         <div className="flex flex-col">
                           <span>Internal</span>
-                          <span className="text-xs text-muted-foreground">All authenticated users • Internal use only</span>
+                          <span className="text-xs text-muted-foreground">Shared with specific departments/divisions/units</span>
                         </div>
                       </SelectItem>
                       <SelectItem value="confidential">
@@ -847,5 +847,4 @@ export const DocumentMetadataEditDialog = ({
     </>
   );
 };
-
 

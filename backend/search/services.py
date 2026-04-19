@@ -61,6 +61,116 @@ class SearchService:
         return queryset.filter(visibility_filter).distinct()
 
     @staticmethod
+    def _apply_correspondence_visibility_filters(queryset: QuerySet, user: Any) -> QuerySet:
+        """
+        Apply visibility filters for correspondence search based on user permissions.
+        
+        Users can see correspondence if:
+        - They are a superuser
+        - They created the correspondence
+        - They are a member of the owning office
+        - They are in the distribution list
+        - They have been assigned as a user in the correspondence flow
+        
+        Args:
+            queryset: Correspondence queryset to filter
+            user: User to check permissions for
+            
+        Returns:
+            Filtered queryset
+        """
+        if not user or not user.is_authenticated:
+            return queryset.none()
+        
+        if user.is_superuser:
+            return queryset.distinct()
+        
+        from correspondence.models import CorrespondenceDistribution, Minute
+        from organization.models import OfficeMembership
+        
+        visibility_filter = Q(created_by=user)
+        
+        # Get user's office memberships
+        user_office_ids = OfficeMembership.objects.filter(
+            user=user,
+            is_active=True
+        ).values_list('office_id', flat=True)
+        
+        # User can see correspondence in their offices
+        if user_office_ids:
+            visibility_filter |= Q(owning_office_id__in=user_office_ids)
+            visibility_filter |= Q(current_office_id__in=user_office_ids)
+        
+        # User can see correspondence where they are in distribution
+        user_distributions = CorrespondenceDistribution.objects.filter(
+            user=user
+        ).values_list('correspondence_id', flat=True).distinct()
+        
+        if user_distributions:
+            visibility_filter |= Q(id__in=user_distributions)
+        
+        # User can see correspondence where they have been added as to_user in minutes
+        user_minute_correspondence = Minute.objects.filter(
+            to_user=user
+        ).values_list('correspondence_id', flat=True).distinct()
+        
+        if user_minute_correspondence:
+            visibility_filter |= Q(id__in=user_minute_correspondence)
+        
+        # Filter out deleted correspondence
+        visibility_filter &= Q(is_deleted=False)
+        
+        return queryset.filter(visibility_filter).distinct()
+
+    @staticmethod
+    def _apply_case_visibility_filters(queryset: QuerySet, user: Any) -> QuerySet:
+        """
+        Apply visibility filters for case search based on user permissions.
+        
+        Users can see cases if:
+        - They are a superuser
+        - They created the case
+        - They are assigned to the case
+        - They are a member of the owning division/department
+        
+        Args:
+            queryset: Case queryset to filter
+            user: User to check permissions for
+            
+        Returns:
+            Filtered queryset
+        """
+        if not user or not user.is_authenticated:
+            return queryset.none()
+        
+        if user.is_superuser:
+            return queryset.distinct()
+        
+        from correspondence.models import Case
+        from organization.models import OfficeMembership
+        
+        visibility_filter = Q(created_by=user) | Q(assigned_to=user)
+        
+        # User can see cases in their division
+        if user.division_id:
+            visibility_filter |= Q(division_id=user.division_id)
+        
+        # User can see cases in their department
+        if user.department_id:
+            visibility_filter |= Q(department_id=user.department_id)
+        
+        # User can see cases in offices they're members of
+        user_office_ids = OfficeMembership.objects.filter(
+            user=user,
+            is_active=True
+        ).values_list('office_id', flat=True)
+        
+        if user_office_ids:
+            visibility_filter |= Q(owning_office_id__in=user_office_ids)
+        
+        return queryset.filter(visibility_filter).distinct()
+
+    @staticmethod
     def extract_snippet(text: str, query: str, context: int = 100, max_length: int = 200) -> str:
         """
         Extract a snippet of text around matching query terms.
@@ -416,6 +526,7 @@ class SearchService:
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 50,
         offset: int = 0,
+        user: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Perform full-text search on correspondence.
@@ -425,13 +536,19 @@ class SearchService:
             filters: Optional filters (status, priority, source, direction, division_id, department_id, office_id, tags, date_from, date_to)
             limit: Maximum number of results
             offset: Offset for pagination
+            user: User to apply visibility filters for (optional)
 
         Returns:
             Dictionary with results and metadata
         """
         filters = filters or {}
 
+        # Build base queryset
         queryset = Correspondence.objects.all()
+        
+        # Apply visibility filters based on user permissions
+        if user and user.is_authenticated:
+            queryset = SearchService._apply_correspondence_visibility_filters(queryset, user)
 
         # Apply filters
         if filters.get("status"):
@@ -481,7 +598,7 @@ class SearchService:
                 SearchVector("subject", weight="A", config="english")
                 + SearchVector("reference_number", weight="A", config="english")
                 + SearchVector("body_html", weight="B", config="english")
-                + SearchVector("summary", weight="B", config="english")
+                + SearchVector("treatment_response", weight="B", config="english")
             )
             search_query = SearchQuery(query, config="english")
 
@@ -499,15 +616,15 @@ class SearchService:
         if query:
             enriched_results = []
             for corr in results:
-                # Extract snippet from body_html or summary
-                text_to_search = corr.summary or corr.body_html or corr.subject or ""
+                # Extract snippet from treatment_response/body_html/subject
+                text_to_search = corr.treatment_response or corr.body_html or corr.subject or ""
                 # Remove HTML tags for snippet extraction
                 import re
                 text_clean = re.sub(r'<[^>]+>', '', text_to_search)
                 snippet = SearchService.extract_snippet(text_clean, query)
                 
                 corr._search_snippet = snippet
-                corr._match_field = "body" if corr.body_html else ("summary" if corr.summary else "subject")
+                corr._match_field = "body" if corr.body_html else ("treatment_response" if corr.treatment_response else "subject")
                 
                 enriched_results.append(corr)
             
@@ -544,7 +661,12 @@ class SearchService:
         """
         filters = filters or {}
 
+        # Build base queryset
         queryset = Case.objects.filter(is_deleted=False)
+        
+        # Apply visibility filters based on user permissions
+        if user and user.is_authenticated:
+            queryset = SearchService._apply_case_visibility_filters(queryset, user)
 
         # Apply filters
         if filters.get("status"):
@@ -644,4 +766,3 @@ class SearchService:
         )
 
         return list(suggestions)
-

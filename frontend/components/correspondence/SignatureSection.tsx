@@ -16,6 +16,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertCircle, ImageIcon, Shield, Upload, Settings } from 'lucide-react';
 import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
+import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import type { StoredSignature, SignatureTemplate } from '@/lib/signature-storage';
 import type { User } from '@/lib/npa-structure';
 
@@ -81,7 +82,7 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
                     `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`
                   }
                   serialPrefix={signature.sealPrefix || 'NPA'}
-                  signatureImage={signature.imageData}
+                  signatureImage={signature?.imageData?.startsWith('data:') ? signature.imageData : (buildDownloadUrl(signature?.imageData) ?? signature?.imageData)}
                   size={250}
                   showQR={true}
                 />

@@ -44,7 +44,7 @@ class CorrespondenceAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("status", "priority", "source", "direction", "division", "department")
-    search_fields = ("reference_number", "subject", "summary")
+    search_fields = ("reference_number", "subject", "treatment_response")
     inlines = [CorrespondenceAttachmentInline, CorrespondenceDistributionInline, MinuteInline]
 
 

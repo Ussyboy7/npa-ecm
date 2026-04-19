@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useEffect, useState } from 'react';
-import { ArrowRight, RefreshCcw, Clock } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, RefreshCcw, Clock, HelpCircle } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,9 +14,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { FormData, FlowType, generateReferenceNumber } from '../register-utils';
 import { PRIORITY_OPTIONS, DOCUMENT_TYPE_OPTIONS } from '../register-constants';
 import { fetchSLATargets, type SLATargets } from '@/lib/sla-client';
+
+const DOCUMENT_TYPE_HELP: Record<string, string> = {
+  letter: 'Formal correspondence to or from external parties. Typically on letterhead with reference numbers.',
+  request: 'Request for action, approval, or decision. Often tracked as a case for follow-up.',
+  complaint: 'Grievance or complaint requiring formal handling. Usually linked to a case file.',
+  inquiry: 'Question or request for information. May or may not require a case.',
+  report: 'Status update, investigation, or compliance report. Submitted for record.',
+  directive: 'Instruction or policy from higher authority. Used for formal communication of decisions.',
+};
 
 interface BasicInfoStepProps {
   formData: FormData;
@@ -105,7 +120,50 @@ export const BasicInfoStep = memo(function BasicInfoStep({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="priority">Priority</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="priority">Priority</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                  aria-label="Priority help"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 text-sm" align="start" side="bottom">
+                <h4 className="font-medium text-foreground mb-2">Priority & SLA</h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Response time target for this correspondence. Higher priority means faster SLA.
+                </p>
+                <ul className="space-y-1.5 text-xs text-muted-foreground">
+                  {PRIORITY_OPTIONS.map((opt) => {
+                    const hours = getSLADays(opt.value);
+                    const dotClass =
+                      opt.color === 'destructive'
+                        ? 'bg-destructive'
+                        : opt.color === 'default'
+                          ? 'bg-primary'
+                          : opt.color === 'secondary'
+                            ? 'bg-yellow-500'
+                            : 'bg-muted-foreground';
+                    return (
+                      <li key={opt.value} className="flex items-center gap-2">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} aria-hidden />
+                        <span>
+                          <strong className="text-foreground">{opt.label}</strong>
+                          {hours !== null ? `: ${hours} hour${hours !== 1 ? 's' : ''} to respond` : ''}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </PopoverContent>
+            </Popover>
+          </div>
           <Select
             value={formData.priority}
             onValueChange={(value) => onFormDataChange({ priority: value as FormData['priority'] })}
@@ -139,7 +197,42 @@ export const BasicInfoStep = memo(function BasicInfoStep({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="documentType">Document Type</Label>
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="documentType">Document Type</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                  aria-label="Document type help"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 text-sm" align="start" side="bottom">
+                <h4 className="font-medium text-foreground mb-2">Document Types</h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Classify the correspondence to route and track it correctly. Requests and complaints are often tracked as cases.
+                </p>
+                <ul className="space-y-2 text-xs text-muted-foreground">
+                  {DOCUMENT_TYPE_OPTIONS.map((type) => (
+                    <li key={type}>
+                      <strong className="text-foreground">{type.charAt(0).toUpperCase() + type.slice(1)}:</strong>{' '}
+                      {DOCUMENT_TYPE_HELP[type] ?? type}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/cases"
+                  className="mt-3 inline-flex items-center text-xs font-medium text-primary hover:underline"
+                >
+                  View Cases →
+                </Link>
+              </PopoverContent>
+            </Popover>
+          </div>
           <Select
             value={formData.documentType}
             onValueChange={(value) => onFormDataChange({ documentType: value })}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -45,7 +44,30 @@ import {
   Building2,
   ArrowUpRight,
 } from 'lucide-react';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import {
   type EscalationRule,
   type EscalationRuleInput,
@@ -86,7 +108,6 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
 };
 
 export const EscalationRulesTab = () => {
-  const { divisions } = useOrganization();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rules, setRules] = useState<EscalationRule[]>([]);
@@ -243,233 +264,298 @@ export const EscalationRulesTab = () => {
   const inactiveRules = rules.filter((r) => !r.isActive);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState message="Loading escalation rules…" />;
   }
 
   return (
     <ClientErrorBoundary>
-      <div className="space-y-6">
-        <div className="flex justify-between items-start">
-          <div></div>
-          <Button onClick={() => handleOpenDialog()} size="sm" className="bg-gradient-primary">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Rule
-          </Button>
-        </div>
+      <div className="space-y-8">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Activity overview</CardTitle>
+            <CardDescription>
+              Snapshot of automation health. Pending items need acknowledgement or resolution.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: 'Active rules',
+                  value: activeRules.length,
+                  sub: `${inactiveRules.length} inactive`,
+                  icon: Power,
+                  box: 'bg-success/10',
+                  iconClass: 'text-success',
+                },
+                {
+                  label: 'Pending escalations',
+                  value: summary?.pending ?? 0,
+                  sub: `${summary?.active ?? 0} total active`,
+                  icon: AlertTriangle,
+                  box: 'bg-warning/10',
+                  iconClass: 'text-warning',
+                },
+                {
+                  label: 'Triggered this week',
+                  value: summary?.triggeredThisWeek ?? 0,
+                  sub: 'Rule firings',
+                  icon: Bell,
+                  box: 'bg-primary/10',
+                  iconClass: 'text-primary',
+                },
+                {
+                  label: 'Resolved today',
+                  value: summary?.resolvedToday ?? 0,
+                  sub: 'Issues closed',
+                  icon: CheckCircle,
+                  box: 'bg-success/10',
+                  iconClass: 'text-success',
+                },
+              ].map(({ label, value, sub, icon: Icon, box, iconClass }) => (
+                <Card key={label}>
+                  <CardContent className={registryQueueStatCardContentClass}>
+                    <div className="flex items-center gap-4">
+                      <div className={cn(registryQueueStatIconBoxClass, box)}>
+                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                      </div>
+                      <div>
+                        <p className={registryQueueStatLabelClass}>{label}</p>
+                        <p className={registryQueueStatValueClass}>{value}</p>
+                        <p className="text-xs text-muted-foreground">{sub}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Rules</CardTitle>
-              <Power className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{activeRules.length}</div>
-              <p className="text-xs text-muted-foreground">
-                {inactiveRules.length} inactive
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Escalations</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-yellow-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary?.pending || 0}</div>
-              <p className="text-xs text-muted-foreground">
-                {summary?.active || 0} total active
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Week</CardTitle>
-              <Bell className="h-4 w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary?.triggeredThisWeek || 0}</div>
-              <p className="text-xs text-muted-foreground">Escalations triggered</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Resolved Today</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{summary?.resolvedToday || 0}</div>
-              <p className="text-xs text-muted-foreground">Issues addressed</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="rules" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="rules">Rules ({rules.length})</TabsTrigger>
-            <TabsTrigger value="pending">
-              Pending Escalations ({escalations.length})
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="rules" className="space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="text-lg">Escalation rules ({rules.length})</CardTitle>
+                <CardDescription>
+                  When a trigger matches, the action runs. Lower priority order runs first. Use Test before going live.
+                </CardDescription>
+              </div>
+              <Button size="sm" onClick={() => handleOpenDialog()} className="shrink-0">
+                <Plus className="h-4 w-4 mr-2" />
+                Add rule
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
             {rules.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Zap className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <p className="text-muted-foreground mb-4">No escalation rules configured yet.</p>
-                  <Button onClick={() => handleOpenDialog()}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create First Rule
-                  </Button>
-                </CardContent>
-              </Card>
+              <EmptyState
+                icon={<Zap className={registryQueueEmptyIconClass} />}
+                title="No escalation rules yet"
+                message="Create a rule to notify assignees, managers, or division heads when SLAs slip or other triggers fire."
+                actionLabel="Add rule"
+                onAction={() => handleOpenDialog()}
+              />
             ) : (
-              <div className="grid gap-4">
+              <div className={correspondenceQueueListStackClass}>
                 {rules.map((rule) => (
-                  <Card key={rule.id} className={!rule.isActive ? 'opacity-60' : ''}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-4">
-                          <div className="p-2 rounded-lg bg-muted">
-                            {TRIGGER_ICONS[rule.triggerType] || <Zap className="h-4 w-4" />}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold">{rule.name}</h3>
-                              <Badge variant={rule.isActive ? 'default' : 'secondary'}>
-                                {rule.isActive ? 'Active' : 'Inactive'}
-                              </Badge>
-                              {rule.escalationCount > 0 && (
-                                <Badge variant="outline">{rule.escalationCount} triggered</Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {rule.description || `Trigger: ${rule.triggerTypeDisplay} → Action: ${rule.actionTypeDisplay}`}
-                            </p>
-                            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                {TRIGGER_ICONS[rule.triggerType]}
-                                {rule.triggerTypeDisplay}
-                              </span>
-                              <span>→</span>
-                              <span className="flex items-center gap-1">
-                                {ACTION_ICONS[rule.actionType]}
-                                {rule.actionTypeDisplay}
-                              </span>
-                              <span>•</span>
-                              <span>Cooldown: {rule.cooldownHours}h</span>
-                              <span>•</span>
-                              <span>Priority: {rule.priorityOrder}</span>
-                              {rule.divisionsDetail.length > 0 && (
-                                <>
-                                  <span>•</span>
-                                  <span className="flex items-center gap-1">
-                                    <Building2 className="h-3 w-3" />
-                                    {rule.divisionsDetail.map((d) => d.code || d.name).join(', ')}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
+                  <div key={rule.id} className={cn(!rule.isActive && 'opacity-60')}>
+                    <ListRowCard
+                      density="compact"
+                      leading={(
+                        <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-muted [&_svg]:size-4')}>
+                          {TRIGGER_ICONS[rule.triggerType] ?? <Zap className="h-4 w-4 text-muted-foreground" />}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleTestRule(rule.id)}
-                          >
-                            <Play className="h-4 w-4 mr-1" />
-                            Test
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleRule(rule.id)}
-                          >
-                            {rule.isActive ? (
-                              <PowerOff className="h-4 w-4 text-muted-foreground" />
-                            ) : (
-                              <Power className="h-4 w-4 text-green-500" />
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenDialog(rule)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteRule(rule.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </div>
+                      )}
+                      actions={(
+                        <>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                aria-label="Test rule"
+                                onClick={() => handleTestRule(rule.id)}
+                              >
+                                <Play className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">Test</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                aria-label={rule.isActive ? 'Disable rule' : 'Enable rule'}
+                                onClick={() => handleToggleRule(rule.id)}
+                              >
+                                {rule.isActive ? (
+                                  <PowerOff className="h-4 w-4" />
+                                ) : (
+                                  <Power className="h-4 w-4 text-success" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">{rule.isActive ? 'Disable' : 'Enable'}</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                aria-label="Edit rule"
+                                onClick={() => handleOpenDialog(rule)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">Edit</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                aria-label="Delete rule"
+                                onClick={() => handleDeleteRule(rule.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">Delete</TooltipContent>
+                          </Tooltip>
+                        </>
+                      )}
+                    >
+                      <h4 className={correspondenceQueueSubjectClass}>{rule.name}</h4>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <Badge variant={rule.isActive ? 'default' : 'secondary'} className={correspondenceQueueBadgeClass}>
+                          {rule.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                        {rule.escalationCount > 0 ? (
+                          <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                            {rule.escalationCount} triggered
+                          </Badge>
+                        ) : null}
                       </div>
-                    </CardContent>
-                  </Card>
+                      {rule.description ? (
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{rule.description}</p>
+                      ) : null}
+                      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <span className="inline-flex items-center gap-0.5">
+                            {TRIGGER_ICONS[rule.triggerType]}
+                            {rule.triggerTypeDisplay}
+                          </span>
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <span className="inline-flex items-center gap-0.5">
+                            {ACTION_ICONS[rule.actionType]}
+                            {rule.actionTypeDisplay}
+                          </span>
+                        </span>
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <Clock className={correspondenceQueueMetaIconClass} />
+                          Cooldown {rule.cooldownHours}h
+                        </span>
+                        <span className={correspondenceQueueMetaItemClass}>
+                          Order {rule.priorityOrder}
+                        </span>
+                        {rule.divisionsDetail.length > 0 ? (
+                          <span className={correspondenceQueueMetaItemClass}>
+                            <Building2 className={correspondenceQueueMetaIconClass} />
+                            <span className="truncate">
+                              {rule.divisionsDetail.map((d) => d.code || d.name).join(', ')}
+                            </span>
+                          </span>
+                        ) : null}
+                      </div>
+                    </ListRowCard>
+                  </div>
                 ))}
               </div>
             )}
-          </TabsContent>
+          </CardContent>
+        </Card>
 
-          <TabsContent value="pending" className="space-y-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Pending escalations ({escalations.length})</CardTitle>
+            <CardDescription>
+              Items waiting for acknowledgement or resolution.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             {escalations.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500 opacity-50" />
-                  <p className="text-muted-foreground">No pending escalations. All clear!</p>
-                </CardContent>
-              </Card>
+              <EmptyState
+                icon={<CheckCircle className={registryQueueEmptyIconClass} />}
+                title="No pending escalations"
+                message="When rules fire, open items appear here for your team to acknowledge or resolve."
+              />
             ) : (
-              <div className="space-y-3">
+              <div className={correspondenceQueueListStackClass}>
                 {escalations.map((esc) => (
-                  <Card key={esc.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline">{esc.correspondenceReference}</Badge>
-                            <span className="font-medium">{esc.correspondenceSubject}</span>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {esc.triggerReason || `Triggered by: ${esc.ruleName}`}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {new Date(esc.triggeredAt).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleAcknowledge(esc.id)}
-                          >
-                            Acknowledge
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleResolve(esc.id)}
-                          >
-                            Resolve
-                          </Button>
-                        </div>
+                  <ListRowCard
+                    key={esc.id}
+                    density="compact"
+                    leading={(
+                      <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-warning/10')}>
+                        <AlertTriangle className="h-4 w-4 text-warning" />
                       </div>
-                    </CardContent>
-                  </Card>
+                    )}
+                    actions={(
+                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => handleAcknowledge(esc.id)}
+                        >
+                          Acknowledge
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => handleResolve(esc.id)}
+                        >
+                          Resolve
+                        </Button>
+                      </div>
+                    )}
+                  >
+                    <div className="flex flex-wrap items-start gap-2">
+                      <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'shrink-0')}>
+                        {esc.correspondenceReference}
+                      </Badge>
+                      <h4 className={correspondenceQueueSubjectClass}>{esc.correspondenceSubject}</h4>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {esc.triggerReason || `Triggered by: ${esc.ruleName}`}
+                    </p>
+                    <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                      <span className={correspondenceQueueMetaItemClass}>
+                        <Clock className={correspondenceQueueMetaIconClass} />
+                        {new Date(esc.triggeredAt).toLocaleString()}
+                      </span>
+                    </div>
+                  </ListRowCard>
                 ))}
               </div>
             )}
-          </TabsContent>
-        </Tabs>
+          </CardContent>
+        </Card>
 
         {/* Add/Edit Rule Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

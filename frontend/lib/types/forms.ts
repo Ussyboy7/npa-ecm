@@ -28,6 +28,8 @@ export interface FormField {
   label: string;
   type: FormFieldType;
   required?: boolean;
+  workflow_collected?: boolean;
+  is_signature_field?: boolean;
   placeholder?: string;
   validation?: {
     min?: number;
@@ -142,4 +144,3 @@ export interface FormSignatureWorkflow {
   created_at: string;
   updated_at: string;
 }
-

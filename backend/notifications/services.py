@@ -232,6 +232,22 @@ class NotificationService:
         return count
 
     @staticmethod
+    def broadcast_unread_count(user) -> None:
+        """Push current unread count to the user's notification WebSocket (if connected)."""
+        try:
+            from asgiref.sync import async_to_sync
+
+            from .consumers import send_unread_count_update
+
+            unread = Notification.objects.filter(
+                recipient=user,
+                status=Notification.Status.UNREAD,
+            ).count()
+            async_to_sync(send_unread_count_update)(str(user.id), unread)
+        except Exception as e:
+            logger.warning("Failed to broadcast unread notification count: %s", e)
+
+    @staticmethod
     def archive_old_notifications(days: int = 30) -> int:
         """Archive notifications older than specified days."""
         cutoff_date = timezone.now() - timedelta(days=days)

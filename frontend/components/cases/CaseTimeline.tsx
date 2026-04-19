@@ -13,6 +13,7 @@ import { apiFetch } from '@/lib/api-client';
 import type { CaseDetail } from '@/lib/npa-structure';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { useCurrentUser } from '@/hooks/use-current-user';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TimelineActivity {
@@ -40,12 +41,23 @@ interface CaseTimelineProps {
 }
 
 export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
+  const { currentUser } = useCurrentUser();
   const abortControllerRef = useRef<AbortController | null>(null);
   const [activities, setActivities] = useState<TimelineActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [expandedActivities, setExpandedActivities] = useState<Set<string>>(new Set());
   const [filterType, setFilterType] = useState<string>('all');
+  const canViewAuditDetails = useMemo(() => {
+    if (currentUser?.isSuperuser) return true;
+    const role = (currentUser?.systemRole || "").toLowerCase();
+    return role.includes("managing director")
+      || role.includes("executive director")
+      || role.includes("general manager")
+      || role.includes("director")
+      || role.includes("audit")
+      || role.includes("super admin");
+  }, [currentUser?.isSuperuser, currentUser?.systemRole]);
 
   useEffect(() => {
     if (!caseId) {
@@ -135,14 +147,14 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
             timestamp: caseData.openedAt || caseData.createdAt,
             user: {
               id: caseData.createdById || '',
-              name: (caseData as any).createdByName || 'System',
+              name: caseData.createdByName || 'System',
             },
             description: `Case ${caseData.caseNumber} created: ${caseData.title}`,
           });
 
           // Add status changes from case data
-          if ((caseData as any).statusHistory) {
-            ((caseData as any).statusHistory as any[]).forEach((statusChange: any) => {
+          if (caseData.statusHistory) {
+            caseData.statusHistory.forEach((statusChange) => {
               timelineActivities.push({
                 id: `status-${statusChange.timestamp}`,
                 type: 'status_change',
@@ -163,17 +175,21 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
           // Add linked items
           if (caseData.correspondence && caseData.correspondence.length > 0) {
             caseData.correspondence.forEach((corr) => {
+              const correspondenceLabel =
+                corr.subject?.trim() ||
+                corr.referenceNumber?.trim() ||
+                "Correspondence";
               timelineActivities.push({
                 id: `corr-${corr.id}`,
                 type: 'correspondence_linked',
-                timestamp: (corr as any).linkedAt || corr.createdAt,
+                timestamp: corr.linkedAt || corr.createdAt,
                 user: {
-                  id: (corr as any).createdById || '',
-                  name: (corr as any).createdByName || 'System',
+                  id: corr.createdById || '',
+                  name: corr.createdByName || 'System',
                 },
-                description: `Correspondence linked: ${(corr as any).subject || (corr as any).referenceNumber}`,
+                description: `Correspondence linked: ${correspondenceLabel}`,
                 metadata: {
-                  item_title: (corr as any).subject,
+                  item_title: correspondenceLabel,
                   item_id: corr.id,
                   item_type: 'correspondence',
                 },
@@ -183,17 +199,18 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
 
           if (caseData.documents && caseData.documents.length > 0) {
             caseData.documents.forEach((doc) => {
+              const documentLabel = doc.documentTitle?.trim() || `Document ${doc.documentId}`;
               timelineActivities.push({
                 id: `doc-${doc.id}`,
                 type: 'document_linked',
-                timestamp: (doc as any).linkedAt || doc.createdAt,
+                timestamp: doc.createdAt,
                 user: {
-                  id: (doc as any).authorId || '',
-                  name: (doc as any).authorName || 'System',
+                  id: '',
+                  name: 'System',
                 },
-                description: `Document linked: ${(doc as any).title}`,
+                description: `Document linked: ${documentLabel}`,
                 metadata: {
-                  item_title: (doc as any).title,
+                  item_title: documentLabel,
                   item_id: doc.id,
                   item_type: 'document',
                 },
@@ -203,17 +220,18 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
 
           if (caseData.forms && caseData.forms.length > 0) {
             caseData.forms.forEach((form) => {
+              const formLabel = form.formTitle?.trim() || `Form ${form.formDocumentId}`;
               timelineActivities.push({
                 id: `form-${form.id}`,
                 type: 'form_linked',
-                timestamp: (form as any).linkedAt || form.createdAt,
+                timestamp: form.createdAt,
                 user: {
-                  id: (form as any).createdById || '',
-                  name: (form as any).createdByName || 'System',
+                  id: '',
+                  name: 'System',
                 },
-                description: `Form linked: ${(form as any).templateName || 'Form'}`,
+                description: `Form linked: ${formLabel}`,
                 metadata: {
-                  item_title: (form as any).templateName,
+                  item_title: formLabel,
                   item_id: form.id,
                   item_type: 'form',
                 },
@@ -472,13 +490,13 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
                             <span className="font-medium">{activity.metadata.item_title}</span>
                           </div>
                         )}
-                        {activity.metadata.item_id && (
+                        {canViewAuditDetails && activity.metadata.item_id && (
                           <div className="flex items-center gap-1">
                             <span>ID:</span>
                             <span className="font-mono">{activity.metadata.item_id}</span>
                           </div>
                         )}
-                        {activity.metadata.item_type && (
+                        {canViewAuditDetails && activity.metadata.item_type && (
                           <div className="flex items-center gap-1">
                             <span>Type:</span>
                             <span className="font-medium">{activity.metadata.item_type}</span>
@@ -488,7 +506,7 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
                     )}
                     
                     {/* Expandable Details */}
-                    {(activity.metadata || activity.user.email) && (
+                    {canViewAuditDetails && (activity.metadata || activity.user.email) && (
                       <div className="mt-2">
                         <Button
                           variant="ghost"
@@ -552,4 +570,3 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
     </Card>
   );
 };
-

@@ -1,6 +1,6 @@
-# NPA ECM - TODO List
+# NPA ECM - Updated TODO List
 
-**Last Updated:** January 2025  
+**Last Updated:** April 2026
 **Status:** Active Tasks
 
 ---
@@ -13,56 +13,55 @@
 
 ## 📋 Future Tasks
 
-### 2. Implement Case/File Management Module
-
-**Priority:** Critical  
-**Status:** ⏳ Pending  
-**Timeline:** Q1 2025
+### 1. Security Hardening
+**Priority:** Critical
+**Status:** ⏳ Pending
+**Timeline:** Q2 2026
 
 #### Description
-Create a unified "Case" entity to group related correspondence, documents, forms, and actions. This is the foundation of the ECM vision: "correspondence triggers cases, documents are evidence, workflow is control, and the case file is the truth."
+Address remaining security concerns identified in codebase review:
 
-#### Implementation Plan
-- [ ] Create `Case` model
-- [ ] Auto-create cases from correspondence (based on type)
-- [ ] Link all documents/forms to cases
-- [ ] Implement case lifecycle
-- [ ] Verify workflow hierarchy enforcement
-- [ ] Auto-generate completion packages for cases
+- [ ] Review and strengthen SECRET_KEY validation
+- [ ] Implement proper production DEBUG settings
+- [ ] Add security headers middleware
+- [ ] Review CORS configuration for production
+- [ ] Implement rate limiting
+- [ ] Add input validation and sanitization
 
 ---
 
 ## ✅ Completed Tasks
 
-### 1. Differentiate "My Documents" vs "Document Management" Pages ✅
-
-**Completed:** January 2025
+### 1. Documentation Fixes ✅
+**Completed:** April 2026
 
 **What was implemented:**
-- ✅ Tab navigation with 4 tabs (My Documents, Shared with Me, Awaiting Action, Recent)
-- ✅ Quick stats card showing counts for each tab
-- ✅ Filtering logic based on active tab:
-  - **My Documents**: Filters by `authorId = currentUser.id`
-  - **Shared with Me**: Filters documents with explicit user permissions (excludes authored documents)
-  - **Awaiting Action**: Shows forms needing signatures
-  - **Recent**: Shows documents accessed in last 30 days
-- ✅ Helper functions in `dms-storage.ts`:
-  - `getSharedDocuments()` - Gets documents explicitly shared with user
-  - `getRecentDocuments()` - Gets documents from access logs
-- ✅ Updated page description and UI to reflect personal workspace
-- ✅ "Document Management" page remains unchanged (full organizational view)
+- ✅ Fixed frontend README.md (removed Lovable template, added ECM-specific content)
+- ✅ Added root package.json with workspace configuration
+- ✅ Fixed Django security defaults (DEBUG=False by default, proper SECRET_KEY validation)
+- ✅ Verified no incorrect EMR references in documentation
+- ✅ Confirmed `fix_all_remaining_users.py` is legitimate (user hierarchy script)
+- ✅ Removed references to non-existent `allcheck` command
 
 **Files Modified:**
-- `frontend/app/documents/page.tsx` - Complete rewrite with tabs and filtering
-- `frontend/lib/dms-storage.ts` - Added `getSharedDocuments()` and `getRecentDocuments()` helper functions
+- `frontend/README.md` - Complete rewrite with ECM-specific documentation
+- `package.json` - Added root workspace configuration
+- `backend/ecm_backend/settings.py` - Fixed security defaults
 
-**Result:**
-- "My Documents" now feels like a personal workspace
-- "Document Management" remains the organizational repository
-- Clear differentiation between the two pages
-- Users can still access organization-wide documents via "Shared with Me" tab
+### 2. Security Hardening ✅
+**Completed:** April 2026
+
+**What was implemented:**
+- ✅ Updated Django DEBUG default from `True` to `False` for production safety
+- ✅ Enhanced SECRET_KEY validation with proper error handling for production
+- ✅ Added development fallback for SECRET_KEY when DEBUG=True
+- ✅ Maintained backward compatibility for existing deployments
+
+**Security Improvements:**
+- Production deployments now default to secure settings
+- Clear error messages when SECRET_KEY is missing in production
+- Development mode still allows insecure defaults for local development
 
 ---
 
 **Note:** This TODO list is actively maintained. Tasks are moved to "Completed" section when finished.
-

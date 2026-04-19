@@ -1,5 +1,5 @@
-import { logError, logWarn } from '@/lib/client-logger';
-import { useState } from 'react';
+import { logError } from '@/lib/client-logger';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,17 +28,14 @@ export const RecallMinuteModal = ({
   const [recallReason, setRecallReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!minute) return null;
+  // If modal is opened with an already-recalled minute (e.g. stale state), close it
+  useEffect(() => {
+    if (isOpen && minute?.isRecalled) {
+      onClose();
+    }
+  }, [isOpen, minute?.id, minute?.isRecalled, onClose]);
 
-  // Log minute status for debugging
-  if (minute.isRecalled || minute.recalledAt) {
-    logWarn('[RecallMinuteModal] Minute is already recalled:', {
-      id: minute.id,
-      isRecalled: minute.isRecalled,
-      recalledAt: minute.recalledAt,
-      canBeRecalled: minute.canBeRecalled,
-    });
-  }
+  if (!minute) return null;
 
   const handleSubmit = async () => {
     // Validate character limit

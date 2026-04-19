@@ -29,7 +29,7 @@ import { toast } from 'sonner';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
 import type { DocumentRecord } from '@/lib/dms-storage';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
-import { User as UserIcon, Calendar, Mail, Phone, Building2, Users } from 'lucide-react';
+import { User as UserIcon, Calendar, Mail, Phone, Building2, Users, Paperclip } from 'lucide-react';
 import { ShareWithDepartmentButton } from '@/components/correspondence/ShareWithDepartmentButton';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -147,9 +147,10 @@ export const CorrespondenceHeader = ({
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="min-w-0 flex-1">
+              {/* Line 1: Reference + Priority + Direction */}
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-base md:text-xl font-bold text-foreground truncate">{correspondence.referenceNumber}</h1>
-                {/* Priority badge - always visible */}
+                {/* Priority badge */}
                 <Badge
                   variant={
                     correspondence.priority === 'urgent'
@@ -162,8 +163,8 @@ export const CorrespondenceHeader = ({
                 >
                   {correspondence.priority.toUpperCase()}
                 </Badge>
-                {/* Direction badge - hidden on mobile */}
-                <Badge variant="outline" className="gap-1 hidden sm:flex flex-shrink-0">
+                {/* Direction badge */}
+                <Badge variant="outline" className="gap-1 flex-shrink-0">
                   {correspondence.direction === 'downward' ? (
                     <>
                       <ArrowDown className="h-3 w-3 text-info" />
@@ -177,104 +178,117 @@ export const CorrespondenceHeader = ({
                   )}
                 </Badge>
               </div>
-              <p className="text-xs md:text-sm text-muted-foreground truncate">{correspondence.subject}</p>
-              {/* Sender and Received Date Info */}
-              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+
+              {/* Line 2: Subject */}
+              <p className="text-sm md:text-base font-medium mt-1">{correspondence.subject}</p>
+
+              {/* Line 3: In response to (parent correspondence) */}
+              {correspondence.parentCorrespondence && (
+                <div className="mt-1 text-xs">
+                  <span className="text-muted-foreground">In response to: </span>
+                  <button
+                    onClick={() => router.push(`/correspondence/${correspondence.parentCorrespondence?.id}`)}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    {correspondence.parentCorrespondence.reference_number}
+                  </button>
+                </div>
+              )}
+
+              {/* Line 4: Sender • Organization */}
+              <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
                 {correspondence.senderName && (
-                  <span className="flex items-center gap-1">
-                    <UserIcon className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate max-w-[200px]">{correspondence.senderName}</span>
+                  <>
+                    <span className="flex items-center gap-1">
+                      <UserIcon className="h-3 w-3" />
+                      {correspondence.senderName}
+                    </span>
                     {correspondence.senderOrganization && (
-                      <span className="truncate max-w-[150px]">• {correspondence.senderOrganization}</span>
+                      <span>• {correspondence.senderOrganization}</span>
                     )}
-                  </span>
-                )}
-                {correspondence.receivedDate && (
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-3 w-3 flex-shrink-0" />
-                    <span>Received: {formatDateShort(correspondence.receivedDate)}</span>
-                  </span>
+                  </>
                 )}
               </div>
-              {/* Case link - if correspondence is linked to a case */}
+
+              {/* Line 5: Received date + Attachments */}
+              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                {correspondence.receivedDate && (
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    Received: {formatDateShort(correspondence.receivedDate)}
+                  </span>
+                )}
+                {correspondence.attachments && correspondence.attachments.length > 0 && (
+                  <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                    <Paperclip className="h-3 w-3 mr-1" />
+                    {correspondence.attachments.length} attachment{correspondence.attachments.length > 1 ? 's' : ''}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Line 6: Owning + Current Office */}
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {correspondence.owningOfficeName && (
+                  <span>Owning: {correspondence.owningOfficeName}</span>
+                )}
+                {correspondence.currentOfficeName && (
+                  <span>Current: {correspondence.currentOfficeName}</span>
+                )}
+              </div>
+
+              {/* Line 7: Division/Department */}
+              {(correspondence.divisionName || correspondence.departmentName) && (
+                <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                  <Building2 className="h-3 w-3" />
+                  <span>
+                    {correspondence.divisionName && correspondence.departmentName
+                      ? `${correspondence.divisionName} / ${correspondence.departmentName}`
+                      : correspondence.divisionName || correspondence.departmentName}
+                  </span>
+                </div>
+              )}
+
+              {/* Line 8: Case link */}
               {correspondence.caseId && (
                 <div className="mt-1 flex items-center gap-2">
-                  <Badge variant="outline" className="gap-1">
+                  <Badge variant="outline" className="gap-1 text-xs">
                     <FolderTree className="h-3 w-3" />
-                    <Link
-                      href={`/cases/${correspondence.caseId}`}
-                      className="hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <Link href={`/cases/${correspondence.caseId}`} className="hover:underline">
                       Case #{correspondence.caseId}
                     </Link>
                   </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 w-5 p-0 text-destructive hover:text-destructive"
-                    onClick={handleUnlinkCase}
-                    title="Unlink from case"
-                  >
+                  <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-destructive" onClick={handleUnlinkCase} title="Unlink from case">
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
               )}
-              {/* Division/Department and Office info */}
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                {/* Division/Department */}
-                {(correspondence.divisionName || correspondence.departmentName) && (
-                  <span className="flex items-center gap-1">
-                    <Building2 className="h-3 w-3 flex-shrink-0" />
-                    <span>
-                      {correspondence.divisionName && correspondence.departmentName
-                        ? `${correspondence.divisionName} / ${correspondence.departmentName}`
-                        : correspondence.divisionName || correspondence.departmentName}
-                    </span>
-                  </span>
-                )}
-                {/* Office info - hidden on mobile */}
-                <span className="hidden md:flex items-center gap-1">
-                  <span>Owning: {correspondence.owningOfficeName ?? 'Not set'}</span>
-                </span>
-                <span className="hidden md:flex items-center gap-1">
-                  <span>Current: {correspondence.currentOfficeName ?? correspondence.owningOfficeName ?? 'Not set'}</span>
-                </span>
-              </div>
-              {/* Distribution (CC) info */}
+
+              {/* Line 9: CC (Distribution) */}
               {correspondence.distribution && correspondence.distribution.length > 0 && (
-                <div className="mt-1.5 space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                    <span className="flex items-center gap-1 text-muted-foreground">
-                      <Users className="h-3 w-3 flex-shrink-0" />
-                      <span className="font-medium">CC:</span>
-                    </span>
-                    <div className="flex flex-wrap items-center gap-1.5">
+                <div className="mt-1.5">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Users className="h-3 w-3" />
+                    <span className="font-medium">CC:</span>
+                    <div className="flex flex-wrap gap-1">
                       {correspondence.distribution.slice(0, 3).map((recipient) => (
-                        <Badge key={recipient.id} variant="outline" className="text-[10px] h-4 px-1.5 py-0">
+                        <Badge key={recipient.id} variant="outline" className="text-[10px] h-5 px-1.5">
                           {recipient.name || 'Unknown'}
                         </Badge>
                       ))}
                       {correspondence.distribution.length > 3 && (
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5 py-0">
-                          +{correspondence.distribution.length - 3} more
+                        <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                          +{correspondence.distribution.length - 3}
                         </Badge>
                       )}
                     </div>
                   </div>
-                  {/* Share with Department buttons for office holders */}
+                  {/* Share with Department buttons */}
                   {shareableDistributions.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
                       {shareableDistributions.map((dist) => (
-                        <div key={dist.id} className="flex items-center gap-2">
+                        <div key={dist.id} className="flex items-center gap-1 text-xs">
                           <span className="text-muted-foreground">Share {dist.name}:</span>
-                          <ShareWithDepartmentButton
-                            distribution={dist}
-                            correspondenceId={correspondence.id}
-                            onShared={() => {
-                              onDistributionShared?.();
-                            }}
-                          />
+                          <ShareWithDepartmentButton distribution={dist} correspondenceId={correspondence.id} onShared={() => onDistributionShared?.()} />
                         </div>
                       ))}
                     </div>

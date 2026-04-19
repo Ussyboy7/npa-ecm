@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { ArrowDown, ArrowUp, Building2, Globe } from 'lucide-react';
 
 interface FlowTypeBadgeProps {
@@ -11,6 +12,9 @@ interface FlowTypeBadgeProps {
   isExternal?: boolean;
   variant?: 'default' | 'outline' | 'secondary';
   showIcon?: boolean;
+  className?: string;
+  /** Smaller badge and icons for dense list rows */
+  compact?: boolean;
 }
 
 /**
@@ -30,6 +34,8 @@ export function FlowTypeBadge({
   isExternal,
   variant = 'outline',
   showIcon = true,
+  className,
+  compact = false,
 }: FlowTypeBadgeProps) {
   // Determine flow type from props if not provided
   let actualFlowType = flowType;
@@ -90,10 +96,17 @@ export function FlowTypeBadge({
   const Icon = config.icon;
   const SourceIcon = isInternal ? Building2 : Globe;
 
+  const iconSize = compact ? 'h-2.5 w-2.5' : 'h-3 w-3';
+
   return (
     <Badge
       variant={variant}
-      className={`gap-1.5 ${variant === 'outline' ? config.bgClass : ''} ${variant === 'outline' ? config.textClass : ''}`}
+      className={cn(
+        compact ? 'gap-0.5' : 'gap-1.5',
+        variant === 'outline' ? config.bgClass : '',
+        variant === 'outline' ? config.textClass : '',
+        className,
+      )}
       title={
         actualFlowType === 'inward-internal'
           ? 'Coming INTO office from another NPA office (minuted to you)'
@@ -104,8 +117,8 @@ export function FlowTypeBadge({
           : 'Going OUT OF office to external organization (registered, printed, mailed)'
       }
     >
-      {showIcon && <Icon className={`h-3 w-3 ${config.iconClass}`} />}
-      <SourceIcon className="h-3 w-3" />
+      {showIcon && <Icon className={cn(iconSize, config.iconClass)} />}
+      <SourceIcon className={iconSize} />
       <span>{config.label}</span>
     </Badge>
   );

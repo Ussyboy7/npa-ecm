@@ -15,7 +15,7 @@ export default function AnalyticsPage() {
   const permissions = useUserPermissions(currentUser ?? undefined);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!currentUser?.id) return;
     
     // Default to performance analytics if user has access, otherwise executive dashboard
     if (permissions.canAccessAnalytics) {
@@ -27,7 +27,7 @@ export default function AnalyticsPage() {
     } else {
       router.replace('/analytics/cases');
     }
-  }, [hydrated, permissions, router]);
+  }, [currentUser?.id, permissions, router]);
 
   return null;
 }

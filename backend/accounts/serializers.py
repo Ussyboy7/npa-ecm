@@ -8,6 +8,7 @@ from .models import User, ExecutiveSignature, DocumentSeal, SignatureTemplate, U
 
 
 class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, allow_blank=False, trim_whitespace=False)
     directorate = serializers.PrimaryKeyRelatedField(
         queryset=Directorate.objects.all(), allow_null=True, required=False
     )
@@ -28,7 +29,12 @@ class UserSerializer(serializers.ModelSerializer):
     
     def get_system_role_name(self, obj):
         try:
-            return obj.system_role.name if obj.system_role else ""
+            if obj.system_role:
+                return obj.system_role.name
+            # Fallback: if user is superuser, show "System Administrator"
+            if getattr(obj, 'is_superuser', False):
+                return "System Administrator"
+            return ""
         except Exception:
             return ""
     
@@ -81,6 +87,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "username",
+            "password",
             "email",
             "first_name",
             "last_name",
@@ -105,6 +112,14 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "last_login", "date_joined"]
 
     def validate(self, attrs):
+        if self.instance is None and "password" not in attrs:
+            raise serializers.ValidationError({"password": "Password is required."})
+
+        if "password" in attrs:
+            from django.contrib.auth.password_validation import validate_password
+
+            validate_password(attrs["password"], user=self.instance)
+
         directorate = attrs.get("directorate") or getattr(self.instance, "directorate", None)
         division = attrs.get("division") or getattr(self.instance, "division", None)
         department = attrs.get("department") or getattr(self.instance, "department", None)
@@ -130,6 +145,22 @@ class UserSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        user = super().create(validated_data)
+        if password:
+            user.set_password(password)
+            user.save(update_fields=["password"])
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        user = super().update(instance, validated_data)
+        if password:
+            user.set_password(password)
+            user.save(update_fields=["password"])
+        return user
 
 
 class ExecutiveSignatureSerializer(serializers.ModelSerializer):
@@ -309,4 +340,3 @@ class SealVerificationSerializer(serializers.Serializer):
     """Serializer for seal verification requests."""
     
     serial_number = serializers.CharField(max_length=50)
-

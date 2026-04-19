@@ -186,6 +186,30 @@ class Office(UUIDModel, TimeStampedModel):
         help_text="Controls whether this office can route items to peer offices at the same tier.",
     )
 
+    # =============================================================================
+    # DELEGATION FIELDS - COMMENTED OUT FOR FUTURE USE
+    # Uncomment these fields and run migrations to enable office delegation
+    # =============================================================================
+    # is_away = models.BooleanField(
+    #     default=False,
+    #     help_text="When True, delegate can access this office's inbox instead of the office head.",
+    # )
+    # away_start_date = models.DateTimeField(null=True, blank=True, help_text="When away period starts.")
+    # away_end_date = models.DateTimeField(null=True, blank=True, help_text="When away period ends.")
+    # delegate_user = models.ForeignKey(
+    #     'accounts.User',
+    #     on_delete=models.SET_NULL,
+    #     null=True,
+    #     blank=True,
+    #     related_name='delegated_offices',
+    #     help_text="User who can act on behalf of this office when away.",
+    # )
+    # delegate_role = models.CharField(
+    #     max_length=64,
+    #     blank=True,
+    #     help_text="Role title for the delegate (e.g., 'GM MDS Officer').",
+    # )
+
     class Meta:
         ordering = ["name"]
 

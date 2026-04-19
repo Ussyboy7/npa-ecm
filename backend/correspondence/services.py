@@ -105,7 +105,7 @@ class CorrespondenceDocumentService:
         # Create DMS Document
         document = Document.objects.create(
             title=correspondence.subject,
-            description=correspondence.summary or f"Correspondence: {correspondence.reference_number}",
+            description=correspondence.treatment_response or f"Correspondence: {correspondence.reference_number}",
             document_type=dms_document_type,
             reference_number=correspondence.reference_number or "",
             status=Document.DocumentStatus.DRAFT,  # Will be published when correspondence is completed
@@ -395,6 +395,19 @@ class CompletionPackageService:
 
         return document
 
+    @classmethod
+    def generate_pdf(cls, correspondence: Correspondence) -> bytes:
+        """
+        Generate completion summary PDF bytes on demand.
+        Does not create or update the DMS document; use for direct download.
+        The completion package is still created and stored in DMS when correspondence
+        is completed; this endpoint is an extra convenience.
+        """
+        if correspondence.status != Correspondence.Status.COMPLETED:
+            raise ValueError("Completion summary PDF is only available for completed correspondence.")
+        context = cls._build_summary_context(correspondence, None, document_created=False)
+        return cls._build_summary_pdf(context)
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -438,7 +451,7 @@ class CompletionPackageService:
             file_size=len(pdf_bytes),
             file_url=file_url,
             content_html=html,
-            content_text=text,
+            content_text=strip_tags(html),
             summary="Automated completion summary",
             uploaded_by=triggered_by or correspondence.created_by,
         )
@@ -456,6 +469,35 @@ class CompletionPackageService:
             correspondence.distribution.select_related("directorate", "division", "department", "added_by")
         )
         generated_by = triggered_by or correspondence.current_approver or correspondence.created_by
+
+        # Linked DMS document content for inclusion in summary
+        document_content = ""
+        from correspondence.models import CorrespondenceDocumentLink
+        from dms.models import DocumentVersion
+
+        doc_links = CorrespondenceDocumentLink.objects.filter(
+            correspondence=correspondence
+        ).select_related("document").order_by("created_at")
+        for link in doc_links:
+            latest = (
+                DocumentVersion.objects.filter(document=link.document)
+                .order_by("-version_number")
+                .first()
+            )
+            if latest and (latest.content_html or latest.content_text):
+                doc_content = latest.content_html or latest.content_text
+                if doc_content and doc_content.strip():
+                    document_content += f'<div class="linked-doc"><h3>{link.document.title}</h3>{doc_content}</div>'
+
+        # Fallback: when no linked DMS content but attachments exist, show guidance
+        if not document_content.strip() and attachments:
+            has_body = bool(correspondence.body_html and correspondence.body_html.strip())
+            has_treatment = bool(correspondence.treatment_response and correspondence.treatment_response.strip())
+            if not has_body and not has_treatment:
+                document_content = (
+                    "<p class=\"muted\">Document content is available in the attachments below.</p>"
+                )
+
         return {
             "correspondence": correspondence,
             "minutes": minutes,
@@ -464,6 +506,7 @@ class CompletionPackageService:
             "generated_at": timezone.now(),
             "generated_by": generated_by,
             "document_created": document_created,
+            "document_content": document_content,
         }
 
     @staticmethod
@@ -489,10 +532,10 @@ class CompletionPackageService:
         heading_style = ParagraphStyle(
             'CustomHeading',
             parent=styles['Heading2'],
-            fontSize=14,
+            fontSize=15,
             textColor=colors.HexColor('#111827'),
-            spaceAfter=8,
-            spaceBefore=16,
+            spaceAfter=12,
+            spaceBefore=20,
             alignment=TA_LEFT,
         )
         normal_style = ParagraphStyle(
@@ -506,9 +549,9 @@ class CompletionPackageService:
         meta_style = ParagraphStyle(
             'MetaStyle',
             parent=styles['Normal'],
-            fontSize=10,
-            textColor=colors.HexColor('#0f172a'),
-            leading=14,
+            fontSize=9,
+            textColor=colors.HexColor('#64748b'),
+            leading=12,
             spaceAfter=6,
         )
         minute_header_style = ParagraphStyle(
@@ -523,8 +566,8 @@ class CompletionPackageService:
             'MinuteMeta',
             parent=styles['Normal'],
             fontSize=9,
-            textColor=colors.HexColor('#475569'),
-            spaceAfter=6,
+            textColor=colors.HexColor('#64748b'),
+            spaceAfter=4,
         )
         minute_text_style = ParagraphStyle(
             'MinuteText',
@@ -532,11 +575,12 @@ class CompletionPackageService:
             fontSize=10,
             textColor=colors.HexColor('#0f172a'),
             leading=14,
-            spaceAfter=12,
+            spaceAfter=8,
             leftIndent=12,
         )
         
         story = []
+        temp_files_to_cleanup = []  # PDF preview temp files; cleaned after doc.build()
         correspondence = context['correspondence']
         minutes = context['minutes']
         distribution = context['distribution']
@@ -544,10 +588,190 @@ class CompletionPackageService:
         generated_at = context['generated_at']
         generated_by = context.get('generated_by')
         
+        # Helper to convert HTML to ReportLab-safe format
+        def html_to_reportlab(text):
+            if not text or not str(text).strip():
+                return ""
+            import re
+            t = re.sub(r'</(p|div|li|tr|h[1-6])>', '\n', str(text), flags=re.IGNORECASE)
+            t = re.sub(r'<br\s*/?>', '\n', t, flags=re.IGNORECASE)
+            t = strip_tags(t)
+            t = t.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+            t = re.sub(r'\n\s*\n', '\n\n', t)
+            return t.strip().replace('\n', '<br/>')
+
         # Title
         story.append(Paragraph("Correspondence Completion Summary", title_style))
-        story.append(Spacer(1, 0.2*inch))
-        
+        story.append(Spacer(1, 0.28*inch))
+
+        # Document Content Section (aligned with Executive Approval document structure)
+        # Order: body_html, treatment_response, parent (Re:), linked DMS, fallback when attachments only
+        has_doc = False
+        if correspondence.body_html and str(correspondence.body_html).strip():
+            story.append(Paragraph("Correspondence Document", heading_style))
+            story.append(Spacer(1, 0.1*inch))
+            story.append(Paragraph(html_to_reportlab(correspondence.body_html), normal_style))
+            story.append(Spacer(1, 0.15*inch))
+            has_doc = True
+        if correspondence.treatment_response and str(correspondence.treatment_response).strip():
+            if not has_doc:
+                story.append(Paragraph("Correspondence Document", heading_style))
+                story.append(Spacer(1, 0.1*inch))
+                has_doc = True
+            story.append(Paragraph(html_to_reportlab(correspondence.treatment_response), normal_style))
+            story.append(Spacer(1, 0.15*inch))
+        # Parent correspondence (for Re: / response correspondence)
+        parent = getattr(correspondence, 'parent_correspondence', None)
+        if parent:
+            parent_content_parts = []
+            if parent.body_html and str(parent.body_html).strip():
+                parent_content_parts.append(html_to_reportlab(parent.body_html))
+            if parent.treatment_response and str(parent.treatment_response).strip():
+                parent_content_parts.append(html_to_reportlab(parent.treatment_response))
+            from correspondence.models import Minute as MinuteModel
+            for pm in MinuteModel.objects.filter(
+                correspondence=parent,
+            ).order_by('timestamp', 'step_number')[:5]:  # Limit to first 5 parent minutes
+                if pm.minute_text and str(pm.minute_text).strip():
+                    parent_content_parts.append(html_to_reportlab(pm.minute_text))
+            if parent_content_parts:
+                if not has_doc:
+                    story.append(Paragraph("Correspondence Document", heading_style))
+                    story.append(Spacer(1, 0.1*inch))
+                    has_doc = True
+                subheader = ParagraphStyle(
+                    'CompletionSubheader', parent=styles['Heading3'],
+                    fontSize=12, textColor=colors.HexColor('#475569'),
+                    spaceAfter=6, fontName='Helvetica-Bold',
+                )
+                story.append(Paragraph(
+                    f"<b>Original Request ({getattr(parent, 'reference_number', None) or getattr(parent, 'subject', 'Re:')}):</b>",
+                    subheader,
+                ))
+                story.append(Paragraph("<br/><br/>".join(parent_content_parts), normal_style))
+                story.append(Spacer(1, 0.15*inch))
+        document_content = context.get("document_content", "")
+        if document_content and str(document_content).strip():
+            if not has_doc:
+                story.append(Paragraph("Correspondence Document", heading_style))
+                story.append(Spacer(1, 0.1*inch))
+                has_doc = True
+            story.append(Paragraph(html_to_reportlab(document_content), normal_style))
+            story.append(Spacer(1, 0.15*inch))
+        if has_doc:
+            story.append(Spacer(1, 0.1*inch))
+
+        # Attachments & Documents Section (before meta - same order as Executive Approval)
+        if attachments:
+            story.append(PageBreak() if has_doc else Spacer(1, 0.1*inch))
+            story.append(Paragraph("Attachments & Documents", heading_style))
+            story.append(Spacer(1, 0.15*inch))
+            from reportlab.platypus import Image as ReportLabImage
+            from reportlab.lib.utils import ImageReader
+            try:
+                from PIL import Image
+            except ImportError:
+                Image = None
+            original_threshold = correspondence.created_at + timezone.timedelta(minutes=1) if hasattr(correspondence, 'created_at') and correspondence.created_at else None
+            for idx, att in enumerate(attachments, 1):
+                is_original = original_threshold and att.created_at <= original_threshold
+                att_label = "Original Document" if is_original else f"Attachment #{idx}"
+                att_header = ParagraphStyle(
+                    'AttHeader', parent=styles['Heading3'], fontSize=12,
+                    textColor=colors.HexColor('#1e3a5f'), spaceAfter=6,
+                    spaceBefore=16 if idx > 1 else 0, fontName='Helvetica-Bold',
+                )
+                story.append(Paragraph(f"{att_label}: {att.file_name or 'Attachment'}", att_header))
+                file_size_kb = att.file_size / 1024 if att.file_size else 0
+                file_size_str = f"{file_size_kb:.1f} KB" if file_size_kb < 1024 else f"{file_size_kb / 1024:.1f} MB"
+                story.append(Paragraph(f"{att.file_type or '—'} · {file_size_str}", meta_style))
+                story.append(Spacer(1, 0.1*inch))
+                try:
+                    file_path = None
+                    if att.file_url:
+                        if '/media/' in att.file_url:
+                            file_path = att.file_url.split('/media/')[-1].lstrip('/')
+                        elif att.file_url.startswith('http'):
+                            from urllib.parse import urlparse
+                            parsed = urlparse(att.file_url)
+                            if '/media/' in parsed.path:
+                                file_path = parsed.path.split('/media/')[-1].lstrip('/')
+                            elif parsed.path.startswith('/correspondence_attachments/'):
+                                file_path = parsed.path.lstrip('/')
+                    if not file_path:
+                        file_path = f"correspondence_attachments/{correspondence.id}/{att.file_name}"
+                    possible_paths = [file_path, f"correspondence_attachments/{correspondence.id}/{att.file_name}", att.file_name]
+                    file_path = next((p for p in possible_paths if default_storage.exists(p)), None)
+                    if file_path and default_storage.exists(file_path):
+                        ft, fn = (att.file_type or '').lower(), (att.file_name or '').lower()
+                        if 'image' in ft:
+                            with default_storage.open(file_path, 'rb') as img_file:
+                                img = Image.open(img_file)
+                                max_width = 5.5 * inch
+                                if img.width > max_width:
+                                    ratio = max_width / img.width
+                                    img.thumbnail((max_width, img.height * ratio), Image.Resampling.LANCZOS)
+                                img_buffer = BytesIO()
+                                if img.mode in ('RGBA', 'LA', 'P'):
+                                    rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                                    if img.mode == 'P':
+                                        img = img.convert('RGBA')
+                                    rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                                    img = rgb_img
+                                img.save(img_buffer, format='PNG')
+                                img_buffer.seek(0)
+                                story.append(ReportLabImage(ImageReader(img_buffer), width=img.width, height=img.height))
+                        elif 'pdf' in ft or fn.endswith('.pdf'):
+                            try:
+                                from pdf2image import convert_from_path
+                                import tempfile
+                                full_path = default_storage.path(file_path)
+                                images = convert_from_path(full_path, first_page=1, last_page=1, dpi=150)
+                                if images:
+                                    img = images[0]
+                                    if img.mode in ('RGBA', 'LA', 'P'):
+                                        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                                        if img.mode == 'P':
+                                            img = img.convert('RGBA')
+                                        rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                                        img = rgb_img
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                                        img.save(tmp, format='PNG')
+                                        tmp_path = tmp.name
+                                        temp_files_to_cleanup.append(tmp_path)
+                                    max_w, max_h = 6.5 * 72, 8.5 * 72
+                                    w_pts = img.width * (72.0 / 150.0)
+                                    h_pts = img.height * (72.0 / 150.0)
+                                    if w_pts > max_w or h_pts > max_h:
+                                        r = min(max_w / w_pts, max_h / h_pts)
+                                        w_pts, h_pts = w_pts * r, h_pts * r
+                                    story.append(ReportLabImage(tmp_path, width=w_pts, height=h_pts))
+                                    story.append(Paragraph("<i>First page of PDF</i>", meta_style))
+                            except Exception as e:
+                                logger.warning("PDF conversion failed: %s", e)
+                                story.append(Paragraph(f"<i>PDF: {att.file_name} (preview unavailable)</i>", meta_style))
+                        elif 'html' in ft or fn.endswith(('.html', '.htm')):
+                            with default_storage.open(file_path, 'rb') as f:
+                                html_content = f.read().decode('utf-8', errors='replace')
+                            if html_content and html_content.strip():
+                                story.append(Paragraph(html_to_reportlab(html_content), normal_style))
+                            else:
+                                story.append(Paragraph("<i>HTML file (empty)</i>", meta_style))
+                        else:
+                            story.append(Paragraph(f"<i>File: {att.file_name} (preview not available)</i>", meta_style))
+                    else:
+                        story.append(Paragraph(f"<i>File not found: {att.file_name}</i>", meta_style))
+                except Exception as e:
+                    logger.warning("Attachment processing error for %s: %s", att.file_name, e)
+                    story.append(Paragraph(f"<i>Error loading: {att.file_name}</i>", meta_style))
+                story.append(Spacer(1, 0.2*inch))
+            story.append(Spacer(1, 0.15*inch))
+        else:
+            story.append(PageBreak() if has_doc else Spacer(1, 0.1*inch))
+            story.append(Paragraph("Attachments & Documents", heading_style))
+            story.append(Paragraph("No attachments were linked to this correspondence.", normal_style))
+            story.append(Spacer(1, 0.2*inch))
+
         # Correspondence Details Section
         story.append(Paragraph("Correspondence Details", heading_style))
         
@@ -564,7 +788,7 @@ class CompletionPackageService:
         for label, value in meta_items:
             story.append(Paragraph(f"<b>{label}:</b> {value}", meta_style))
         
-        story.append(Spacer(1, 0.15*inch))
+        story.append(Spacer(1, 0.22*inch))
         
         # Minutes & Decisions Section
         story.append(Paragraph("Minutes & Decisions", heading_style))
@@ -593,11 +817,11 @@ class CompletionPackageService:
                 if hasattr(minute, 'to_office') and minute.to_office:
                     story.append(Paragraph(f"Routed to: {minute.to_office.name}", minute_meta_style))
                 
-                story.append(Spacer(1, 0.1*inch))
+                story.append(Spacer(1, 0.08*inch))
         else:
-            story.append(Paragraph("No minutes were recorded for this correspondence.", normal_style))
+            story.append(Paragraph("<i>— No minutes recorded —</i>", meta_style))
         
-        story.append(Spacer(1, 0.15*inch))
+        story.append(Spacer(1, 0.22*inch))
         
         # Distribution Section
         story.append(Paragraph("Distribution", heading_style))
@@ -608,6 +832,8 @@ class CompletionPackageService:
                 recipient_name = "—"
                 if hasattr(entry, 'directorate') and entry.directorate:
                     recipient_name = entry.directorate.name
+                elif hasattr(entry, 'office') and entry.office:
+                    recipient_name = entry.office.name
                 elif hasattr(entry, 'division') and entry.division:
                     recipient_name = entry.division.name
                 elif hasattr(entry, 'department') and entry.department:
@@ -639,55 +865,17 @@ class CompletionPackageService:
             ]))
             story.append(dist_table)
         else:
-            story.append(Paragraph("No distribution list captured.", normal_style))
+            story.append(Paragraph("<i>— No distribution list —</i>", meta_style))
         
         story.append(Spacer(1, 0.15*inch))
-        
-        # Attachments Section
-        story.append(Paragraph("Attachments", heading_style))
-        
-        if attachments:
-            attach_data = [['File Name', 'Type', 'Size']]
-            for attachment in attachments:
-                file_size = ""
-                if hasattr(attachment, 'file_size') and attachment.file_size:
-                    size_kb = attachment.file_size / 1024
-                    if size_kb < 1024:
-                        file_size = f"{size_kb:.1f} KB"
-                    else:
-                        file_size = f"{size_kb / 1024:.1f} MB"
-                
-                attach_data.append([
-                    attachment.file_name or "—",
-                    getattr(attachment, 'file_type', None) or "—",
-                    file_size or "—"
-                ])
-            
-            attach_table = Table(attach_data, colWidths=[3.5*inch, 1.5*inch, 1*inch])
-            attach_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f1f5f9')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#111827')),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 10),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#0f172a')),
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 1), (-1, -1), 9),
-                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e2e8f0')),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
-                ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-            ]))
-            story.append(attach_table)
-        else:
-            story.append(Paragraph("No attachments were linked to this correspondence.", normal_style))
-        
-        # Build PDF
+
+        # Build PDF (temp_files_to_cleanup must survive until after build – ReportLab reads lazily)
         doc.build(story)
+        for tmp in temp_files_to_cleanup:
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
         buffer.seek(0)
         return buffer.read()
 
@@ -778,7 +966,9 @@ class CompletionPackageService:
         office_ids: set[str] = set()
         office_queryset = Office.objects.filter(is_active=True)
         for entry in correspondence.distribution.all():
-            if entry.department_id:
+            if entry.office_id:
+                office_ids.add(str(entry.office_id))
+            elif entry.department_id:
                 office_ids.update(
                     office_queryset.filter(department_id=entry.department_id).values_list("id", flat=True)
                 )
@@ -814,6 +1004,12 @@ class CompletionPackageService:
             departments.add(correspondence.department_id)
 
         for entry in correspondence.distribution.all():
+            if entry.office_id:
+                office = Office.objects.filter(id=entry.office_id).first()
+                if office and office.division_id:
+                    divisions.add(office.division_id)
+                if office and office.department_id:
+                    departments.add(office.department_id)
             if entry.division_id:
                 divisions.add(entry.division_id)
             if entry.department_id:
@@ -901,11 +1097,15 @@ class ExecutiveApprovalPDFService:
         """
         Generate a comprehensive PDF document for an executive approval.
         
-        Includes:
-        - Original correspondence details
-        - All minutes/actions taken
-        - Executive approval with digital seal
-        - All formatted professionally
+        Document content (in order):
+        - body_html, treatment_response
+        - Parent correspondence content (for Re: responses)
+        - Treat/forward minute text (request context)
+        - Linked DMS document content
+        - Attachments (PDFs, images, HTML files)
+        - Correspondence details
+        - Minutes & actions with digital seal
+        - Footer
         """
         from correspondence.models import Minute as MinuteModel
         from django.utils.dateformat import format as date_format
@@ -1007,15 +1207,263 @@ class ExecutiveApprovalPDFService:
         
         story = []
         
+        # Helper to convert HTML to ReportLab-safe format (Paragraph supports <b>, <i>, <br/>, etc.)
+        def html_to_reportlab(html):
+            if not html or not html.strip():
+                return ""
+            import re
+            text = re.sub(r'</(p|div|li|tr|h[1-6])>', '\n', html, flags=re.IGNORECASE)
+            text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+            text = strip_tags(text)
+            text = text.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+            text = re.sub(r'\n\s*\n', '\n\n', text)
+            return text.strip().replace('\n', '<br/>')
+        
         # Title
         story.append(Paragraph("EXECUTIVE APPROVAL DOCUMENT", title_style))
-        story.append(Spacer(1, 0.3*inch))
+        story.append(Spacer(1, 0.2*inch))
         
+        # --- SECTION 1: Document That Was Approved ---
+        # Bundles approved document content with minutes and seal in one PDF
+        has_doc_content = False
+        
+        # 1a. Letter/Body content (body_html)
+        if correspondence.body_html and correspondence.body_html.strip():
+            story.append(Paragraph("Document Content", header_style))
+            story.append(Spacer(1, 0.1*inch))
+            body_safe = html_to_reportlab(correspondence.body_html)
+            if body_safe:
+                story.append(Paragraph(body_safe, normal_style))
+                story.append(Spacer(1, 0.2*inch))
+                has_doc_content = True
+        
+        # 1a2. Treatment/Request content (treatment_response)
+        if correspondence.treatment_response and correspondence.treatment_response.strip():
+            if not has_doc_content:
+                story.append(Paragraph("Document Content", header_style))
+                story.append(Spacer(1, 0.1*inch))
+            treatment_safe = html_to_reportlab(correspondence.treatment_response)
+            if treatment_safe:
+                story.append(Paragraph(treatment_safe, normal_style))
+                story.append(Spacer(1, 0.2*inch))
+                has_doc_content = True
+        
+        # 1a3. Parent correspondence content (for Re: / response correspondence)
+        parent = getattr(correspondence, 'parent_correspondence', None)
+        if parent:
+            parent_content_parts = []
+            if parent.body_html and parent.body_html.strip():
+                parent_content_parts.append(html_to_reportlab(parent.body_html))
+            if parent.treatment_response and parent.treatment_response.strip():
+                parent_content_parts.append(html_to_reportlab(parent.treatment_response))
+            # Parent's non-approval minutes (request is often in treat/minute)
+            for pm in MinuteModel.objects.filter(
+                correspondence=parent,
+            ).exclude(action_type=MinuteModel.ActionType.APPROVE).order_by('timestamp', 'step_number'):
+                if pm.minute_text and pm.minute_text.strip():
+                    parent_content_parts.append(html_to_reportlab(pm.minute_text))
+            if parent_content_parts:
+                if not has_doc_content:
+                    story.append(Paragraph("Document Content", header_style))
+                    story.append(Spacer(1, 0.1*inch))
+                story.append(Paragraph(
+                    f"<b>Original Request ({parent.reference_number or parent.subject}):</b>",
+                    subheader_style
+                ))
+                story.append(Paragraph("<br/><br/>".join(parent_content_parts), normal_style))
+                story.append(Spacer(1, 0.2*inch))
+                has_doc_content = True
+        
+        # 1a4. Minute text (all non-approval minutes - often contain the request)
+        pre_approval_minutes = MinuteModel.objects.filter(
+            correspondence=correspondence,
+        ).exclude(action_type=MinuteModel.ActionType.APPROVE).order_by('timestamp', 'step_number')
+        for m in pre_approval_minutes:
+            if m.minute_text and m.minute_text.strip():
+                if not has_doc_content:
+                    story.append(Paragraph("Document Content", header_style))
+                    story.append(Spacer(1, 0.1*inch))
+                user_name = m.user.get_full_name() if m.user else m.user.username if m.user else "Unknown"
+                action_label = m.get_action_type_display() if hasattr(m, 'get_action_type_display') else str(m.action_type).title()
+                story.append(Paragraph(f"<b>{action_label} by {user_name}:</b>", subheader_style))
+                story.append(Paragraph(m.minute_text.replace('\n', '<br/>'), normal_style))
+                story.append(Spacer(1, 0.15*inch))
+                has_doc_content = True
+        
+        # 1b. Linked DMS document content
+        from correspondence.models import CorrespondenceDocumentLink
+        doc_links = CorrespondenceDocumentLink.objects.filter(
+            correspondence=correspondence
+        ).select_related('document').order_by('created_at')
+        for link in doc_links:
+            latest_version = (
+                DocumentVersion.objects.filter(document=link.document)
+                .order_by('-version_number')
+                .first()
+            )
+            if latest_version and (latest_version.content_html or latest_version.content_text):
+                if not has_doc_content:
+                    story.append(Paragraph("Document Content", header_style))
+                    story.append(Spacer(1, 0.1*inch))
+                content = latest_version.content_html or latest_version.content_text
+                content_safe = html_to_reportlab(content)
+                if content_safe:
+                    story.append(Paragraph(f"<b>Linked: {link.document.title}</b>", subheader_style))
+                    story.append(Paragraph(content_safe, normal_style))
+                    story.append(Spacer(1, 0.15*inch))
+                    has_doc_content = True
+        
+        # 1c. Attachments (original document + other attachments) - embed before correspondence details
+        attachments = correspondence.attachments.all().order_by('created_at') if hasattr(correspondence, 'attachments') else []
+        if attachments:
+            story.append(PageBreak())
+            story.append(Paragraph("Attachments & Documents", header_style))
+            story.append(Spacer(1, 0.15*inch))
+            # Determine original vs later attachments (within 1 minute of correspondence creation = original)
+            original_threshold = correspondence.created_at + timezone.timedelta(minutes=1)
+            for idx, att in enumerate(attachments, 1):
+                is_original = att.created_at <= original_threshold
+                attachment_label = "Original Document" if is_original else f"Attachment #{idx}"
+                att_header_style = ParagraphStyle(
+                    'AttachmentHeader',
+                    parent=styles['Heading3'],
+                    fontSize=12,
+                    textColor=colors.HexColor('#1e3a5f'),
+                    spaceAfter=6,
+                    spaceBefore=16 if idx > 1 else 0,
+                    fontName='Helvetica-Bold',
+                )
+                story.append(Paragraph(f"{attachment_label}: {att.file_name}", att_header_style))
+                file_size_kb = att.file_size / 1024 if att.file_size else 0
+                file_size_str = f"{file_size_kb:.1f} KB" if file_size_kb < 1024 else f"{file_size_kb / 1024:.1f} MB"
+                att_meta_parts = [f"Type: {att.file_type}", f"Size: {file_size_str}"]
+                try:
+                    att_date_str = date_format(att.created_at, 'F j, Y, H:i')
+                except (AttributeError, TypeError):
+                    att_date_str = att.created_at.strftime('%B %d, %Y, %H:%M') if hasattr(att.created_at, 'strftime') else str(att.created_at)
+                if not is_original:
+                    att_meta_parts.append(f"Added: {att_date_str}")
+                story.append(Paragraph(" · ".join(att_meta_parts), meta_style))
+                story.append(Spacer(1, 0.1*inch))
+                # Try to embed the actual file content (PDF, image, etc.)
+                try:
+                    from django.core.files.storage import default_storage
+                    import os
+                    file_path = None
+                    if att.file_url:
+                        if '/media/' in att.file_url:
+                            file_path = att.file_url.split('/media/')[-1].lstrip('/')
+                        elif att.file_url.startswith('http'):
+                            from urllib.parse import urlparse
+                            parsed = urlparse(att.file_url)
+                            if '/media/' in parsed.path:
+                                file_path = parsed.path.split('/media/')[-1].lstrip('/')
+                            elif parsed.path.startswith('/correspondence_attachments/'):
+                                file_path = parsed.path.lstrip('/')
+                    else:
+                        file_path = f"correspondence_attachments/{correspondence.id}/{att.file_name}"
+                    possible_paths = [file_path] if file_path else []
+                    possible_paths.extend([
+                        f"correspondence_attachments/{correspondence.id}/{att.file_name}",
+                        att.file_name,
+                    ])
+                    file_path = next((p for p in possible_paths if default_storage.exists(p)), None)
+                    if not file_path:
+                        logger.warning(f"Attachment file not found: {att.file_name}, file_url: {att.file_url}")
+                        story.append(Paragraph(f"<i>File not found in storage: {att.file_name}</i>", meta_style))
+                    elif file_path and default_storage.exists(file_path):
+                        file_type_lower = (att.file_type or '').lower()
+                        if 'pdf' in file_type_lower:
+                            pdf_embedded = False
+                            try:
+                                from pdf2image import convert_from_path
+                                import tempfile
+                                import subprocess
+                                poppler_path = None
+                                for bin_path in ['/opt/local/bin', '/usr/local/bin', '/usr/bin']:
+                                    if os.path.exists(os.path.join(bin_path, 'pdftoppm')):
+                                        poppler_path = bin_path
+                                        break
+                                if hasattr(default_storage, 'path'):
+                                    full_path = default_storage.path(file_path)
+                                    convert_kwargs = {'first_page': 1, 'last_page': 1, 'dpi': 300}
+                                    if poppler_path:
+                                        convert_kwargs['poppler_path'] = poppler_path
+                                    images = convert_from_path(full_path, **convert_kwargs)
+                                    if images:
+                                        img = images[0]
+                                        if img.mode in ('RGBA', 'LA', 'P'):
+                                            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                                            if img.mode == 'P':
+                                                img = img.convert('RGBA')
+                                            rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                                            img = rgb_img
+                                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+                                            img.save(tmp, format='PNG')
+                                            tmp_path = tmp.name
+                                            temp_files_to_cleanup.append(tmp_path)
+                                        from reportlab.platypus import Image as ReportLabImage
+                                        max_w, max_h = 6.5 * 72, 8.5 * 72
+                                        w_pts = img.width * (72.0 / 300.0)
+                                        h_pts = img.height * (72.0 / 300.0)
+                                        if w_pts > max_w or h_pts > max_h:
+                                            r = min(max_w / w_pts, max_h / h_pts)
+                                            w_pts, h_pts = w_pts * r, h_pts * r
+                                        story.append(ReportLabImage(tmp_path, width=w_pts, height=h_pts))
+                                        story.append(Paragraph("<i>First page of PDF document</i>", meta_style))
+                                        pdf_embedded = True
+                            except Exception as e:
+                                logger.warning(f"PDF conversion failed: {e}")
+                            if not pdf_embedded:
+                                story.append(Paragraph(f"<i>PDF file: {att.file_name} (preview unavailable)</i>", meta_style))
+                        elif 'html' in file_type_lower or (att.file_name or '').lower().endswith('.html'):
+                            # HTML attachment - include content in document
+                            try:
+                                with default_storage.open(file_path, 'rb') as f:
+                                    html_content = f.read().decode('utf-8', errors='replace')
+                                if html_content and html_content.strip():
+                                    story.append(Paragraph(html_to_reportlab(html_content), normal_style))
+                                else:
+                                    story.append(Paragraph("<i>HTML file (empty)</i>", meta_style))
+                            except Exception as e:
+                                logger.warning(f"Could not read HTML attachment {att.file_name}: {e}")
+                                story.append(Paragraph(f"<i>HTML file: {att.file_name} (could not read)</i>", meta_style))
+                        elif 'image' in file_type_lower:
+                            try:
+                                with default_storage.open(file_path, 'rb') as img_file:
+                                    img = Image.open(img_file)
+                                    max_width = 5.5 * inch
+                                    if img.width > max_width:
+                                        ratio = max_width / img.width
+                                        img.thumbnail((max_width, img.height * ratio), Image.Resampling.LANCZOS)
+                                    img_buffer = BytesIO()
+                                    if img.mode in ('RGBA', 'LA', 'P'):
+                                        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                                        if img.mode == 'P':
+                                            img = img.convert('RGBA')
+                                        rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                                        img = rgb_img
+                                    img.save(img_buffer, format='PNG')
+                                    img_buffer.seek(0)
+                                    from reportlab.platypus import Image as ReportLabImage
+                                    from reportlab.lib.utils import ImageReader
+                                    story.append(ReportLabImage(ImageReader(img_buffer), width=img.width, height=img.height))
+                            except Exception as e:
+                                logger.warning(f"Image embed failed: {e}")
+                                story.append(Paragraph("<i>Image file (could not be embedded)</i>", meta_style))
+                        else:
+                            story.append(Paragraph(f"<i>File type: {att.file_type}. Preview not available.</i>", meta_style))
+                    else:
+                        story.append(Paragraph("<i>File not found in storage</i>", meta_style))
+                except Exception as e:
+                    logger.warning(f"Error processing attachment {att.file_name}: {e}")
+                    story.append(Paragraph(f"<i>Error loading: {str(e)}</i>", meta_style))
+                story.append(Spacer(1, 0.2*inch))
+            story.append(Spacer(1, 0.2*inch))
+
         # Correspondence Details Section
         story.append(Paragraph("Correspondence Details", header_style))
         story.append(Spacer(1, 0.1*inch))
-        
-        # Format received date
         received_date_str = "—"
         if correspondence.received_date:
             try:
@@ -1133,7 +1581,7 @@ class ExecutiveApprovalPDFService:
                         if default_storage.exists(seal.seal_image.name):
                             with default_storage.open(seal.seal_image.name, 'rb') as img_file:
                                 img = Image.open(img_file)
-                                img.thumbnail((200, 200), Image.Resampling.LANCZOS)
+                                img.thumbnail((900, 900), Image.Resampling.LANCZOS)
                                 img_buffer = BytesIO()
                                 # Convert to RGB if necessary (for PNG with transparency)
                                 if img.mode in ('RGBA', 'LA', 'P'):
@@ -1145,11 +1593,10 @@ class ExecutiveApprovalPDFService:
                                 img.save(img_buffer, format='PNG')
                                 img_buffer.seek(0)
                                 
-                                seal_img = ImageReader(img_buffer)
                                 story.append(Spacer(1, 0.1*inch))
                                 # Center the image
                                 from reportlab.platypus import Image as ReportLabImage
-                                seal_image_elem = ReportLabImage(seal_img, width=150, height=150)
+                                seal_image_elem = ReportLabImage(img_buffer, width=144, height=144)
                                 story.append(seal_image_elem)
                     except ImportError as e:
                         logger.warning(f"PIL or reportlab not available for seal image: {e}")
@@ -1162,374 +1609,6 @@ class ExecutiveApprovalPDFService:
             story.append(Paragraph("No minutes recorded for this correspondence.", normal_style))
         
         story.append(Spacer(1, 0.2*inch))
-        
-        # Attachments Section (if any) - Embed actual content
-        attachments = correspondence.attachments.all().order_by('created_at') if hasattr(correspondence, 'attachments') else []
-        if attachments:
-            story.append(PageBreak())
-            story.append(Paragraph("Attachments & Documents", header_style))
-            story.append(Spacer(1, 0.15*inch))
-            
-            # Determine original vs later attachments (within 1 minute of correspondence creation = original)
-            original_threshold = correspondence.created_at + timezone.timedelta(minutes=1)
-            
-            for idx, att in enumerate(attachments, 1):
-                is_original = att.created_at <= original_threshold
-                attachment_label = "Original Document" if is_original else f"Attachment #{idx}"
-                
-                # Attachment header with metadata
-                att_header_style = ParagraphStyle(
-                    'AttachmentHeader',
-                    parent=styles['Heading3'],
-                    fontSize=12,
-                    textColor=colors.HexColor('#1e3a5f'),
-                    spaceAfter=6,
-                    spaceBefore=16 if idx > 1 else 0,
-                    fontName='Helvetica-Bold',
-                )
-                
-                story.append(Paragraph(f"{attachment_label}: {att.file_name}", att_header_style))
-                
-                # Attachment metadata
-                file_size_kb = att.file_size / 1024 if att.file_size else 0
-                file_size_str = f"{file_size_kb:.1f} KB" if file_size_kb < 1024 else f"{file_size_kb / 1024:.1f} MB"
-                
-                att_meta_parts = [
-                    f"Type: {att.file_type}",
-                    f"Size: {file_size_str}",
-                ]
-                
-                # Format created_at
-                try:
-                    att_date_str = date_format(att.created_at, 'F j, Y, H:i')
-                except (AttributeError, TypeError):
-                    if hasattr(att.created_at, 'strftime'):
-                        att_date_str = att.created_at.strftime('%B %d, %Y, %H:%M')
-                    else:
-                        att_date_str = str(att.created_at)
-                
-                if not is_original:
-                    att_meta_parts.append(f"Added: {att_date_str}")
-                
-                story.append(Paragraph(" · ".join(att_meta_parts), meta_style))
-                story.append(Spacer(1, 0.1*inch))
-                
-                # Try to embed the actual file content
-                try:
-                    from django.core.files.storage import default_storage
-                    import os
-                    
-                    # Extract file path from file_url or construct it
-                    file_path = None
-                    if att.file_url:
-                        # Extract path from URL (e.g., /media/correspondence_attachments/...)
-                        if '/media/' in att.file_url:
-                            file_path = att.file_url.split('/media/')[-1].lstrip('/')
-                        elif att.file_url.startswith('http'):
-                            # Full URL - extract path
-                            from urllib.parse import urlparse
-                            parsed = urlparse(att.file_url)
-                            if '/media/' in parsed.path:
-                                file_path = parsed.path.split('/media/')[-1].lstrip('/')
-                            elif parsed.path.startswith('/correspondence_attachments/'):
-                                file_path = parsed.path.lstrip('/')
-                    else:
-                        # Construct path from correspondence ID and filename
-                        file_path = f"correspondence_attachments/{correspondence.id}/{att.file_name}"
-                    
-                    # Try multiple path variations if the first doesn't exist
-                    possible_paths = []
-                    if file_path:
-                        possible_paths.append(file_path)
-                    possible_paths.append(f"correspondence_attachments/{correspondence.id}/{att.file_name}")
-                    # Also try with just the filename in case it's stored differently
-                    possible_paths.append(att.file_name)
-                    
-                    # Find the first path that exists
-                    file_path = None
-                    for path in possible_paths:
-                        if default_storage.exists(path):
-                            file_path = path
-                            break
-                    
-                    # Log for debugging if file not found
-                    if not file_path:
-                        logger.warning(f"Attachment file not found: {att.file_name}, tried paths: {possible_paths}, file_url: {att.file_url}")
-                        story.append(Paragraph(f"<i>File not found in storage: {att.file_name}</i>", meta_style))
-                        continue
-                    
-                    if file_path and default_storage.exists(file_path):
-                        # Determine file type and handle accordingly
-                        file_type_lower = (att.file_type or '').lower()
-                        
-                        if 'pdf' in file_type_lower:
-                            # For PDFs, convert to image using poppler
-                            pdf_embedded = False
-                            try:
-                                from pdf2image import convert_from_path
-                                import tempfile
-                                import subprocess
-                                
-                                # Check if poppler is available
-                                poppler_available = False
-                                try:
-                                    # Try to find pdftoppm or pdftocairo
-                                    result = subprocess.run(['which', 'pdftoppm'], capture_output=True, timeout=2)
-                                    poppler_available = result.returncode == 0
-                                    if not poppler_available:
-                                        result = subprocess.run(['which', 'pdftocairo'], capture_output=True, timeout=2)
-                                        poppler_available = result.returncode == 0
-                                except Exception:
-                                    pass
-                                
-                                # Find poppler path (check MacPorts first, then system)
-                                poppler_path = None
-                                poppler_bin_paths = [
-                                    '/opt/local/bin',  # MacPorts
-                                    '/usr/local/bin',  # Homebrew
-                                    '/usr/bin',        # System
-                                ]
-                                for bin_path in poppler_bin_paths:
-                                    pdftoppm_path = os.path.join(bin_path, 'pdftoppm')
-                                    if os.path.exists(pdftoppm_path) and os.access(pdftoppm_path, os.X_OK):
-                                        poppler_path = bin_path
-                                        logger.info(f"Found poppler at: {poppler_path}")
-                                        break
-                                
-                                if not poppler_available and not poppler_path:
-                                    logger.warning("poppler not found - PDF preview requires poppler-utils to be installed")
-                                    raise ImportError("poppler not available")
-                                
-                                # Get the full file system path if using local storage
-                                if hasattr(default_storage, 'path'):
-                                    try:
-                                        # Local file storage
-                                        full_path = default_storage.path(file_path)
-                                        # Convert first page to image directly from file path
-                                        # Use poppler_path if found
-                                        # Use very high DPI (600) for maximum clarity
-                                        convert_kwargs = {'first_page': 1, 'last_page': 1, 'dpi': 600}
-                                        if poppler_path:
-                                            convert_kwargs['poppler_path'] = poppler_path
-                                        images = convert_from_path(full_path, **convert_kwargs)
-                                        if images:
-                                            img = images[0]
-                                            # For maximum clarity, minimize resizing
-                                            # Only resize if image is extremely large (over 7.5 inches at 600 DPI = 4500 pixels)
-                                            # This preserves maximum detail
-                                            max_width_pixels = 7.5 * 600  # 7.5 inches at 600 DPI
-                                            if img.width > max_width_pixels:
-                                                ratio = max_width_pixels / img.width
-                                                new_height = img.height * ratio
-                                                # Use highest quality resampling (LANCZOS is best for downscaling)
-                                                img = img.resize((int(max_width_pixels), int(new_height)), Image.Resampling.LANCZOS)
-                                            
-                                            img_buffer = BytesIO()
-                                            if img.mode in ('RGBA', 'LA', 'P'):
-                                                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                                                if img.mode == 'P':
-                                                    img = img.convert('RGBA')
-                                                rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-                                                img = rgb_img
-                                            # Save to temporary file for ReportLabImage with maximum quality
-                                            import tempfile
-                                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img_file:
-                                                # Save PNG with no compression for maximum quality
-                                                img.save(tmp_img_file, format='PNG', optimize=False, compress_level=0)
-                                                tmp_img_path = tmp_img_file.name
-                                            
-                                            # Track temp file for cleanup after PDF build
-                                            temp_files_to_cleanup.append(tmp_img_path)
-                                            
-                                            from reportlab.platypus import Image as ReportLabImage
-                                            # Convert pixel dimensions to points for ReportLab
-                                            # At 600 DPI: 1 pixel = 72/600 = 0.12 points
-                                            # Calculate available space: frame is ~492 x 672 points based on error
-                                            # Use slightly smaller to ensure it fits: 6.5 inches = 468 points width
-                                            max_width_pts = 6.5 * 72  # 6.5 inches = 468 points
-                                            max_height_pts = 8.5 * 72  # 8.5 inches = 612 points (leave room for other content)
-                                            
-                                            # Convert image dimensions from pixels to points
-                                            width_pts = img.width * (72.0 / 600.0)
-                                            height_pts = img.height * (72.0 / 600.0)
-                                            
-                                            # Scale down if image is too large to fit in frame
-                                            if width_pts > max_width_pts or height_pts > max_height_pts:
-                                                width_ratio = max_width_pts / width_pts
-                                                height_ratio = max_height_pts / height_pts
-                                                # Use built-in min function explicitly to avoid shadowing issues
-                                                import builtins
-                                                scale_ratio = builtins.min(width_ratio, height_ratio)
-                                                width_pts = width_pts * scale_ratio
-                                                height_pts = height_pts * scale_ratio
-                                            
-                                            # Use the scaled dimensions to fit within page frame
-                                            pdf_image_elem = ReportLabImage(
-                                                tmp_img_path,
-                                                width=width_pts,
-                                                height=height_pts
-                                            )
-                                            story.append(pdf_image_elem)
-                                            story.append(Paragraph("<i>First page of PDF document</i>", meta_style))
-                                            pdf_embedded = True
-                                    except Exception as e:
-                                        logger.warning(
-                                            f"pdf2image convert_from_path (file system) failed: {e}, "
-                                            f"poppler_path={poppler_path}, file={full_path}",
-                                            exc_info=True
-                                        )
-                                        # Don't raise - continue to try temp file method below
-                                else:
-                                    # Remote storage or BytesIO needed
-                                    with default_storage.open(file_path, 'rb') as pdf_file:
-                                        # Save to temp file for pdf2image
-                                        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                                            tmp_file.write(pdf_file.read())
-                                            tmp_path = tmp_file.name
-                                    
-                                    try:
-                                        # Convert first page to image
-                                        # Use poppler_path if found
-                                        # Use very high DPI (600) for maximum clarity
-                                        convert_kwargs = {'first_page': 1, 'last_page': 1, 'dpi': 600}
-                                        if poppler_path:
-                                            convert_kwargs['poppler_path'] = poppler_path
-                                        images = convert_from_path(tmp_path, **convert_kwargs)
-                                        if images:
-                                            img = images[0]
-                                            # For maximum clarity, minimize resizing
-                                            # Only resize if image is extremely large (over 7.5 inches at 600 DPI = 4500 pixels)
-                                            # This preserves maximum detail
-                                            max_width_pixels = 7.5 * 600  # 7.5 inches at 600 DPI
-                                            if img.width > max_width_pixels:
-                                                ratio = max_width_pixels / img.width
-                                                new_height = img.height * ratio
-                                                # Use highest quality resampling (LANCZOS is best for downscaling)
-                                                img = img.resize((int(max_width_pixels), int(new_height)), Image.Resampling.LANCZOS)
-                                            
-                                            img_buffer = BytesIO()
-                                            if img.mode in ('RGBA', 'LA', 'P'):
-                                                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                                                if img.mode == 'P':
-                                                    img = img.convert('RGBA')
-                                                rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-                                                img = rgb_img
-                                            # Save to temporary file for ReportLabImage with maximum quality
-                                            import tempfile
-                                            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_img_file:
-                                                # Save PNG with no compression for maximum quality
-                                                img.save(tmp_img_file, format='PNG', optimize=False, compress_level=0)
-                                                tmp_img_path = tmp_img_file.name
-                                            
-                                            # Track temp file for cleanup after PDF build
-                                            temp_files_to_cleanup.append(tmp_img_path)
-                                            
-                                            from reportlab.platypus import Image as ReportLabImage
-                                            # Convert pixel dimensions to points for ReportLab
-                                            # At 600 DPI: 1 pixel = 72/600 = 0.12 points
-                                            # Calculate available space: frame is ~492 x 672 points based on error
-                                            # Use slightly smaller to ensure it fits: 6.5 inches = 468 points width
-                                            max_width_pts = 6.5 * 72  # 6.5 inches = 468 points
-                                            max_height_pts = 8.5 * 72  # 8.5 inches = 612 points (leave room for other content)
-                                            
-                                            # Convert image dimensions from pixels to points
-                                            width_pts = img.width * (72.0 / 600.0)
-                                            height_pts = img.height * (72.0 / 600.0)
-                                            
-                                            # Scale down if image is too large to fit in frame
-                                            if width_pts > max_width_pts or height_pts > max_height_pts:
-                                                width_ratio = max_width_pts / width_pts
-                                                height_ratio = max_height_pts / height_pts
-                                                # Use built-in min function explicitly to avoid shadowing issues
-                                                import builtins
-                                                scale_ratio = builtins.min(width_ratio, height_ratio)
-                                                width_pts = width_pts * scale_ratio
-                                                height_pts = height_pts * scale_ratio
-                                            
-                                            # Use the scaled dimensions to fit within page frame
-                                            pdf_image_elem = ReportLabImage(
-                                                tmp_img_path,
-                                                width=width_pts,
-                                                height=height_pts
-                                            )
-                                            story.append(pdf_image_elem)
-                                            story.append(Paragraph("<i>First page of PDF document</i>", meta_style))
-                                            pdf_embedded = True
-                                    finally:
-                                        if os.path.exists(tmp_path):
-                                            temp_files_to_cleanup.append(tmp_path)
-                            except ImportError:
-                                logger.warning("pdf2image not installed - poppler may be missing")
-                            except Exception as e:
-                                logger.warning(
-                                    f"pdf2image conversion failed: {e}, "
-                                    f"poppler_path={poppler_path}, file_path={file_path}",
-                                    exc_info=True
-                                )
-                            
-                            # If poppler conversion failed, show metadata only
-                            if not pdf_embedded:
-                                story.append(Paragraph("<b>PDF Document</b>", subheader_style))
-                                story.append(Paragraph(
-                                    f"<i>PDF file: {att.file_name}<br/>"
-                                    f"Size: {file_size_str}<br/>"
-                                    f"Note: PDF image conversion was not possible (poppler may not be available). "
-                                    f"Please download the file to view its contents.</i>",
-                                    meta_style
-                                ))
-                                logger.info(
-                                    f"PDF image conversion failed for: {att.file_name}, "
-                                    f"path: {file_path}, "
-                                    f"exists: {default_storage.exists(file_path) if file_path else False}"
-                                )
-                        
-                        elif 'image' in file_type_lower:
-                            # For images, embed directly
-                            try:
-                                with default_storage.open(file_path, 'rb') as img_file:
-                                    img = Image.open(img_file)
-                                    # Resize to fit page width (max 5.5 inches)
-                                    max_width = 5.5 * inch
-                                    if img.width > max_width:
-                                        ratio = max_width / img.width
-                                        new_height = img.height * ratio
-                                        img.thumbnail((max_width, new_height), Image.Resampling.LANCZOS)
-                                    
-                                    img_buffer = BytesIO()
-                                    if img.mode in ('RGBA', 'LA', 'P'):
-                                        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                                        if img.mode == 'P':
-                                            img = img.convert('RGBA')
-                                        rgb_img.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
-                                        img = rgb_img
-                                    img.save(img_buffer, format='PNG')
-                                    img_buffer.seek(0)
-                                    
-                                    from reportlab.platypus import Image as ReportLabImage
-                                    img_reader = ImageReader(img_buffer)
-                                    img_elem = ReportLabImage(img_reader, width=img.width, height=img.height)
-                                    story.append(img_elem)
-                            except Exception as e:
-                                logger.warning(f"Could not embed image: {e}")
-                                story.append(Paragraph("<i>Image file (could not be embedded)</i>", meta_style))
-                        
-                        else:
-                            # For other file types, show metadata only
-                            story.append(Paragraph(
-                                f"<i>File type: {att.file_type or 'Unknown'}. "
-                                f"Content preview not available for this file type.</i>",
-                                meta_style
-                            ))
-                    else:
-                        story.append(Paragraph("<i>File not found in storage</i>", meta_style))
-                
-                except Exception as e:
-                    logger.warning(f"Error processing attachment {att.file_name}: {e}")
-                    story.append(Paragraph(f"<i>Error loading attachment: {str(e)}</i>", meta_style))
-                
-                story.append(Spacer(1, 0.2*inch))
-            
-            story.append(Spacer(1, 0.2*inch))
         
         # Footer
         story.append(Spacer(1, 0.3*inch))
@@ -1548,7 +1627,6 @@ class ExecutiveApprovalPDFService:
             buffer.seek(0)
             return buffer.getvalue()
         finally:
-            # Clean up all temporary files after PDF is built
             for temp_file in temp_files_to_cleanup:
                 try:
                     if os.path.exists(temp_file):
@@ -1560,14 +1638,12 @@ class ExecutiveApprovalPDFService:
 class CaseService:
     """Service for managing Cases - unified case/file management."""
     
-    # Correspondence document types that should auto-create cases
     CASE_TRIGGERING_TYPES = [
         Correspondence.DocumentType.COMPLAINT,
         Correspondence.DocumentType.REQUEST,
         Correspondence.DocumentType.INQUIRY,
     ]
     
-    # Map correspondence document types to case types
     CASE_TYPE_MAP = {
         Correspondence.DocumentType.COMPLAINT: "complaint",
         Correspondence.DocumentType.REQUEST: "request",
@@ -1582,22 +1658,9 @@ class CaseService:
     def generate_case_number(cls) -> str:
         """Generate a unique case number."""
         from datetime import datetime
-        year = datetime.now().year
-        # Format: CASE/YYYY/XXX (e.g., CASE/2025/001)
-        last_case = Case.objects.filter(
-            case_number__startswith=f"CASE/{year}/"
-        ).order_by('-case_number').first()
-        
-        if last_case:
-            try:
-                last_num = int(last_case.case_number.split('/')[-1])
-                next_num = last_num + 1
-            except (ValueError, IndexError):
-                next_num = 1
-        else:
-            next_num = 1
-        
-        return f"CASE/{year}/{next_num:03d}"
+        today = timezone.now().date()
+        count = Case.objects.filter(opened_at__date=today).count() + 1
+        return f"CASE/{today.strftime('%Y%m%d')}/{count:04d}"
     
     @classmethod
     @transaction.atomic
@@ -1650,7 +1713,10 @@ class CaseService:
         case = Case.objects.create(
             case_number=case_number,
             title=correspondence.subject,
-            description=correspondence.summary or correspondence.body_html[:500] if correspondence.body_html else "",
+            description=(
+                correspondence.treatment_response
+                or (correspondence.body_html[:500] if correspondence.body_html else "")
+            ),
             case_type=case_type,
             status=Case.Status.OPEN,
             priority=correspondence.priority,
@@ -2205,4 +2271,3 @@ class CaseService:
         # 2. Evaluate rule conditions against case state and context
         # 3. Execute matching rule actions (notifications, status updates, etc.)
         pass
-

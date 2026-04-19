@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { ListRowCard } from '@/components/shared/ListRowCard';
 import {
   Select,
   SelectContent,
@@ -34,6 +34,24 @@ import {
   Copy,
 } from 'lucide-react';
 import { formatDateShort } from '@/lib/correspondence-helpers';
+import { cn } from '@/lib/utils';
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -42,6 +60,9 @@ import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
 
 const STORAGE_KEY = 'office-inbox-selection';
 
@@ -105,7 +126,7 @@ const CorrespondenceInbox = () => {
     initialPageSize: 25,
     totalCount: count,
   });
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['pending', 'in-progress']);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [assignedOnly, setAssignedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<string>('priority');
@@ -142,6 +163,7 @@ const CorrespondenceInbox = () => {
 
   // Get user's organizational unit IDs for CC/distribution matching
   const userOrgIds = useMemo(() => {
+    const officeIds = new Set<string>();
     const divisionIds = new Set<string>();
     const departmentIds = new Set<string>();
     const directorateIds = new Set<string>();
@@ -150,6 +172,7 @@ const CorrespondenceInbox = () => {
     userOfficeMemberships.forEach((membership) => {
       const office = offices.find((o) => o.id === membership.officeId);
       if (office) {
+        officeIds.add(office.id);
         if (office.divisionId) divisionIds.add(office.divisionId);
         if (office.departmentId) departmentIds.add(office.departmentId);
         if (office.directorateId) directorateIds.add(office.directorateId);
@@ -159,7 +182,7 @@ const CorrespondenceInbox = () => {
     // Note: User type has division/department/directorate as names, not IDs
     // The office memberships above already capture the user's organizational units
 
-    return { divisionIds, departmentIds, directorateIds };
+    return { officeIds, divisionIds, departmentIds, directorateIds };
   }, [userOfficeMemberships, offices, currentUser]);
 
   // Helper to check if user is a CC recipient and get the purpose
@@ -170,6 +193,9 @@ const CorrespondenceInbox = () => {
 
     for (const recipient of corr.distribution) {
       // Check if user's org matches this distribution entry
+      if (recipient.type === 'office' && recipient.officeId && userOrgIds.officeIds.has(recipient.officeId)) {
+        return { isCC: true, purpose: recipient.purpose };
+      }
       if (recipient.type === 'division' && recipient.divisionId && userOrgIds.divisionIds.has(recipient.divisionId)) {
         return { isCC: true, purpose: recipient.purpose };
       }
@@ -187,7 +213,7 @@ const CorrespondenceInbox = () => {
   // Count active filters for badge
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedStatuses.length > 0 && !(selectedStatuses.length === 2 && selectedStatuses.includes('pending') && selectedStatuses.includes('in-progress'))) count++;
+    if (selectedStatuses.length > 0) count++;
     if (selectedPriorities.length > 0) count++;
     if (assignedOnly) count++;
     if (dateFrom) count++;
@@ -209,7 +235,7 @@ const CorrespondenceInbox = () => {
   };
 
   const clearAllFilters = () => {
-    setSelectedStatuses(['pending', 'in-progress']);
+    setSelectedStatuses([]);
     setSelectedPriorities([]);
     setAssignedOnly(false);
     setDateFrom('');
@@ -250,13 +276,15 @@ const CorrespondenceInbox = () => {
   }, [selectedOfficeId, debouncedSearch, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {
-    if (hydrated && currentUser && !hasCorrespondenceAccess) {
+    // Redirect if access is denied (don't wait for hydration)
+    if (!hasCorrespondenceAccess) {
       router.replace('/inbox');
     }
-  }, [hydrated, currentUser, hasCorrespondenceAccess, router]);
+  }, [hasCorrespondenceAccess, router]);
 
   useEffect(() => {
-    if (!hydrated || !currentUser || !hasCorrespondenceAccess) return;
+    // Fetch data immediately if user has correspondence access (don't wait for currentUser hydration)
+    if (!hasCorrespondenceAccess) return;
 
     const fetchInbox = async () => {
       setLoading(true);
@@ -313,7 +341,7 @@ const CorrespondenceInbox = () => {
     };
 
     void fetchInbox();
-  }, [hydrated, currentUser, hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
+  }, [hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -362,60 +390,114 @@ const CorrespondenceInbox = () => {
     };
 
     return (
-      <Link href={`/correspondence/${corr.id}`} className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer block">
-        <div className="flex items-start gap-4">
-          <div className={`p-3 rounded-lg relative ${corr.priority === 'urgent' ? 'bg-destructive/10' : corr.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
-            <Mail className={`h-5 w-5 ${corr.priority === 'urgent' ? 'text-destructive' : corr.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
+      <ListRowCard
+        density="compact"
+        href={`/correspondence/${corr.id}`}
+        leading={(
+          <div
+            className={cn(
+              correspondenceQueueLeadingBoxClass,
+              corr.priority === 'urgent'
+                ? 'bg-destructive/10'
+                : corr.priority === 'high'
+                  ? 'bg-warning/10'
+                  : 'bg-primary/10',
+            )}
+          >
+            <Mail
+              className={cn(
+                correspondenceQueueLeadingIconClass,
+                corr.priority === 'urgent'
+                  ? 'text-destructive'
+                  : corr.priority === 'high'
+                    ? 'text-warning'
+                    : 'text-primary',
+              )}
+            />
             {ccInfo.isCC && (
-              <div className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                <Copy className="h-2.5 w-2.5 text-white" />
+              <div className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-blue-500">
+                <Copy className="h-2 w-2 text-white" />
               </div>
             )}
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex-1 min-w-0">
-                <h4 className="font-semibold text-foreground truncate mb-1">{corr.subject}</h4>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {ccInfo.isCC && (
-                    <Badge variant="outline" className={`gap-1 ${getPurposeColor(ccInfo.purpose)}`}>
-                      <Copy className="h-3 w-3" />
-                      {getPurposeLabel(ccInfo.purpose)}
-                  </Badge>
-                  )}
-                  <Badge variant={getPriorityColor(corr.priority)}>{corr.priority.toUpperCase()}</Badge>
-                  <Badge variant="outline" className="gap-1">
-                    {corr.direction === 'downward' ? (<><ArrowDown className="h-3 w-3 text-info" />Downward</>) : (<><ArrowUp className="h-3 w-3 text-success" />Upward</>)}
-                  </Badge>
-                  <Badge variant="secondary" className={getStatusColor(corr.status)}>{corr.status.replace('-', ' ')}</Badge>
-                  {overdue && <Badge variant="destructive">SLA Breach</Badge>}
-                  {daysPending > 0 && (
-                    <Badge variant={daysPendingColor} className="gap-1">
-                      <Clock className="h-3 w-3" />{daysPending} day{daysPending !== 1 ? 's' : ''} pending
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDateShort(corr.receivedDate)}</span>
-            </div>
-            <div className="space-y-1 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" /><span>From: {corr.senderName}</span></div>
-              <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /><span>Ref: {corr.referenceNumber}</span></div>
-              {division && <div className="flex items-center gap-2"><AlertCircle className="h-3.5 w-3.5" /><span>Division: {division.name}</span></div>}
-              {currentApprover && <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /><span>Current: {currentApprover.name}</span></div>}
-              {corr.currentOfficeName && <div className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5" /><span>Office: {corr.currentOfficeName}</span></div>}
-            </div>
+        )}
+      >
+        <h4 className={correspondenceQueueSubjectClass}>{corr.subject}</h4>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            {ccInfo.isCC && (
+              <Badge
+                variant="outline"
+                className={cn(correspondenceQueueBadgeClass, getPurposeColor(ccInfo.purpose))}
+              >
+                <Copy className="h-2.5 w-2.5" />
+                {getPurposeLabel(ccInfo.purpose)}
+              </Badge>
+            )}
+            <Badge variant={getPriorityColor(corr.priority)} className={correspondenceQueueBadgeClass}>
+              {corr.priority.toUpperCase()}
+            </Badge>
+            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+              {corr.direction === 'downward' ? (
+                <><ArrowDown className="h-2.5 w-2.5 text-info" />Downward</>
+              ) : (
+                <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
+              )}
+            </Badge>
+            <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, getStatusColor(corr.status))}>
+              {corr.status.replace('-', ' ')}
+            </Badge>
+            {overdue && (
+              <Badge variant="destructive" className={correspondenceQueueBadgeClass}>
+                SLA Breach
+              </Badge>
+            )}
+            {daysPending > 0 && (
+              <Badge variant={daysPendingColor} className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+                <Clock className="h-2.5 w-2.5" />
+                {daysPending} day{daysPending !== 1 ? 's' : ''} pending
+              </Badge>
+            )}
           </div>
+          <span className={correspondenceQueueDateClass}>{formatDateShort(corr.receivedDate)}</span>
         </div>
-      </Link>
+        <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+          <span className={correspondenceQueueMetaItemClass}>
+            <UserIcon className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">From: {corr.senderName}</span>
+          </span>
+          <span className={correspondenceQueueMetaItemClass}>
+            <Mail className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">Ref: {corr.referenceNumber}</span>
+          </span>
+          {division && (
+            <span className={correspondenceQueueMetaItemClass}>
+              <AlertCircle className={correspondenceQueueMetaIconClass} />
+              <span className="truncate">Division: {division.name}</span>
+            </span>
+          )}
+          {currentApprover && (
+            <span className={correspondenceQueueMetaItemClass}>
+              <Clock className={correspondenceQueueMetaIconClass} />
+              <span className="truncate">Current: {currentApprover.name}</span>
+            </span>
+          )}
+          {corr.currentOfficeName && (
+            <span className={correspondenceQueueMetaItemClass}>
+              <Building2 className={correspondenceQueueMetaIconClass} />
+              <span className="truncate">Office: {corr.currentOfficeName}</span>
+            </span>
+          )}
+        </div>
+      </ListRowCard>
     );
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">
-          <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading office inbox…</CardContent></Card>
+          <LoadingState message="Loading office inbox…" />
         </div>
       </DashboardLayout>
     );
@@ -467,7 +549,7 @@ const CorrespondenceInbox = () => {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Inbox Filters</CardTitle>
+                <CardTitle className="text-lg">Office Inbox Filters</CardTitle>
                 {activeFilterCount > 0 && (
                   <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>
                 )}
@@ -573,30 +655,39 @@ const CorrespondenceInbox = () => {
             { label: 'Assigned to You', value: summary.assigned_to_user, icon: UserIcon, bgClass: 'bg-info/10', iconClass: 'text-info' },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
-              <CardContent className="p-6">
+              <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
-                  <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        {error && <Card><CardContent className="py-4 text-sm text-destructive">{error}</CardContent></Card>}
+        {error && <ErrorState message={error} variant="inline" />}
 
         {loading ? (
-          <Card><CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading office queue…</CardContent></Card>
+          <LoadingState message="Loading office queue…" />
         ) : inboxItems.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Inbox className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-sm text-muted-foreground mb-2">{debouncedSearch || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence routed to your office yet.'}</p>
-              {(debouncedSearch || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">Clear Filters</Button>}
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={<Inbox className={registryQueueEmptyIconClass} />}
+            title={debouncedSearch || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence routed to your office yet'}
+            message={debouncedSearch || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'When correspondence is routed to your office, it will appear here.'}
+            actionLabel={debouncedSearch || activeFilterCount > 0 ? 'Clear Filters' : undefined}
+            onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+          />
         ) : (
-          <div className="space-y-3">{inboxItems.map((corr) => <CorrespondenceCard key={corr.id} corr={corr} />)}</div>
+          <div className={correspondenceQueueListStackClass}>
+            {inboxItems.map((corr) => (
+              <CorrespondenceCard key={corr.id} corr={corr} />
+            ))}
+          </div>
         )}
 
         {/* Pagination */}

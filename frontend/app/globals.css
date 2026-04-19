@@ -144,3 +144,11 @@ All colors MUST be HSL.
   }
 }
 
+/* Remove focus outline/ring from TipTap/ProseMirror editor composer */
+.ProseMirror:focus,
+.ProseMirror:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: none !important;
+}
+

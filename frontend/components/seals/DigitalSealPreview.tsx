@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import QRCode from "qrcode";
 
 interface DigitalSealPreviewProps {
@@ -35,7 +35,8 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
   verificationBaseUrl,
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [imagesReady, setImagesReady] = useState(false);
+  // Increments when logo/signature/QR load (or logo gives up); ensures redraw so logo/QR appear after async load
+  const [loadCount, setLoadCount] = useState(0);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const logoRef = useRef<HTMLImageElement | null>(null);
   const signatureRef = useRef<HTMLImageElement | null>(null);
@@ -108,8 +109,7 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
         qrImg.onload = () => {
           if (!cancelled) {
             qrRef.current = qrImg;
-            // Use a counter to force redraw without infinite loop
-            setImagesReady(prev => true);
+            setLoadCount((c) => c + 1);
           }
         };
         qrImg.src = dataUrl;
@@ -138,19 +138,16 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
       logo.onload = () => {
         if (!cancelled) {
           logoRef.current = logo;
-          setImagesReady(true);
-          logInfo('Logo loaded successfully:', src);
+          setLoadCount((c) => c + 1);
         }
       };
       logo.onerror = () => {
         if (!cancelled) {
           if (fallbackSrc) {
-            // Try fallback
-            logInfo('Logo failed, trying fallback:', fallbackSrc);
             tryLoadLogo(fallbackSrc);
           } else {
             logWarn('Failed to load NPA logo - using placeholder');
-            setImagesReady(true); // Continue with placeholder
+            setLoadCount((c) => c + 1);
           }
         }
       };
@@ -183,15 +180,14 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
     sig.onload = () => {
       if (!cancelled) {
         signatureRef.current = sig;
-        setImagesReady(prev => true);
-        logInfo('Signature loaded successfully:', signatureImage);
+        setLoadCount((c) => c + 1);
       }
     };
     sig.onerror = (error) => {
       if (!cancelled) {
         logWarn('Failed to load signature image:', signatureImage, error);
         signatureRef.current = null;
-        setImagesReady(prev => true); // Continue without signature
+        setLoadCount((c) => c + 1);
       }
     };
     sig.src = signatureImage;
@@ -413,7 +409,7 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-  }, [size, officeName, officeTitle, signatureText, serial, showQR, imagesReady]);
+  }, [size, officeName, officeTitle, signatureText, serial, showQR, loadCount]);
 
   return (
     <div className="flex flex-col items-center gap-4">

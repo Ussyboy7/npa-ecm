@@ -1,7 +1,7 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -29,6 +29,25 @@ import { toast } from "sonner";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
 import { login, clearTokens } from "@/lib/api-client";
 import { getStoredRedirectPath } from "@/lib/auth-errors";
+
+/** Valid route prefixes for post-login redirect. Invalid or unknown paths fall back to /dashboard to avoid 404s. */
+const ALLOWED_REDIRECT_PREFIXES = [
+  "/inbox", "/dashboard", "/correspondence", "/cases", "/admin", "/analytics",
+  "/approvals", "/audit", "/dms", "/documents", "/forms", "/help", "/integrations",
+  "/notifications", "/records", "/seal-preview", "/search", "/settings", "/tasks",
+];
+
+const DEFAULT_POST_LOGIN_PATH = "/dashboard";
+
+function resolveRedirectPath(raw: string | null | undefined): string {
+  const s = (raw || "").trim();
+  if (!s || s === "/") return DEFAULT_POST_LOGIN_PATH;
+  if (!s.startsWith("/") || s.includes("//") || s.includes("..")) return DEFAULT_POST_LOGIN_PATH;
+  if (s.startsWith("/login") || s.startsWith("/verify")) return DEFAULT_POST_LOGIN_PATH;
+  const pathname = s.split("?")[0];
+  const allowed = ALLOWED_REDIRECT_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+  return allowed ? s : DEFAULT_POST_LOGIN_PATH;
+}
 
 type PersonaOption = {
   id: string;
@@ -76,7 +95,7 @@ const DEMO_PERSONAS: PersonaOption[] = [
   },
 ];
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
@@ -129,14 +148,22 @@ export default function LoginPage() {
       // Check URL search params (from middleware redirect)
       const redirectFromUrl = searchParams?.get('redirect');
       
-      // Priority: URL param > Cookie > SessionStorage > Default
-      const redirectPath = redirectFromUrl || redirectFromCookie || redirectFromStorage || "/dashboard";
-      
+      // Priority: URL param > Cookie > SessionStorage > Default. Resolve to a known route to avoid 404s.
+      const redirectPath = resolveRedirectPath(
+        redirectFromUrl || redirectFromCookie || redirectFromStorage || DEFAULT_POST_LOGIN_PATH
+      );
+
       // Clear cookie if it exists
       if (redirectFromCookie && typeof document !== 'undefined') {
         document.cookie = 'redirect_after_login=; path=/; max-age=0; samesite=lax';
       }
-      
+
+      // Full page redirect ensures layout re-runs with auth cookies, so server bootstrap gets fresh data.
+      if (typeof window !== "undefined") {
+        window.location.assign(redirectPath);
+        return;
+      }
+      router.refresh();
       router.push(redirectPath);
     } catch (error: unknown) {
       logError(error);
@@ -354,5 +381,13 @@ export default function LoginPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -133,11 +133,11 @@ export default function NotificationsPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6 space-y-4">
+      <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
+            <h1 className="text-3xl font-bold flex items-center gap-2">
               <Bell className="h-6 w-6 text-primary" />
               Notifications
             </h1>

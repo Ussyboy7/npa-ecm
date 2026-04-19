@@ -54,15 +54,15 @@ export default function CaseTemplatesPage() {
   });
 
   useEffect(() => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser?.id) return;
     loadTemplates();
-  }, [hydrated, currentUser]);
+  }, [currentUser?.id]);
 
   const loadTemplates = async () => {
     setLoading(true);
     try {
       const data = await getCaseTemplates();
-      setTemplates(data.filter((t) => t.is_active));
+      setTemplates(Array.isArray(data) ? data.filter((t) => t.is_active) : []);
     } catch (err) {
       logError("Failed to load templates", err);
       toast.error("Failed to load templates");
@@ -108,7 +108,7 @@ export default function CaseTemplatesPage() {
     template.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return null;
   }
 
@@ -264,4 +264,3 @@ export default function CaseTemplatesPage() {
     </DashboardLayout>
   );
 }
-

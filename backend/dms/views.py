@@ -5,11 +5,13 @@ from __future__ import annotations
 import base64
 import logging
 import os
+from datetime import timedelta
 from datetime import datetime
 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.db import connection
 from django.db.models import Max, Q
 from django.utils import timezone
 from django.utils.text import slugify
@@ -55,6 +57,46 @@ from .serializers import (
 from .services import OCRService, DocumentSummaryService
 
 logger = logging.getLogger(__name__)
+
+
+def _document_search_terms(search_query: str) -> list[str]:
+    """Split comma-separated search into terms (OR match). Single phrase stays one term."""
+    s = (search_query or "").strip()
+    if not s:
+        return []
+    if "," in s:
+        return [t.strip() for t in s.split(",") if t.strip()]
+    return [s]
+
+
+def _apply_document_text_search(queryset, terms: list[str]):
+    """OR across terms; each term matches title, reference, description, or version OCR/text."""
+    combined = Q()
+    for term in terms:
+        combined |= (
+            Q(title__icontains=term)
+            | Q(reference_number__icontains=term)
+            | Q(description__icontains=term)
+            | Q(versions__content_text__icontains=term)
+            | Q(versions__ocr_text__icontains=term)
+        )
+    return queryset.filter(combined)
+
+
+def _apply_document_tag_search_postgresql(queryset, terms: list[str]):
+    """
+    Documents where any JSON array tag string matches any term (substring, case-insensitive).
+    Requires PostgreSQL (jsonb_array_elements_text).
+    """
+    if not terms or connection.vendor != "postgresql":
+        return queryset.none()
+    fragments = [
+        "EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE((dms_document.tags)::jsonb, '[]'::jsonb)) AS _tag_el WHERE _tag_el ILIKE %s)"
+        for _ in terms
+    ]
+    where_sql = "(" + " OR ".join(fragments) + ")"
+    params = [f"%{t}%" for t in terms]
+    return queryset.extra(where=[where_sql], params=params)
 
 
 class DocumentWorkspaceViewSet(viewsets.ModelViewSet):
@@ -115,6 +157,8 @@ class DocumentViewSet(viewsets.ModelViewSet):
         # Get date range parameters
         date_from = self.request.query_params.get("date_from")
         date_to = self.request.query_params.get("date_to")
+        status_in = self.request.query_params.get("status_in", "").strip()
+        document_type_in = self.request.query_params.get("document_type_in", "").strip()
         
         # Apply date range filter first (before search to reduce queryset size)
         if date_from:
@@ -130,89 +174,91 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(created_at__date__lte=to_date)
             except ValueError:
                 pass  # Invalid date format, ignore
+
+        if status_in:
+            statuses = [value.strip() for value in status_in.split(",") if value.strip()]
+            if statuses:
+                queryset = queryset.filter(status__in=statuses)
+
+        if document_type_in:
+            document_types = [value.strip() for value in document_type_in.split(",") if value.strip()]
+            if document_types:
+                queryset = queryset.filter(document_type__in=document_types)
         
-        # If there's a search query, search across all fields including version content
+        # If there's a search query, search across fields, version content, and tags (PostgreSQL)
         if search_query:
-            # Build comprehensive search filter using icontains for partial word matching
-            # This supports searching with partial words (e.g., "en" matches "Enterprise", "R" matches "Request")
-            # icontains is case-insensitive and supports substring matching
-            base_search = (
-                Q(title__icontains=search_query) |
-                Q(reference_number__icontains=search_query) |
-                Q(description__icontains=search_query)
-            )
-            
-            # Note: tags is JSONField - icontains doesn't work directly on JSONField
-            # We skip tags search for now to avoid errors
-            # If needed, can implement JSONB text search separately
-            
-            # Also search in version content (use icontains - supports partial words)
-            version_search = (
-                Q(versions__content_text__icontains=search_query) |
-                Q(versions__ocr_text__icontains=search_query)
-            )
-            
-            # Combine: documents matching base fields OR version content
-            # Using icontains ensures partial word matching works (e.g., "R" matches "Request", "Re", "Rollout")
-            search_filter = base_search | version_search
-            
-            # Apply search filter FIRST - this will match any document with the search term in title, reference, description, or version content
-            # This must happen before other filters to ensure search works correctly
-            queryset = queryset.filter(search_filter)
-            
-            # Still need to apply other filters (status, type, etc.) from DjangoFilterBackend
-            # Temporarily remove SearchFilter to avoid double-filtering (we handle search manually above)
-            from rest_framework.filters import SearchFilter
-            original_backends = self.filter_backends
-            self.filter_backends = [b for b in original_backends if not isinstance(b, SearchFilter)]
-            try:
-                # Apply DjangoFilterBackend filters (status, type, etc.) but NOT SearchFilter
+            terms = _document_search_terms(search_query)
+            if not terms:
+                # e.g. only commas — no meaningful terms
                 queryset = super().filter_queryset(queryset)
-            finally:
-                self.filter_backends = original_backends
+            else:
+                text_qs = _apply_document_text_search(queryset, terms)
+                if connection.vendor == "postgresql":
+                    tag_qs = _apply_document_tag_search_postgresql(queryset, terms)
+                    combined_pks = set(text_qs.values_list("pk", flat=True)) | set(
+                        tag_qs.values_list("pk", flat=True)
+                    )
+                    queryset = queryset.filter(pk__in=combined_pks) if combined_pks else queryset.none()
+                else:
+                    queryset = text_qs
             
-            # Apply distinct() after all filters to avoid duplicates from version joins
-            queryset = queryset.distinct()
-            
-            # For longer queries (3+ chars), optionally enhance with full-text search for better ranking
-            # But always include icontains results to ensure partial matches are found
-            if len(search_query.strip()) >= 3:
+                # Still need to apply other filters (status, type, etc.) from DjangoFilterBackend
+                # Temporarily remove SearchFilter to avoid double-filtering (we handle search manually above)
+                from rest_framework.filters import SearchFilter
+
+                original_backends = self.filter_backends
+                self.filter_backends = [b for b in original_backends if not isinstance(b, SearchFilter)]
                 try:
-                    from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
-                    search_query_obj = SearchQuery(search_query, config="english")
-                    
-                    # Try to get full-text search results for ranking
-                    if hasattr(queryset.model, '_meta') and 'search_vector' in [f.name for f in queryset.model._meta.get_fields()]:
-                        # If search_vector field exists, use it
-                        full_text_pks = list(queryset.filter(search_vector=search_query_obj).values_list('pk', flat=True))
-                    else:
-                        # Build SearchVector on the fly
-                        search_vector = (
-                            SearchVector("title", weight="A", config="english") +
-                            SearchVector("reference_number", weight="A", config="english") +
-                            SearchVector("description", weight="B", config="english") +
-                            SearchVector("tags", weight="C", config="english")
-                        )
-                        full_text_pks = list(
-                            queryset.annotate(
-                                search=search_vector,
-                                rank=SearchRank(search_vector, search_query_obj)
-                            ).filter(search=search_query_obj).values_list('pk', flat=True)
-                        )
-                    
-                    # Reorder results: full-text matches first (better ranking), then icontains matches
-                    if full_text_pks:
-                        from django.db.models import Case, When, IntegerField
-                        queryset = queryset.annotate(
-                            search_priority=Case(
-                                When(pk__in=full_text_pks, then=1),
-                                default=2,
-                                output_field=IntegerField()
+                    # Apply DjangoFilterBackend filters (status, type, etc.) but NOT SearchFilter
+                    queryset = super().filter_queryset(queryset)
+                finally:
+                    self.filter_backends = original_backends
+
+                # Apply distinct() after all filters to avoid duplicates from version joins
+                queryset = queryset.distinct()
+
+                # For longer queries (3+ chars), optionally enhance with full-text search for better ranking
+                # But always include icontains results to ensure partial matches are found
+                if len(search_query.strip()) >= 3:
+                    try:
+                        from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+
+                        search_query_obj = SearchQuery(search_query, config="english")
+
+                        if hasattr(queryset.model, "_meta") and "search_vector" in [
+                            f.name for f in queryset.model._meta.get_fields()
+                        ]:
+                            full_text_pks = list(
+                                queryset.filter(search_vector=search_query_obj).values_list("pk", flat=True)
                             )
-                        ).order_by('search_priority', '-updated_at')
-                except Exception:
-                    # If full-text search fails, just use icontains results (already filtered above)
-                    pass
+                        else:
+                            search_vector = (
+                                SearchVector("title", weight="A", config="english")
+                                + SearchVector("reference_number", weight="A", config="english")
+                                + SearchVector("description", weight="B", config="english")
+                                + SearchVector("tags", weight="C", config="english")
+                            )
+                            full_text_pks = list(
+                                queryset.annotate(
+                                    search=search_vector,
+                                    rank=SearchRank(search_vector, search_query_obj),
+                                )
+                                .filter(search=search_query_obj)
+                                .values_list("pk", flat=True)
+                            )
+
+                        if full_text_pks:
+                            from django.db.models import Case, IntegerField, When
+
+                            queryset = queryset.annotate(
+                                search_priority=Case(
+                                    When(pk__in=full_text_pks, then=1),
+                                    default=2,
+                                    output_field=IntegerField(),
+                                )
+                            ).order_by("search_priority", "-updated_at")
+                    except Exception:
+                        pass
         else:
             # No search query, just apply standard filters
             queryset = super().filter_queryset(queryset)
@@ -235,7 +281,79 @@ class DocumentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_deleted=False)
 
         user = getattr(self.request, "user", None)
-        if not user or not user.is_authenticated or user.is_superuser:
+        if not user or not user.is_authenticated:
+            return qs.distinct()
+
+        shared_with_me = str(self.request.query_params.get("shared_with_me", "")).lower() in {"1", "true", "yes"}
+        shared_by_me = str(self.request.query_params.get("shared_by_me", "")).lower() in {"1", "true", "yes"}
+        recent_for_me = str(self.request.query_params.get("recent_for_me", "")).lower() in {"1", "true", "yes"}
+        awaiting_action = str(self.request.query_params.get("awaiting_action", "")).lower() in {"1", "true", "yes"}
+
+        if awaiting_action:
+            from forms.signature_models import FormSignature
+
+            office_ids = list(
+                user.office_memberships.filter(is_active=True).values_list("office_id", flat=True)
+            )
+            assignment_filter = Q(form_document__signature_workflow__signatures__assigned_to_user=user)
+            if office_ids:
+                assignment_filter |= Q(form_document__signature_workflow__signatures__assigned_to_office_id__in=office_ids)
+            if getattr(user, "department_id", None):
+                assignment_filter |= Q(form_document__signature_workflow__signatures__assigned_to_department_id=user.department_id)
+            if getattr(user, "division_id", None):
+                assignment_filter |= Q(form_document__signature_workflow__signatures__assigned_to_division_id=user.division_id)
+
+            pending_signature_filter = (
+                Q(form_document__signature_workflow__signatures__status=FormSignature.Status.PENDING)
+                & assignment_filter
+            )
+            qs = qs.filter(pending_signature_filter).distinct()
+
+        if shared_with_me:
+            shared_filter = Q(permissions__users=user)
+            if user.division_id:
+                shared_filter |= Q(permissions__divisions=user.division_id)
+            if user.department_id:
+                shared_filter |= Q(permissions__departments=user.department_id)
+            if user.grade_level:
+                shared_filter |= Q(permissions__grade_levels__contains=[user.grade_level])
+            qs = qs.filter(shared_filter).exclude(author=user).distinct()
+
+        if shared_by_me:
+            shared_by_me_filter = (
+                Q(permissions__users__isnull=False)
+                | Q(permissions__divisions__isnull=False)
+                | Q(permissions__departments__isnull=False)
+            )
+            qs = qs.filter(author=user).filter(shared_by_me_filter).distinct()
+
+        if recent_for_me:
+            recent_days = 30
+            raw_recent_days = self.request.query_params.get("recent_days")
+            if raw_recent_days:
+                try:
+                    parsed = int(raw_recent_days)
+                    if parsed > 0:
+                        recent_days = min(parsed, 365)
+                except (TypeError, ValueError):
+                    pass
+            cutoff = timezone.now() - timedelta(days=recent_days)
+            recent_logs = (
+                DocumentAccessLog.objects.filter(user=user, timestamp__gte=cutoff)
+                .values("document_id")
+                .annotate(last_accessed=Max("timestamp"))
+                .order_by("-last_accessed")
+            )
+            recent_doc_ids = [row["document_id"] for row in recent_logs]
+            if not recent_doc_ids:
+                return qs.none()
+            qs = qs.filter(id__in=recent_doc_ids).annotate(
+                last_accessed=Max("access_logs__timestamp", filter=Q(access_logs__user=user))
+            )
+            if not self.request.query_params.get("ordering"):
+                qs = qs.order_by("-last_accessed")
+
+        if user.is_superuser:
             return qs.distinct()
 
         visibility_filter = Q(author=user) | Q(workspaces__members=user) | Q(permissions__users=user)
@@ -249,19 +367,48 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
         visibility_filter |= Q(sensitivity__in=[Document.Sensitivity.PUBLIC, Document.Sensitivity.INTERNAL])
 
-        high_confidential_grades = {"MSS5", "MSS4", "MSS3", "MSS2", "MSS1", "EDCS", "MDCS"}
-        high_restricted_grades = {"MSS1", "EDCS", "MDCS"}
-
-        if user.grade_level in high_confidential_grades:
-            visibility_filter |= Q(sensitivity=Document.Sensitivity.CONFIDENTIAL)
-        if user.grade_level in high_restricted_grades:
-            visibility_filter |= Q(sensitivity=Document.Sensitivity.RESTRICTED)
-
-        # Published documents with public/internal sensitivity are generally accessible
+        # Visibility rules:
+        # - Public: All authenticated users (when published)
+        # - Internal: Requires explicit permission (dept/division/directorate/user)
+        # - Confidential: Requires grade level + explicit permission
+        # - Restricted: Requires top grade + explicit permission
+        
+        # Public is visible to all authenticated users when published
         visibility_filter |= Q(
             status=Document.DocumentStatus.PUBLISHED,
-            sensitivity__in=[Document.Sensitivity.PUBLIC, Document.Sensitivity.INTERNAL],
+            sensitivity=Document.Sensitivity.PUBLIC,
         )
+        
+        # Internal requires explicit permission - shared with specific depts/divs/directorates
+        has_internal_permission = (
+            Q(permissions__users=user) |
+            Q(permissions__divisions=user.division_id) |
+            Q(permissions__departments=user.department_id)
+        )
+        visibility_filter |= (
+            Q(sensitivity=Document.Sensitivity.INTERNAL) & has_internal_permission
+        )
+        
+        # Confidential: need grade level AND explicit permission
+        has_confidential_permission = (
+            Q(permissions__users=user) |
+            Q(permissions__divisions=user.division_id) |
+            Q(permissions__departments=user.department_id) |
+            Q(permissions__grade_levels__contains=[user.grade_level])
+        ) if user.grade_level else Q()
+        
+        high_confidential_grades = {"MSS5", "MSS4", "MSS3", "MSS2", "MSS1", "EDCS", "MDCS"}
+        if user.grade_level in high_confidential_grades:
+            visibility_filter |= (
+                Q(sensitivity=Document.Sensitivity.CONFIDENTIAL) & has_confidential_permission
+            )
+        
+        # Restricted: need top grade AND explicit permission
+        high_restricted_grades = {"MSS1", "EDCS", "MDCS"}
+        if user.grade_level in high_restricted_grades:
+            visibility_filter |= (
+                Q(sensitivity=Document.Sensitivity.RESTRICTED) & has_confidential_permission
+            )
 
         return qs.filter(visibility_filter).distinct()
 
@@ -478,7 +625,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
             })
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
-            raise ValidationError({"detail": f"Failed to generate summary: {str(e)}"})
+            raise ValidationError({"detail": "Failed to generate summary. Please try again or contact support."})
 
 
 class DocumentVersionViewSet(viewsets.ModelViewSet):
@@ -557,7 +704,7 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                         
             except Exception as e:
                 logger.error(f"Failed to process data URL for document version: {e}")
-                raise ValidationError({"file_url": f"Failed to process uploaded file: {str(e)}"})
+                raise ValidationError({"file_url": "Failed to process uploaded file. Please try again or contact support."})
         
         # Create serializer with modified data
         serializer = self.get_serializer(data=data)
@@ -648,7 +795,7 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                         
             except Exception as e:
                 logger.error(f"Failed to process data URL for version replacement: {e}")
-                raise ValidationError({"file_url": f"Failed to process uploaded file: {str(e)}"})
+                raise ValidationError({"file_url": "Failed to process uploaded file. Please try again or contact support."})
         
         # Update the version
         serializer = self.get_serializer(version, data=data, partial=True)
@@ -731,7 +878,7 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                         
             except Exception as e:
                 logger.error(f"Failed to process data URL for version replacement: {e}")
-                raise ValidationError({"file_url": f"Failed to process uploaded file: {str(e)}"})
+                raise ValidationError({"file_url": "Failed to process uploaded file. Please try again or contact support."})
         
         # Update the version (preserve version_number, uploaded_by, uploaded_at)
         serializer = self.get_serializer(version, data=data, partial=True)
@@ -784,7 +931,7 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                     })
             except Exception as e:
                 logger.error(f"HTML text extraction failed: {e}")
-                raise ValidationError({"detail": f"Text extraction failed: {str(e)}"})
+                raise ValidationError({"detail": "Text extraction failed. Please try again or contact support."})
         
         # For file-based versions, use OCR
         if not version.file_url:
@@ -849,7 +996,7 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
                 raise ValidationError({"detail": f"Required library not installed: {error_msg}"})
         except Exception as e:
             logger.error(f"OCR failed for {file_path}: {e}", exc_info=True)
-            raise ValidationError({"detail": f"OCR processing failed: {str(e)}"})
+            raise ValidationError({"detail": "OCR processing failed. Please try again or contact support."})
 
 
 class DocumentPermissionViewSet(viewsets.ModelViewSet):

@@ -116,18 +116,20 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
         .filter(isRecord)
         .map((recipient) => {
           const recipientTypeRaw = asString(recipient.recipient_type, 'division');
-          const recipientType = asOneOf(recipientTypeRaw, ['directorate', 'department', 'user', 'division'] as const, 'division');
+          const recipientType = asOneOf(recipientTypeRaw, ['office', 'directorate', 'department', 'user', 'division'] as const, 'division');
           const addedBy = isRecord(recipient.added_by) ? recipient.added_by : undefined;
 
           return {
             id: normalizeId(recipient.id) ?? `${asString(item.id, 'cor')}-dist-${Math.random().toString(36).slice(2)}`,
             type: recipientType,
             userId: recipientType === 'user' ? normalizeId(recipient.user ?? recipient.user_id) : undefined,
+            officeId: normalizeId(recipient.office),
             directorateId: normalizeId(recipient.directorate),
             divisionId: normalizeId(recipient.division),
             departmentId: normalizeId(recipient.department),
             name:
               asStringOptional(recipient.user_name) ??
+              asStringOptional(recipient.office_name) ??
               asStringOptional(recipient.directorate_name) ??
               asStringOptional(recipient.division_name) ??
               asStringOptional(recipient.department_name) ??
@@ -146,9 +148,14 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
         })
     : [];
 
-  const linkedDocumentIds = Array.isArray(item.linked_documents)
-    ? item.linked_documents.map((doc) => normalizeId(doc)).filter((id): id is string => Boolean(id))
-    : [];
+  const rawLinkedDocuments = Array.isArray(item.linked_document_ids)
+    ? item.linked_document_ids
+    : Array.isArray(item.linked_documents)
+      ? item.linked_documents
+      : [];
+  const linkedDocumentIds = rawLinkedDocuments
+    .map((doc) => normalizeId(doc))
+    .filter((id): id is string => Boolean(id));
 
   const flowType = asOneOfOptional(
     item.flow_type,
@@ -183,6 +190,7 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
     id: asString(item.id),
     referenceNumber: asString(item.reference_number),
     subject: asString(item.subject),
+    treatmentResponse: asStringOptional(item.treatment_response),
     documentType: asStringOptional(item.document_type),
     senderReference: asStringOptional(item.sender_reference),
     letterDate: asStringOptional(item.letter_date),
@@ -214,6 +222,11 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
     currentOfficeName: asStringOptional(item.current_office_name) ?? (currentOffice ? asStringOptional(currentOffice.name) : undefined),
     attachments,
     distribution,
+    parentCorrespondence: isRecord(item.parent_correspondence) ? {
+      id: normalizeId(item.parent_correspondence.id) ?? '',
+      reference_number: asString(item.parent_correspondence.reference_number),
+      subject: asString(item.parent_correspondence.subject),
+    } : null,
     archiveLevel: asOneOfOptional(item.archive_level, ['department', 'division', 'directorate'] as const),
     linkedDocumentIds,
     completionPackage: completionPackage
@@ -262,7 +275,9 @@ const mapApiMinute = (item: Record<string, unknown>): Minute => {
   const signaturePayload = isRecord(item.signature_payload) ? item.signature_payload : undefined;
   const signature: MinuteSignaturePayload | undefined = signaturePayload
     ? (() => {
-        const imageData = asStringOptional(signaturePayload.imageData ?? signaturePayload.image_data);
+        const imageData = asStringOptional(
+          signaturePayload.imageData ?? signaturePayload.image_data ?? signaturePayload.image_url ?? signaturePayload.signature_url
+        );
         const appliedAt = asStringOptional(signaturePayload.appliedAt ?? signaturePayload.applied_at);
         if (!imageData || !appliedAt) return undefined;
         return {
@@ -483,7 +498,9 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   }, []);
 
   const syncFromApi = useCallback(async () => {
-    if (!hydrated || !currentUser || !hasTokens()) return;
+    // Only requirement: authenticated (has token)
+    // Don't wait for useCurrentUser to hydrate - data fetching is independent
+    if (!hasTokens()) return;
 
     try {
       // Use pagination to avoid loading all correspondence at once
@@ -514,28 +531,45 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         logError('Failed to load correspondence from API', error);
       }
     }
-  }, [hydrated, currentUser]);
+  }, []);
 
-  // Track if we've synced for the current user to prevent duplicate syncs
-  const syncedUserIdRef = useRef<string | null>(null);
+  const syncInitialFromApi = useCallback(async () => {
+    if (!hasTokens()) return;
+    try {
+      const correspondenceRaw = await apiFetch('/correspondence/items/?page_size=25&page=1');
+      const correspondenceList = unwrapResults(correspondenceRaw).filter(isRecord).map(mapApiCorrespondence);
+      saveCorrespondence(correspondenceList);
+      setCorrespondence(correspondenceList);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.toLowerCase().includes('auth')) {
+        logInfo('Correspondence data will sync after authentication is available.');
+      } else {
+        logError('Failed to load correspondence from API', error);
+      }
+    }
+  }, []);
+
+  // Track if we've synced already to prevent duplicate syncs
+  const syncedRef = useRef<boolean>(false);
   
   useEffect(() => {
-    if (!hydrated || !currentUser || !hasTokens()) return;
+    if (!hasTokens()) return;
     
-    // Only sync if user changed or hasn't synced yet
-    if (syncedUserIdRef.current === currentUser.id) return;
+    // Only sync once when tokens become available
+    // Don't wait for useCurrentUser to hydrate - we can fetch data immediately after login
+    if (syncedRef.current) return;
     
     let ignore = false;
     const run = async () => {
       if (ignore) return;
-      syncedUserIdRef.current = currentUser.id;
-      await syncFromApi();
+      syncedRef.current = true;
+      await syncInitialFromApi();
     };
     void run();
     return () => {
       ignore = true;
     };
-  }, [hydrated, currentUser?.id, syncFromApi]);
+  }, [syncInitialFromApi]);
 
   const refreshData = () => {
     const loadedCorrespondence = loadCorrespondence() ?? [];

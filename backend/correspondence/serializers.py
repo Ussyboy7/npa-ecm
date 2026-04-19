@@ -102,6 +102,9 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
     directorate = serializers.PrimaryKeyRelatedField(
         queryset=Directorate.objects.all(), allow_null=True, required=False
     )
+    office = serializers.PrimaryKeyRelatedField(
+        queryset=Office.objects.all(), allow_null=True, required=False
+    )
     division = serializers.PrimaryKeyRelatedField(queryset=Division.objects.all(), allow_null=True, required=False)
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
     user = serializers.PrimaryKeyRelatedField(
@@ -109,6 +112,7 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
     )
     added_by = UserSerializer(read_only=True)
     directorate_name = serializers.CharField(source="directorate.name", read_only=True, allow_null=True, required=False)
+    office_name = serializers.CharField(source="office.name", read_only=True, allow_null=True, required=False)
     division_name = serializers.CharField(source="division.name", read_only=True, allow_null=True, required=False)
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True, required=False)
     user_name = serializers.CharField(source="user.name", read_only=True, allow_null=True, required=False)
@@ -137,6 +141,7 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
             "correspondence",
             "recipient_type",
             "directorate",
+            "office",
             "division",
             "department",
             "user",
@@ -147,6 +152,7 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
             "is_active",
             "purpose",
             "directorate_name",
+            "office_name",
             "division_name",
             "department_name",
             "user_name",
@@ -370,6 +376,14 @@ class MinuteSerializer(serializers.ModelSerializer):
             "status": correspondence.status,
         }
 
+    def to_representation(self, instance):
+        """Override to ensure signature_payload is preserved with full base64 data."""
+        data = super().to_representation(instance)
+        # Ensure signature_payload is returned as-is from the database (no URL conversion)
+        if hasattr(instance, 'signature_payload') and instance.signature_payload:
+            data['signature_payload'] = instance.signature_payload
+        return data
+
     def get_seal_data(self, obj):
         """Get digital seal data if this minute has an executive seal applied."""
         if not obj.seal_applied:
@@ -387,15 +401,12 @@ class MinuteSerializer(serializers.ModelSerializer):
                 base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:8002')
                 seal_image_url = f"{base_url}{seal.seal_image.url}"
         
-        # Get signature image URL from the signature used to create the seal
+        # Signature image: use proxy URL so it loads cross-origin (CORS-safe)
         signature_image_url = None
-        if seal.signature_used and seal.signature_used.signature_image:
-            if request:
-                signature_image_url = request.build_absolute_uri(seal.signature_used.signature_image.url)
-            else:
-                from django.conf import settings
-                base_url = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:8002')
-                signature_image_url = f"{base_url}{seal.signature_used.signature_image.url}"
+        if seal.signature_used and getattr(seal.signature_used, 'signature_image', None) and seal.signature_used.signature_image and request:
+            signature_image_url = request.build_absolute_uri(
+                f"/api/v1/accounts/seal/signature-image/{seal.serial_number}/"
+            )
         
         return {
             "id": str(seal.id),
@@ -482,7 +493,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "id",
             "reference_number",
             "subject",
-            "summary",
+            "treatment_response",
             "body_html",
             "source",
             "received_date",
@@ -1169,4 +1180,3 @@ class CorrespondenceDraftSerializer(serializers.ModelSerializer):
             "reference_number": obj.correspondence.reference_number,
             "subject": obj.correspondence.subject,
         }
-

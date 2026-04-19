@@ -14,6 +14,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 import {
+  apiFetch,
   hasTokens,
   impersonateUser,
   storeOriginalTokens,
@@ -55,7 +56,7 @@ const DEBOUNCE_DELAY = 300;
 const DEFAULT_PAGE_SIZE = 50; // Default page size for pagination
 
 const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProps) => {
-  const { directorates, divisions, departments, users, refreshOrganizationData, isSyncing } = useOrganization();
+  const { directorates, divisions, departments, users, refreshOrganizationData } = useOrganization();
   const { currentUser, hydrated, refresh: refreshCurrentUser, isImpersonating } = useCurrentUser();
   
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -74,11 +75,8 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   const [searchHistory, setSearchHistory] = useState<string[]>(getSearchHistory());
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [groupOrder, setGroupOrder] = useState<string[]>(getGroupOrder());
-  const [performanceMetrics, setPerformanceMetrics] = useState({
-    searchTime: 0,
-    filterTime: 0,
-    renderTime: 0,
-  });
+
+  const shouldUseBackendSearch = users.length === 0 || users.length > BACKEND_SEARCH_THRESHOLD;
   
   // Pagination for backend search
   const backendPagination = usePagination({
@@ -147,10 +145,10 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       abortControllerRef.current.abort();
     }
 
-    if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim()) {
+    if (shouldUseBackendSearch && debouncedSearchQuery.trim()) {
       // Reset to page 1 when search query changes
       backendPagination.goToFirstPage();
-      performBackendSearch(debouncedSearchQuery, backendPagination.page, backendPagination.pageSize);
+      performBackendSearch(debouncedSearchQuery, 1, backendPagination.pageSize);
     } else {
       setBackendSearchResults([]);
       setBackendSearchTotal(0);
@@ -163,11 +161,11 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
         abortControllerRef.current.abort();
       }
     };
-  }, [debouncedSearchQuery, users.length]);
+  }, [debouncedSearchQuery, shouldUseBackendSearch]);
 
   // Re-fetch when backend pagination changes
   useEffect(() => {
-    if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim() && !isSearchingBackend) {
+    if (shouldUseBackendSearch && debouncedSearchQuery.trim() && !isSearchingBackend) {
       performBackendSearch(debouncedSearchQuery, backendPagination.page, backendPagination.pageSize);
     }
   }, [backendPagination.page, backendPagination.pageSize]);
@@ -278,11 +276,9 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
 
   // Use backend search results if available, otherwise filter locally
   const filteredUsers = useMemo(() => {
-    const startTime = performance.now();
-    
     let result: User[];
     
-    if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim() && backendSearchResults.length > 0) {
+    if (shouldUseBackendSearch && debouncedSearchQuery.trim() && backendSearchResults.length > 0) {
       // Use backend search results directly (already paginated)
       result = backendSearchResults;
     } else {
@@ -319,14 +315,20 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       result = pool;
     }
     
-    const filterTime = performance.now() - startTime;
-    setPerformanceMetrics(prev => ({ ...prev, filterTime }));
-    
     return result;
-  }, [activeUsers, debouncedSearchQuery, directorateMap, divisionMap, departmentMap, getDirectorateNameForUser, backendSearchResults, users.length]);
+  }, [
+    activeUsers,
+    backendSearchResults,
+    debouncedSearchQuery,
+    departmentMap,
+    directorateMap,
+    divisionMap,
+    getDirectorateNameForUser,
+    shouldUseBackendSearch,
+  ]);
 
   // Determine which pagination to use (defined after filteredUsers)
-  const isUsingBackendSearch = users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim();
+  const isUsingBackendSearch = shouldUseBackendSearch && Boolean(debouncedSearchQuery.trim());
   
   // Reset frontend pagination to page 1 when search query changes
   useEffect(() => {
@@ -348,7 +350,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
 
   // Get paginated users (for frontend filtering)
   const paginatedUsers = useMemo(() => {
-    if (users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim()) {
+    if (shouldUseBackendSearch && debouncedSearchQuery.trim()) {
       // Backend search is already paginated
       return filteredUsers;
     }
@@ -384,7 +386,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     };
 
     // Use paginated users for grouping (frontend) or all results (backend)
-    const usersToGroup = users.length > BACKEND_SEARCH_THRESHOLD && debouncedSearchQuery.trim()
+    const usersToGroup = shouldUseBackendSearch && debouncedSearchQuery.trim()
       ? filteredUsers // Backend search - already paginated
       : paginatedUsers; // Frontend - use paginated slice
 
@@ -412,14 +414,14 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     }
 
     return groups;
-  }, [filteredUsers, paginatedUsers, isUsingBackendSearch]);
+  }, [filteredUsers, paginatedUsers, shouldUseBackendSearch, debouncedSearchQuery]);
   
   // Determine which pagination to use and get total count
   const currentPagination = isUsingBackendSearch ? backendPagination : frontendPagination;
   const totalCount = isUsingBackendSearch ? backendSearchTotal : filteredUsers.length;
 
   // Early returns AFTER all hooks
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return (
       <div className="flex items-center justify-center py-8" role="status" aria-label="Loading">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -435,17 +437,6 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       <div className="text-center py-8 text-muted-foreground" role="alert">
         <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" aria-hidden="true" />
         <p className="text-sm">Role switching is only available to Super Admins</p>
-      </div>
-    );
-  }
-
-  // Loading state
-  if (isSyncing || (users.length === 0 && !isSearchingBackend)) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12" role="status" aria-label="Loading users">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p className="text-sm text-muted-foreground">Loading users...</p>
-        <span className="sr-only">Loading user list, please wait</span>
       </div>
     );
   }
@@ -486,21 +477,37 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       storeOriginalTokens();
     }
 
-    const identifier = selectedUser.username ?? selectedUser.id;
-
     try {
-      await impersonateUser(identifier);
+      // Always resolve from fresh backend state, never cached/recent client objects.
+      const freshUser = await apiFetch<Record<string, unknown>>(`/accounts/users/${selectedUser.id}/`);
+      const freshUserId = typeof freshUser.id === "string" ? freshUser.id : selectedUser.id;
+      const freshIsActive = Boolean(
+        typeof freshUser.is_active === "boolean" ? freshUser.is_active : freshUser.isActive
+      );
+
+      if (!freshUserId || freshUserId !== selectedUser.id) {
+        throw new Error("Selected user is invalid.");
+      }
+      if (!freshIsActive) {
+        throw new Error("Selected user is not active.");
+      }
+
+      // Send backend UUID identifier directly.
+      await impersonateUser(freshUserId);
       
       // Add to recent users
+      const firstName = typeof freshUser.first_name === "string" ? freshUser.first_name.trim() : "";
+      const lastName = typeof freshUser.last_name === "string" ? freshUser.last_name.trim() : "";
+      const displayName = [firstName, lastName].filter(Boolean).join(" ") || selectedUser.name || selectedUser.username || "User";
       addRecentUser({
-        id: selectedUser.id,
-        name: selectedUser.name || selectedUser.username || 'Unknown',
-        username: selectedUser.username,
-        email: selectedUser.email,
+        id: freshUserId,
+        name: displayName,
+        username: typeof freshUser.username === "string" ? freshUser.username : selectedUser.username,
+        email: typeof freshUser.email === "string" ? freshUser.email : "",
       });
       setRecentUsers(getRecentUsers());
       
-      toast.success(`Switched to ${selectedUser.name || selectedUser.username}`);
+      toast.success(`Switched to ${displayName}`);
       
       // Close modal on success
       onClose?.();
@@ -911,11 +918,6 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             <span>
               Found {filteredUsers.length} {filteredUsers.length === 1 ? 'user' : 'users'}
             </span>
-            {process.env.NODE_ENV === 'development' && performanceMetrics.filterTime > 0 && (
-              <span className="text-[10px]">
-                {performanceMetrics.filterTime.toFixed(2)}ms
-              </span>
-            )}
           </div>
         )}
 
@@ -1030,13 +1032,19 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
             })()}
             
             {/* Empty States */}
-            {!hasResults && !isSyncing && !isSearchingBackend && (
+            {!hasResults && !isSearchingBackend && (
               <div className="text-center py-12 text-muted-foreground" role="status">
                 {isSearching ? (
                   <>
                     <Search className="h-12 w-12 mx-auto mb-4 opacity-50" aria-hidden="true" />
                     <p className="text-sm font-medium mb-1">No users found</p>
                     <p className="text-xs">Try a different search term or clear the search to see all users</p>
+                  </>
+                ) : users.length === 0 ? (
+                  <>
+                    <Users className="h-12 w-12 mx-auto mb-4 opacity-50" aria-hidden="true" />
+                    <p className="text-sm font-medium mb-1">Type to search users</p>
+                    <p className="text-xs">User results load from the server as you search</p>
                   </>
                 ) : (
                   <>

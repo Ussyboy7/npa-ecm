@@ -151,6 +151,7 @@ export const getNotifications = async (params?: {
   if (!hasTokens()) return [];
 
   const queryParams = new URLSearchParams();
+  queryParams.set('page_size', '50');
   if (params?.status) queryParams.append('status', params.status);
   if (params?.notificationType) queryParams.append('notification_type', params.notificationType);
   if (params?.priority) queryParams.append('priority', params.priority);
@@ -198,6 +199,14 @@ let globalUnreadCountPromise: Promise<number> | null = null;
 const globalUnreadCountSubscribers = new Set<(count: number) => void>();
 const UNREAD_COUNT_CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
+const setGlobalUnreadCount = (count: number): void => {
+  const safeCount = Math.max(0, count);
+  globalUnreadCountState.count = safeCount;
+  globalUnreadCountState.timestamp = Date.now();
+  globalUnreadCountState.loading = false;
+  globalUnreadCountSubscribers.forEach((sub) => sub(safeCount));
+};
+
 /**
  * Get the unread notification count for the current user.
  * Uses singleton pattern to ensure only one fetch happens at a time.
@@ -234,13 +243,8 @@ export const getUnreadCount = async (force = false): Promise<number> => {
       
       const count = response.count as number || 0;
       
-      // Update cache
-      globalUnreadCountState.count = count;
-      globalUnreadCountState.timestamp = Date.now();
-      globalUnreadCountState.loading = false;
-      
-      // Notify all subscribers
-      globalUnreadCountSubscribers.forEach(sub => sub(count));
+      // Update cache and notify subscribers
+      setGlobalUnreadCount(count);
       
       return count;
     } catch (error: unknown) {
@@ -250,25 +254,16 @@ export const getUnreadCount = async (force = false): Promise<number> => {
       // Handle network errors (Failed to fetch, etc.)
       if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError') || errorMessage.includes('Network request failed')) {
         logWarn('[notifications-storage] Network error fetching unread count (backend may be unavailable):', errorMessage);
-        globalUnreadCountState.count = 0;
-        globalUnreadCountState.timestamp = Date.now();
-        globalUnreadCountState.loading = false;
-        globalUnreadCountSubscribers.forEach(sub => sub(0));
+        setGlobalUnreadCount(0);
         return 0;
       }
       
       if (errorMessage === 'Authentication required' || errorMessage === 'Authentication expired') {
-        globalUnreadCountState.count = 0;
-        globalUnreadCountState.timestamp = Date.now();
-        globalUnreadCountState.loading = false;
-        globalUnreadCountSubscribers.forEach(sub => sub(0));
+        setGlobalUnreadCount(0);
         return 0;
       }
       logError('[notifications-storage] Error fetching unread count:', error);
-      globalUnreadCountState.count = 0;
-      globalUnreadCountState.timestamp = Date.now();
-      globalUnreadCountState.loading = false;
-      globalUnreadCountSubscribers.forEach(sub => sub(0));
+      setGlobalUnreadCount(0);
       return 0;
     } finally {
       globalUnreadCountPromise = null;
@@ -300,6 +295,7 @@ export const markNotificationAsRead = async (notificationId: string): Promise<vo
   await apiFetch(`/notifications/notifications/${notificationId}/mark_read/`, {
     method: 'POST',
   });
+  await getUnreadCount(true);
 };
 
 /**
@@ -311,6 +307,7 @@ export const markNotificationAsArchived = async (notificationId: string): Promis
   await apiFetch(`/notifications/notifications/${notificationId}/mark_archived/`, {
     method: 'POST',
   });
+  await getUnreadCount(true);
 };
 
 /**
@@ -322,6 +319,7 @@ export const markAllNotificationsAsRead = async (): Promise<number> => {
   const response = await apiFetch<{ count: number }>('/notifications/notifications/mark_all_read/', {
     method: 'POST',
   });
+  setGlobalUnreadCount(0);
   return response.count as number || 0;
 };
 

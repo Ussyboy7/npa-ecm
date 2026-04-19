@@ -127,6 +127,7 @@ export function SealVerificationResult({
               officeTitle={verification.office_title}
               serialNumber={verification.serial_number}
               signatureImage={verification.signature_image_url || verification.seal_image_url}
+              signatureText={verification.sealed_by}
               timestamp={verification.sealed_at}
               size={220}
               showQR={true}

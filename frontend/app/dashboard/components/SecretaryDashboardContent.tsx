@@ -1,16 +1,47 @@
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, UserCheck, Mail, FileText, CheckCircle, CheckCircle2, Clock, AlertCircle, TrendingUp, Users, Activity } from 'lucide-react';
+import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import {
+  registryQueueSearchStatsShellContentClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+} from '@/components/shared/registry-queue-styles';
+import { cn } from '@/lib/utils';
+import {
+  UserCheck,
+  Mail,
+  FileText,
+  CheckCircle,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Users,
+  Activity,
+} from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { logError } from '@/lib/client-logger';
 import { formatDateShort } from '@/lib/correspondence-helpers';
-import Link from 'next/link';
 import { getCases } from '@/lib/api/cases';
 import { getFormDocuments } from '@/lib/api/dms-forms';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
@@ -43,7 +74,7 @@ interface RecentActivity {
 
 const SecretaryDashboardContent = () => {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const { currentUser } = useCurrentUser();
   const [loading, setLoading] = useState(true);
   const [executives, setExecutives] = useState<Executive[]>([]);
   const [metrics, setMetrics] = useState<SecretaryMetrics>({
@@ -59,7 +90,7 @@ const SecretaryDashboardContent = () => {
 
   // Fetch executives
   useEffect(() => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser?.id) return;
 
     const fetchExecutives = async () => {
       try {
@@ -71,11 +102,11 @@ const SecretaryDashboardContent = () => {
     };
 
     void fetchExecutives();
-  }, [hydrated, currentUser]);
+  }, [currentUser?.id]);
 
   // Fetch metrics and activities
   useEffect(() => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser?.id) return;
 
     const fetchMetrics = async () => {
       setLoading(true);
@@ -161,7 +192,7 @@ const SecretaryDashboardContent = () => {
     };
 
     void fetchMetrics();
-  }, [hydrated, currentUser, executives.length]);
+  }, [currentUser?.id, executives.length]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -207,186 +238,215 @@ const SecretaryDashboardContent = () => {
     }
   };
 
-  if (!hydrated || !currentUser) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+  if (!currentUser?.id) {
+    return <LoadingState message="Loading secretary workspace…" />;
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState message="Loading your workload…" />;
   }
+
+  const statsItems = [
+    {
+      label: 'Total items',
+      value: metrics.totalCorrespondence,
+      description: 'Correspondence handled',
+      icon: FileText,
+    },
+    {
+      label: 'Pending actions',
+      value: metrics.pendingActions,
+      description: 'Requires attention',
+      icon: Clock,
+    },
+    {
+      label: 'Urgent items',
+      value: metrics.urgentItems,
+      description: 'High priority',
+      icon: AlertCircle,
+    },
+    {
+      label: 'Completed today',
+      value: metrics.completedToday,
+      description: 'Items resolved today',
+      icon: CheckCircle,
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold">Secretary Dashboard</h2>
-        <p className="text-muted-foreground mt-1">
-          Overview of your executive support activities and workload
-        </p>
-      </div>
+      <HelpGuideCard
+        title="Secretary workspace"
+        description="Your metrics cover correspondence from the executive support inbox. Use the quick links below to jump into the inbox, cases, or forms."
+        links={[
+          { label: 'Executive Support Inbox', href: '/inbox?tab=executive-support' },
+          { label: 'Manage Cases', href: '/cases' },
+          { label: 'Manage Forms', href: '/forms' },
+        ]}
+      />
 
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Items</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.totalCorrespondence}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Correspondence handled
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Actions</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.pendingActions}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Requires attention
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Urgent Items</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.urgentItems}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              High priority
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed Today</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{metrics.completedToday}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Items resolved today
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-lg">Secretary workload</CardTitle>
+              <CardDescription>
+                From your executive support inbox and today&apos;s completions.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => router.push('/inbox?tab=executive-support')}>
+                Executive inbox
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => router.push('/cases')}>
+                Manage cases
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => router.push('/forms')}>
+                Manage forms
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className={registryQueueSearchStatsShellContentClass}>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {statsItems.map((stat, index) => {
+              const Icon = stat.icon;
+              return (
+                <Card key={index}>
+                  <CardContent className={registryQueueStatCardContentClass}>
+                    <div className="flex items-center gap-4">
+                      <div className={cn(registryQueueStatIconBoxClass, 'bg-muted/60')}>
+                        <Icon className={cn(registryQueueStatIconClass, 'text-muted-foreground')} />
+                      </div>
+                      <div>
+                        <p className={registryQueueStatLabelClass}>{stat.label}</p>
+                        <p className={registryQueueStatValueClass}>{stat.value}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{stat.description}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Executives Supported */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Executives Supported
+              <Users className="h-5 w-5 text-primary" />
+              Executives supported
             </CardTitle>
             <CardDescription>
-              Executives you have acted on behalf of
+              Executives you have acted on behalf of.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {executives.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <UserCheck className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No executives found</p>
-                <p className="text-sm mt-1">
-                  Executives will appear here once you act on their behalf
-                </p>
-              </div>
+              <EmptyState
+                icon="inbox"
+                title="No executives yet"
+                message="Executives will appear here once you act on their behalf."
+                variant="dashed"
+              />
             ) : (
-              <div className="space-y-3">
+              <div className={correspondenceQueueListStackClass}>
                 {executives.map((exec) => (
-                  <div
+                  <ListRowCard
                     key={exec.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                    density="compact"
+                    leading={
+                      <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-primary/10')}>
+                        <UserCheck
+                          className={cn(correspondenceQueueLeadingIconClass, 'text-primary')}
+                        />
+                      </div>
+                    }
+                    actions={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/cases?executive=${exec.id}`)}
+                      >
+                        View cases
+                      </Button>
+                    }
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <UserCheck className="h-5 w-5 text-primary" />
+                    <h4 className={correspondenceQueueSubjectClass}>{exec.name}</h4>
+                    {exec.email ? (
+                      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <Mail className={correspondenceQueueMetaIconClass} />
+                          <span className="truncate">{exec.email}</span>
+                        </span>
                       </div>
-                      <div>
-                        <p className="font-medium">{exec.name}</p>
-                        {exec.email && (
-                          <p className="text-xs text-muted-foreground">{exec.email}</p>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push(`/cases?executive=${exec.id}`)}
-                    >
-                      View Cases
-                    </Button>
-                  </div>
+                    ) : null}
+                  </ListRowCard>
                 ))}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Recent Activities */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Recent Activities
+              <Activity className="h-5 w-5 text-primary" />
+              Recent activities
             </CardTitle>
             <CardDescription>
-              Your recent executive support activities
+              Your recent correspondence, cases, and form activity.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {recentActivities.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Activity className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No recent activities</p>
-              </div>
+              <EmptyState
+                icon="file"
+                title="No recent activity"
+                message="Activity will appear here as you work on correspondence and cases."
+                variant="dashed"
+              />
             ) : (
-              <div className="space-y-3">
+              <div className={correspondenceQueueListStackClass}>
                 {recentActivities.map((activity) => {
                   const Icon = getActivityIcon(activity.type);
                   return (
-                    <Link
+                    <ListRowCard
                       key={`${activity.type}-${activity.id}`}
+                      density="compact"
                       href={getActivityLink(activity)}
-                      className="block"
+                      leading={
+                        <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-muted/60')}>
+                          <Icon
+                            className={cn(
+                              correspondenceQueueLeadingIconClass,
+                              'text-muted-foreground',
+                            )}
+                          />
+                        </div>
+                      }
                     >
-                      <div className="flex items-start gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
-                        <div className="mt-0.5">
-                          <Icon className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-sm font-medium truncate">{activity.title}</p>
-                            <Badge variant={getStatusBadgeVariant(activity.status)} className="text-xs">
-                              {activity.status.replace('_', ' ').replace('-', ' ')}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span className="capitalize">{activity.type}</span>
-                            <span>•</span>
-                            <span>{formatDateShort(activity.timestamp)}</span>
-                          </div>
-                        </div>
+                      <h4 className={correspondenceQueueSubjectClass}>{activity.title}</h4>
+                      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                        <Badge
+                          variant={getStatusBadgeVariant(activity.status)}
+                          className={correspondenceQueueBadgeClass}
+                        >
+                          {activity.status.replace(/_/g, ' ').replace(/-/g, ' ')}
+                        </Badge>
+                        <span className={correspondenceQueueDateClass}>
+                          {formatDateShort(activity.timestamp)}
+                        </span>
                       </div>
-                    </Link>
+                      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <Icon className={correspondenceQueueMetaIconClass} />
+                          <span className="capitalize">{activity.type}</span>
+                        </span>
+                      </div>
+                    </ListRowCard>
                   );
                 })}
               </div>
@@ -394,44 +454,6 @@ const SecretaryDashboardContent = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>
-            Common tasks for executive support
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-3">
-            <Button
-              variant="outline"
-              className="justify-start"
-              onClick={() => router.push('/inbox?tab=executive-support')}
-            >
-              <Mail className="h-4 w-4 mr-2" />
-              Executive Support Inbox
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start"
-              onClick={() => router.push('/cases')}
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Manage Cases
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start"
-              onClick={() => router.push('/forms')}
-            >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Manage Forms
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };

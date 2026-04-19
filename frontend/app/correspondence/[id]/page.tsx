@@ -63,7 +63,7 @@ import {
 } from 'lucide-react';
 import type { Minute, DistributionRecipient, Correspondence, ParallelRoutingGroup } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
+import { fetchDocumentById, logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
 import type { Delegation } from '@/lib/delegation-storage';
 import { apiFetch } from '@/lib/api-client';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
@@ -251,6 +251,7 @@ const CorrespondenceDetailContent = () => {
   
   // Track if we've already fetched parallel routing groups for this correspondence ID
   const fetchedParallelGroupsRef = useRef<string | null>(null);
+  const wasDocumentPreviewOpenRef = useRef(false);
 
   // Document preview is handled by DocumentPreviewPanel component
 
@@ -687,6 +688,89 @@ const CorrespondenceDetailContent = () => {
     return [sorted[sorted.length - 1]];
   }, [parallelRoutingGroups]);
 
+  // Keep hooks above early returns to preserve stable hook order.
+  const selectedAttachmentForAccess =
+    selectedAttachmentIndex !== null && correspondence?.attachments?.[selectedAttachmentIndex]
+      ? correspondence.attachments[selectedAttachmentIndex]
+      : null;
+  const completionPackageUrlForAccess = buildDownloadUrl(correspondence?.completionPackage?.fileUrl ?? null) ?? null;
+  const linkedDocumentLatestVersionForAccess = linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1];
+  const linkedDocumentPreviewUrlForAccess = buildDownloadUrl(linkedDocumentLatestVersionForAccess?.fileUrl);
+  const defaultPreviewAttachmentSourceForAccess: 'attachment' | 'completion-package' =
+    selectedAttachmentForAccess
+      ? 'attachment'
+      : (!linkedDocumentPreviewUrlForAccess && isCompleted && completionPackageUrlForAccess ? 'completion-package' : 'attachment');
+
+  const resolveDmsAccessTarget = useCallback((): { documentId: string; sensitivity: string } | null => {
+    if (defaultPreviewAttachmentSourceForAccess === 'completion-package' && correspondence?.completionPackage?.documentId) {
+      return { documentId: correspondence.completionPackage.documentId, sensitivity: 'internal' };
+    }
+
+    const linkedDoc = linkedDocuments[0];
+    if (linkedDoc?.id) {
+      return { documentId: linkedDoc.id, sensitivity: linkedDoc.sensitivity ?? 'internal' };
+    }
+
+    const linkedDocId = correspondence?.linkedDocumentIds?.[0];
+    if (linkedDocId) {
+      return { documentId: linkedDocId, sensitivity: 'internal' };
+    }
+
+    return null;
+  }, [defaultPreviewAttachmentSourceForAccess, correspondence?.completionPackage?.documentId, correspondence?.linkedDocumentIds, linkedDocuments]);
+
+  const logCorrespondenceDmsAccess = useCallback(async (action: 'view' | 'download' | 'attempted-download') => {
+    if (!activeUser?.id) return;
+    const target = resolveDmsAccessTarget();
+    if (!target) return;
+
+    try {
+      await logDocumentAccess({
+        documentId: target.documentId,
+        userId: activeUser.id,
+        action,
+        sensitivity: target.sensitivity,
+      });
+    } catch (error: unknown) {
+      // Access logging should not block correspondence usage.
+      logWarn('Failed to write DMS access log from correspondence view', error);
+    }
+  }, [activeUser?.id, resolveDmsAccessTarget]);
+
+  const handleCompletionPackageDownload = useCallback(
+    async (_url: string, filename: string) => {
+      if (!correspondence?.id) return;
+      await logCorrespondenceDmsAccess('download');
+      try {
+        const blob = await apiFetch<Blob>(
+          `/correspondence/items/${correspondence.id}/completion-pdf/`,
+          { responseType: 'blob' }
+        );
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+        toast.success('Completion summary downloaded');
+      } catch (error) {
+        logError('Failed to download completion PDF', error);
+        toast.error('Unable to download completion summary');
+      }
+    },
+    [correspondence?.id, logCorrespondenceDmsAccess]
+  );
+
+  useEffect(() => {
+    const isOpenNow = isOpen('document-preview');
+    if (isOpenNow && !wasDocumentPreviewOpenRef.current) {
+      void logCorrespondenceDmsAccess('view');
+    }
+    wasDocumentPreviewOpenRef.current = isOpenNow;
+  }, [isOpen, logCorrespondenceDmsAccess]);
+
   if (!correspondence) {
     return (
       <DashboardLayout>
@@ -742,6 +826,37 @@ const CorrespondenceDetailContent = () => {
     correspondence.completionPackage?.generatedAt ??
     correspondence.completionSummaryGeneratedAt ??
     correspondence.completedAt;
+  const selectedAttachment =
+    selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
+      ? correspondence.attachments[selectedAttachmentIndex]
+      : null;
+  const completionPackageFileName = completionPackageUrl
+    ? (
+        completionPackageUrl.split('/').filter(Boolean).pop() ||
+        `${correspondence.referenceNumber || 'completion-package'}.pdf`
+      )
+    : undefined;
+  const linkedDocumentLatestVersion = linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1];
+  const linkedDocumentPreviewUrl = buildDownloadUrl(linkedDocumentLatestVersion?.fileUrl);
+  const linkedDocumentPreviewFileName = linkedDocumentLatestVersion?.fileName;
+  const defaultPreviewAttachmentUrl = selectedAttachment
+    ? buildDownloadUrl(selectedAttachment.fileUrl)
+    : (linkedDocumentPreviewUrl
+        ? linkedDocumentPreviewUrl
+        : (isCompleted && completionPackageUrl
+            ? completionPackageUrl
+            : buildDownloadUrl(correspondence.attachments?.[0]?.fileUrl)));
+  const defaultPreviewAttachmentFileName = selectedAttachment
+    ? selectedAttachment.fileName
+    : (linkedDocumentPreviewFileName
+        ? linkedDocumentPreviewFileName
+        : (isCompleted && completionPackageUrl
+            ? completionPackageFileName
+            : correspondence.attachments?.[0]?.fileName));
+  const defaultPreviewAttachmentSource: 'attachment' | 'completion-package' =
+    selectedAttachment
+      ? 'attachment'
+      : (!linkedDocumentPreviewUrl && isCompleted && completionPackageUrl ? 'completion-package' : 'attachment');
 
   const lookupUser = (userId?: string) => {
     if (!userId) return undefined;
@@ -936,7 +1051,7 @@ const CorrespondenceDetailContent = () => {
             // onOpenParallelRouteModal removed - Use Distribution (CC) in MinuteModal instead
             onOpenDelegateModal={() => openModal('delegate')}
             // onOpenLinkCaseModal moved to CorrespondenceHeader
-            onDownloadCompletionPackage={handleDownload}
+            onDownloadCompletionPackage={handleCompletionPackageDownload}
             onSyncFromApi={syncFromApi}
                               />
                             </div>
@@ -1003,7 +1118,7 @@ const CorrespondenceDetailContent = () => {
             // onOpenParallelRouteModal removed - Use Distribution (CC) in MinuteModal instead
             onOpenDelegateModal={() => openModal('delegate')}
             // onOpenLinkCaseModal moved to CorrespondenceHeader
-            onDownloadCompletionPackage={handleDownload}
+            onDownloadCompletionPackage={handleCompletionPackageDownload}
             onSyncFromApi={syncFromApi}
           />
                     </div>
@@ -1093,7 +1208,7 @@ const CorrespondenceDetailContent = () => {
 
       <CompletionSummaryModal
         open={isOpen('completion')}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (open) {
             openModal('completion');
           } else {
@@ -1102,6 +1217,7 @@ const CorrespondenceDetailContent = () => {
         }}
         correspondence={correspondence}
         minutes={minutes}
+        documentContentHtml={linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1]?.contentHtml}
       />
 
       <DocumentPreviewModal
@@ -1113,18 +1229,9 @@ const CorrespondenceDetailContent = () => {
           setSelectedAttachmentIndex(null);
         }}
         documentContentHtml={linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1]?.contentHtml}
-        attachmentUrl={
-          buildDownloadUrl(
-            selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
-              ? correspondence.attachments[selectedAttachmentIndex].fileUrl
-              : correspondence.attachments?.[0]?.fileUrl
-          )
-        }
-        attachmentFileName={
-          selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
-            ? correspondence.attachments[selectedAttachmentIndex].fileName
-            : correspondence.attachments?.[0]?.fileName
-        }
+        attachmentUrl={defaultPreviewAttachmentUrl}
+        attachmentFileName={defaultPreviewAttachmentFileName}
+        attachmentSource={defaultPreviewAttachmentSource}
       />
 
       <PrintPreviewModal
@@ -1133,8 +1240,8 @@ const CorrespondenceDetailContent = () => {
         isOpen={isOpen('print-preview')}
         onClose={() => closeModal()}
         documentContentHtml={linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1]?.contentHtml}
-        attachmentUrl={buildDownloadUrl(correspondence.attachments?.[0]?.fileUrl)}
-        attachmentFileName={correspondence.attachments?.[0]?.fileName}
+        attachmentUrl={defaultPreviewAttachmentUrl}
+        attachmentFileName={defaultPreviewAttachmentFileName}
       />
 
       <DelegateModal

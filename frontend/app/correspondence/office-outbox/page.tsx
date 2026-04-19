@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import { PaginationControls } from '@/components/shared/PaginationControls';
+import { usePagination } from '@/hooks/use-pagination';
 import {
   Select,
   SelectContent,
@@ -23,11 +29,12 @@ import {
   Building2,
   Filter,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
   AlertCircle,
   Download,
   Clock,
+  Pencil,
+  Undo2,
+  Trash2,
   User as UserIcon,
   ArrowDown,
   ArrowUp,
@@ -44,7 +51,30 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
+import { cn } from '@/lib/utils';
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
 import { FlowTypeBadge } from '@/components/correspondence/FlowTypeBadge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -97,19 +127,21 @@ const OfficeOutboxPage = () => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('all');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['pending', 'in-progress']);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [goToPageInput, setGoToPageInput] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [outboxItems, setOutboxItems] = useState<Correspondence[]>([]);
   const [summary, setSummary] = useState({ total: 0, urgent: 0, pending: 0, inProgress: 0 });
   const [count, setCount] = useState(0);
+  const pagination = usePagination({
+    initialPage: 1,
+    initialPageSize: 25,
+    totalCount: count,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -137,7 +169,7 @@ const OfficeOutboxPage = () => {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedOfficeId !== 'all') count++;
-    if (selectedStatuses.length > 0 && !(selectedStatuses.length === 2 && selectedStatuses.includes('pending') && selectedStatuses.includes('in-progress'))) count++;
+    if (selectedStatuses.length > 0) count++;
     if (selectedPriorities.length > 0) count++;
     if (dateFrom) count++;
     if (dateTo) count++;
@@ -154,7 +186,7 @@ const OfficeOutboxPage = () => {
 
   const clearAllFilters = () => {
     setSelectedOfficeId('all');
-    setSelectedStatuses(['pending', 'in-progress']);
+    setSelectedStatuses([]);
     setSelectedPriorities([]);
     setDateFrom('');
     setDateTo('');
@@ -214,7 +246,7 @@ const OfficeOutboxPage = () => {
       }
       if (dateFrom) params.append('date_from', dateFrom);
       if (dateTo) params.append('date_to', dateTo);
-      params.append('page_size', '10000'); // Get all items
+      params.append('page_size', '1000'); // Reasonable limit for export
 
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/outbox/?${params.toString()}`);
       const allItems = Array.isArray(response.results) ? response.results.map(mapApiCorrespondence) : [];
@@ -254,11 +286,12 @@ const OfficeOutboxPage = () => {
   }, [query]);
 
   useEffect(() => {
-    setPage(1);
-  }, [debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo, pageSize]);
+    pagination.goToFirstPage();
+  }, [debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {
-    if (!hydrated || !currentUser || !userOfficeIds.length) {
+    // Fetch data immediately if user has offices (don't wait for currentUser hydration)
+    if (!userOfficeIds.length) {
       setLoading(false);
       return;
     }
@@ -299,8 +332,8 @@ const OfficeOutboxPage = () => {
         if (dateTo && !dateError) params.append('date_to', dateTo);
         params.append('sort_by', sortBy);
         params.append('sort_order', sortOrder);
-        params.append('page', String(page));
-        params.append('page_size', String(pageSize));
+        params.append('page', String(pagination.page));
+        params.append('page_size', String(pagination.pageSize));
 
         const response = await apiFetch<Record<string, unknown>>(
           `/correspondence/items/outbox/?${params.toString()}`,
@@ -339,17 +372,7 @@ const OfficeOutboxPage = () => {
     return () => {
       controller.abort();
     };
-  }, [hydrated, currentUser, userOfficeIds, page, pageSize, debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, dateFrom, dateTo, sortBy, sortOrder, dateError]);
-
-  const pageCount = Math.max(1, Math.ceil(count / pageSize));
-
-  const handleGoToPage = () => {
-    const pageNum = parseInt(goToPageInput, 10);
-    if (pageNum >= 1 && pageNum <= pageCount) {
-      setPage(pageNum);
-      setGoToPageInput('');
-    }
-  };
+  }, [userOfficeIds, pagination.page, pagination.pageSize, debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, dateFrom, dateTo, sortBy, sortOrder, dateError]);
 
   const handleWithdrawClick = (item: Correspondence) => {
     if (item.status as string !== 'pending' && item.status as string !== 'in-progress') {
@@ -383,7 +406,7 @@ const OfficeOutboxPage = () => {
       setSelectedItem(null);
       
       // Refresh the list
-      setPage(1);
+      pagination.goToFirstPage();
     } catch (err: unknown) {
       let errorMessage = 'Failed to withdraw correspondence';
       if (err && typeof err === 'object') {
@@ -428,7 +451,7 @@ const OfficeOutboxPage = () => {
       setSelectedItem(null);
       
       // Refresh the list
-      setPage(1);
+      pagination.goToFirstPage();
     } catch (err: unknown) {
       let errorMessage = 'Failed to delete correspondence';
       if (err && typeof err === 'object') {
@@ -450,7 +473,7 @@ const OfficeOutboxPage = () => {
     }
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6">
@@ -521,6 +544,15 @@ const OfficeOutboxPage = () => {
               <Download className="h-4 w-4 mr-2" />
               {exporting ? 'Exporting...' : 'Export'}
             </Button>
+            <ContextualHelp
+              title="How to use Office Outbox"
+              description="Review correspondence your office has sent or is preparing to dispatch. Withdraw or edit drafts while they are still pending."
+              steps={[
+                'Filter by office, status, or priority to find items.',
+                'Open a record to view routing details or continue processing.',
+                'Use Withdraw on pending or in-progress items if you need to recall and fix them.',
+              ]}
+            />
           </div>
         </div>
 
@@ -540,7 +572,7 @@ const OfficeOutboxPage = () => {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Filters</CardTitle>
+                <CardTitle className="text-lg">Office Outbox Filters</CardTitle>
                 {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
               </div>
             </CardHeader>
@@ -654,42 +686,43 @@ const OfficeOutboxPage = () => {
             { label: 'In Progress', value: summary.inProgress, icon: Mail, bgClass: 'bg-info/10', iconClass: 'text-info' },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
-              <CardContent className="p-6">
+              <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
-                  <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        {/* Outbox Items */}
         {loading ? (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading outbox items…
-            </CardContent>
-          </Card>
+          <LoadingState message="Loading office outbox…" />
         ) : error ? (
-          <Card>
-            <CardContent className="py-4 text-sm text-destructive" role="alert">{error}</CardContent>
-          </Card>
+          <ErrorState message={error} variant="inline" />
         ) : outboxItems.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12 text-muted-foreground text-sm">
-              {debouncedQuery || activeFilterCount > 0
-                ? 'No office outbox items match your filters.'
-                : 'No correspondence found in your office outbox.'}
-              {(debouncedQuery || activeFilterCount > 0) && (
-                <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4 block mx-auto">
-                  Clear Filters
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={<Send className={registryQueueEmptyIconClass} />}
+            title={
+              debouncedQuery || activeFilterCount > 0
+                ? 'No items match your filters'
+                : 'No correspondence in your office outbox yet'
+            }
+            message={
+              debouncedQuery || activeFilterCount > 0
+                ? 'Try adjusting your search or filters.'
+                : 'When your office sends or drafts outgoing correspondence, it will appear here.'
+            }
+            actionLabel={debouncedQuery || activeFilterCount > 0 ? 'Clear Filters' : undefined}
+            onAction={debouncedQuery || activeFilterCount > 0 ? clearAllFilters : undefined}
+          />
         ) : (
-          <div className="space-y-3">
+          <div className={correspondenceQueueListStackClass}>
             {outboxItems.map((item) => {
               const owningOffice = item.owningOfficeId
                 ? offices.find((office) => office.id === item.owningOfficeId)
@@ -699,126 +732,183 @@ const OfficeOutboxPage = () => {
               const daysPending = calculateDaysPending(item);
 
               return (
-                <div key={item.id as string} className="border border-border rounded-lg p-4 hover:bg-muted/50 hover:shadow-soft transition-all">
-                  <Link href={`/correspondence/${item.id as string}`} className="block">
-                    <div className="flex items-start gap-4">
-                      <div className={`p-3 rounded-lg ${item.priority === 'urgent' ? 'bg-destructive/10' : item.priority === 'high' ? 'bg-warning/10' : 'bg-primary/10'}`}>
-                        <Mail className={`h-5 w-5 ${item.priority === 'urgent' ? 'text-destructive' : item.priority === 'high' ? 'text-warning' : 'text-primary'}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-foreground truncate mb-1">{item.subject}</h3>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant={getPriorityColor(item.priority)}>{item.priority.toUpperCase()}</Badge>
-                              <FlowTypeBadge
-                                flowType={item.flowType}
-                                isInward={item.isInward}
-                                isOutward={item.isOutward}
-                                isInternal={item.isInternal}
-                                isExternal={item.isExternal}
-                              />
-                              <Badge variant={getStatusBadgeVariant(item.status as string)}>{(item.status as string).replace('-', ' ')}</Badge>
-                              {daysPending > 0 && <Badge variant="outline" className="gap-1"><Clock className="h-3 w-3" />{daysPending} day{daysPending === 1 ? '' : 's'} pending</Badge>}
-                            </div>
-                          </div>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">{item.updatedAt ? formatDateShort(item.updatedAt) : '—'}</span>
-                        </div>
-                        <div className="space-y-1 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /><span>Ref: {item.referenceNumber}</span></div>
-                          {item.senderName && <div className="flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" /><span>From: {item.senderName}</span></div>}
-                          {owningOffice && <div className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5" /><span>Office: {owningOffice.name}</span></div>}
-                          {division && <div className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5" /><span>Division: {division.name}</span></div>}
-                          {currentApprover && <div className="flex items-center gap-2"><Clock className="h-3.5 w-3.5" /><span>Current Approver: {currentApprover.name}</span></div>}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                  {/* Action Menu */}
-                  <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-                    {item.status as string === 'pending' && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={(e) => {
-                          e.preventDefault();
-                          router.push(`/correspondence/register?edit=${item.id as string}`);
-                        }}
-                      >
-                        Edit Draft
-                      </Button>
-                    )}
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleWithdrawClick(item);
-                      }}
-                      disabled={item.status as string !== 'pending' || isProcessing}
+                <ListRowCard
+                  key={item.id as string}
+                  density="compact"
+                  href={`/correspondence/${item.id as string}`}
+                  leading={(
+                    <div
+                      className={cn(
+                        correspondenceQueueLeadingBoxClass,
+                        item.priority === 'urgent'
+                          ? 'bg-destructive/10'
+                          : item.priority === 'high'
+                            ? 'bg-warning/10'
+                            : 'bg-primary/10',
+                      )}
                     >
-                      Withdraw
-                    </Button>
-                    {item.status as string === 'pending' && isAdmin && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleDeleteClick(item);
-                        }}
-                        disabled={isProcessing}
+                      <Mail
+                        className={cn(
+                          correspondenceQueueLeadingIconClass,
+                          item.priority === 'urgent'
+                            ? 'text-destructive'
+                            : item.priority === 'high'
+                              ? 'text-warning'
+                              : 'text-primary',
+                        )}
+                      />
+                    </div>
+                  )}
+                  actions={(
+                    <>
+                      {item.status as string === 'pending' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              aria-label="Edit draft"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                router.push(`/correspondence/register?edit=${item.id as string}`);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Edit draft</TooltipContent>
+                        </Tooltip>
+                      )}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              aria-label="Withdraw correspondence"
+                              disabled={item.status as string !== 'pending' || isProcessing}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleWithdrawClick(item);
+                              }}
+                            >
+                              <Undo2 className="h-4 w-4" />
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          {item.status as string === 'pending'
+                            ? 'Withdraw correspondence'
+                            : 'Only pending items can be withdrawn'}
+                        </TooltipContent>
+                      </Tooltip>
+                      {item.status as string === 'pending' && isAdmin && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label="Delete draft"
+                              disabled={isProcessing}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteClick(item);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Delete draft</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </>
+                  )}
+                >
+                  <h4 className={correspondenceQueueSubjectClass}>{item.subject}</h4>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                      <Badge variant={getPriorityColor(item.priority)} className={correspondenceQueueBadgeClass}>
+                        {item.priority.toUpperCase()}
+                      </Badge>
+                      <FlowTypeBadge
+                        flowType={item.flowType}
+                        isInward={item.isInward}
+                        isOutward={item.isOutward}
+                        isInternal={item.isInternal}
+                        isExternal={item.isExternal}
+                        compact
+                        className={correspondenceQueueBadgeClass}
+                      />
+                      <Badge
+                        variant={getStatusBadgeVariant(item.status as string)}
+                        className={correspondenceQueueBadgeClass}
                       >
-                        Delete
-                      </Button>
+                        {(item.status as string).replace('-', ' ')}
+                      </Badge>
+                      {daysPending > 0 && (
+                        <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+                          <Clock className="h-2.5 w-2.5" />
+                          {daysPending} day{daysPending === 1 ? '' : 's'} pending
+                        </Badge>
+                      )}
+                    </div>
+                    <span className={correspondenceQueueDateClass}>
+                      {item.updatedAt ? formatDateShort(item.updatedAt) : '—'}
+                    </span>
+                  </div>
+                  <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                    <span className={correspondenceQueueMetaItemClass}>
+                      <Mail className={correspondenceQueueMetaIconClass} />
+                      <span className="truncate">Ref: {item.referenceNumber}</span>
+                    </span>
+                    {item.senderName && (
+                      <span className={correspondenceQueueMetaItemClass}>
+                        <UserIcon className={correspondenceQueueMetaIconClass} />
+                        <span className="truncate">From: {item.senderName}</span>
+                      </span>
+                    )}
+                    {owningOffice && (
+                      <span className={correspondenceQueueMetaItemClass}>
+                        <Building2 className={correspondenceQueueMetaIconClass} />
+                        <span className="truncate">Office: {owningOffice.name}</span>
+                      </span>
+                    )}
+                    {division && (
+                      <span className={correspondenceQueueMetaItemClass}>
+                        <Building2 className={correspondenceQueueMetaIconClass} />
+                        <span className="truncate">Division: {division.name}</span>
+                      </span>
+                    )}
+                    {currentApprover && (
+                      <span className={correspondenceQueueMetaItemClass}>
+                        <Clock className={correspondenceQueueMetaIconClass} />
+                        <span className="truncate">Current: {currentApprover.name}</span>
+                      </span>
                     )}
                   </div>
-                </div>
+                </ListRowCard>
               );
             })}
           </div>
         )}
 
-        {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">Showing {count === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count, (page - 1) * pageSize + outboxItems.length)}`} of {count} items</p>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground">Per page:</label>
-              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-                <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1 || loading}><ChevronLeft className="h-4 w-4" />Previous</Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
-                let pageNum: number;
-                if (pageCount <= 5) pageNum = i + 1;
-                else if (page <= 3) pageNum = i + 1;
-                else if (page >= pageCount - 2) pageNum = pageCount - 4 + i;
-                else pageNum = page - 2 + i;
-                if (pageNum > pageCount) return null;
-                return <Button key={pageNum} variant={page === pageNum ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pageNum)} disabled={loading}>{pageNum}</Button>;
-              })}
-            </div>
-            {pageCount > 5 && (
-              <div className="flex items-center gap-1">
-                <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
-                <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
-              </div>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
-          </div>
-        </div>
+        {count > 0 && (
+          <PaginationControls
+            pagination={pagination}
+            showPageSizeSelector={true}
+            showGoToPage={true}
+            className="border-t border-border/60 pt-4"
+          />
+        )}
 
         {/* Withdraw Confirmation Dialog */}
         <AlertDialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
@@ -915,5 +1005,4 @@ const OfficeOutboxPage = () => {
 };
 
 export default OfficeOutboxPage;
-
 

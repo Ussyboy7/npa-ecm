@@ -3,6 +3,7 @@
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -11,11 +12,20 @@ from .serializers import NotificationPreferencesSerializer, NotificationSerializ
 from .services import NotificationService
 
 
+class NotificationListPagination(PageNumberPagination):
+    """Larger default page so the header dropdown can show recent items beyond global PAGE_SIZE."""
+
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for user notifications."""
 
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = NotificationListPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "notification_type", "priority", "module"]
     search_fields = ["title", "message"]
@@ -34,6 +44,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         notification.mark_as_read()
+        NotificationService.broadcast_unread_count(request.user)
         return Response({"status": "marked as read"})
 
     @action(detail=True, methods=["post"])
@@ -44,12 +55,14 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         notification.mark_as_archived()
+        NotificationService.broadcast_unread_count(request.user)
         return Response({"status": "archived"})
 
     @action(detail=False, methods=["post"])
     def mark_all_read(self, request):
         """Mark all notifications as read."""
         count = NotificationService.mark_all_as_read(request.user)
+        NotificationService.broadcast_unread_count(request.user)
         return Response({"count": count, "status": "all marked as read"})
 
     @action(detail=False, methods=["get"])

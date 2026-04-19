@@ -28,11 +28,45 @@ interface OrgNode {
   userCount?: number;
 }
 
+interface OrgDirectorate {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  executiveDirectorId?: string;
+}
+
+interface OrgDivision {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  directorateId: string;
+  generalManagerId?: string;
+}
+
+interface OrgDepartment {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  divisionId: string;
+  headOfDepartmentId?: string;
+}
+
+interface OrgUser {
+  id: string;
+  name: string;
+  directorate?: string;
+  division?: string;
+  department?: string;
+}
+
 interface OrganizationChartProps {
-  directorates: unknown[];
-  divisions: unknown[];
-  departments: unknown[];
-  users: unknown[];
+  directorates: OrgDirectorate[];
+  divisions: OrgDivision[];
+  departments: OrgDepartment[];
+  users: OrgUser[];
 }
 
 export function OrganizationChart({
@@ -45,14 +79,14 @@ export function OrganizationChart({
 
   const orgTree = useMemo(() => {
     // Build tree structure
-    const tree: OrgNode[] = (directorates as any[])
-      .filter((d: any) => d.isActive)
-      .map((dir: any) => {
-        const dirDivisions = (divisions as any[])
-          .filter((div: any) => div.isActive && div.directorateId === dir.id)
-          .map((div: any) => {
-            const divDepartments = (departments as any[])
-              .filter((dept: any) => dept.isActive && dept.divisionId === div.id)
+    const tree: OrgNode[] = directorates
+      .filter((d) => d.isActive)
+      .map((dir) => {
+        const dirDivisions = divisions
+          .filter((div) => div.isActive && div.directorateId === dir.id)
+          .map((div) => {
+            const divDepartments = departments
+              .filter((dept) => dept.isActive && dept.divisionId === div.id)
               .map(dept => ({
                 id: dept.id,
                 name: dept.name,
@@ -60,10 +94,10 @@ export function OrganizationChart({
                 type: 'department' as const,
                 leader: dept.headOfDepartmentId ? {
                   id: dept.headOfDepartmentId,
-                  name: (users as any[]).find((u: any) => u.id === dept.headOfDepartmentId)?.name || 'Unknown',
+                  name: users.find((u) => u.id === dept.headOfDepartmentId)?.name || 'Unknown',
                   role: 'Head of Department',
                 } : undefined,
-                userCount: (users as any[]).filter((u: any) => u.department === dept.id).length,
+                userCount: users.filter((u) => u.department === dept.id).length,
               }));
 
             return {
@@ -73,11 +107,11 @@ export function OrganizationChart({
               type: 'division' as const,
               leader: div.generalManagerId ? {
                 id: div.generalManagerId,
-                name: (users as any[]).find((u: any) => u.id === div.generalManagerId)?.name || 'Unknown',
+                name: users.find((u) => u.id === div.generalManagerId)?.name || 'Unknown',
                 role: 'General Manager',
               } : undefined,
               children: divDepartments,
-              userCount: (users as any[]).filter((u: any) => u.division === div.id).length,
+              userCount: users.filter((u) => u.division === div.id).length,
             };
           });
 
@@ -88,11 +122,11 @@ export function OrganizationChart({
           type: 'directorate' as const,
           leader: dir.executiveDirectorId ? {
             id: dir.executiveDirectorId,
-            name: (users as any[]).find((u: any) => u.id === dir.executiveDirectorId)?.name || 'Unknown',
+            name: users.find((u) => u.id === dir.executiveDirectorId)?.name || 'Unknown',
             role: 'Executive Director',
           } : undefined,
           children: dirDivisions,
-          userCount: (users as any[]).filter((u: any) => u.directorate === dir.id).length,
+          userCount: users.filter((u) => u.directorate === dir.id).length,
         };
       });
 

@@ -78,7 +78,7 @@ const workspaceHighlights = [
       "Manage signatures, template formats, organization defaults, personal overrides, and auto-apply rules for approvals.",
     links: [
       { label: "Signature Settings", href: "/settings" },
-      { label: "Admin Templates", href: "/admin/templates" },
+      { label: "Admin Templates", href: "/admin/templates-hub" },
     ],
   },
   {
@@ -382,8 +382,8 @@ export default function HelpAndGuidePage() {
                   <CardDescription>{highlight.description}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-2">
-                  {highlight.links.map((link) => (
-                    <Button key={link.href} variant="secondary" size="sm" asChild>
+                  {highlight.links.map((link, linkIndex) => (
+                    <Button key={`${link.href}-${link.label}-${linkIndex}`} variant="secondary" size="sm" asChild>
                       <Link href={link.href}>{link.label}</Link>
                     </Button>
                   ))}
@@ -551,4 +551,3 @@ export default function HelpAndGuidePage() {
     </DashboardLayout>
   );
 }
-

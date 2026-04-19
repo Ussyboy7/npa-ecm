@@ -145,6 +145,30 @@ export function generateDocumentHTML(content: DocumentContent): string {
     `;
   }
   
+  // Priority 3: Show treatment response if available
+  const treatmentResponse = (correspondence as Correspondence & { treatmentResponse?: string })?.treatmentResponse;
+  if (treatmentResponse) {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>${correspondence.referenceNumber} - ${correspondence.subject}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+          .summary-label { font-weight: bold; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #ddd; color: #666; }
+          .summary-content { white-space: pre-wrap; }
+        </style>
+      </head>
+      <body>
+        <div class="summary-label">Treatment Response</div>
+        <div class="summary-content">${treatmentResponse}</div>
+      </body>
+      </html>
+    `;
+  }
+  
   // No document available - show message
   const division = getDivisionById(correspondence.divisionId);
   

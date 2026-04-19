@@ -1466,3 +1466,50 @@ class AnalyticsService:
             },
             "bottlenecks": bottlenecks[:5],
         }
+
+# ================================================================ #
+# Public wrapper functions for backward compatibility with tests
+# ================================================================ #
+
+def compute_performance_metrics(*, range_days: int = 30) -> dict[str, Any]:
+    """
+    Compute performance metrics analytics.
+    
+    Returns a payload with turnaround, SLA, division performance, and role performance metrics.
+    """
+    # Fetch correspondences to compute totals
+    correspondences = list(AnalyticsService._fetch_correspondence(range_days=range_days))
+    
+    # Compute basic metrics
+    total = len(correspondences)
+    completed = len([item for item in correspondences if item.status == Correspondence.Status.COMPLETED])
+    pending = len([item for item in correspondences if item.status == Correspondence.Status.PENDING])
+    urgent = len([item for item in correspondences if item.priority == Correspondence.Priority.URGENT])
+    
+    payload = AnalyticsService.build_performance_payload(range_days=range_days)
+    # Add 'totals' as an alias for tests that expect it
+    payload["totals"] = {
+        "total": total,
+        "completed": completed,
+        "pending": pending,
+        "urgent": urgent,
+    }
+    return payload
+
+
+def compute_executive_metrics(*, range_days: int = 30) -> dict[str, Any]:
+    """
+    Compute executive-level analytics.
+    
+    Returns a payload with division metrics, department activity, escalations, and trends.
+    """
+    return AnalyticsService.build_executive_payload(range_days=range_days)
+
+
+def compute_report_metrics(*, range_days: int = 30, division_id: str | None = None) -> dict[str, Any]:
+    """
+    Compute detailed report metrics.
+    
+    Returns a payload with status distribution, priority breakdown, turnaround analysis, and division summaries.
+    """
+    return AnalyticsService.build_reports_payload(range_days=range_days, division_id=division_id)

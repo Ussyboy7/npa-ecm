@@ -80,7 +80,7 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
 
     reference_number = models.CharField(max_length=100, unique=True, blank=True)
     subject = models.CharField(max_length=500)
-    summary = models.TextField(blank=True)
+    treatment_response = models.TextField(blank=True, default="")
     body_html = models.TextField(blank=True)
     source = models.CharField(max_length=20, choices=Source.choices, default=Source.INTERNAL)
     received_date = models.DateField(null=True, blank=True)
@@ -324,6 +324,7 @@ class CorrespondenceDistribution(UUIDModel, TimeStampedModel):
     """
 
     class RecipientType(models.TextChoices):
+        OFFICE = "office", "Office"
         DIVISION = "division", "Division"
         DEPARTMENT = "department", "Department"
         DIRECTORATE = "directorate", "Directorate"
@@ -342,6 +343,13 @@ class CorrespondenceDistribution(UUIDModel, TimeStampedModel):
         null=True,
         blank=True,
         related_name="directorate_distribution_entries",
+    )
+    office = models.ForeignKey(
+        "organization.Office",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="office_distribution_entries",
     )
     division = models.ForeignKey(
         "organization.Division",

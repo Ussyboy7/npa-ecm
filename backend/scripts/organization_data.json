@@ -2,7 +2,7 @@
   "DIRECTORATES": [
     {
       "id": "dir-md",
-      "name": "Managing Director Office",
+      "name": "Managing Director",
       "code": "MD",
       "executiveDirector": "Managing Director",
       "executiveDirectorId": "user-md",

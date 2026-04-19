@@ -325,6 +325,35 @@ pre-commit install
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
+## 📚 Documentation
+
+Complete documentation is available in the `docs/` directory:
+
+- **[📖 Documentation Home](./docs/README.md)**: Overview and navigation guide
+- **[🧩 Component Reference](./docs/components/COMPONENTS_REFERENCE.md)**: Technical documentation for all components
+- **[👤 User Guides](./docs/user-guides/USER_GUIDES.md)**: Step-by-step guides for end users
+- **[🔌 API Reference](./docs/api/API_REFERENCE.md)**: Complete API documentation and examples
+
+### Key Features Recently Added
+
+#### Completion Summary Modal
+- View comprehensive completion details for correspondence
+- Document preview with full content rendering
+- Process timeline and statistics
+- Export and sharing capabilities
+
+#### Actions Panel
+- Dynamic, context-aware action buttons
+- Permission-based UI customization
+- Delegation management and tracking
+- Status indicators and workflow guidance
+
+#### Document Upload System
+- Advanced file upload with validation
+- Version control and management
+- Progress tracking and error recovery
+- Support for multiple file formats (PDF, Word, Excel, etc.)
+
 ## 📄 License
 
 This project is proprietary software of NPA.

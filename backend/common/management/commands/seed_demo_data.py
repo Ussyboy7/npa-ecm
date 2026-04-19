@@ -451,10 +451,41 @@ class Command(BaseCommand):
 
         management_grades = {"MSS1", "MSS2", "MSS3", "MSS4", "MSS5", "EDCS", "MDCS"}
 
+        alias_map = {
+            "user-md": "md",
+            "user-ed-fa": "edfa",
+            "user-ed-mo": "edmo",
+            "user-ed-ets": "edets",
+            "user-gm-ict": "gmict",
+            "user-pa-md": "pamd",
+        }
+
+        def ensure_unique_email(desired_email: str, username: str) -> str:
+            email = (desired_email or "").strip().lower()
+            if not email:
+                return email
+            conflict = User.objects.filter(email=email).exclude(username=username).first()
+            if not conflict:
+                return email
+            if "@" in email:
+                local, domain = email.split("@", 1)
+                return f"{local}+seed-{username}@{domain}"
+            return f"{email}.seed-{username}"
+
+        def ensure_unique_employee_id(desired_employee_id: str, username: str) -> str:
+            employee_id = (desired_employee_id or "").strip()
+            if not employee_id:
+                return employee_id
+            conflict = User.objects.filter(employee_id=employee_id).exclude(username=username).first()
+            if not conflict:
+                return employee_id
+            return f"{employee_id}-SEED-{username[:8]}"
+
         for entry in users_data:
-            username = entry.get("id") or entry.get("username")
-            if not username:
+            source_key = entry.get("id") or entry.get("username")
+            if not source_key:
                 continue
+            username = alias_map.get(source_key, source_key)
 
             name = (entry.get("name") or "").strip()
             name_parts = name.split()
@@ -471,12 +502,12 @@ class Command(BaseCommand):
                 )
 
             defaults = {
-                "email": entry.get("email") or f"{username}@npa.gov.ng",
+                "email": ensure_unique_email(entry.get("email") or f"{username}@npa.gov.ng", username),
                 "first_name": first_name,
                 "last_name": last_name,
                 "system_role": system_role,
                 "grade_level": entry.get("gradeLevel", ""),
-                "employee_id": entry.get("employeeId", ""),
+                "employee_id": ensure_unique_employee_id(entry.get("employeeId", ""), username),
                 "is_management": entry.get("gradeLevel", "") in management_grades,
             }
 
@@ -488,9 +519,10 @@ class Command(BaseCommand):
                 user.set_password("ChangeMe123!")
                 user.save(update_fields=["password"])
 
+            created_users[source_key] = user
             created_users[username] = user
             pending_assignments.append(
-                (username, entry.get("division"), entry.get("department"))
+                (source_key, entry.get("division"), entry.get("department"))
             )
 
         # Ensure super admin account
@@ -499,7 +531,7 @@ class Command(BaseCommand):
             defaults={"description": "Super Administrator with full system access"}
         )
         superadmin_defaults = {
-            "email": "superadmin@npa.gov.ng",
+            "email": ensure_unique_email("superadmin@npa.gov.ng", "superadmin"),
             "first_name": "Super",
             "last_name": "Admin",
             "is_staff": True,
@@ -542,22 +574,24 @@ class Command(BaseCommand):
             user.save(update_fields=["division", "department", "directorate"])
 
         # Ensure personal assistant demo account exists even if missing from source data
-        if "user-pa-md" not in created_users:
+        pa_source_key = "user-pa-md"
+        pa_username = alias_map.get(pa_source_key, pa_source_key)
+        if pa_username not in created_users and pa_source_key not in created_users:
             pa_role, _ = Role.objects.get_or_create(
                 name="Personal Assistant",
                 defaults={"description": "Personal Assistant role"}
             )
             pamd_defaults = {
-                "email": "pa.md@npa.gov.ng",
+                "email": ensure_unique_email("pa.md@npa.gov.ng", "user-pa-md"),
                 "first_name": "Grace",
                 "last_name": "Nnaji",
                 "system_role": pa_role,
                 "grade_level": "SSS2",
-                "employee_id": "NPA-PA-001",
+                "employee_id": ensure_unique_employee_id("NPA-PA-001", "user-pa-md"),
                 "is_management": False,
             }
             pamd_user, created = User.objects.update_or_create(
-                username="user-pa-md",
+                username=pa_username,
                 defaults=pamd_defaults,
             )
             if created or not pamd_user.has_usable_password():
@@ -569,43 +603,8 @@ class Command(BaseCommand):
                 pamd_user.division = None
                 pamd_user.department = None
                 pamd_user.save(update_fields=["directorate", "division", "department"])
-            created_users["user-pa-md"] = pamd_user
-
-        # Ensure key login accounts exist with friendly usernames
-        alias_map = {
-            "user-md": "md",
-            "user-ed-fa": "edfa",
-            "user-ed-mo": "edmo",
-            "user-ed-ets": "edets",
-            "user-gm-ict": "gmict",
-            "user-pa-md": "pamd",
-        }
-
-        for source_id, alias_username in alias_map.items():
-            source_user = created_users.get(source_id)
-            if not source_user:
-                continue
-            alias_defaults = {
-                "email": source_user.email,
-                "first_name": source_user.first_name,
-                "last_name": source_user.last_name,
-                "system_role": source_user.system_role,
-                "grade_level": source_user.grade_level,
-                "employee_id": source_user.employee_id,
-                "is_management": source_user.is_management,
-            }
-            alias_user, created = User.objects.update_or_create(
-                username=alias_username,
-                defaults=alias_defaults,
-            )
-            if created or not alias_user.has_usable_password():
-                alias_user.set_password("ChangeMe123!")
-                alias_user.save(update_fields=["password"])
-            alias_user.directorate = source_user.directorate
-            alias_user.division = source_user.division
-            alias_user.department = source_user.department
-            alias_user.save(update_fields=["directorate", "division", "department"])
-            created_users[alias_username] = alias_user
+            created_users[pa_source_key] = pamd_user
+            created_users[pa_username] = pamd_user
 
         self.stdout.write(self.style.SUCCESS(f"Ensured {len(created_users)} users."))
         return created_users

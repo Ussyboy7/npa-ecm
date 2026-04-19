@@ -20,8 +20,6 @@ import {
   FileArchive,
   Filter,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
@@ -31,6 +29,11 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/shared/PaginationControls';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: '#ef4444',
@@ -61,13 +64,17 @@ const ArchivedCorrespondence = () => {
   const [receivedTo, setReceivedTo] = useState<string>('');
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [summary, setSummary] = useState({ total: 0, downward: 0, upward: 0, thisYear: 0 });
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  const [goToPageInput, setGoToPageInput] = useState('');
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Use pagination hook
+  const pagination = usePagination({
+    initialPage: 1,
+    initialPageSize: PAGE_SIZE,
+    totalCount: count,
+  });
 
   const archiveLevelOptions = useMemo(() => {
     const allowedLevels = permissions.allowedArchiveLevels ?? [];
@@ -116,8 +123,8 @@ const ArchivedCorrespondence = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, yearFilter, selectedPriorities, selectedStatuses, archiveLevelFilter, selectedDirections, sortBy, sortOrder, receivedFrom, receivedTo, pageSize]);
+    pagination.goToFirstPage();
+  }, [debouncedSearch, yearFilter, selectedPriorities, selectedStatuses, archiveLevelFilter, selectedDirections, sortBy, sortOrder, receivedFrom, receivedTo, pagination.pageSize]);
 
   useEffect(() => {
     let ignore = false;
@@ -125,7 +132,7 @@ const ArchivedCorrespondence = () => {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+        const params = new URLSearchParams({ page: String(pagination.page), page_size: String(pagination.pageSize) });
         if (debouncedSearch) params.append('search', debouncedSearch);
         if (yearFilter !== 'all') params.append('year', yearFilter);
         if (selectedPriorities.length > 0) selectedPriorities.forEach((p) => params.append('priority', p));
@@ -168,17 +175,7 @@ const ArchivedCorrespondence = () => {
 
     fetchArchive();
     return () => { ignore = true; };
-  }, [page, pageSize, debouncedSearch, yearFilter, selectedPriorities, selectedStatuses, archiveLevelFilter, selectedDirections, sortBy, sortOrder, receivedFrom, receivedTo]);
-
-  const pageCount = Math.max(1, Math.ceil(count / pageSize));
-
-  const handleGoToPage = () => {
-    const pageNum = parseInt(goToPageInput, 10);
-    if (pageNum >= 1 && pageNum <= pageCount) {
-      setPage(pageNum);
-      setGoToPageInput('');
-    }
-  };
+  }, [pagination.page, pagination.pageSize, debouncedSearch, yearFilter, selectedPriorities, selectedStatuses, archiveLevelFilter, selectedDirections, sortBy, sortOrder, receivedFrom, receivedTo]);
 
   const getPriorityBadgeVariant = (priority: string) => {
     switch (priority) {
@@ -330,17 +327,17 @@ const ArchivedCorrespondence = () => {
         </div>
 
         {loading ? (
-          <Card><CardContent className="py-12 text-center text-muted-foreground text-sm flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Loading archived records...</CardContent></Card>
+          <LoadingState message="Loading archived records…" />
         ) : error ? (
-          <Card><CardContent className="py-4 text-sm text-destructive">{error}</CardContent></Card>
+          <ErrorState message={error} variant="inline" />
         ) : records.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Archive className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-muted-foreground mb-2">{debouncedSearch || activeFilterCount > 0 ? 'No archived records match your filters' : 'No archived records found'}</p>
-              {(debouncedSearch || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">Clear Filters</Button>}
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon="inbox"
+            title={debouncedSearch || activeFilterCount > 0 ? 'No archived records match your filters' : 'No archived records found'}
+            message={debouncedSearch || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'When correspondence is archived, it will appear here.'}
+            actionLabel={debouncedSearch || activeFilterCount > 0 ? 'Clear Filters' : undefined}
+            onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+          />
         ) : (
           <div className="space-y-3">
             {records.map((corr) => {
@@ -380,44 +377,14 @@ const ArchivedCorrespondence = () => {
         )}
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">Showing {count === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count, (page - 1) * pageSize + records.length)}`} of {count} records</p>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground">Per page:</label>
-              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-                <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1 || loading}><ChevronLeft className="h-4 w-4" />Previous</Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
-                let pageNum: number;
-                if (pageCount <= 5) pageNum = i + 1;
-                else if (page <= 3) pageNum = i + 1;
-                else if (page >= pageCount - 2) pageNum = pageCount - 4 + i;
-                else pageNum = page - 2 + i;
-                if (pageNum > pageCount) return null;
-                return <Button key={pageNum} variant={page === pageNum ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pageNum)} disabled={loading}>{pageNum}</Button>;
-              })}
-            </div>
-            {pageCount > 5 && (
-              <div className="flex items-center gap-1">
-                <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
-                <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
-              </div>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
-          </div>
-        </div>
+        {count > 0 && (
+          <PaginationControls
+            pagination={pagination}
+            showPageSizeSelector={true}
+            showGoToPage={true}
+            className="border-t border-border/60 pt-4"
+          />
+        )}
       </div>
     </DashboardLayout>
   );

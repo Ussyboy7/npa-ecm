@@ -20,6 +20,9 @@ backend/.venv/
 backend/venv/
 backend/staticfiles/
 backend/media/
+__pycache__/
+*.pyc
+*.pyo
 
 # Celery
 celerybeat-schedule*

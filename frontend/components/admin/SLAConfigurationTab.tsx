@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -25,18 +24,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 import {
-  Target,
   Plus,
   Edit,
   Trash2,
@@ -47,6 +37,31 @@ import {
   Loader2,
   Save,
 } from 'lucide-react';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import {
   type SLAConfiguration,
@@ -62,11 +77,32 @@ import {
   fetchSLAChoices,
 } from '@/lib/sla-client';
 
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-  high: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-  medium: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  low: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+const getPriorityBadgeVariant = (
+  priority: string,
+): 'destructive' | 'default' | 'secondary' | 'outline' => {
+  switch (priority) {
+    case 'urgent':
+      return 'destructive';
+    case 'high':
+      return 'default';
+    case 'medium':
+      return 'secondary';
+    default:
+      return 'outline';
+  }
+};
+
+const priorityStatVisual = (priority: string) => {
+  switch (priority) {
+    case 'urgent':
+      return { box: 'bg-destructive/10', icon: 'text-destructive' };
+    case 'high':
+      return { box: 'bg-orange-500/10', icon: 'text-orange-600 dark:text-orange-400' };
+    case 'medium':
+      return { box: 'bg-warning/10', icon: 'text-warning' };
+    default:
+      return { box: 'bg-success/10', icon: 'text-success' };
+  }
 };
 
 export const SLAConfigurationTab = () => {
@@ -190,224 +226,221 @@ export const SLAConfigurationTab = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState message="Loading SLA settings…" />;
   }
 
   return (
     <ClientErrorBoundary>
-      <div className="space-y-6">
-        <div className="flex justify-between items-start">
-          <div></div>
-          <Button onClick={() => handleOpenDialog()} size="sm" className="bg-gradient-primary">
-            <Plus className="h-4 w-4 mr-2" />
-            Add SLA Rule
-          </Button>
-        </div>
-
-        {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Urgent SLA</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{targets.urgent} hours</div>
-              <p className="text-xs text-muted-foreground">Maximum response time</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">High SLA</CardTitle>
-              <Clock className="h-4 w-4 text-orange-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{targets.high} hours</div>
-              <p className="text-xs text-muted-foreground">Maximum response time</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Medium SLA</CardTitle>
-              <Clock className="h-4 w-4 text-yellow-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{targets.medium} hours</div>
-              <p className="text-xs text-muted-foreground">Maximum response time</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Low SLA</CardTitle>
-              <CheckCircle className="h-4 w-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{targets.low} hours</div>
-              <p className="text-xs text-muted-foreground">Maximum response time</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="global" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="global">Global SLA Targets</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced Rules ({configs.length})</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="global" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Default SLA Targets</CardTitle>
-                    <CardDescription>
-                      These targets apply to all correspondence unless overridden by advanced rules
-                    </CardDescription>
-                  </div>
-                  {!editingTargets ? (
-                    <Button variant="outline" onClick={() => setEditingTargets(true)}>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Targets
-                    </Button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Button variant="outline" onClick={() => {
+      <div className="space-y-8">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="text-lg">Default SLA targets</CardTitle>
+                <CardDescription>
+                  Maximum response time (hours) before a priority is considered overdue. Advanced rules can override these for specific types or divisions.
+                </CardDescription>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {!editingTargets ? (
+                  <Button variant="outline" size="sm" onClick={() => setEditingTargets(true)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit targets
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
                         setTempTargets(targets);
                         setEditingTargets(false);
-                      }}>
-                        Cancel
-                      </Button>
-                      <Button onClick={handleSaveTargets} disabled={saving}>
-                        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                        Save Changes
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {(['urgent', 'high', 'medium', 'low'] as const).map((priority) => (
-                    <div key={priority} className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="flex items-center gap-2">
-                          <Badge className={PRIORITY_COLORS[priority]}>{priority.toUpperCase()}</Badge>
-                          Priority
-                        </Label>
-                        <span className="text-lg font-semibold">
-                          {editingTargets ? tempTargets[priority] : targets[priority]} hours
-                        </span>
-                      </div>
-                      {editingTargets && (
-                        <div className="flex items-center gap-4">
-                          <Slider
-                            value={[tempTargets[priority]]}
-                            onValueChange={([value]) => setTempTargets({ ...tempTargets, [priority]: value })}
-                            min={1}
-                            max={720}
-                            step={1}
-                            className="flex-1"
-                          />
-                          <Input
-                            type="number"
-                            value={tempTargets[priority]}
-                            onChange={(e) => setTempTargets({ ...tempTargets, [priority]: parseInt(e.target.value) || 1 })}
-                            className="w-24"
-                            min={1}
-                            max={720}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="advanced" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Advanced SLA Rules</CardTitle>
-                <CardDescription>
-                  Create specific SLA rules for different correspondence types or divisions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {configs.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No advanced SLA rules configured yet.</p>
-                    <Button variant="outline" className="mt-4" onClick={() => handleOpenDialog()}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create First Rule
+                      }}
+                    >
+                      Cancel
                     </Button>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Priority</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Target</TableHead>
-                        <TableHead>Warning</TableHead>
-                        <TableHead>Division</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {configs.map((config) => (
-                        <TableRow key={config.id}>
-                          <TableCell className="font-medium">{config.name}</TableCell>
-                          <TableCell>
-                            <Badge className={PRIORITY_COLORS[config.priority]}>
-                              {config.priorityDisplay}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{config.correspondenceTypeDisplay}</TableCell>
-                          <TableCell>{config.targetDays} hours</TableCell>
-                          <TableCell>{config.warningThresholdPercent}%</TableCell>
-                          <TableCell>
-                            {config.divisionDetail?.name || <span className="text-muted-foreground">Global</span>}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={config.isActive ? 'default' : 'secondary'}>
-                              {config.isActive ? 'Active' : 'Inactive'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenDialog(config)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteConfig(config.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                    <Button size="sm" onClick={handleSaveTargets} disabled={saving}>
+                      {saving ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-2" />
+                      )}
+                      Save
+                    </Button>
+                  </>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {(['urgent', 'high', 'medium', 'low'] as const).map((priority) => {
+                const { box, icon: iconColor } = priorityStatVisual(priority);
+                const hours = editingTargets ? tempTargets[priority] : targets[priority];
+                const LeadIcon =
+                  priority === 'urgent'
+                    ? AlertTriangle
+                    : priority === 'low'
+                      ? CheckCircle
+                      : Clock;
+                return (
+                  <Card key={priority}>
+                    <CardContent className={registryQueueStatCardContentClass}>
+                      <div className="flex items-start gap-4">
+                        <div className={cn(registryQueueStatIconBoxClass, box)}>
+                          <LeadIcon className={cn(registryQueueStatIconClass, iconColor)} />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <Badge
+                            variant={getPriorityBadgeVariant(priority)}
+                            className={correspondenceQueueBadgeClass}
+                          >
+                            {priority.toUpperCase()}
+                          </Badge>
+                          <p className={registryQueueStatLabelClass}>Max response</p>
+                          <p className={registryQueueStatValueClass}>{hours}h</p>
+                          {editingTargets ? (
+                            <div className="space-y-2 border-t border-border/60 pt-3">
+                              <Slider
+                                value={[tempTargets[priority]]}
+                                onValueChange={([value]) =>
+                                  setTempTargets({ ...tempTargets, [priority]: value })
+                                }
+                                min={1}
+                                max={720}
+                                step={1}
+                              />
+                              <Input
+                                type="number"
+                                value={tempTargets[priority]}
+                                onChange={(e) =>
+                                  setTempTargets({
+                                    ...tempTargets,
+                                    [priority]: parseInt(e.target.value, 10) || 1,
+                                  })
+                                }
+                                className="h-8"
+                                min={1}
+                                max={720}
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="text-lg">Advanced SLA rules ({configs.length})</CardTitle>
+                <CardDescription>
+                  Overrides for correspondence types, divisions, or combinations.
+                </CardDescription>
+              </div>
+              <Button size="sm" onClick={() => handleOpenDialog()} className="shrink-0">
+                <Plus className="h-4 w-4 mr-2" />
+                Add rule
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {configs.length === 0 ? (
+              <EmptyState
+                icon={<Settings className={registryQueueEmptyIconClass} />}
+                title="No advanced rules yet"
+                message="Defaults apply everywhere until you add a rule for a specific type or division."
+                actionLabel="Add rule"
+                onAction={() => handleOpenDialog()}
+              />
+            ) : (
+              <div className={correspondenceQueueListStackClass}>
+                {configs.map((config) => (
+                  <ListRowCard
+                    key={config.id}
+                    density="compact"
+                    leading={(
+                      <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-muted')}>
+                        <Settings className={cn(correspondenceQueueLeadingIconClass, 'text-muted-foreground')} />
+                      </div>
+                    )}
+                    actions={(
+                      <>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              aria-label="Edit rule"
+                              onClick={() => handleOpenDialog(config)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Edit</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              aria-label="Delete rule"
+                              onClick={() => handleDeleteConfig(config.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Delete</TooltipContent>
+                        </Tooltip>
+                      </>
+                    )}
+                  >
+                    <h4 className={correspondenceQueueSubjectClass}>{config.name}</h4>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <Badge
+                        variant={getPriorityBadgeVariant(config.priority)}
+                        className={correspondenceQueueBadgeClass}
+                      >
+                        {config.priorityDisplay}
+                      </Badge>
+                      <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                        {config.correspondenceTypeDisplay}
+                      </Badge>
+                      <Badge variant={config.isActive ? 'default' : 'secondary'} className={correspondenceQueueBadgeClass}>
+                        {config.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                    <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+                      <span className={correspondenceQueueMetaItemClass}>
+                        <Clock className={correspondenceQueueMetaIconClass} />
+                        Target {config.targetDays}h
+                      </span>
+                      <span className={correspondenceQueueMetaItemClass}>
+                        Warning {config.warningThresholdPercent}%
+                      </span>
+                      <span className={correspondenceQueueMetaItemClass}>
+                        <span className="opacity-80">Division:</span>{' '}
+                        {config.divisionDetail?.name ?? (
+                          <span className="text-muted-foreground">Global</span>
+                        )}
+                      </span>
+                    </div>
+                  </ListRowCard>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Add/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

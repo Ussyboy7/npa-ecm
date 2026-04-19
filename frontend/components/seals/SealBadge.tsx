@@ -1,6 +1,6 @@
 "use client";
 
-import { Shield, ExternalLink, QrCode } from "lucide-react";
+import { Shield, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -15,9 +15,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { QRCodeSVG } from "qrcode.react";
-import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
+import { DigitalSealPreview, type DigitalSealPreviewHandle } from "@/components/seals/DigitalSealPreview";
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
+import { uploadSealImage } from "@/lib/api/seal-images";
+import { logWarn } from "@/lib/client-logger";
 
 interface SealData {
   id: string;
@@ -96,8 +98,56 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
     );
   }
 
+  const [open, setOpen] = useState(false);
+  const previewRef = useRef<DigitalSealPreviewHandle>(null);
+  const uploadedSerialRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!sealData?.serialNumber) return;
+    if (uploadedSerialRef.current === sealData.serialNumber) return;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const tick = async () => {
+      attempts += 1;
+      const canvas = previewRef.current?.getCanvas();
+      if (!canvas) return;
+
+      try {
+        const dataUrl = canvas.toDataURL("image/png");
+        if (!dataUrl.startsWith("data:image/png;base64,")) return;
+
+        await uploadSealImage(sealData.serialNumber, dataUrl);
+        if (cancelled) return;
+        uploadedSerialRef.current = sealData.serialNumber;
+      } catch (err) {
+        if (!cancelled) {
+          logWarn("Failed to upload seal image", err);
+        }
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+      if (attempts >= 12) {
+        window.clearInterval(interval);
+        return;
+      }
+      tick();
+    }, 500);
+
+    tick();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [open, sealData?.serialNumber]);
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Badge
           variant={sealData.isValid ? "default" : "destructive"}
@@ -118,10 +168,12 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
           {/* Seal Preview - Centered */}
           <div className="flex justify-center p-3 bg-white rounded-lg border border-emerald-200 dark:border-emerald-800">
             <DigitalSealPreview
+              ref={previewRef}
               officeName={sealData.officeName}
               officeTitle={sealData.officeTitle}
               serialNumber={sealData.serialNumber}
-              signatureImage={sealData.signatureImageUrl || sealData.sealImageUrl}
+              signatureImage={sealData.signatureImageUrl}
+              signatureText={sealData.sealedBy}
               timestamp={sealData.sealedAt}
               size={240}
               showQR={true}
@@ -130,25 +182,12 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
           </div>
           
           {/* Seal Info - Grid Layout */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {/* Left Column - Seal Details */}
             <div className="space-y-3 p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800">
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Serial Number</p>
                 <p className="font-mono font-bold text-sm text-foreground">{sealData.serialNumber}</p>
-              </div>
-              
-              {/* QR Code */}
-              <div className="flex flex-col items-center gap-2">
-                <div className="p-2 bg-white rounded-lg border">
-                  <QRCodeSVG
-                    value={verificationUrl}
-                    size={80}
-                    level="H"
-                    includeMargin={false}
-                  />
-                </div>
-                <p className="text-[10px] text-muted-foreground text-center">Scan to verify</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Date & Time</p>
@@ -156,18 +195,6 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
               </div>
             </div>
             
-            {/* Right Column - QR Code */}
-            <div className="flex flex-col items-center justify-center p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800">
-              <div className="p-2 bg-white rounded-lg border border-emerald-200 dark:border-emerald-800 mb-2">
-                <QRCodeSVG
-                  value={verificationUrl}
-                  size={100}
-                  level="H"
-                  includeMargin={false}
-                />
-              </div>
-              <p className="text-xs font-medium text-muted-foreground text-center">Scan to verify</p>
-            </div>
           </div>
 
           {/* Status Badge and Actions - Centered */}
@@ -199,4 +226,3 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
     </Dialog>
   );
 }
-

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,18 +12,48 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { getCases, type CaseQueryParams } from "@/lib/api/cases";
 import type { Case } from "@/lib/npa-structure";
 import { formatDateShort } from "@/lib/correspondence-helpers";
+import { toast } from "sonner";
 import { logError, logWarn } from "@/lib/client-logger";
+import { exportToCSV } from "@/lib/admin-export";
 import { apiFetch } from "@/lib/api-client";
-import { Search, Filter, Plus, FileText, Loader2, AlertCircle, User, Briefcase, Clock, Building2, Inbox, Download } from "lucide-react";
+import { Search, Filter, Plus, FileText, Loader2, AlertCircle, Briefcase, Clock, Building2, Inbox, Download, ChevronRight } from "lucide-react";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 import { useScopeChecks } from "@/hooks/use-scope-checks";
 import { useRoleChecks } from "@/hooks/use-role-checks";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ListRowCard } from "@/components/shared/ListRowCard";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { LoadingState } from "@/components/shared/LoadingState";
+import { ErrorState } from "@/components/shared/ErrorState";
+import { cn } from "@/lib/utils";
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
+  registryQueueSearchStatsShellContentClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+  registryQueueSearchInputWrapClass,
+} from "@/components/shared/registry-queue-styles";
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -161,7 +190,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   // Fetch executives for secretaries and super admins
   useEffect(() => {
     // Only fetch if user is a secretary or super admin
-    if (!hydrated || !currentUser || (!isSecretary && !isSuperAdmin)) {
+    if (!currentUser?.id || (!isSecretary && !isSuperAdmin)) {
       setExecutives([]);
       return;
     }
@@ -191,7 +220,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
     return () => {
       abortController.abort();
     };
-  }, [hydrated, currentUser, isSecretary, isSuperAdmin]);
+  }, [currentUser?.id, isSecretary, isSuperAdmin]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -200,7 +229,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
 
   // Fetch cases with request cancellation
   useEffect(() => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser?.id) return;
 
     // Cancel previous request
     if (abortControllerRef.current) {
@@ -301,7 +330,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
       }
     };
   }, [
-    hydrated,
     currentUser,
     pagination.page,
     pagination.pageSize,
@@ -370,12 +398,62 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   };
 
   const handleExport = async () => {
-    // TODO: Implement export functionality
+    if (cases.length === 0 && count === 0) {
+      toast.error('No cases to export');
+      return;
+    }
     setExporting(true);
-    setTimeout(() => setExporting(false), 1000);
+    try {
+      const params: CaseQueryParams = {
+        page: 1,
+        pageSize: 1000,
+        search: debouncedSearch.trim() || undefined,
+        status: selectedStatuses.length > 0 ? selectedStatuses : undefined,
+        caseType: selectedTypes.length > 0 ? selectedTypes : undefined,
+        priority: selectedPriorities.length > 0 ? selectedPriorities : undefined,
+        division: divisionFilter !== "all" ? divisionFilter : undefined,
+        executive: (isSecretary || isSuperAdmin) && executiveFilter !== "all" ? executiveFilter : undefined,
+        ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
+      };
+      if (scope === "my" && currentUser) {
+        params.scope = "my";
+        params.assignedTo = currentUser.id;
+      } else if (scope === "office" && userOfficeIds.length > 0) {
+        params.scope = "office";
+      } else if (scope === "all") {
+        params.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
+      }
+      const response = await getCases(params);
+      const exportData = response.results.map((c) => ({
+        'Case Number': c.caseNumber,
+        'Title': c.title,
+        'Status': c.status.replace('_', ' '),
+        'Priority': c.priority,
+        'Type': c.caseType,
+        'Opened': formatDateShort(c.openedAt),
+        'Office': c.owningOfficeId ? offices.find((o) => o.id === c.owningOfficeId)?.name || '' : '',
+      }));
+      exportToCSV(exportData, [
+        { key: 'Case Number', label: 'Case Number' },
+        { key: 'Title', label: 'Title' },
+        { key: 'Status', label: 'Status' },
+        { key: 'Priority', label: 'Priority' },
+        { key: 'Type', label: 'Type' },
+        { key: 'Opened', label: 'Opened' },
+        { key: 'Office', label: 'Office' },
+      ], {
+        filename: `cases-export-${new Date().toISOString().split('T')[0]}.csv`,
+      });
+      toast.success(`Exported ${exportData.length} cases successfully`);
+    } catch (err: unknown) {
+      logError('Failed to export cases', err);
+      toast.error('Failed to export cases');
+    } finally {
+      setExporting(false);
+    }
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return (
       <div className="container mx-auto p-6">
         <div className="flex items-center justify-center py-12">
@@ -451,7 +529,13 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">Case Filters</CardTitle>
+              <CardTitle className="text-lg">
+                {scope === "my"
+                  ? "My Case Filters"
+                  : scope === "office"
+                    ? "Office Case Filters"
+                    : "All Case Filters"}
+              </CardTitle>
               {activeFilterCount > 0 && (
                 <Button variant="ghost" size="sm" onClick={clearAllFilters}>
                   Clear All
@@ -583,137 +667,188 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           </Card>
         )}
 
-      {/* Search */}
-      <div className="relative max-w-xl">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search cases by number, title, description..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: 'Total Cases', value: summary.total, icon: Inbox, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-            { label: 'Open Cases', value: summary.open, icon: FileText, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-            { label: 'In Progress', value: summary.inProgress, icon: Clock, bgClass: 'bg-yellow-500/10', iconClass: 'text-yellow-600 dark:text-yellow-400' },
-            { label: 'Urgent Items', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
-                  <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-      {error && (
-        <Card>
-          <CardContent className="py-4 text-sm text-destructive" role="alert">
-            {error}
-          </CardContent>
-        </Card>
-      )}
+      {/* Search + Stats */}
+      <Card>
+        <CardContent className={registryQueueSearchStatsShellContentClass}>
+          <div className={registryQueueSearchInputWrapClass}>
+            <Search
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              placeholder="Search cases by number, title, description…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+              aria-label="Search cases"
+            />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: 'Total cases', value: summary.total, icon: Inbox, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+              { label: 'Open cases', value: summary.open, icon: FileText, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+              { label: 'In progress', value: summary.inProgress, icon: Clock, bgClass: 'bg-yellow-500/10', iconClass: 'text-yellow-600 dark:text-yellow-400' },
+              { label: 'Urgent items', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
+            ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+              <Card key={label}>
+                <CardContent className={registryQueueStatCardContentClass}>
+                  <div className="flex items-center gap-4">
+                    <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                      <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                    </div>
+                    <div>
+                      <p className={registryQueueStatLabelClass}>{label}</p>
+                      <p className={registryQueueStatValueClass}>{value}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
-        <Card>
-          <CardContent className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading cases…
-          </CardContent>
-        </Card>
+        <LoadingState message="Loading cases…" />
+      ) : error ? (
+        <ErrorState message={error} variant="inline" />
       ) : cases.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Briefcase className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-            <p className="text-sm text-muted-foreground mb-2">
-              {debouncedSearch || activeFilterCount > 0 
-                ? 'No cases match your filters' 
-                : scope === "my" 
-                  ? "You don't have any cases assigned to you yet." 
-                  : scope === "office" 
-                    ? "Your office doesn't have any cases yet." 
-                    : "No cases found in your scope."}
-            </p>
-            {(debouncedSearch || activeFilterCount > 0) && (
-              <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">
-                Clear Filters
-              </Button>
-            )}
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<Briefcase className={registryQueueEmptyIconClass} />}
+          title={
+            debouncedSearch || activeFilterCount > 0
+              ? "No cases match your filters"
+              : scope === "my"
+                ? "No cases assigned to you yet"
+                : scope === "office"
+                  ? "No cases for your office yet"
+                  : "No cases in your scope"
+          }
+          message={
+            debouncedSearch || activeFilterCount > 0
+              ? "Try adjusting your search or filters."
+              : "When cases are created in your scope, they will appear here."
+          }
+          actionLabel={debouncedSearch || activeFilterCount > 0 ? "Clear Filters" : undefined}
+          onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+        />
       ) : (
         <>
-          <div className="grid gap-4">
-              {cases.map((caseItem) => (
-                <Card key={caseItem.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap mb-2">
-                          <Badge variant="outline" className="font-mono">
-                            {caseItem.caseNumber}
-                          </Badge>
-                          <Badge className={getStatusBadgeClass(caseItem.status)}>
-                            {caseItem.status.replace('_', ' ').toUpperCase()}
-                          </Badge>
-                          <Badge variant={getPriorityBadgeVariant(caseItem.priority)}>
-                            {caseItem.priority.toUpperCase()}
-                          </Badge>
-                          <Badge variant="outline">
-                            {getCaseTypeLabel(caseItem.caseType)}
-                          </Badge>
-                        </div>
-                        <Link
-                          href={`/cases/${caseItem.id}`}
-                          className="text-lg font-semibold hover:text-primary transition-colors block mb-2"
+          <div className={correspondenceQueueListStackClass}>
+              {cases.map((caseItem) => {
+                const owningOffice = caseItem.owningOfficeId
+                  ? offices.find((o) => o.id === caseItem.owningOfficeId)
+                  : undefined;
+                const showMeta =
+                  Boolean(owningOffice) || caseItem.correspondenceCount !== undefined;
+
+                return (
+                <ListRowCard
+                  key={caseItem.id}
+                  density="compact"
+                  href={`/cases/${caseItem.id}`}
+                  actions={(
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          aria-label="View case"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            router.push(`/cases/${caseItem.id}`);
+                          }}
                         >
-                          {caseItem.title}
-                        </Link>
-                        {caseItem.description && (
-                          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                            {caseItem.description}
-                          </p>
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">View case</TooltipContent>
+                    </Tooltip>
+                  )}
+                  leading={(
+                    <div
+                      className={cn(
+                        correspondenceQueueLeadingBoxClass,
+                        caseItem.priority === "urgent"
+                          ? "bg-destructive/10"
+                          : caseItem.priority === "high"
+                            ? "bg-warning/10"
+                            : "bg-primary/10",
+                      )}
+                    >
+                      <Briefcase
+                        className={cn(
+                          correspondenceQueueLeadingIconClass,
+                          caseItem.priority === "urgent"
+                            ? "text-destructive"
+                            : caseItem.priority === "high"
+                              ? "text-warning"
+                              : "text-primary",
                         )}
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {caseItem.owningOfficeId && (() => {
-                            const owningOffice = offices.find(o => o.id === caseItem.owningOfficeId);
-                            return owningOffice ? (
-                              <div className="flex items-center gap-1">
-                                <Building2 className="h-4 w-4" />
-                                <span>{owningOffice.name}</span>
-                              </div>
-                            ) : null;
-                          })()}
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            <span>Opened {formatDateShort(caseItem.openedAt)}</span>
-                          </div>
-                          {caseItem.correspondenceCount !== undefined && (
-                            <div className="flex items-center gap-1">
-                              <FileText className="h-4 w-4" />
-                              <span>{caseItem.correspondenceCount} correspondence</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push(`/cases/${caseItem.id}`)}
-                      >
-                        View
-                      </Button>
+                      />
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  )}
+                >
+                  <h4 className={correspondenceQueueSubjectClass}>{caseItem.title}</h4>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                      <Badge
+                        variant="outline"
+                        className={cn(correspondenceQueueBadgeClass, "font-mono")}
+                      >
+                        {caseItem.caseNumber}
+                      </Badge>
+                      <Badge
+                        className={cn(
+                          correspondenceQueueBadgeClass,
+                          getStatusBadgeClass(caseItem.status),
+                        )}
+                      >
+                        {caseItem.status.replace("_", " ").toUpperCase()}
+                      </Badge>
+                      <Badge
+                        variant={getPriorityBadgeVariant(caseItem.priority)}
+                        className={correspondenceQueueBadgeClass}
+                      >
+                        {caseItem.priority.toUpperCase()}
+                      </Badge>
+                      <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                        {getCaseTypeLabel(caseItem.caseType)}
+                      </Badge>
+                    </div>
+                    <span className={correspondenceQueueDateClass}>
+                      {formatDateShort(caseItem.openedAt)}
+                    </span>
+                  </div>
+                  {caseItem.description && (
+                    <p className="mt-1 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
+                      {caseItem.description}
+                    </p>
+                  )}
+                  {showMeta && (
+                    <div className={cn(correspondenceQueueMetaRowClass, "mt-1")}>
+                      {owningOffice && (
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <Building2 className={correspondenceQueueMetaIconClass} />
+                          <span className="truncate">Office: {owningOffice.name}</span>
+                        </span>
+                      )}
+                      {caseItem.correspondenceCount !== undefined && (
+                        <span className={correspondenceQueueMetaItemClass}>
+                          <FileText className={correspondenceQueueMetaIconClass} />
+                          <span className="truncate">
+                            {caseItem.correspondenceCount} linked correspondence
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </ListRowCard>
+                );
+              })}
             </div>
 
             <PaginationControls

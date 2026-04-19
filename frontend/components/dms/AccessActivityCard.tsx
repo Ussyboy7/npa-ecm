@@ -58,6 +58,21 @@ export const AccessActivityCard = ({
   const [sortOption, setSortOption] = useState<SortOption>(initialState.sort);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const getDisplayUserName = (log: DocumentAccessLog): string =>
+    userLookup.get(log.userId)?.name || log.userName || 'Unknown';
+
+  const getDisplayUserInitials = (log: DocumentAccessLog): string => {
+    const fallbackFromLookup = getUserInitials(log.userId);
+    if (fallbackFromLookup && fallbackFromLookup !== '?') return fallbackFromLookup;
+    const name = getDisplayUserName(log);
+    if (!name || name === 'Unknown') return '?';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
   // Persist filter state to localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -84,9 +99,9 @@ export const AccessActivityCard = ({
     const csv = [
       ['User', 'Action', 'Sensitivity', 'Timestamp'].map(escapeCsvValue).join(','),
       ...filtered.map((log) => {
-        const user = userLookup.get(log.userId);
+        const userName = getDisplayUserName(log);
         return [
-          escapeCsvValue(user?.name || 'Unknown'),
+          escapeCsvValue(userName),
           escapeCsvValue(log.action),
           escapeCsvValue(log.sensitivity || 'N/A'),
           escapeCsvValue(log.timestamp),
@@ -142,8 +157,7 @@ export const AccessActivityCard = ({
 
       // Search filter
       if (searchQuery.trim()) {
-        const user = userLookup.get(log.userId);
-        const userName = user?.name?.toLowerCase() || '';
+        const userName = getDisplayUserName(log).toLowerCase();
         const searchLower = searchQuery.toLowerCase();
         if (!userName.includes(searchLower)) return false;
       }
@@ -159,8 +173,8 @@ export const AccessActivityCard = ({
         case 'oldest':
           return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
         case 'user': {
-          const userA = userLookup.get(a.userId)?.name || '';
-          const userB = userLookup.get(b.userId)?.name || '';
+          const userA = getDisplayUserName(a);
+          const userB = getDisplayUserName(b);
           return userA.localeCompare(userB);
         }
         case 'action':
@@ -353,7 +367,7 @@ export const AccessActivityCard = ({
                   </div>
                 ) : (
                   filtered.map((log) => {
-                    const user = userLookup.get(log.userId);
+                    const userName = getDisplayUserName(log);
                     const actionIcon = log.action === 'download' ? DownloadIcon : Eye;
                     const actionLabel =
                       log.action === 'download'
@@ -388,10 +402,10 @@ export const AccessActivityCard = ({
                           )}
                           <Avatar className="h-5 w-5 flex-shrink-0">
                             <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
-                              {getUserInitials(log.userId)}
+                              {getDisplayUserInitials(log)}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="text-xs font-medium truncate">{user?.name ?? 'Unknown'}</span>
+                          <span className="text-xs font-medium truncate">{userName}</span>
                           <Badge variant={actionVariant} className="text-[10px] px-1.5 py-0 h-4">
                             {actionLabel}
                           </Badge>
@@ -440,5 +454,4 @@ export const AccessActivityCard = ({
     </>
   );
 };
-
 

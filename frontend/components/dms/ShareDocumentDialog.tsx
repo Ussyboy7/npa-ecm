@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import {
   Dialog,
@@ -31,6 +31,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/dms-storage";
+import type { User } from "@/lib/npa-structure";
 import { shareDocument, apiFetch, hasTokens } from "@/lib/dms-storage";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -120,7 +121,15 @@ export const ShareDocumentDialog = ({
   const [correspondenceNotes, setCorrespondenceNotes] = useState<string>('');
   const [correspondenceSubject, setCorrespondenceSubject] = useState<string>('');
   const [correspondencePriority, setCorrespondencePriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
-  const [isCreatingCorrespondence, setIsCreatingCorrespondence] = useState(false);
+  const [directShareSelectedOfficeIds, setDirectShareSelectedOfficeIds] = useState<Set<string>>(new Set());
+  const [directSharePersonSearch, setDirectSharePersonSearch] = useState('');
+  const [directShareOfficeSearch, setDirectShareOfficeSearch] = useState('');
+  const [debouncedPersonSearch, setDebouncedPersonSearch] = useState('');
+  const [debouncedOfficeSearch, setDebouncedOfficeSearch] = useState('');
+  const [fallbackRecipientUsers, setFallbackRecipientUsers] = useState<User[]>([]);
+  const [loadingFallbackRecipients, setLoadingFallbackRecipients] = useState(false);
+  const [hasLoadedDirectShareUsers, setHasLoadedDirectShareUsers] = useState(false);
+  const wasOpenRef = useRef(false);
   
   // Selection state
   const [shareToAll, setShareToAll] = useState(false);
@@ -154,7 +163,7 @@ export const ShareDocumentDialog = ({
 
   // Fetch existing permissions
   useEffect(() => {
-    if (!open || !document) return;
+    if (!open || !document?.id) return;
     
     setIsLoadingPermissions(true);
     const fetchPermissions = async () => {
@@ -185,11 +194,11 @@ export const ShareDocumentDialog = ({
     };
     
     void fetchPermissions();
-  }, [open, document]);
+  }, [open, document?.id]);
 
   // Fetch share history (audit logs)
   useEffect(() => {
-    if (!open || !document) return;
+    if (!open || !document?.id) return;
     
     setIsLoadingHistory(true);
     const fetchHistory = async () => {
@@ -214,7 +223,7 @@ export const ShareDocumentDialog = ({
     };
     
     void fetchHistory();
-  }, [open, document]);
+  }, [open, document?.id]);
 
   // Fetch workspaces
   useEffect(() => {
@@ -271,7 +280,8 @@ export const ShareDocumentDialog = ({
   }, [recentRecipients]);
 
   useEffect(() => {
-    if (!open) {
+    // Reset state only on open -> closed transition to avoid unnecessary update churn.
+    if (wasOpenRef.current && !open) {
       setNote("");
       setSearchQuery("");
       setSearchDirectorateQuery("");
@@ -311,13 +321,21 @@ export const ShareDocumentDialog = ({
       setCorrespondenceNotes('');
       setCorrespondenceSubject('');
       setCorrespondencePriority('medium');
-    } else if (document) {
-      // Auto-fill subject with document title when dialog opens
-      if (!correspondenceSubject && document.title) {
-        setCorrespondenceSubject(document.title);
-      }
+      setDirectShareSelectedOfficeIds(new Set());
+      setDirectSharePersonSearch('');
+      setDirectShareOfficeSearch('');
+      setDebouncedPersonSearch('');
+      setDebouncedOfficeSearch('');
+      setHasLoadedDirectShareUsers(false);
     }
-  }, [open, document]);
+    wasOpenRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
+    // Auto-fill subject with document title when dialog opens.
+    if (!open || !document?.title || correspondenceSubject) return;
+    setCorrespondenceSubject(document.title);
+  }, [open, document?.title, correspondenceSubject]);
 
   const shareableUsers = useMemo(
     () =>
@@ -427,13 +445,155 @@ export const ShareDocumentDialog = ({
   }, [offices, correspondenceOfficeFilterDirectorate, correspondenceOfficeFilterDivision, correspondenceOfficeSearchQuery]);
 
   // Filtered users for correspondence person selector
+  const personSelectionPool = useMemo(() => {
+    if (fallbackRecipientUsers.length > 0) return fallbackRecipientUsers;
+    return shareableUsers;
+  }, [shareableUsers, fallbackRecipientUsers]);
+  const personSelectionLookup = useMemo(
+    () => new Map(personSelectionPool.map((user) => [user.id, user])),
+    [personSelectionPool]
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedPersonSearch(directSharePersonSearch);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [directSharePersonSearch]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedOfficeSearch(directShareOfficeSearch);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [directShareOfficeSearch]);
+
   const correspondenceFilteredUsers = useMemo(() => {
     return filterUsersBySearch(
-      shareableUsers,
-      correspondencePersonSearchQuery,
+      personSelectionPool,
+      debouncedPersonSearch,
       { includeDivision: true, includeDepartment: true, includeEmail: true }
     );
-  }, [shareableUsers, correspondencePersonSearchQuery]);
+  }, [personSelectionPool, debouncedPersonSearch]);
+
+  const directShareFilteredOffices = useMemo(() => {
+    const query = debouncedOfficeSearch.trim().toLowerCase();
+    const activeOffices = offices.filter((office) => office.isActive);
+    if (!query) return activeOffices.sort((a, b) => a.name.localeCompare(b.name));
+    return activeOffices
+      .filter((office) =>
+        office.name.toLowerCase().includes(query) ||
+        office.code.toLowerCase().includes(query) ||
+        office.officeType.toLowerCase().includes(query)
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [offices, debouncedOfficeSearch]);
+
+  const directShareSelectedOffices = useMemo(
+    () => offices.filter((office) => directShareSelectedOfficeIds.has(office.id)),
+    [offices, directShareSelectedOfficeIds]
+  );
+  const directShareDerivedDivisionIds = useMemo(
+    () => Array.from(new Set(directShareSelectedOffices.map((office) => office.divisionId).filter(Boolean) as string[])),
+    [directShareSelectedOffices]
+  );
+  const directShareDerivedDepartmentIds = useMemo(
+    () => Array.from(new Set(directShareSelectedOffices.map((office) => office.departmentId).filter(Boolean) as string[])),
+    [directShareSelectedOffices]
+  );
+
+  useEffect(() => {
+    if (!open || loadingFallbackRecipients || hasLoadedDirectShareUsers) {
+      return;
+    }
+
+    setLoadingFallbackRecipients(true);
+    void (async () => {
+      try {
+        const response = await apiFetch<unknown>('/accounts/users/?is_active=true&page_size=500&ordering=username');
+        const rows = Array.isArray(response)
+          ? response
+          : (isRecord(response) && Array.isArray(response.results) ? response.results : []);
+
+        const mapped = rows
+          .filter(isRecord)
+          .map((item) => {
+            const firstName = typeof item.first_name === 'string' ? item.first_name : '';
+            const lastName = typeof item.last_name === 'string' ? item.last_name : '';
+            const fullName = `${firstName} ${lastName}`.trim();
+            return {
+              id: String(item.id ?? ''),
+              name: fullName || String(item.username ?? item.email ?? 'Unknown User'),
+              email: String(item.email ?? ''),
+              employeeId: String(item.employee_id ?? item.employeeId ?? ''),
+              gradeLevel: String(item.grade_level ?? item.gradeLevel ?? ''),
+              systemRole: String(item.system_role ?? item.systemRole ?? ''),
+              active: true,
+            };
+          })
+          .filter((user) => Boolean(user.id) && (!currentUserId || user.id !== currentUserId));
+
+        setFallbackRecipientUsers(mapped);
+      } catch (error: unknown) {
+        logWarn('Failed to fetch fallback recipients for direct share', error);
+      } finally {
+        setLoadingFallbackRecipients(false);
+        setHasLoadedDirectShareUsers(true);
+      }
+    })();
+  }, [open, loadingFallbackRecipients, hasLoadedDirectShareUsers, currentUserId]);
+
+  const handleToggleDirectSharePerson = useCallback((userId: string) => {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) {
+        next.delete(userId);
+      } else {
+        next.add(userId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleDirectShareOffice = useCallback((officeId: string) => {
+    setDirectShareSelectedOfficeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(officeId)) {
+        next.delete(officeId);
+      } else {
+        next.add(officeId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleToggleAllDirectSharePeople = useCallback(() => {
+    const filteredIds = correspondenceFilteredUsers.map((user) => user.id);
+    setSelectedUserIds((prev) => {
+      const allSelected = filteredIds.length > 0 && filteredIds.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        filteredIds.forEach((id) => next.delete(id));
+      } else {
+        filteredIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }, [correspondenceFilteredUsers]);
+
+  const handleToggleAllDirectShareOffices = useCallback(() => {
+    const filteredIds = directShareFilteredOffices.map((office) => office.id);
+    setDirectShareSelectedOfficeIds((prev) => {
+      const allSelected = filteredIds.length > 0 && filteredIds.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        filteredIds.forEach((id) => next.delete(id));
+      } else {
+        filteredIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }, [directShareFilteredOffices]);
 
   // Check if recipient already has access
   const hasExistingAccess = useCallback((
@@ -463,22 +623,23 @@ export const ShareDocumentDialog = ({
   }, [existingPermissions, divisions]);
 
   // Count duplicates before submission
-  const countDuplicates = useCallback((): number => {
+  const countDuplicatesForTargets = useCallback((
+    userIds: string[],
+    divisionIds: string[],
+    departmentIds: string[],
+  ): number => {
     let count = 0;
-    selectedUserIds.forEach((id) => {
+    userIds.forEach((id) => {
       if (hasExistingAccess(id).hasAccess) count++;
     });
-    selectedDivisionIds.forEach((id) => {
+    divisionIds.forEach((id) => {
       if (hasExistingAccess(undefined, id).hasAccess) count++;
     });
-    selectedDepartmentIds.forEach((id) => {
+    departmentIds.forEach((id) => {
       if (hasExistingAccess(undefined, undefined, id).hasAccess) count++;
     });
-    selectedDirectorateIds.forEach((id) => {
-      if (hasExistingAccess(undefined, undefined, undefined, id).hasAccess) count++;
-    });
     return count;
-  }, [selectedUserIds, selectedDivisionIds, selectedDepartmentIds, selectedDirectorateIds, hasExistingAccess]);
+  }, [hasExistingAccess]);
 
   // Group divisions by directorate
   const divisionsByDirectorate = useMemo(() => {
@@ -593,178 +754,65 @@ export const ShareDocumentDialog = ({
     }
   };
 
-  // Handler to create correspondence with document
-  const handleCreateCorrespondence = async () => {
-    if (!document || !currentUser) return;
-    
-    // Validation is done in handleSubmit, but double-check here
-    if (correspondenceRouteType === 'office' && !correspondenceTargetOfficeId) {
-      toast.error('Please select an office');
-      return;
-    }
-    if (correspondenceRouteType === 'person' && !correspondenceRecipient) {
-      toast.error('Please select a person');
-      return;
-    }
-
-    const subject = correspondenceSubject.trim() || document.title || 'Document';
-    
-    setIsCreatingCorrespondence(true);
-    try {
-      // Create correspondence FormData
-      const formData = new FormData();
-      formData.append('subject', subject);
-      formData.append('sender_name', currentUser.name || 'System');
-      formData.append('sender_organization', 'Internal');
-      formData.append('received_date', new Date().toISOString().split('T')[0]);
-      formData.append('priority', correspondencePriority);
-      formData.append('source', 'internal');
-      formData.append('direction', 'upward');
-      formData.append('document_type', 'letter');
-      
-      // Set recipient based on route type
-      if (correspondenceRouteType === 'office') {
-        const office = offices.find(o => o.id === correspondenceTargetOfficeId);
-        if (office) {
-          const primaryMember = officeMemberships.find(
-            (m) => m.officeId === office.id && m.isPrimary && m.isActive
-          );
-          if (primaryMember) {
-            formData.append('current_approver_id', primaryMember.userId);
-          }
-          formData.append('current_office', correspondenceTargetOfficeId);
-        }
-      } else {
-        formData.append('current_approver_id', correspondenceRecipient);
-      }
-
-      // Create correspondence
-      const correspondenceResponse = await apiFetch<{ id: string; reference_number?: string }>(
-        '/correspondence/items/',
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-
-      // Link document to correspondence
-      await apiFetch(`/correspondence/document-links/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          correspondence: correspondenceResponse.id,
-          document: document.id,
-          notes: correspondenceNotes.trim() || undefined,
-        }),
-      });
-
-      // Create initial minute if notes provided
-      if (correspondenceNotes.trim()) {
-        await apiFetch('/correspondence/minutes/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            correspondence: correspondenceResponse.id,
-            user_id: currentUser.id,
-            action_type: 'minute',
-            minute_text: correspondenceNotes.trim(),
-            direction: 'upward',
-            step_number: 1,
-          }),
-        });
-      }
-
-      toast.success('Document sent via correspondence', {
-        description: `Reference: ${correspondenceResponse.reference_number || correspondenceResponse.id}`,
-        action: {
-          label: 'View',
-          onClick: () => {
-            window.open(`/correspondence/${correspondenceResponse.id}`, '_blank');
-          },
-        },
-      });
-
-      onOpenChange(false);
-      onShared?.(document);
-    } catch (error: unknown) {
-      logError('Failed to create correspondence', error);
-      toast.error('Failed to send document via correspondence');
-    } finally {
-      setIsCreatingCorrespondence(false);
-    }
-  };
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!document) return;
 
-    // If correspondence tab is active, handle correspondence routing
+    // Correspondence tab: submit only via CorrespondenceRoutingView (avoids duplicate buttons & stale parent state)
     if (activeTab === 'correspondence') {
-      // Validate recipient
-      if (correspondenceRouteType === 'office' && !correspondenceTargetOfficeId) {
-        toast.error('Please select an office');
-        return;
-      }
-      if (correspondenceRouteType === 'person' && !correspondenceRecipient) {
-        toast.error('Please select a person');
-        return;
-      }
-      await handleCreateCorrespondence();
       return;
     }
 
     // Check for sensitive document warning
     if ((document.sensitivity === 'restricted' || document.sensitivity === 'confidential') && !showSensitivityWarning) {
       setPendingShareAction(async () => {
-        if (shareToAll) {
-          await handleConfirmShareToAll();
-        } else {
-          const allDivisionIds = Array.from(
-            new Set([...selectedDivisionIds, ...selectedDivisionIdsFromDirectorates])
-          );
-          const hasSelection =
-            selectedUserIds.size > 0 || allDivisionIds.length > 0 || selectedDepartmentIds.size > 0;
-          if (!hasSelection) {
-            toast.error("Select at least one recipient, division, or department");
-            return;
-          }
-          const dupCount = countDuplicates();
-          if (dupCount > 0) {
-            setDuplicateCount(dupCount);
-            setShowDuplicateWarning(true);
-            return;
-          }
-          await performShare(Array.from(selectedUserIds), allDivisionIds, Array.from(selectedDepartmentIds));
+        const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
+        const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
+        const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
+
+        if (correspondenceRouteType === 'person' && userIds.length === 0) {
+          toast.error('Select at least one person');
+          return;
         }
+        if (correspondenceRouteType === 'office' && directShareSelectedOfficeIds.size === 0) {
+          toast.error('Select at least one office');
+          return;
+        }
+        if (correspondenceRouteType === 'office' && divisionIds.length === 0 && departmentIds.length === 0) {
+          toast.error('Selected offices do not map to any division/department access');
+          return;
+        }
+        const dupCount = countDuplicatesForTargets(userIds, divisionIds, departmentIds);
+        if (dupCount > 0) {
+          setDuplicateCount(dupCount);
+          setShowDuplicateWarning(true);
+          return;
+        }
+        await performShare(userIds, divisionIds, departmentIds);
       });
       setShowSensitivityWarning(true);
       return;
     }
 
-    if (shareToAll) {
-      await handleConfirmShareToAll();
+    const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
+    const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
+    const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
+
+    if (correspondenceRouteType === 'person' && userIds.length === 0) {
+      toast.error('Select at least one person');
       return;
     }
-
-    // Combine division IDs from directorates and directly selected divisions
-    const allDivisionIds = Array.from(
-      new Set([...selectedDivisionIds, ...selectedDivisionIdsFromDirectorates])
-    );
-
-    const hasSelection =
-      selectedUserIds.size > 0 || allDivisionIds.length > 0 || selectedDepartmentIds.size > 0 || selectedWorkspaceIds.size > 0;
-
-    if (!hasSelection) {
-      toast.error("Select at least one recipient, division, department, or workspace");
+    if (correspondenceRouteType === 'office' && directShareSelectedOfficeIds.size === 0) {
+      toast.error('Select at least one office');
+      return;
+    }
+    if (correspondenceRouteType === 'office' && divisionIds.length === 0 && departmentIds.length === 0) {
+      toast.error('Selected offices do not map to any division/department access');
       return;
     }
 
     // Check for duplicates
-    const dupCount = countDuplicates();
+    const dupCount = countDuplicatesForTargets(userIds, divisionIds, departmentIds);
     if (dupCount > 0) {
       setDuplicateCount(dupCount);
       setShowDuplicateWarning(true);
@@ -778,16 +826,16 @@ export const ShareDocumentDialog = ({
   // Final confirmation from review step
   const handleConfirmShare = async () => {
     setShowReviewStep(false);
-    const allDivisionIds = Array.from(
-      new Set([...selectedDivisionIds, ...selectedDivisionIdsFromDirectorates])
-    );
-    const dupCount = countDuplicates();
+    const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
+    const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
+    const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
+    const dupCount = countDuplicatesForTargets(userIds, divisionIds, departmentIds);
     if (dupCount > 0) {
       setDuplicateCount(dupCount);
       setShowDuplicateWarning(true);
       return;
     }
-    await performShare(Array.from(selectedUserIds), allDivisionIds, Array.from(selectedDepartmentIds), Array.from(selectedWorkspaceIds));
+    await performShare(userIds, divisionIds, departmentIds);
   };
 
   const performShare = async (
@@ -1018,27 +1066,23 @@ export const ShareDocumentDialog = ({
   };
 
   const totalSelected =
-    (shareToAll ? 1 : 0) +
-    selectedUserIds.size +
-    selectedDirectorateIds.size +
-    selectedDivisionIds.size +
-    selectedDepartmentIds.size +
-    selectedWorkspaceIds.size;
+    correspondenceRouteType === 'person'
+      ? selectedUserIds.size
+      : directShareSelectedOfficeIds.size;
 
   // Detailed selection summary
   const selectionSummary = useMemo(() => {
-    const allDivisionIds = Array.from(
-      new Set([...selectedDivisionIds, ...selectedDivisionIdsFromDirectorates])
-    );
+    const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
+    const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
     return {
       users: selectedUserIds.size,
-      divisions: allDivisionIds.length,
-      departments: selectedDepartmentIds.size,
-      directorates: selectedDirectorateIds.size,
-      workspaces: selectedWorkspaceIds.size,
+      divisions: divisionIds.length,
+      departments: departmentIds.length,
+      directorates: 0,
+      workspaces: 0,
       total: totalSelected,
     };
-  }, [selectedUserIds.size, selectedDivisionIds, selectedDivisionIdsFromDirectorates, selectedDepartmentIds.size, selectedDirectorateIds.size, selectedWorkspaceIds.size, totalSelected]);
+  }, [selectedUserIds.size, correspondenceRouteType, directShareDerivedDivisionIds, directShareDerivedDepartmentIds, totalSelected]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1178,8 +1222,8 @@ export const ShareDocumentDialog = ({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
-        <DialogHeader>
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full h-[95vh] sm:h-[90vh] overflow-hidden p-0 flex flex-col">
+        <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 border-b">
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
             Share Document
@@ -1190,12 +1234,13 @@ export const ShareDocumentDialog = ({
             )}
           </DialogTitle>
           <DialogDescription>
-            Share this document with users, offices, or workspaces
+            Share this document with users or offices
           </DialogDescription>
         </DialogHeader>
 
+        <div className="flex-1 min-h-0 overflow-y-auto">
         {document && (
-          <div className="space-y-6 mt-4">
+          <div className="space-y-6 px-4 sm:px-6 py-4">
             {/* Document Summary - Like Minute Modal */}
             <Card className="bg-muted/50">
               <CardContent className="p-4">
@@ -1379,7 +1424,7 @@ export const ShareDocumentDialog = ({
                           )}
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          Share directly with users, offices, or workspaces. Grant immediate access to the document.
+                          Share directly with users or offices. Grant immediate access to the document.
                         </p>
                       </div>
                     </div>
@@ -1441,7 +1486,7 @@ export const ShareDocumentDialog = ({
                           <div className="space-y-3">
                             {existingPermissions.map((perm) => {
                               const permUsers = perm.userIds.map(id => {
-                                const user = shareableUsers.find(u => u.id === id);
+                                const user = personSelectionLookup.get(id);
                                 return user?.name || 'Unknown';
                               }).filter(Boolean);
                               const permDivisions = perm.divisionIds.map(id => {
@@ -1595,512 +1640,197 @@ export const ShareDocumentDialog = ({
                   ) : (
                     /* Main Share View - Card-based like Minute Modal */
                     <div className="space-y-4">
-                      {/* Share to All - Card */}
-                      <Card className={shareToAll ? "border-primary bg-primary/5" : ""}>
-                        <CardContent className="p-4">
-                          <div className="flex items-center space-x-3 cursor-pointer"
-                               onClick={() => handleShareToAllClick()}>
-                            <Checkbox
-                              id="share-to-all"
-                              checked={shareToAll}
-                              onCheckedChange={handleShareToAllClick}
-                            />
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <Globe className="h-4 w-4 text-primary" />
-                                <Label htmlFor="share-to-all" className="font-medium text-sm cursor-pointer">
-                                  Share to all users
-                                </Label>
-                                {shareToAll && <Badge variant="secondary" className="ml-2 text-xs">{activeUserCount}</Badge>}
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Grant {accessLevel} access to all {activeUserCount} active users
-                              </p>
-                            </div>
-                          </div>
-                          {shareToAll && (
-                            <Alert className="mt-3">
-                              <AlertTriangle className="h-4 w-4" />
-                              <AlertDescription className="text-xs">
-                                This will share with all {activeUserCount} users.
-                              </AlertDescription>
-                            </Alert>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      {!shareToAll && (
-                        <>
-                          {/* Share To - Like Minute Modal Route To */}
-                          <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Users className="h-4 w-4 text-muted-foreground" />
-                                <Label className="text-sm font-semibold">Share To *</Label>
-                                <Badge variant={totalSelected > 0 ? 'default' : 'outline'} className="text-xs">
-                                  {totalSelected > 0 ? `${totalSelected} selected` : '0 recipients'}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  variant={shareSection === 'users' ? 'default' : 'ghost'}
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => setShareSection('users')}
-                                >
-                                  <Users className="h-3.5 w-3.5 mr-1.5" />
-                                  Users
-                                  {selectedUserIds.size > 0 && (
-                                    <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{selectedUserIds.size}</Badge>
-                                  )}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant={shareSection === 'org' ? 'default' : 'ghost'}
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => setShareSection('org')}
-                                >
-                                  <Building2 className="h-3.5 w-3.5 mr-1.5" />
-                                  Organization
-                                  {(selectedDirectorateIds.size + selectedDivisionIds.size + selectedDepartmentIds.size) > 0 && (
-                                    <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">
-                                      {selectedDirectorateIds.size + selectedDivisionIds.size + selectedDepartmentIds.size}
-                                    </Badge>
-                                  )}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant={shareSection === 'workspaces' ? 'default' : 'ghost'}
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => setShareSection('workspaces')}
-                                >
-                                  <FolderKanban className="h-3.5 w-3.5 mr-1.5" />
-                                  Workspaces
-                                  {selectedWorkspaceIds.size > 0 && (
-                                    <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{selectedWorkspaceIds.size}</Badge>
-                                  )}
-                                </Button>
-                              </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <Label className="text-sm font-semibold">Share To *</Label>
+                          <Badge variant={totalSelected > 0 ? 'default' : 'outline'} className="text-xs">
+                            {totalSelected > 0 ? `${totalSelected} selected` : '0 recipients'}
+                          </Badge>
+                        </div>
+                        <Card className="bg-muted/30">
+                          <CardContent className="p-4 space-y-4">
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant={correspondenceRouteType === 'person' ? 'default' : 'ghost'}
+                                size="sm"
+                                onClick={() => {
+                                  setCorrespondenceRouteType('person');
+                                  setDirectShareSelectedOfficeIds(new Set());
+                                  setSelectedDivisionIds(new Set());
+                                  setSelectedDepartmentIds(new Set());
+                                }}
+                              >
+                                <Users className="h-3.5 w-3.5 mr-1.5" />
+                                Person
+                              </Button>
+                              <Button
+                                type="button"
+                                variant={correspondenceRouteType === 'office' ? 'default' : 'ghost'}
+                                size="sm"
+                                onClick={() => {
+                                  setCorrespondenceRouteType('office');
+                                  setSelectedUserIds(new Set());
+                                }}
+                              >
+                                <Building2 className="h-3.5 w-3.5 mr-1.5" />
+                                Office
+                              </Button>
                             </div>
 
-                            {/* Selection Form - Card like Minute Modal */}
-                            <Card className="bg-muted/30">
-                              <CardContent className="p-4">
-
-                              {/* Section Content */}
-                              {shareSection === 'users' && (
-                                <div className="space-y-3">
-                                  {/* Search & Filters */}
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-sm font-medium">
-                                        Users ({selectedUserIds.size}/{filteredUsers.length})
-                                      </span>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={toggleAllUsers}
-                                        className="text-xs h-6"
-                                      >
-                                        {selectedUserIds.size === filteredUsers.length ? "Clear" : "Select All"}
-                                      </Button>
-                                    </div>
-                                    <div className="relative">
-                                      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                      <Input
-                                        value={searchQuery}
-                                        onChange={(event) => setSearchQuery(event.target.value)}
-                                        placeholder="Search name, email, role..."
-                                        className="pl-9 h-8 text-sm"
-                                      />
-                                    </div>
-                                    {availableSystemRoles.length > 0 && (
-                                      <div className="flex flex-wrap gap-1">
-                                        {availableSystemRoles.slice(0, 8).map((role) => {
-                                          const isSelected = selectedSystemRoles.has(role);
-                                          return (
-                                            <Button
-                                              key={role}
-                                              type="button"
-                                              variant={isSelected ? "default" : "outline"}
-                                              size="sm"
-                                              className="h-5 text-[10px] px-1.5"
-                                              onClick={() => {
-                                                const newSet = new Set(selectedSystemRoles);
-                                                if (isSelected) {
-                                                  newSet.delete(role);
-                                                } else {
-                                                  newSet.add(role);
-                                                }
-                                                setSelectedSystemRoles(newSet);
-                                              }}
-                                            >
-                                              {role}
-                                            </Button>
-                                          );
-                                        })}
-                                        {selectedSystemRoles.size > 0 && (
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-5 text-[10px] px-1.5"
-                                            onClick={() => setSelectedSystemRoles(new Set())}
-                                          >
-                                            ✕
-                                          </Button>
-                                        )}
+                            {correspondenceRouteType === 'person' ? (
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs text-muted-foreground">Select Person</Label>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-xs px-2"
+                                    onClick={handleToggleAllDirectSharePeople}
+                                  >
+                                    {correspondenceFilteredUsers.length > 0 &&
+                                    correspondenceFilteredUsers.every((user) => selectedUserIds.has(user.id))
+                                      ? 'Clear'
+                                      : 'Select all'}
+                                  </Button>
+                                </div>
+                                <div className="relative">
+                                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                  <Input
+                                    value={directSharePersonSearch}
+                                    onChange={(e) => setDirectSharePersonSearch(e.target.value)}
+                                    placeholder="Search person by name, email, role..."
+                                    className="pl-9 h-9"
+                                  />
+                                </div>
+                                <ScrollArea className="h-[280px] border rounded-md p-2">
+                                  <div className="space-y-1.5">
+                                    {loadingFallbackRecipients && correspondenceFilteredUsers.length === 0 ? (
+                                      <div className="p-3 text-xs text-muted-foreground flex items-center gap-2">
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        Loading users...
                                       </div>
+                                    ) : correspondenceFilteredUsers.length === 0 ? (
+                                      <div className="p-3 text-xs text-muted-foreground">
+                                        No matching users found.
+                                      </div>
+                                    ) : (
+                                      correspondenceFilteredUsers.map((user) => {
+                                        const selected = selectedUserIds.has(user.id);
+                                        return (
+                                          <div
+                                            key={user.id}
+                                            role="button"
+                                            tabIndex={0}
+                                            className={`w-full text-left flex items-start gap-2 p-2 rounded border ${selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
+                                            onClick={() => handleToggleDirectSharePerson(user.id)}
+                                            onKeyDown={(event) => {
+                                              if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                handleToggleDirectSharePerson(user.id);
+                                              }
+                                            }}
+                                          >
+                                            <span
+                                              className={`mt-0.5 h-4 w-4 rounded-sm border flex items-center justify-center flex-shrink-0 ${
+                                                selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'
+                                              }`}
+                                              aria-hidden="true"
+                                            >
+                                              {selected ? <CheckCircle2 className="h-3 w-3" /> : null}
+                                            </span>
+                                            <div className="min-w-0">
+                                              <p className="text-sm font-medium truncate">{user.name}</p>
+                                              <p className="text-xs text-muted-foreground truncate">
+                                                {user.email} • {user.gradeLevel || user.systemRole || 'User'}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        );
+                                      })
                                     )}
                                   </div>
-                                  {/* User List */}
-                                  <ScrollArea className="h-[300px] border rounded-md p-2">
-                                    <div className="space-y-1.5" role="list">
-                                      {/* Recent Recipients */}
-                                      {recentRecipients.users.length > 0 && !searchQuery && (
-                                        <>
-                                          <div className="text-xs font-medium text-muted-foreground mb-2 px-1">Recent</div>
-                                          {recentRecipients.users
-                                            .filter((id) => shareableUsers.some((u) => u.id === id))
-                                            .slice(0, 5)
-                                            .map((userId) => {
-                                              const user = shareableUsers.find((u) => u.id === userId);
-                                              if (!user) return null;
-                                              const isSelected = selectedUserIds.has(user.id);
-                                              const existing = hasExistingAccess(user.id);
-                                              return (
-                                                <div
-                                                  key={user.id}
-                                                  className={`flex items-center space-x-3 p-3 border rounded-lg transition-colors ${
-                                                    existing.hasAccess 
-                                                      ? 'bg-muted/30 border-muted' 
-                                                      : 'hover:bg-accent/50 border-border'
-                                                  }`}
-                                                  role="listitem"
-                                                >
-                                                  <Checkbox
-                                                    id={`user-recent-${user.id}`}
-                                                    checked={isSelected}
-                                                    onCheckedChange={(checked) => {
-                                                      if (checked) {
-                                                        setSelectedUserIds((prev) => new Set([...prev, user.id]));
-                                                      } else {
-                                                        setSelectedUserIds((prev) => {
-                                                          const next = new Set(prev);
-                                                          next.delete(user.id);
-                                                          return next;
-                                                        });
-                                                      }
-                                                    }}
-                                                    aria-label={`${isSelected ? 'Deselect' : 'Select'} ${user.name}`}
-                                                  />
-                                                  <Label htmlFor={`user-recent-${user.id}`} className="flex-1 cursor-pointer min-w-0">
-                                                    <div className="flex flex-col">
-                                                      <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-medium text-foreground">
-                                                          {user.name}
-                                                        </span>
-                                                        {existing.hasAccess && (
-                                                          <Badge variant="outline" className="text-xs">
-                                                            Has {existing.accessLevel} access
-                                                          </Badge>
-                                                        )}
-                                                      </div>
-                                                      <span className="text-xs text-muted-foreground mt-0.5">
-                                                        {user.email} • {user.systemRole}
-                                                      </span>
-                                                    </div>
-                                                  </Label>
-                                                </div>
-                                              );
-                                            })}
-                                          <Separator className="my-3" />
-                                        </>
-                                      )}
-                                      {filteredUsers.length > 0 ? (
-                                        filteredUsers.map((user) => {
-                                          const isSelected = selectedUserIds.has(user.id);
-                                          const existing = hasExistingAccess(user.id);
-                                          return (
-                                            <div
-                                              key={user.id}
-                                              className={`flex items-center space-x-3 p-3 border rounded-lg transition-colors ${
-                                                existing.hasAccess 
-                                                  ? 'bg-muted/30 border-muted' 
-                                                  : 'hover:bg-accent/50 border-border'
+                                </ScrollArea>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs text-muted-foreground">Select Office</Label>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-xs px-2"
+                                    onClick={handleToggleAllDirectShareOffices}
+                                  >
+                                    {directShareFilteredOffices.length > 0 &&
+                                    directShareFilteredOffices.every((office) => directShareSelectedOfficeIds.has(office.id))
+                                      ? 'Clear'
+                                      : 'Select all'}
+                                  </Button>
+                                </div>
+                                <div className="relative">
+                                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                  <Input
+                                    value={directShareOfficeSearch}
+                                    onChange={(e) => setDirectShareOfficeSearch(e.target.value)}
+                                    placeholder="Search office..."
+                                    className="pl-9 h-9"
+                                  />
+                                </div>
+                                <ScrollArea className="h-[280px] border rounded-md p-2">
+                                  <div className="space-y-1.5">
+                                    {directShareFilteredOffices.length === 0 ? (
+                                      <div className="p-3 text-xs text-muted-foreground">
+                                        No matching offices found.
+                                      </div>
+                                    ) : (
+                                      directShareFilteredOffices.map((office) => {
+                                        const selected = directShareSelectedOfficeIds.has(office.id);
+                                        return (
+                                          <div
+                                            key={office.id}
+                                            role="button"
+                                            tabIndex={0}
+                                            className={`w-full text-left flex items-start gap-2 p-2 rounded border ${selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}
+                                            onClick={() => handleToggleDirectShareOffice(office.id)}
+                                            onKeyDown={(event) => {
+                                              if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                handleToggleDirectShareOffice(office.id);
+                                              }
+                                            }}
+                                          >
+                                            <span
+                                              className={`mt-0.5 h-4 w-4 rounded-sm border flex items-center justify-center flex-shrink-0 ${
+                                                selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'
                                               }`}
-                                              role="listitem"
+                                              aria-hidden="true"
                                             >
-                                              <Checkbox
-                                                id={`user-${user.id}`}
-                                                checked={isSelected}
-                                                onCheckedChange={(checked) => {
-                                                  if (checked) {
-                                                    setSelectedUserIds((prev) => new Set([...prev, user.id]));
-                                                  } else {
-                                                    setSelectedUserIds((prev) => {
-                                                      const next = new Set(prev);
-                                                      next.delete(user.id);
-                                                      return next;
-                                                    });
-                                                  }
-                                                }}
-                                                aria-label={`${isSelected ? 'Deselect' : 'Select'} ${user.name}`}
-                                              />
-                                              <Label htmlFor={`user-${user.id}`} className="flex-1 cursor-pointer min-w-0">
-                                                <div className="flex flex-col">
-                                                  <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="font-medium text-foreground">
-                                                      {user.name}
-                                                    </span>
-                                                    {existing.hasAccess && (
-                                                      <Badge variant="outline" className="text-xs">
-                                                        Has {existing.accessLevel} access
-                                                      </Badge>
-                                                    )}
-                                                  </div>
-                                                  <span className="text-xs text-muted-foreground mt-0.5">
-                                                    {user.email} • {user.systemRole}
-                                                  </span>
-                                                </div>
-                                              </Label>
+                                              {selected ? <CheckCircle2 className="h-3 w-3" /> : null}
+                                            </span>
+                                            <div className="min-w-0">
+                                              <p className="text-sm font-medium truncate">{office.name}</p>
+                                              <p className="text-xs text-muted-foreground truncate">
+                                                {office.officeType.toUpperCase()} {office.code ? `• ${office.code}` : ''}
+                                              </p>
                                             </div>
-                                          );
-                                        })
-                                      ) : (
-                                        <div className="p-8 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
-                                          <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                                          <p className="font-medium mb-1 text-foreground">No users found</p>
-                                          <p className="text-xs">
-                                            {searchQuery || selectedSystemRoles.size > 0
-                                              ? `No users match your current filters. Try adjusting your search or role filters.`
-                                              : 'No users available to share with.'}
-                                          </p>
-                                          {(searchQuery || selectedSystemRoles.size > 0) && (
-                                            <div className="flex items-center justify-center gap-2 mt-3">
-                                              {searchQuery && (
-                                                <Button
-                                                  type="button"
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  onClick={() => setSearchQuery("")}
-                                                  aria-label="Clear search"
-                                                >
-                                                  Clear search
-                                                </Button>
-                                              )}
-                                              {selectedSystemRoles.size > 0 && (
-                                                <Button
-                                                  type="button"
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  onClick={() => setSelectedSystemRoles(new Set())}
-                                                  aria-label="Clear role filters"
-                                                >
-                                                  Clear role filters
-                                                </Button>
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </ScrollArea>
-                                </div>
-                              )}
-
-                              {shareSection === 'org' && (
-                                <div className="space-y-3">
-                                  <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                      value={searchDirectorateQuery}
-                                      onChange={(e) => setSearchDirectorateQuery(e.target.value)}
-                                      placeholder="Search directorates..."
-                                      className="pl-9 h-9"
-                                    />
+                                          </div>
+                                        );
+                                      })
+                                    )}
                                   </div>
-                                  <ScrollArea className="h-[300px] border rounded-md p-2">
-                                    <div className="space-y-2">
-                                      {filteredDirectorates.length > 0 ? (
-                                        filteredDirectorates.map((dir) => {
-                                          const isSelected = selectedDirectorateIds.has(dir.id);
-                                          const divisionCount = divisionsByDirectorate.get(dir.id)?.length || 0;
-                                          const existing = hasExistingAccess(undefined, undefined, undefined, dir.id);
-                                          return (
-                                            <div
-                                              key={dir.id}
-                                              className={`flex items-center space-x-3 p-3 border rounded-lg transition-colors ${
-                                                existing.hasAccess 
-                                                  ? 'bg-muted/30 border-muted' 
-                                                  : 'hover:bg-accent/50 border-border'
-                                              }`}
-                                              role="listitem"
-                                            >
-                                              <Checkbox
-                                                id={`dir-${dir.id}`}
-                                                checked={isSelected}
-                                                onCheckedChange={(checked) => {
-                                                  if (checked) {
-                                                    setSelectedDirectorateIds((prev) => new Set([...prev, dir.id]));
-                                                  } else {
-                                                    setSelectedDirectorateIds((prev) => {
-                                                      const next = new Set(prev);
-                                                      next.delete(dir.id);
-                                                      return next;
-                                                    });
-                                                  }
-                                                }}
-                                                aria-label={`${isSelected ? 'Deselect' : 'Select'} ${dir.name} directorate`}
-                                              />
-                                              <Label htmlFor={`dir-${dir.id}`} className="flex-1 cursor-pointer min-w-0">
-                                                <div className="flex items-center justify-between gap-2">
-                                                  <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="font-medium text-foreground">
-                                                      {dir.name}
-                                                    </span>
-                                                    {existing.hasAccess && (
-                                                      <Badge variant="outline" className="text-xs">
-                                                        Has {existing.accessLevel} access
-                                                      </Badge>
-                                                    )}
-                                                  </div>
-                                                  <Badge variant="outline" className="text-xs">
-                                                    {divisionCount} division{divisionCount !== 1 ? "s" : ""}
-                                                  </Badge>
-                                                </div>
-                                              </Label>
-                                            </div>
-                                          );
-                                        })
-                                      ) : (
-                                        <div className="p-8 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
-                                          <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                                          <p className="font-medium mb-1 text-foreground">No directorates available</p>
-                                          <p className="text-xs">
-                                            {searchDirectorateQuery 
-                                              ? `No directorates match "${searchDirectorateQuery}". Try a different search term.`
-                                              : 'No directorates available to share with.'}
-                                          </p>
-                                          {searchDirectorateQuery && (
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="sm"
-                                              className="mt-3"
-                                              onClick={() => setSearchDirectorateQuery("")}
-                                              aria-label="Clear search"
-                                            >
-                                              Clear search
-                                            </Button>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </ScrollArea>
-                                </div>
-                              )}
-
-                              {shareSection === 'workspaces' && (
-                                <div className="space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium">
-                                      Select Workspaces ({selectedWorkspaceIds.size} selected)
-                                    </span>
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={toggleAllWorkspaces}
-                                      className="text-xs h-7"
-                                    >
-                                      {selectedWorkspaceIds.size === filteredWorkspaces.length ? "Deselect All" : `Select All (${filteredWorkspaces.length})`}
-                                    </Button>
-                                  </div>
-                                  <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input
-                                      value={searchWorkspaceQuery}
-                                      onChange={(e) => setSearchWorkspaceQuery(e.target.value)}
-                                      placeholder="Search workspaces..."
-                                      className="pl-9 h-9"
-                                    />
-                                  </div>
-                                  <ScrollArea className="h-[300px] border rounded-md p-2">
-                                    <div className="space-y-2 p-3" role="list">
-                                      {isLoadingWorkspaces ? (
-                                        <div className="p-8 text-center text-sm text-muted-foreground">
-                                          <Loader2 className="h-6 w-6 mx-auto mb-2 animate-spin" />
-                                          <p>Loading workspaces...</p>
-                                        </div>
-                                      ) : filteredWorkspaces.length > 0 ? (
-                                        filteredWorkspaces.map((ws) => {
-                                          const isSelected = selectedWorkspaceIds.has(ws.id);
-                                          return (
-                                            <div
-                                              key={ws.id}
-                                              className="flex items-center space-x-3 p-3 border rounded-lg transition-colors hover:bg-accent/50 border-border"
-                                              role="listitem"
-                                            >
-                                              <Checkbox
-                                                id={`ws-${ws.id}`}
-                                                checked={isSelected}
-                                                onCheckedChange={() => toggleWorkspace(ws.id)}
-                                                aria-label={`${isSelected ? 'Deselect' : 'Select'} ${ws.name} workspace`}
-                                              />
-                                              <Label htmlFor={`ws-${ws.id}`} className="flex-1 cursor-pointer min-w-0">
-                                                <div className="flex items-start justify-between gap-2">
-                                                  <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                      <span className="font-medium text-foreground">
-                                                        {ws.name}
-                                                      </span>
-                                                    </div>
-                                                    {ws.description && (
-                                                      <p className="text-xs text-muted-foreground mt-1">{ws.description}</p>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              </Label>
-                                            </div>
-                                          );
-                                        })
-                                      ) : (
-                                        <div className="p-8 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
-                                          <FolderKanban className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                                          <p className="font-medium mb-1 text-foreground">No workspaces found</p>
-                                          <p className="text-xs">
-                                            {searchWorkspaceQuery
-                                              ? `No workspaces match "${searchWorkspaceQuery}". Try a different search term.`
-                                              : 'No workspaces available to share with.'}
-                                          </p>
-                                          {searchWorkspaceQuery && (
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="sm"
-                                              className="mt-3"
-                                              onClick={() => setSearchWorkspaceQuery("")}
-                                              aria-label="Clear search"
-                                            >
-                                              Clear search
-                                            </Button>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </ScrollArea>
-                                </div>
-                              )}
-                              </CardContent>
-                            </Card>
-                          </div>
-                        </>
-                      )}
+                                </ScrollArea>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Sharing to an office applies access by its mapped division/department.
+                                </p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
                     </div>
                   )}
                 </>
@@ -2574,18 +2304,15 @@ export const ShareDocumentDialog = ({
             )}
           </div>
         )}
+        </div>
 
-        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t px-4 sm:px-6 py-3">
           <div className="text-xs text-muted-foreground">
             {activeTab === 'correspondence' ? (
-              <span>
-                {correspondenceRecipient || correspondenceTargetOfficeId
-                  ? `Route to ${correspondenceRouteType === 'office' ? 'Office' : 'Person'}${correspondencePurpose ? ` • ${correspondencePurpose === 'action' ? 'For Action' : correspondencePurpose === 'information' ? 'For Information' : correspondencePurpose === 'comment' ? 'For Comment' : 'For Approval'}` : ''}`
-                  : 'Select recipient above'}
-              </span>
+              <span>Use <span className="font-medium text-foreground">Send via Correspondence</span> below the notes field.</span>
             ) : totalSelected > 0 ? (
               <span>
-                {shareToAll ? `All ${activeUserCount} users` : `${totalSelected} selected`}
+                {`${totalSelected} selected`}
                 {' • '}<span className="capitalize">{accessLevel}</span> access
               </span>
             ) : (
@@ -2597,43 +2324,33 @@ export const ShareDocumentDialog = ({
               type="button" 
               variant="outline" 
               onClick={() => onOpenChange(false)}
-              disabled={isSubmitting || isCreatingCorrespondence}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              form="share-form"
-              disabled={
-                isSubmitting || 
-                isCreatingCorrespondence ||
-                (activeTab === 'correspondence' 
-                  ? !correspondenceSubject.trim() || (correspondenceRouteType === 'office' ? !correspondenceTargetOfficeId : !correspondenceRecipient)
-                  : !shareToAll && totalSelected === 0)
-              }
-              className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
-            >
-              {isSubmitting || isCreatingCorrespondence ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {activeTab === 'correspondence' ? 'Sending...' : 'Sharing...'}
-                </>
-              ) : (
-                <>
-                  {activeTab === 'correspondence' ? (
-                    <>
-                      <Send className="h-4 w-4" />
-                      Send via Correspondence
-                    </>
-                  ) : (
-                    <>
-                      <Users className="h-4 w-4" />
-                      Share Document
-                    </>
-                  )}
-                </>
-              )}
-            </Button>
+            {activeTab !== 'correspondence' && (
+              <Button
+                type="submit"
+                form="share-form"
+                disabled={
+                  isSubmitting ||
+                  totalSelected === 0
+                }
+                className="bg-gradient-primary hover:opacity-90 transition-opacity gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sharing...
+                  </>
+                ) : (
+                  <>
+                    <Users className="h-4 w-4" />
+                    Share Document
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>
@@ -2754,10 +2471,10 @@ export const ShareDocumentDialog = ({
           <AlertDialogAction
             onClick={() => {
               setShowDuplicateWarning(false);
-              const allDivisionIds = Array.from(
-                new Set([...selectedDivisionIds, ...selectedDivisionIdsFromDirectorates])
-              );
-              void performShare(Array.from(selectedUserIds), allDivisionIds, Array.from(selectedDepartmentIds));
+              const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
+              const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
+              const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
+              void performShare(userIds, divisionIds, departmentIds);
             }}
           >
             Continue Anyway

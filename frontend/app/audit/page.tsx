@@ -2,12 +2,36 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueSearchInputWrapClass,
+  registryQueueSearchStatsShellContentClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
+import { cn } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -15,6 +39,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { MoreVertical } from 'lucide-react';
 import {
   Activity,
   Search,
@@ -84,6 +115,125 @@ const DEFAULT_SUMMARY: AuditSummary = {
   actions: 0,
 };
 
+function getSeverityVariant(severity: ActivityLog['severity']) {
+  switch (severity) {
+    case 'critical':
+    case 'error':
+      return 'destructive' as const;
+    case 'warning':
+      return 'default' as const;
+    case 'info':
+    default:
+      return 'secondary' as const;
+  }
+}
+
+function getActionIconForLog(action: string) {
+  if (action.includes('login') || action.includes('logout')) return UserIcon;
+  if (action.includes('document')) return FileText;
+  if (action.includes('permission')) return Shield;
+  return Activity;
+}
+
+function AuditLogRow({
+  log,
+  getUserName,
+}: {
+  log: ActivityLog;
+  getUserName: (userId?: string) => string;
+}) {
+  const ActionIcon = getActionIconForLog(log.action);
+  const isError = log.severity === 'error' || log.severity === 'critical' || !log.success;
+  const leadingBg = isError
+    ? 'bg-destructive/10'
+    : log.severity === 'warning'
+      ? 'bg-amber-500/10'
+      : 'bg-primary/10';
+  const leadingIcon = isError
+    ? 'text-destructive'
+    : log.severity === 'warning'
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-primary';
+
+  return (
+    <ListRowCard
+      density="compact"
+      leading={
+        <div className={cn(correspondenceQueueLeadingBoxClass, leadingBg)}>
+          <ActionIcon className={cn(correspondenceQueueLeadingIconClass, leadingIcon)} />
+        </div>
+      }
+    >
+      <h4 className={correspondenceQueueSubjectClass}>
+        {log.actionDisplay ||
+          log.action.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+      </h4>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+          <Badge variant={getSeverityVariant(log.severity)} className={correspondenceQueueBadgeClass}>
+            {log.severityDisplay || log.severity.toUpperCase()}
+          </Badge>
+          {log.module ? (
+            <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+              {log.module.toUpperCase()}
+            </Badge>
+          ) : null}
+          {log.success ? (
+            <Badge
+              variant="outline"
+              className={cn(
+                correspondenceQueueBadgeClass,
+                'gap-0.5 text-green-600 border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400',
+              )}
+            >
+              <CheckCircle2 className="h-2.5 w-2.5" />
+              Success
+            </Badge>
+          ) : (
+            <Badge variant="destructive" className={correspondenceQueueBadgeClass}>
+              <XCircle className="h-2.5 w-2.5" />
+              Failed
+            </Badge>
+          )}
+        </div>
+        <span className={correspondenceQueueDateClass}>{formatDateTime(log.timestamp)}</span>
+      </div>
+      <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+        <span className={correspondenceQueueMetaItemClass}>
+          <UserIcon className={correspondenceQueueMetaIconClass} />
+          <span className="truncate">User: {log.userName || getUserName(log.user)}</span>
+        </span>
+        {log.description ? (
+          <span className={correspondenceQueueMetaItemClass}>
+            <Activity className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">{log.description}</span>
+          </span>
+        ) : null}
+        {log.objectType && log.objectRepr ? (
+          <span className={correspondenceQueueMetaItemClass}>
+            <FileText className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">
+              {log.objectType}: {log.objectRepr}
+            </span>
+          </span>
+        ) : null}
+        {log.errorMessage ? (
+          <span className={cn(correspondenceQueueMetaItemClass, 'text-destructive')}>
+            <AlertCircle className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">{log.errorMessage}</span>
+          </span>
+        ) : null}
+        {log.ipAddress ? (
+          <span className={correspondenceQueueMetaItemClass}>
+            <Clock className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">IP: {log.ipAddress}</span>
+          </span>
+        ) : null}
+      </div>
+    </ListRowCard>
+  );
+}
+
 const AuditTrailPage = () => {
   const { currentUser, hydrated } = useCurrentUser();
   const { users: organizationUsers } = useOrganization();
@@ -98,6 +248,7 @@ const AuditTrailPage = () => {
   const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
   const [customDateFrom, setCustomDateFrom] = useState<string>('');
   const [customDateTo, setCustomDateTo] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -108,6 +259,18 @@ const AuditTrailPage = () => {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Calculate active filter count
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (debouncedSearch) count++;
+    if (actionFilter !== 'all') count++;
+    if (moduleFilter !== 'all') count++;
+    if (severityFilter !== 'all') count++;
+    if (successFilter !== 'all') count++;
+    if (dateRangeFilter !== 'all') count++;
+    return count;
+  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, dateRangeFilter]);
 
   // Debounce search
   useEffect(() => {
@@ -275,7 +438,7 @@ const AuditTrailPage = () => {
   useEffect(() => {
     void fetchLogs();
     void fetchSummaryStats();
-  }, [hydrated, currentUser, page, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateRangeFilter, customDateFrom, customDateTo]);
+  }, [hydrated, currentUser, page, pageSize, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateRangeFilter, customDateFrom, customDateTo]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -296,131 +459,30 @@ const AuditTrailPage = () => {
     return user?.name || userId;
   };
 
-  const getSeverityColor = (severity: ActivityLog['severity']) => {
-    switch (severity) {
-      case 'critical':
-      case 'error':
-        return 'destructive';
-      case 'warning':
-        return 'default';
-      case 'info':
-      default:
-        return 'secondary';
-    }
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setActionFilter('all');
+    setModuleFilter('all');
+    setSeverityFilter('all');
+    setSuccessFilter('all');
+    setDateRangeFilter('all');
+    setCustomDateFrom('');
+    setCustomDateTo('');
   };
 
-  const getActionIcon = (action: string) => {
-    if (action.includes('login') || action.includes('logout')) return UserIcon;
-    if (action.includes('document')) return FileText;
-    if (action.includes('permission')) return Shield;
-    return Activity;
-  };
-
-  const LogCard = ({ log }: { log: ActivityLog }) => {
-    const ActionIcon = getActionIcon(log.action);
-    const isError = log.severity === 'error' || log.severity === 'critical' || !log.success;
-    
-    return (
-      <div className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all">
-        <div className="flex items-start gap-4">
-          <div
-            className={`p-3 rounded-lg ${
-              isError
-                ? 'bg-destructive/10'
-                : log.severity === 'warning'
-                  ? 'bg-warning/10'
-                  : 'bg-primary/10'
-            }`}
-          >
-            <ActionIcon
-              className={`h-5 w-5 ${
-                isError
-                  ? 'text-destructive'
-                  : log.severity === 'warning'
-                    ? 'text-warning'
-                    : 'text-primary'
-              }`}
-            />
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex-1 min-w-0">
-                <h4 className="font-semibold text-foreground mb-1">
-                  {log.actionDisplay || log.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </h4>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant={getSeverityColor(log.severity)}>
-                    {log.severityDisplay || log.severity.toUpperCase()}
-                  </Badge>
-                  {log.module && (
-                    <Badge variant="outline">
-                      {log.module.toUpperCase()}
-                    </Badge>
-                  )}
-                  {log.success ? (
-                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Success
-                    </Badge>
-                  ) : (
-                    <Badge variant="destructive">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Failed
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {formatDateTime(log.timestamp)}
-              </span>
-            </div>
-
-            <div className="space-y-1 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <UserIcon className="h-3.5 w-3.5" />
-                <span>User: {log.userName || getUserName(log.user)}</span>
-              </div>
-              {log.description && (
-                <div className="flex items-center gap-2">
-                  <Activity className="h-3.5 w-3.5" />
-                  <span>{log.description}</span>
-                </div>
-              )}
-              {log.objectType && log.objectRepr && (
-                <div className="flex items-center gap-2">
-                  <FileText className="h-3.5 w-3.5" />
-                  <span>{log.objectType}: {log.objectRepr}</span>
-                </div>
-              )}
-              {log.errorMessage && (
-                <div className="flex items-center gap-2 text-destructive">
-                  <AlertCircle className="h-3.5 w-3.5" />
-                  <span>{log.errorMessage}</span>
-                </div>
-              )}
-              {log.ipAddress && (
-                <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>IP: {log.ipAddress}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const hasListFilters =
+    debouncedSearch ||
+    actionFilter !== 'all' ||
+    moduleFilter !== 'all' ||
+    severityFilter !== 'all' ||
+    successFilter !== 'all' ||
+    dateRangeFilter !== 'all';
 
   if (!hydrated || !currentUser) {
     return (
       <DashboardLayout>
-        <div className="p-6 space-y-6">
-          <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              Loading audit trail…
-            </CardContent>
-          </Card>
+        <div className="container mx-auto p-6">
+          <LoadingState message="Loading audit trail…" />
         </div>
       </DashboardLayout>
     );
@@ -428,126 +490,139 @@ const AuditTrailPage = () => {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
+      <div className="container mx-auto space-y-6 p-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-              <Activity className="h-8 w-8 text-primary" />
-              Audit Trail
-            </h1>
-            <p className="text-muted-foreground mt-1">
+            <h1 className="text-3xl font-bold text-foreground">Audit Trail</h1>
+            <p className="mt-1 max-w-2xl text-muted-foreground">
               Track and monitor all system activities, user actions, and security events.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void fetchLogs()}
-              disabled={loading}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={handleExport}
-              disabled={exporting || loading || logs.length === 0}
-            >
-              {exporting ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </>
-              )}
-            </Button>
+          <div className="flex shrink-0 flex-col gap-3 sm:items-end">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <ContextualHelp
+                title="Using the audit trail"
+                description="Search and filter events across modules. Export filtered results as CSV from More for audits and compliance."
+                steps={[
+                  'Use the search box for user names, actions, descriptions, or object text.',
+                  'Open Filters to narrow by action type, module, severity, status, or date.',
+                  'Clear filters from the filter card or empty state when no rows match.',
+                ]}
+              />
+              <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
+                <Filter className="mr-2 h-4 w-4" /> Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="ml-2">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <MoreVertical className="mr-2 h-4 w-4" />
+                    More
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => void fetchLogs()} disabled={loading}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || logs.length === 0}>
+                    <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
+                    {exporting ? 'Exporting...' : 'Export CSV'}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
 
-        {/* Help Guide */}
         <HelpGuideCard
-          title="Understanding the Audit Trail"
-          description="The audit trail provides a comprehensive record of all activities in the system. Use filters to find specific events, track user actions, and investigate security incidents."
+          title="Workspace guide"
+          description="Summary counts respect your current search and filters (except action type, which is broken out in the list). Cross-check unusual activity in User Management."
           links={[
             { label: 'User Management', href: '/admin/users-roles?tab=users' },
             { label: 'System Settings', href: '/settings' },
           ]}
         />
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            {
-              label: 'Total Events',
-              value: summary.total,
-              icon: Activity,
-              bgClass: 'bg-primary/10',
-              iconClass: 'text-primary',
-            },
-            {
-              label: 'User Logins',
-              value: summary.logins,
-              icon: UserIcon,
-              bgClass: 'bg-info/10',
-              iconClass: 'text-info',
-            },
-            {
-              label: 'Errors & Failures',
-              value: summary.errors,
-              icon: AlertCircle,
-              bgClass: 'bg-destructive/10',
-              iconClass: 'text-destructive',
-            },
-            {
-              label: 'System Actions',
-              value: summary.actions,
-              icon: Shield,
-              bgClass: 'bg-success/10',
-              iconClass: 'text-success',
-            },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-lg ${bgClass}`}>
-                    <Icon className={`h-6 w-6 ${iconClass}`} />
-                  </div>
-        <div>
-                    <p className="text-sm text-muted-foreground">{label}</p>
-                    <p className="text-2xl font-semibold">{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <Card>
+          <CardContent className={registryQueueSearchStatsShellContentClass}>
+            <div className={registryQueueSearchInputWrapClass}>
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by user, action, description, object…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: 'Total Events',
+                  value: summary.total,
+                  icon: Activity,
+                  bgClass: 'bg-primary/10',
+                  iconClass: 'text-primary',
+                },
+                {
+                  label: 'User Logins',
+                  value: summary.logins,
+                  icon: UserIcon,
+                  bgClass: 'bg-info/10',
+                  iconClass: 'text-info',
+                },
+                {
+                  label: 'Errors & Failures',
+                  value: summary.errors,
+                  icon: AlertCircle,
+                  bgClass: 'bg-destructive/10',
+                  iconClass: 'text-destructive',
+                },
+                {
+                  label: 'System Actions',
+                  value: summary.actions,
+                  icon: Shield,
+                  bgClass: 'bg-success/10',
+                  iconClass: 'text-success',
+                },
+              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+                <Card key={label}>
+                  <CardContent className={registryQueueStatCardContentClass}>
+                    <div className="flex items-center gap-4">
+                      <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                      </div>
+                      <div>
+                        <p className={registryQueueStatLabelClass}>{label}</p>
+                        <p className={registryQueueStatValueClass}>{value}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Search Bar */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="relative max-w-xl w-full">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-              placeholder="Search by user, action, description, object..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-                />
+        {showFilters && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-lg">Audit trail filters</CardTitle>
+                {activeFilterCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearAllFilters}>
+                    Clear all
+                  </Button>
+                )}
               </div>
-        </div>
-
-        {/* Filters */}
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-xs uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-              <Filter className="h-3.5 w-3.5" />
-              Filters
-            </Label>
-            <div className="flex flex-wrap gap-4">
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-4">
               <div className="w-full md:w-48 space-y-1">
                 <Label className="text-xs text-muted-foreground">Action Type</Label>
                 <Select value={actionFilter} onValueChange={setActionFilter}>
@@ -654,81 +729,37 @@ const AuditTrailPage = () => {
                 </SelectContent>
               </Select>
               </div>
-              {(actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || debouncedSearch || dateRangeFilter !== 'all') && (
-                <div className="flex items-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setActionFilter('all');
-                      setModuleFilter('all');
-                      setSeverityFilter('all');
-                      setSuccessFilter('all');
-                      setDateRangeFilter('all');
-                      setCustomDateFrom('');
-                      setCustomDateTo('');
-                    }}
-                    className="text-xs"
-                  >
-                    Clear Filters
-                  </Button>
-                </div>
-              )}
             </div>
-          </div>
-        </div>
-
-        {/* Error State */}
-        {error && (
-          <Card>
-            <CardContent className="py-4 text-sm text-destructive">{error}</CardContent>
+            </CardContent>
           </Card>
         )}
 
-        {/* Loading State */}
-        {loading ? (
-          <Card>
-            <CardContent className="py-12 text-center text-sm text-muted-foreground">
-              Loading audit logs…
-            </CardContent>
-          </Card>
+        {error ? (
+          <ErrorState
+            title="Could not load audit logs"
+            message={error}
+            onRetry={() => void fetchLogs()}
+            retryLabel="Try again"
+          />
+        ) : loading ? (
+          <LoadingState message="Loading audit logs…" />
         ) : logs.length === 0 ? (
-          /* Empty State */
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Activity className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-sm text-muted-foreground mb-2">
-                {debouncedSearch || actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || dateRangeFilter !== 'all'
-                  ? 'No audit logs match your filters'
-                  : 'No audit logs recorded yet.'}
-              </p>
-              {(debouncedSearch || actionFilter !== 'all' || moduleFilter !== 'all' || severityFilter !== 'all' || successFilter !== 'all' || dateRangeFilter !== 'all') && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setActionFilter('all');
-                    setModuleFilter('all');
-                    setSeverityFilter('all');
-                    setSuccessFilter('all');
-                    setDateRangeFilter('all');
-                    setCustomDateFrom('');
-                    setCustomDateTo('');
-                  }}
-                  className="mt-4"
-                >
-                  Clear Filters
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={hasListFilters ? 'search' : 'file'}
+            title={hasListFilters ? 'No matching events' : 'No audit logs yet'}
+            message={
+              hasListFilters
+                ? 'No audit logs match your search or filters. Try clearing filters or broadening the date range.'
+                : 'Activity will appear here as users interact with the system.'
+            }
+            actionLabel={hasListFilters ? 'Clear filters' : undefined}
+            onAction={hasListFilters ? clearAllFilters : undefined}
+            variant="dashed"
+          />
         ) : (
-          /* Log List */
-          <div className="space-y-3">
+          <div className={correspondenceQueueListStackClass}>
             {logs.map((log) => (
-              <LogCard key={log.id} log={log} />
+              <AuditLogRow key={log.id} log={log} getUserName={getUserName} />
             ))}
           </div>
         )}

@@ -14,7 +14,7 @@ export default function ReportsPage() {
   const { currentUser, hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">

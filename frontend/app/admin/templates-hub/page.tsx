@@ -1,29 +1,41 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { RichTextEditor } from "@/components/dms/RichTextEditor";
+import { QuillEditor } from "@/components/dms/QuillEditor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
+import { LoadingState } from "@/components/shared/LoadingState";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { ListRowCard } from "@/components/shared/ListRowCard";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  correspondenceQueueBadgeClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueEmptyIconClass,
+  registryQueueSearchInputWrapClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from "@/components/shared/registry-queue-styles";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,7 +70,6 @@ import type { FormTemplate } from "@/lib/types/forms";
 import {
   Plus,
   Trash2,
-  FileText,
   GitBranch,
   FormInput,
   Search,
@@ -67,10 +78,8 @@ import {
   Copy,
   Power,
   PowerOff,
-  LayoutTemplate,
   FileEdit,
   MessageSquare,
-  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
@@ -88,14 +97,22 @@ const scopeOptions: { value: TemplateScope; label: string }[] = [
 
 type HubTab = "documents" | "workflows" | "forms";
 
-export default function TemplatesHubPage() {
+function TemplatesHubForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { directorates, divisions, departments, users: organizationUsers, isSyncing } = useOrganization();
   const { currentUser, hydrated: userHydrated } = useCurrentUser();
 
-  // Main tab state
+  // Main tab state (overridable via ?tab=documents|workflows|forms)
   const [activeTab, setActiveTab] = useState<HubTab>("documents");
+
+  useEffect(() => {
+    const raw = searchParams.get("tab");
+    if (raw === "workflows" || raw === "forms" || raw === "documents") {
+      setActiveTab(raw);
+    }
+  }, [searchParams]);
 
   // ============ DOCUMENT TEMPLATES STATE ============
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
@@ -118,6 +135,9 @@ export default function TemplatesHubPage() {
   const [formSearch, setFormSearch] = useState("");
   const [formCategoryFilter, setFormCategoryFilter] = useState<string>("all");
   const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
+  const [showFormDeleteConfirm, setShowFormDeleteConfirm] = useState(false);
+  const [formToDelete, setFormToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [formDeleteConfirmText, setFormDeleteConfirmText] = useState("");
   const [showWorkflowDeleteConfirm, setShowWorkflowDeleteConfirm] = useState(false);
   const [workflowToDelete, setWorkflowToDelete] = useState<{ id: string; name: string } | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -385,27 +405,42 @@ export default function TemplatesHubPage() {
   };
 
   useEffect(() => {
-    if (activeTab === "forms") {
-      loadFormTemplates();
-    }
+    loadFormTemplates();
+    // Load once on mount for accurate dashboard stats and whenever switching back to forms.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === "forms" && formSearch !== "") {
+    if (activeTab === "forms") {
       const timeoutId = setTimeout(() => loadFormTemplates(), 300);
       return () => clearTimeout(timeoutId);
     }
   }, [formSearch, activeTab]);
 
-  const handleDeleteForm = async (id: string) => {
+  const handleDeleteFormClick = (id: string, name: string) => {
+    setFormToDelete({ id, name });
+    setFormDeleteConfirmText("");
+    setShowFormDeleteConfirm(true);
+  };
+
+  const handleDeleteForm = async () => {
+    if (!formToDelete) return;
+    if (formDeleteConfirmText !== "DELETE") {
+      sonnerToast.error('Type "DELETE" to confirm');
+      return;
+    }
+
     try {
-      await deleteFormTemplate(id);
+      await deleteFormTemplate(formToDelete.id);
       sonnerToast.success("Template deleted successfully");
       loadFormTemplates();
     } catch (error: unknown) {
       logError("Error deleting template:", error);
       sonnerToast.error("Failed to delete template");
     } finally {
+      setShowFormDeleteConfirm(false);
+      setFormToDelete(null);
+      setFormDeleteConfirmText("");
       setDeletingFormId(null);
     }
   };
@@ -435,6 +470,31 @@ export default function TemplatesHubPage() {
     { value: "general", label: "General" },
   ];
 
+  const getFormCategoryStyles = (category: string) => {
+    switch (category) {
+      case "audit":
+        return {
+          accent: "border-l-amber-500",
+          badge: "bg-amber-500/10 text-amber-700 border-amber-500/20",
+        };
+      case "finance":
+        return {
+          accent: "border-l-emerald-500",
+          badge: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20",
+        };
+      case "procurement":
+        return {
+          accent: "border-l-blue-500",
+          badge: "bg-blue-500/10 text-blue-700 border-blue-500/20",
+        };
+      default:
+        return {
+          accent: "border-l-slate-500",
+          badge: "bg-slate-500/10 text-slate-700 border-slate-500/20",
+        };
+    }
+  };
+
   // ============ STATS ============
   const documentCount = templates.filter(t => t.templateType === "document").length;
   const minuteCount = templates.filter(t => t.templateType === "minute").length;
@@ -443,10 +503,8 @@ export default function TemplatesHubPage() {
   if (!userHydrated || isSyncing) {
     return (
       <DashboardLayout>
-        <div className="p-6 space-y-6">
-          <Card className="shadow-soft">
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">Loading templates…</CardContent>
-          </Card>
+        <div className="container mx-auto p-6">
+          <LoadingState message="Loading templates hub…" />
         </div>
       </DashboardLayout>
     );
@@ -455,7 +513,7 @@ export default function TemplatesHubPage() {
   if (!currentUser) {
     return (
       <DashboardLayout>
-        <div className="p-6 space-y-6">
+        <div className="container mx-auto p-6 space-y-6">
           <HelpGuideCard
             title="Select a persona"
             description="Use the Role Switcher to choose a user context before managing templates."
@@ -469,123 +527,162 @@ export default function TemplatesHubPage() {
   return (
     <ClientErrorBoundary>
       <DashboardLayout>
-        <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-2">
-              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-                <LayoutTemplate className="h-8 w-8 text-primary" />
-                Templates Hub
-              </h1>
-              <p className="text-muted-foreground">
+        <div className="container mx-auto space-y-6 p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Templates Hub</h1>
+              <p className="mt-1 max-w-2xl text-muted-foreground">
                 Manage document templates, workflow templates, and form templates in one place
               </p>
             </div>
             <ContextualHelp
               title="How to manage templates"
-              description="Create and manage templates for documents, minutes, workflows, and forms. Templates can be scoped to organization, directorate, division, department, or personal use."
+              description="Use the overview cards below to switch areas. Documents and minutes share an editor with org scope; workflows and forms open dedicated builders."
               steps={[
-                'Select a template type (Documents, Minutes, Workflows, or Forms).',
-                'Choose the scope level (organization-wide, directorate, division, etc.).',
-                'Create or edit templates using the editor.',
-                'For workflows and forms, use the dedicated creation pages for advanced configuration.',
+                "Click a summary card to open Documents, Minutes, Workflows, or Forms.",
+                "For documents/minutes, pick scope and template, then edit and save.",
+                "For workflows and forms, use Create or a row action to open the full editor.",
               ]}
             />
           </div>
 
-          {/* Overview Stats */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card 
-              className={`cursor-pointer transition-all hover:shadow-md ${activeTab === "documents" && activeTemplateType === "document" ? "ring-2 ring-primary" : ""}`}
-              onClick={() => { setActiveTab("documents"); setActiveTemplateType("document"); }}
+          <HelpGuideCard
+            title="Three template families"
+            description="Documents and minutes are rich-text (or plain minute text) per scope. Workflows define approval chains; forms define fields and categories."
+            links={[
+              { label: "Help & Guides", href: "/help" },
+              { label: "Forms (user)", href: "/forms/templates" },
+            ]}
+          />
+
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Choose a section
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Card
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setActiveTab("documents");
+                  setActiveTemplateType("document");
+                }
+              }}
+              className={cn(
+                "cursor-pointer transition-all hover:shadow-md",
+                activeTab === "documents" && activeTemplateType === "document" ? "ring-2 ring-primary" : "",
+              )}
+              onClick={() => {
+                setActiveTab("documents");
+                setActiveTemplateType("document");
+              }}
             >
-              <CardContent className="p-5">
+              <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-lg bg-primary/10">
-                    <FileEdit className="h-6 w-6 text-primary" />
+                  <div className={cn(registryQueueStatIconBoxClass, "bg-primary/10")}>
+                    <FileEdit className={cn(registryQueueStatIconClass, "text-primary")} />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Document Templates</p>
-                    <p className="text-2xl font-bold">{documentCount}</p>
+                    <p className={registryQueueStatLabelClass}>Document templates</p>
+                    <p className={registryQueueStatValueClass}>{documentCount}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card 
-              className={`cursor-pointer transition-all hover:shadow-md ${activeTab === "documents" && activeTemplateType === "minute" ? "ring-2 ring-primary" : ""}`}
-              onClick={() => { setActiveTab("documents"); setActiveTemplateType("minute"); }}
+            <Card
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setActiveTab("documents");
+                  setActiveTemplateType("minute");
+                }
+              }}
+              className={cn(
+                "cursor-pointer transition-all hover:shadow-md",
+                activeTab === "documents" && activeTemplateType === "minute" ? "ring-2 ring-primary" : "",
+              )}
+              onClick={() => {
+                setActiveTab("documents");
+                setActiveTemplateType("minute");
+              }}
             >
-              <CardContent className="p-5">
+              <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-lg bg-info/10">
-                    <MessageSquare className="h-6 w-6 text-info" />
+                  <div className={cn(registryQueueStatIconBoxClass, "bg-info/10")}>
+                    <MessageSquare className={cn(registryQueueStatIconClass, "text-info")} />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Minute Templates</p>
-                    <p className="text-2xl font-bold">{minuteCount}</p>
+                    <p className={registryQueueStatLabelClass}>Minute templates</p>
+                    <p className={registryQueueStatValueClass}>{minuteCount}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card 
-              className={`cursor-pointer transition-all hover:shadow-md ${activeTab === "workflows" ? "ring-2 ring-primary" : ""}`}
+            <Card
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setActiveTab("workflows");
+                }
+              }}
+              className={cn(
+                "cursor-pointer transition-all hover:shadow-md",
+                activeTab === "workflows" ? "ring-2 ring-primary" : "",
+              )}
               onClick={() => setActiveTab("workflows")}
             >
-              <CardContent className="p-5">
+              <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-lg bg-success/10">
-                    <GitBranch className="h-6 w-6 text-success" />
+                  <div className={cn(registryQueueStatIconBoxClass, "bg-success/10")}>
+                    <GitBranch className={cn(registryQueueStatIconClass, "text-success")} />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Workflow Templates</p>
-                    <p className="text-2xl font-bold">{workflowStats.total}</p>
+                    <p className={registryQueueStatLabelClass}>Workflow templates</p>
+                    <p className={registryQueueStatValueClass}>{workflowStats.total}</p>
                     <p className="text-xs text-muted-foreground">{workflowStats.active} active</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card 
-              className={`cursor-pointer transition-all hover:shadow-md ${activeTab === "forms" ? "ring-2 ring-primary" : ""}`}
+            <Card
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setActiveTab("forms");
+                }
+              }}
+              className={cn(
+                "cursor-pointer transition-all hover:shadow-md",
+                activeTab === "forms" ? "ring-2 ring-primary" : "",
+              )}
               onClick={() => setActiveTab("forms")}
             >
-              <CardContent className="p-5">
+              <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-lg bg-warning/10">
-                    <FormInput className="h-6 w-6 text-warning" />
+                  <div className={cn(registryQueueStatIconBoxClass, "bg-warning/10")}>
+                    <FormInput className={cn(registryQueueStatIconClass, "text-warning")} />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Form Templates</p>
-                    <p className="text-2xl font-bold">{formTemplates.length}</p>
+                    <p className={registryQueueStatLabelClass}>Form templates</p>
+                    <p className={registryQueueStatValueClass}>{formTemplates.length}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Main Content Area */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as HubTab)} className="space-y-4">
-            <div className="flex items-center justify-between">
-              <TabsList>
-                <TabsTrigger value="documents" className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Documents & Minutes
-                </TabsTrigger>
-                <TabsTrigger value="workflows" className="flex items-center gap-2">
-                  <GitBranch className="h-4 w-4" />
-                  Workflows
-                </TabsTrigger>
-                <TabsTrigger value="forms" className="flex items-center gap-2">
-                  <FormInput className="h-4 w-4" />
-                  Forms
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            {/* ============ DOCUMENT TEMPLATES TAB ============ */}
-            <TabsContent value="documents" className="space-y-4">
+          {activeTab === "documents" ? (
+            <div className="space-y-4">
               <Card>
                 <CardHeader className="pb-4">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -712,7 +809,7 @@ export default function TemplatesHubPage() {
                         />
                       ) : (
                         <div className="border rounded-lg bg-background">
-                          <RichTextEditor value={contentHtml} onChange={(html) => setContentHtml(html)} />
+                          <QuillEditor value={contentHtml} onChange={(html) => setContentHtml(html)} showCharacterCount={false} />
                         </div>
                       )}
                     </div>
@@ -726,137 +823,164 @@ export default function TemplatesHubPage() {
                   </div>
                 </CardContent>
               </Card>
-            </TabsContent>
-
-            {/* ============ WORKFLOW TEMPLATES TAB ============ */}
-            <TabsContent value="workflows" className="space-y-4">
+            </div>
+          ) : activeTab === "workflows" ? (
+            <div className="space-y-4">
               <Card>
-                <CardHeader className="pb-4">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <CardTitle className="text-lg">Workflow Templates</CardTitle>
-                      <CardDescription>Define approval processes for documents and correspondence</CardDescription>
+                      <CardTitle className="text-lg">Workflow templates</CardTitle>
+                      <CardDescription>
+                        Approval chains for correspondence and documents. Open a row to edit steps.
+                      </CardDescription>
                     </div>
-                    <Button onClick={() => router.push("/admin/workflow-templates/new")}>
+                    <Button size="sm" onClick={() => router.push("/admin/workflow-templates/new")} className="shrink-0">
                       <Plus className="h-4 w-4 mr-2" />
-                      Create Workflow
+                      Create workflow
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="mb-4">
-                    <div className="relative max-w-sm">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Search workflows..."
-                        value={workflowSearch}
-                        onChange={(e) => setWorkflowSearch(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
+                <CardContent className="space-y-4">
+                  <div className={registryQueueSearchInputWrapClass}>
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search workflows…"
+                      value={workflowSearch}
+                      onChange={(e) => setWorkflowSearch(e.target.value)}
+                      className="pl-10"
+                    />
                   </div>
 
                   {workflowLoading ? (
-                    <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                    <LoadingState message="Loading workflow templates…" />
                   ) : filteredWorkflowTemplates.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      {workflowSearch ? "No workflows match your search" : "No workflow templates yet."}
-                    </div>
+                    <EmptyState
+                      icon={<GitBranch className={registryQueueEmptyIconClass} />}
+                      title={workflowSearch.trim() ? "No workflows match your search" : "No workflow templates yet"}
+                      message={
+                        workflowSearch.trim()
+                          ? "Try a different name, slug, or description keyword."
+                          : "Create a workflow to define approval steps for correspondence or documents."
+                      }
+                      actionLabel={workflowSearch.trim() ? undefined : "Create workflow"}
+                      onAction={workflowSearch.trim() ? undefined : () => router.push("/admin/workflow-templates/new")}
+                    />
                   ) : (
-                    <div className="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Type</TableHead>
-                            <TableHead>Steps</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="w-[80px]"></TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredWorkflowTemplates.map((template) => (
-                            <TableRow key={template.id} className="hover:bg-muted/50">
-                              <TableCell>
-                                <div className="font-medium">{template.name}</div>
-                                {template.description && (
-                                  <div className="text-xs text-muted-foreground line-clamp-1">{template.description}</div>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-xs">
-                                  {template.applies_to === "correspondence" ? "Correspondence" : "Document"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="secondary" className="text-xs">{template.steps.length} steps</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={template.is_active ? "default" : "secondary"} className="text-xs">
-                                  {template.is_active ? "Active" : "Inactive"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                      <MoreVertical className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => router.push(`/admin/workflow-templates/${template.id}`)}>
-                                      <Edit className="h-4 w-4 mr-2" />Edit
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => router.push(`/admin/workflow-templates/${template.id}?clone=true`)}>
-                                      <Copy className="h-4 w-4 mr-2" />Clone
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleToggleWorkflowActive(template)}>
-                                      {template.is_active ? <PowerOff className="h-4 w-4 mr-2" /> : <Power className="h-4 w-4 mr-2" />}
-                                      {template.is_active ? "Deactivate" : "Activate"}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleDeleteWorkflowClick(template.id, template.name)} className="text-destructive">
-                                      <Trash2 className="h-4 w-4 mr-2" />Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    <div className={correspondenceQueueListStackClass}>
+                      {filteredWorkflowTemplates.map((template) => (
+                        <ListRowCard
+                          key={template.id}
+                          density="compact"
+                          href={`/admin/workflow-templates/${template.id}`}
+                          leading={(
+                            <div className={cn(correspondenceQueueLeadingBoxClass, "bg-success/10")}>
+                              <GitBranch className={cn(correspondenceQueueLeadingIconClass, "text-success")} />
+                            </div>
+                          )}
+                          actions={(
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                  aria-label="More actions"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => router.push(`/admin/workflow-templates/${template.id}`)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    router.push(`/admin/workflow-templates/${template.id}?clone=true`)
+                                  }
+                                >
+                                  <Copy className="mr-2 h-4 w-4" />
+                                  Clone
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleToggleWorkflowActive(template)}>
+                                  {template.is_active ? (
+                                    <PowerOff className="mr-2 h-4 w-4" />
+                                  ) : (
+                                    <Power className="mr-2 h-4 w-4" />
+                                  )}
+                                  {template.is_active ? "Deactivate" : "Activate"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteWorkflowClick(template.id, template.name)}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        >
+                          <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
+                          {template.description ? (
+                            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
+                          ) : null}
+                          <div className={cn(correspondenceQueueMetaRowClass, "mt-1")}>
+                            <span className={correspondenceQueueMetaItemClass}>
+                              <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                                {template.applies_to === "correspondence" ? "Correspondence" : "Document"}
+                              </Badge>
+                            </span>
+                            <span className={correspondenceQueueMetaItemClass}>
+                              <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                                {template.steps.length} steps
+                              </Badge>
+                            </span>
+                            <span className={correspondenceQueueMetaItemClass}>
+                              <Badge
+                                variant={template.is_active ? "default" : "secondary"}
+                                className={correspondenceQueueBadgeClass}
+                              >
+                                {template.is_active ? "Active" : "Inactive"}
+                              </Badge>
+                            </span>
+                          </div>
+                        </ListRowCard>
+                      ))}
                     </div>
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
-
-            {/* ============ FORM TEMPLATES TAB ============ */}
-            <TabsContent value="forms" className="space-y-4">
+            </div>
+          ) : (
+            <div className="space-y-4">
               <Card>
-                <CardHeader className="pb-4">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <CardTitle className="text-lg">Form Templates</CardTitle>
-                      <CardDescription>Create structured forms for data collection</CardDescription>
+                      <CardTitle className="text-lg">Form templates</CardTitle>
+                      <CardDescription>Structured data collection with fields and categories.</CardDescription>
                     </div>
-                    <Button onClick={() => router.push("/admin/form-templates/new")}>
+                    <Button size="sm" onClick={() => router.push("/admin/form-templates/new")} className="shrink-0">
                       <Plus className="h-4 w-4 mr-2" />
-                      Create Form
+                      Create form
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                    <div className="relative flex-1 max-w-sm">
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <div className={cn(registryQueueSearchInputWrapClass, "sm:max-w-sm sm:flex-1")}>
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
-                        placeholder="Search forms..."
+                        placeholder="Search forms…"
                         value={formSearch}
                         onChange={(e) => setFormSearch(e.target.value)}
                         className="pl-10"
                       />
                     </div>
-                    <div className="flex gap-1 flex-wrap">
+                    <div className="flex flex-wrap gap-1">
                       {formCategories.map((cat) => (
                         <Button
                           key={cat.value}
@@ -871,82 +995,136 @@ export default function TemplatesHubPage() {
                   </div>
 
                   {formLoading ? (
-                    <div className="text-center py-8 text-muted-foreground">Loading...</div>
+                    <LoadingState message="Loading form templates…" />
                   ) : filteredFormTemplates.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No form templates found.
-                    </div>
+                    <EmptyState
+                      icon={<FormInput className={registryQueueEmptyIconClass} />}
+                      title="No form templates found"
+                      message="Adjust search or category filters, or create a new form template."
+                      actionLabel="Create form"
+                      onAction={() => router.push("/admin/form-templates/new")}
+                    />
                   ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {filteredFormTemplates.map((template) => (
-                        <Card key={template.id} className="hover:shadow-md transition-shadow group">
-                          <CardHeader className="pb-2">
-                            <div className="flex items-start justify-between">
-                              <CardTitle className="text-base line-clamp-1">{template.name}</CardTitle>
+                    <div className={correspondenceQueueListStackClass}>
+                      {filteredFormTemplates.map((template) => {
+                        const styles = getFormCategoryStyles(template.category);
+                        return (
+                          <ListRowCard
+                            key={template.id}
+                            density="compact"
+                            className={cn("border-l-4", styles.accent)}
+                            href={`/admin/form-templates/${template.id}`}
+                            leading={(
+                              <div className={cn(correspondenceQueueLeadingBoxClass, "bg-muted")}>
+                                <FormInput className={cn(correspondenceQueueLeadingIconClass, "text-muted-foreground")} />
+                              </div>
+                            )}
+                            actions={(
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                    aria-label="More actions"
+                                  >
                                     <MoreVertical className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => router.push(`/admin/form-templates/${template.id}`)}>
-                                    <Edit className="h-4 w-4 mr-2" />Edit
+                                  <DropdownMenuItem
+                                    onClick={() => router.push(`/admin/form-templates/${template.id}`)}
+                                  >
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleCloneForm(template.id)}>
-                                    <Copy className="h-4 w-4 mr-2" />Clone
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Clone
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => setDeletingFormId(template.id)} className="text-destructive">
-                                    <Trash2 className="h-4 w-4 mr-2" />Delete
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteFormClick(template.id, template.name)}
+                                    className="text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
-                            </div>
-                            <p className="text-xs text-muted-foreground line-clamp-2">{template.description}</p>
-                          </CardHeader>
-                          <CardContent className="pt-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="text-xs">{template.category_display || template.category}</Badge>
-                                <Badge variant={template.is_active ? "default" : "outline"} className="text-xs">
+                            )}
+                          >
+                            <h4 className={correspondenceQueueSubjectClass}>{template.name}</h4>
+                            {template.description ? (
+                              <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
+                            ) : null}
+                            <div className={cn(correspondenceQueueMetaRowClass, "mt-1")}>
+                              <span className={correspondenceQueueMetaItemClass}>
+                                <Badge
+                                  variant="outline"
+                                  className={cn(correspondenceQueueBadgeClass, "capitalize", styles.badge)}
+                                >
+                                  {template.category_display || template.category}
+                                </Badge>
+                              </span>
+                              <span className={correspondenceQueueMetaItemClass}>
+                                <Badge
+                                  variant={template.is_active ? "default" : "outline"}
+                                  className={correspondenceQueueBadgeClass}
+                                >
                                   {template.is_active ? "Active" : "Inactive"}
                                 </Badge>
-                              </div>
-                              <span className="text-xs text-muted-foreground">{template.structure?.fields?.length || 0} fields</span>
+                              </span>
+                              <span className={correspondenceQueueMetaItemClass}>
+                                {template.structure?.fields?.length || 0} fields
+                              </span>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="w-full mt-3 justify-between"
-                              onClick={() => router.push(`/admin/form-templates/${template.id}`)}
-                            >
-                              Edit Template
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </CardContent>
-                        </Card>
-                      ))}
+                          </ListRowCard>
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
-          </Tabs>
+            </div>
+          )}
         </div>
 
         {/* Delete Form Confirmation */}
-        <AlertDialog open={deletingFormId !== null} onOpenChange={(open) => !open && setDeletingFormId(null)}>
+        <AlertDialog open={showFormDeleteConfirm} onOpenChange={setShowFormDeleteConfirm}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Template</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete this template? This action cannot be undone.
+                <div className="space-y-3">
+                  <p>
+                    Are you sure you want to delete <strong>"{formToDelete?.name}"</strong>? This action cannot be undone.
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="form-delete-confirm">Type "DELETE" to confirm:</Label>
+                    <Input
+                      id="form-delete-confirm"
+                      value={formDeleteConfirmText}
+                      onChange={(e) => setFormDeleteConfirmText(e.target.value)}
+                      placeholder="DELETE"
+                      className="font-mono"
+                    />
+                  </div>
+                </div>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel
+                onClick={() => {
+                  setShowFormDeleteConfirm(false);
+                  setFormToDelete(null);
+                  setFormDeleteConfirmText("");
+                }}
+              >
+                Cancel
+              </AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => deletingFormId && handleDeleteForm(deletingFormId)}
+                onClick={handleDeleteForm}
                 className="bg-destructive text-destructive-foreground"
               >
                 Delete
@@ -1000,5 +1178,13 @@ export default function TemplatesHubPage() {
         </AlertDialog>
       </DashboardLayout>
     </ClientErrorBoundary>
+  );
+}
+
+export default function TemplatesHubPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <TemplatesHubForm />
+    </Suspense>
   );
 }

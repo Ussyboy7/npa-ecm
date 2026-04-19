@@ -1,73 +1,255 @@
-# Welcome to your Lovable project
+# NPA ECM Frontend
 
-## Project info
+A modern React-based frontend application for the NPA Electronic Content Management (ECM) system.
 
-**URL**: https://lovable.dev/projects/f8bec062-0cbd-46b2-880e-78aa5a58430a
+## 🚀 Features
 
-## How can I edit this code?
+- **Document Management**: Upload, organize, and manage official documents
+- **Correspondence System**: Handle letters, memos, and official communications
+- **Workflow Engine**: Multi-step approval processes with digital signatures
+- **Advanced Search**: Full-text search with filters and metadata
+- **Real-time Notifications**: WebSocket-powered notifications and updates
+- **Role-based Access**: Comprehensive permissions and user management
+- **Analytics Dashboard**: System statistics and reporting
+- **Responsive Design**: Modern UI with Tailwind CSS and shadcn/ui
 
-There are several ways of editing your application.
+## 🛠️ Technology Stack
 
-**Use Lovable**
+- **Framework**: Next.js 16 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS + shadcn/ui components
+- **State Management**: Zustand + React Query
+- **WebSocket**: Native WebSocket + Channels fallback
+- **Forms**: React Hook Form + Zod validation
+- **Charts**: Recharts for analytics
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/f8bec062-0cbd-46b2-880e-78aa5a58430a) and start prompting.
+## 📁 Project Structure
 
-Changes made via Lovable will be committed automatically to this repo.
+```
+frontend/
+├── app/                    # Next.js App Router pages
+│   ├── (auth)/            # Authentication pages
+│   ├── dashboard/         # Main dashboard
+│   ├── documents/         # Document management
+│   ├── correspondence/    # Correspondence system
+│   ├── workflow/          # Workflow management
+│   ├── search/            # Advanced search
+│   ├── analytics/         # Reports and analytics
+│   ├── admin/             # Administration modules
+│   └── api/               # API routes (if needed)
+├── components/            # Reusable React components
+│   ├── ui/               # shadcn/ui base components
+│   ├── documents/        # Document-related components
+│   ├── correspondence/   # Correspondence components
+│   └── shared/           # Shared utilities
+├── lib/                  # Utilities and services
+│   ├── api/              # API client and services
+│   ├── hooks/            # Custom React hooks
+│   ├── stores/           # Zustand stores
+│   ├── utils/            # Utility functions
+│   └── types/            # TypeScript definitions
+├── contexts/             # React contexts
+├── hooks/                # Additional custom hooks
+└── public/               # Static assets
+```
 
-**Use your preferred IDE**
+## 🚀 Quick Start
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Prerequisites
+- Node.js 20+
+- npm or yarn
+- Backend API running (see backend README)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Installation
 
-Follow these steps:
+```bash
+# Install dependencies
+npm install
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Copy environment file
+cp .env.example .env.local
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Configure environment variables
+# Edit .env.local with your API URL and other settings
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The application will be available at `http://localhost:3002`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 🔧 Configuration
 
-**Use GitHub Codespaces**
+### Environment Variables (.env.local)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```env
+# API Configuration
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 
-## What technologies are used for this project?
+# WebSocket Configuration
+NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
 
-This project is built with:
+# Authentication
+NEXT_PUBLIC_TOKEN_STORAGE=localStorage
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+# Feature Flags
+NEXT_PUBLIC_ENABLE_NOTIFICATIONS=true
+NEXT_PUBLIC_ENABLE_ANALYTICS=true
 
-## How can I deploy this project?
+# Development
+NEXT_PUBLIC_DEBUG=false
+```
 
-Simply open [Lovable](https://lovable.dev/projects/f8bec062-0cbd-46b2-880e-78aa5a58430a) and click on Share -> Publish.
+### Build Commands
 
-## Can I connect a custom domain to my Lovable project?
+```bash
+# Development
+npm run dev
 
-Yes, you can!
+# Production build
+npm run build
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+# Start production server
+npm run start
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+# Type checking
+npm run type-check
+
+# Linting
+npm run lint
+
+# Bundle analysis
+npm run analyze
+```
+
+## 🔗 API Integration
+
+The frontend communicates with the Django REST API backend:
+
+- **Base URL**: Configurable via `NEXT_PUBLIC_API_URL`
+- **Authentication**: JWT tokens with automatic refresh
+- **WebSocket**: Real-time notifications via `/ws/notifications/`
+- **File Upload**: Direct to backend with progress tracking
+
+## 📚 Key Modules
+
+### Document Management System (DMS)
+- Document upload with drag-and-drop
+- Version control and metadata management
+- Full-text search and filtering
+- Access control and sharing
+
+### Correspondence System
+- Letter and memo management
+- Approval workflows
+- Digital signatures
+- Routing and tracking
+
+### Workflow Engine
+- Custom workflow templates
+- Multi-step approvals
+- Parallel and sequential routing
+- Status tracking and analytics
+
+### Administration
+- User management
+- Role and permission configuration
+- System settings
+- Audit logs and monitoring
+
+## 🎨 UI Components
+
+Built with modern React patterns:
+
+- **shadcn/ui**: Consistent component library
+- **Tailwind CSS**: Utility-first styling
+- **Responsive Design**: Mobile-first approach
+- **Accessibility**: ARIA compliance and keyboard navigation
+
+## 🔒 Security
+
+- **Authentication**: JWT-based with secure token storage
+- **Authorization**: Role-based access control (RBAC)
+- **Input Validation**: Zod schemas for all forms
+- **CSRF Protection**: Built-in Next.js protection
+- **Content Security**: Strict CSP headers
+
+## 📊 Performance
+
+- **Code Splitting**: Automatic route-based splitting
+- **Image Optimization**: Next.js built-in optimization
+- **Caching**: React Query for API caching
+- **Bundle Analysis**: Webpack bundle analyzer integration
+
+## 🧪 Testing
+
+```bash
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run E2E tests (if configured)
+npm run test:e2e
+```
+
+## 🚢 Deployment
+
+### Docker Build
+
+```bash
+# Build for production
+docker build -f Dockerfile.frontend -t npa-ecm-frontend .
+
+# Run container
+docker run -p 3000:3000 npa-ecm-frontend
+```
+
+### Environment Setup
+
+For production deployment:
+
+1. Set `NODE_ENV=production`
+2. Configure production API URLs
+3. Enable HTTPS and secure headers
+4. Set up proper logging and monitoring
+
+## 🤝 Contributing
+
+1. Follow the existing TypeScript and React patterns
+2. Use the established component library (shadcn/ui)
+3. Ensure proper error handling and loading states
+4. Add tests for new features
+5. Follow the commit message conventions
+
+## 📝 Documentation
+
+- **API Docs**: See backend README for API documentation
+- **Component Docs**: Inline JSDoc comments
+- **Architecture**: See main project README
+- **Deployment**: See deployment guides in `/docs`
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **API Connection Issues**
+   - Check `NEXT_PUBLIC_API_URL` configuration
+   - Ensure backend is running and accessible
+
+2. **WebSocket Connection**
+   - Verify `NEXT_PUBLIC_WS_URL` configuration
+   - Check network/firewall settings
+
+3. **Build Issues**
+   - Clear `node_modules` and reinstall
+   - Check Node.js version compatibility
+
+## 📄 License
+
+This project is proprietary software of the Nigerian Ports Authority (NPA).
+
+---
+
+**For backend setup and full system documentation, see the main project README.**

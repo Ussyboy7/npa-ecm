@@ -19,11 +19,11 @@ import {
   AlertCircle,
   User as UserIcon,
   Filter,
-  Loader2,
-  ChevronLeft,
-  ChevronRight,
   Shield,
   FileText,
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import type { Correspondence } from '@/lib/npa-structure';
@@ -38,6 +38,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/shared/PaginationControls';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { ErrorState } from '@/components/shared/ErrorState';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import {
+  correspondenceQueueBadgeClass,
+  correspondenceQueueDateClass,
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  correspondenceQueueMetaIconClass,
+  correspondenceQueueMetaItemClass,
+  correspondenceQueueMetaRowClass,
+  correspondenceQueueSubjectClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: '#ef4444',
@@ -99,21 +127,25 @@ const ExecutiveInbox = () => {
   const { currentUser, hydrated } = useCurrentUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [goToPageInput, setGoToPageInput] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['pending', 'in-progress']);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<string>('priority');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
-  
+
+  // Use pagination hook
+  const [count, setCount] = useState(0);
+  const pagination = usePagination({
+    initialPage: 1,
+    initialPageSize: 25,
+    totalCount: count,
+  });
+
   const [inboxItems, setInboxItems] = useState<Correspondence[]>([]);
   const [sharedDocuments, setSharedDocuments] = useState<DocumentRecord[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [summary, setSummary] = useState({ total: 0, urgent: 0, overdue: 0, pending: 0, inProgress: 0, dueSoon: 0 });
   const [documentCount, setDocumentCount] = useState(0);
-  const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [slaTargets, setSlaTargets] = useState<{ urgent: number; high: number; medium: number; low: number } | null>(null);
@@ -121,7 +153,7 @@ const ExecutiveInbox = () => {
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedStatuses.length > 0 && !(selectedStatuses.length === 2 && selectedStatuses.includes('pending') && selectedStatuses.includes('in-progress'))) count++;
+    if (selectedStatuses.length > 0) count++;
     if (selectedPriorities.length > 0) count++;
     return count;
   }, [selectedStatuses, selectedPriorities]);
@@ -135,7 +167,7 @@ const ExecutiveInbox = () => {
   };
 
   const clearAllFilters = () => {
-    setSelectedStatuses(['pending', 'in-progress']);
+    setSelectedStatuses([]);
     setSelectedPriorities([]);
     setSearchQuery('');
   };
@@ -146,8 +178,8 @@ const ExecutiveInbox = () => {
   }, [searchQuery]);
 
   useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, selectedStatuses, selectedPriorities, sortBy, sortOrder, pageSize]);
+    pagination.goToFirstPage();
+  }, [debouncedSearch, selectedStatuses, selectedPriorities, sortBy, sortOrder, pagination.pageSize]);
 
   // Load SLA targets on mount
   useEffect(() => {
@@ -165,7 +197,7 @@ const ExecutiveInbox = () => {
   }, []);
 
   useEffect(() => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser?.id) return;
 
     const fetchInbox = async () => {
       setLoading(true);
@@ -182,8 +214,8 @@ const ExecutiveInbox = () => {
         }
         params.append('sort_by', sortBy);
         params.append('sort_order', sortOrder);
-        params.append('page', String(page));
-        params.append('page_size', String(pageSize));
+        params.append('page', String(pagination.page));
+        params.append('page_size', String(pagination.pageSize));
 
         const [corrResponse, docsResponse, approvalsResponse] = await Promise.all([
           apiFetch<Record<string, unknown>>(`/correspondence/items/my-inbox/?${params.toString()}`),
@@ -238,7 +270,7 @@ const ExecutiveInbox = () => {
     };
 
     void fetchInbox();
-  }, [hydrated, currentUser, debouncedSearch, selectedStatuses, selectedPriorities, sortBy, sortOrder, page, pageSize, slaTargets]);
+  }, [currentUser?.id, debouncedSearch, selectedStatuses, selectedPriorities, sortBy, sortOrder, pagination.page, pagination.pageSize, slaTargets]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -248,21 +280,11 @@ const ExecutiveInbox = () => {
     }
   };
 
-  const pageCount = Math.max(1, Math.ceil(count / pageSize));
-
-  const handleGoToPage = () => {
-    const pageNum = parseInt(goToPageInput, 10);
-    if (pageNum >= 1 && pageNum <= pageCount) {
-      setPage(pageNum);
-      setGoToPageInput('');
-    }
-  };
-
-  if (!hydrated) {
+  if (!currentUser?.id) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">
-          <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading inbox…</CardContent></Card>
+          <LoadingState message="Loading inbox…" />
         </div>
       </DashboardLayout>
     );
@@ -291,6 +313,28 @@ const ExecutiveInbox = () => {
     return { label: status, variant: 'outline' as const };
   };
 
+  const openCorrespondenceAction = (id: string) => (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          aria-label="Open correspondence"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            router.push(`/correspondence/${id}`);
+          }}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="left">Open correspondence</TooltipContent>
+    </Tooltip>
+  );
+
   const ItemCard = ({ corr, showSLA = true }: { corr: Correspondence; showSLA?: boolean }) => {
     const daysPending = calculateDaysPending(corr, slaTargets || undefined);
     const statusBadge = getStatusBadge(corr.status);
@@ -298,88 +342,162 @@ const ExecutiveInbox = () => {
     const slaStatus = showSLA ? calculateSLAStatus(corr, slaTargets || undefined) : null;
 
     return (
-      <div onClick={() => router.push(`/correspondence/${corr.id}`)} className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer">
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <Badge variant="outline" className="gap-1"><Mail className="h-3 w-3" />Correspondence</Badge>
-              <Badge variant={getPriorityColor(corr.priority)}>{corr.priority.toUpperCase()}</Badge>
-              <Badge variant="outline" className="gap-1">{corr.direction === 'downward' ? '↓ Downward' : '↑ Upward'}</Badge>
-              <Badge variant={statusBadgeVariant} className="gap-1">
-                <Clock className="h-3 w-3" />{statusBadge.label}
-              </Badge>
-              {slaStatus && slaStatus.status === 'overdue' && (
-                <Badge variant="destructive" className="gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  Overdue {slaStatus.daysOverdue} day{slaStatus.daysOverdue !== 1 ? 's' : ''}
-                </Badge>
+      <ListRowCard
+        density="compact"
+        href={`/correspondence/${corr.id}`}
+        leading={(
+          <div
+            className={cn(
+              correspondenceQueueLeadingBoxClass,
+              corr.priority === 'urgent'
+                ? 'bg-destructive/10'
+                : corr.priority === 'high'
+                  ? 'bg-warning/10'
+                  : 'bg-primary/10',
+            )}
+          >
+            <Mail
+              className={cn(
+                correspondenceQueueLeadingIconClass,
+                corr.priority === 'urgent'
+                  ? 'text-destructive'
+                  : corr.priority === 'high'
+                    ? 'text-warning'
+                    : 'text-primary',
               )}
-              {slaStatus && slaStatus.status === 'due-soon' && (
-                <Badge variant="default" className="bg-orange-500 hover:bg-orange-600 gap-1">
-                  <Clock className="h-3 w-3" />
-                  Due in {slaStatus.daysUntilDue} day{slaStatus.daysUntilDue !== 1 ? 's' : ''}
-                </Badge>
-              )}
-              {!slaStatus && daysPending > 0 && (
-                <Badge variant="secondary" className="gap-1">
-                  <Clock className="h-3 w-3" />{daysPending} day{daysPending !== 1 ? 's' : ''} pending
-                </Badge>
-              )}
-            </div>
-            <h4 className="font-semibold text-foreground mb-2">{corr.subject}</h4>
+            />
           </div>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDateShort(corr.receivedDate)}</span>
+        )}
+        actions={openCorrespondenceAction(corr.id)}
+      >
+        <h4 className={correspondenceQueueSubjectClass}>{corr.subject}</h4>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+              <Mail className="h-2.5 w-2.5" />
+              Correspondence
+            </Badge>
+            <Badge variant={getPriorityColor(corr.priority)} className={correspondenceQueueBadgeClass}>
+              {corr.priority.toUpperCase()}
+            </Badge>
+            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+              {corr.direction === 'downward' ? (
+                <><ArrowDown className="h-2.5 w-2.5 text-info" />Downward</>
+              ) : (
+                <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
+              )}
+            </Badge>
+            <Badge variant={statusBadgeVariant} className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+              <Clock className="h-2.5 w-2.5" />
+              {statusBadge.label}
+            </Badge>
+            {slaStatus && slaStatus.status === 'overdue' && (
+              <Badge variant="destructive" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+                <AlertCircle className="h-2.5 w-2.5" />
+                Overdue {slaStatus.daysOverdue} day{slaStatus.daysOverdue !== 1 ? 's' : ''}
+              </Badge>
+            )}
+            {slaStatus && slaStatus.status === 'due-soon' && (
+              <Badge
+                variant="default"
+                className={cn(
+                  correspondenceQueueBadgeClass,
+                  'gap-0.5 bg-orange-500 hover:bg-orange-600',
+                )}
+              >
+                <Clock className="h-2.5 w-2.5" />
+                Due in {slaStatus.daysUntilDue} day{slaStatus.daysUntilDue !== 1 ? 's' : ''}
+              </Badge>
+            )}
+            {!slaStatus && daysPending > 0 && (
+              <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+                <Clock className="h-2.5 w-2.5" />
+                {daysPending} day{daysPending !== 1 ? 's' : ''} pending
+              </Badge>
+            )}
+          </div>
+          <span className={correspondenceQueueDateClass}>{formatDateShort(corr.receivedDate)}</span>
         </div>
-        <div className="text-sm text-muted-foreground space-y-1">
-          <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /><span>Ref: {corr.referenceNumber}</span></div>
-          <div className="flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" /><span>From: {corr.senderName}</span></div>
-          {corr.currentOfficeName && <div className="flex items-center gap-2"><AlertCircle className="h-3.5 w-3.5" /><span>Office: {corr.currentOfficeName}</span></div>}
+        <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+          <span className={correspondenceQueueMetaItemClass}>
+            <Mail className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">Ref: {corr.referenceNumber}</span>
+          </span>
+          <span className={correspondenceQueueMetaItemClass}>
+            <UserIcon className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">From: {corr.senderName}</span>
+          </span>
+          {corr.currentOfficeName && (
+            <span className={correspondenceQueueMetaItemClass}>
+              <AlertCircle className={correspondenceQueueMetaIconClass} />
+              <span className="truncate">Office: {corr.currentOfficeName}</span>
+            </span>
+          )}
         </div>
-      </div>
+      </ListRowCard>
     );
   };
 
   const ApprovalCard = ({ approval }: { approval: PendingApproval }) => {
     const approvalStatus = approval.due_date ? calculateTaskStatus(approval.due_date) : { status: 'pending' as const };
-    
+    const cid = approval.correspondenceId || approval.correspondence?.id || '';
+
     return (
-      <div onClick={() => router.push(`/correspondence/${approval.correspondenceId || approval.correspondence?.id}`)} className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <Badge variant="outline" className="gap-1 bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 border-amber-300 dark:border-amber-700">
-                <Shield className="h-3 w-3" />Pending Approval
-              </Badge>
-              {approvalStatus.status === 'overdue' && (
-                <Badge variant="destructive" className="gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  Overdue {approvalStatus.daysOverdue} day{approvalStatus.daysOverdue !== 1 ? 's' : ''}
-                </Badge>
-              )}
-              {approvalStatus.status === 'due-soon' && (
-                <Badge variant="default" className="bg-orange-500 hover:bg-orange-600 gap-1">
-                  <Clock className="h-3 w-3" />
-                  Due in {approvalStatus.daysUntilDue} day{approvalStatus.daysUntilDue !== 1 ? 's' : ''}
-                </Badge>
-              )}
-            </div>
-            <h4 className="font-semibold text-foreground mb-2">
-              {approval.correspondence?.subject || 'Pending Approval'}
-            </h4>
+      <ListRowCard
+        density="compact"
+        href={`/correspondence/${cid}`}
+        className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20"
+        leading={(
+          <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-amber-100/90 dark:bg-amber-950/50')}>
+            <Shield className={cn(correspondenceQueueLeadingIconClass, 'text-amber-700 dark:text-amber-400')} />
           </div>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
+        )}
+        actions={openCorrespondenceAction(cid)}
+      >
+        <h4 className={correspondenceQueueSubjectClass}>
+          {approval.correspondence?.subject || 'Pending Approval'}
+        </h4>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            <Badge
+              variant="outline"
+              className={cn(
+                correspondenceQueueBadgeClass,
+                'gap-0.5 border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+              )}
+            >
+              <Shield className="h-2.5 w-2.5" />
+              Pending Approval
+            </Badge>
+            {approvalStatus.status === 'overdue' && (
+              <Badge variant="destructive" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+                <AlertCircle className="h-2.5 w-2.5" />
+                Overdue {approvalStatus.daysOverdue} day{approvalStatus.daysOverdue !== 1 ? 's' : ''}
+              </Badge>
+            )}
+            {approvalStatus.status === 'due-soon' && (
+              <Badge
+                variant="default"
+                className={cn(correspondenceQueueBadgeClass, 'gap-0.5 bg-orange-500 hover:bg-orange-600')}
+              >
+                <Clock className="h-2.5 w-2.5" />
+                Due in {approvalStatus.daysUntilDue} day{approvalStatus.daysUntilDue !== 1 ? 's' : ''}
+              </Badge>
+            )}
+          </div>
+          <span className={correspondenceQueueDateClass}>
             {formatDateShort(approval.created_at)}
           </span>
         </div>
-        <div className="text-sm text-muted-foreground space-y-1">
-          {approval.correspondence?.reference_number && (
-            <div className="flex items-center gap-2">
-              <Mail className="h-3.5 w-3.5" />
-              <span>Ref: {approval.correspondence.reference_number}</span>
-            </div>
-          )}
-        </div>
-      </div>
+        {approval.correspondence?.reference_number ? (
+          <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+            <span className={correspondenceQueueMetaItemClass}>
+              <Mail className={correspondenceQueueMetaIconClass} />
+              <span className="truncate">Ref: {approval.correspondence.reference_number}</span>
+            </span>
+          </div>
+        ) : null}
+      </ListRowCard>
     );
   };
 
@@ -399,28 +517,75 @@ const ExecutiveInbox = () => {
 
   const DocumentCard = ({ doc }: { doc: DocumentRecord }) => {
     const sharedDate = doc.permissions[0]?.createdAt || doc.updatedAt;
-    
+
     return (
-      <div onClick={() => router.push(`/dms/${doc.id}`)} className="p-4 border border-border rounded-lg hover:bg-muted/50 hover:shadow-soft transition-all cursor-pointer">
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-2">
-              <Badge variant="outline" className="gap-1"><FileText className="h-3 w-3" />Document</Badge>
-              <Badge variant="secondary">{doc.documentType}</Badge>
-              <Badge variant={doc.status === 'published' ? 'default' : 'outline'}>{doc.status}</Badge>
-            </div>
-            <h4 className="font-semibold text-foreground mb-2">{doc.title}</h4>
-            {doc.description && (
-              <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{doc.description}</p>
-            )}
+      <ListRowCard
+        density="compact"
+        href={`/dms/${doc.id}`}
+        leading={(
+          <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-primary/10')}>
+            <FileText className={cn(correspondenceQueueLeadingIconClass, 'text-primary')} />
           </div>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDateShort(sharedDate)}</span>
+        )}
+        actions={(
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                aria-label="Open document"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  router.push(`/dms/${doc.id}`);
+                }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">Open document</TooltipContent>
+          </Tooltip>
+        )}
+      >
+        <h4 className={correspondenceQueueSubjectClass}>{doc.title}</h4>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
+              <FileText className="h-2.5 w-2.5" />
+              Document
+            </Badge>
+            <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+              {doc.documentType}
+            </Badge>
+            <Badge
+              variant={doc.status === 'published' ? 'default' : 'outline'}
+              className={correspondenceQueueBadgeClass}
+            >
+              {doc.status}
+            </Badge>
+          </div>
+          <span className={correspondenceQueueDateClass}>{formatDateShort(sharedDate)}</span>
         </div>
-        <div className="text-sm text-muted-foreground space-y-1">
-          <div className="flex items-center gap-2"><FileText className="h-3.5 w-3.5" /><span>Type: {doc.documentType}</span></div>
-          {doc.referenceNumber && <div className="flex items-center gap-2"><Mail className="h-3.5 w-3.5" /><span>Ref: {doc.referenceNumber}</span></div>}
+        {doc.description ? (
+          <p className="mt-1 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
+            {doc.description}
+          </p>
+        ) : null}
+        <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+          <span className={correspondenceQueueMetaItemClass}>
+            <FileText className={correspondenceQueueMetaIconClass} />
+            <span className="truncate">Type: {doc.documentType}</span>
+          </span>
+          {doc.referenceNumber ? (
+            <span className={correspondenceQueueMetaItemClass}>
+              <Mail className={correspondenceQueueMetaIconClass} />
+              <span className="truncate">Ref: {doc.referenceNumber}</span>
+            </span>
+          ) : null}
         </div>
-      </div>
+      </ListRowCard>
     );
   };
 
@@ -469,7 +634,7 @@ const ExecutiveInbox = () => {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Inbox Filters</CardTitle>
+                <CardTitle className="text-lg">My Inbox Filters</CardTitle>
                 {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
               </div>
             </CardHeader>
@@ -529,72 +694,40 @@ const ExecutiveInbox = () => {
             { label: 'Due Soon', value: summary.dueSoon, icon: AlertCircle, bgClass: 'bg-orange-500/10', iconClass: 'text-orange-600 dark:text-orange-400' },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
-              <CardContent className="p-6">
+              <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
-                  <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        {error && <Card><CardContent className="py-4 text-sm text-destructive">{error}</CardContent></Card>}
+        {error && <ErrorState message={error} variant="inline" />}
 
         {loading ? (
-          <Card><CardContent className="py-12 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" /><p className="text-sm text-muted-foreground">Loading inbox...</p></CardContent></Card>
+          <LoadingState message="Loading inbox…" />
         ) : inboxItems.length === 0 && sharedDocuments.length === 0 && pendingApprovals.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Inbox className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-muted-foreground mb-2">No items in your inbox</p>
-              <p className="text-xs text-muted-foreground">
-                {debouncedSearch || activeFilterCount > 0 
-                  ? 'No items match your current filters. Try adjusting your search or filter criteria.' 
-                  : 'All caught up! No correspondence or documents require your attention.'}
-              </p>
-              {(debouncedSearch || activeFilterCount > 0) && <Button variant="outline" size="sm" onClick={clearAllFilters} className="mt-4">Clear Filters</Button>}
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon="inbox"
+            title="No items in your inbox"
+            message={debouncedSearch || activeFilterCount > 0 
+              ? 'No items match your current filters. Try adjusting your search or filter criteria.' 
+              : 'All caught up! No correspondence or documents require your attention.'}
+            actionLabel={debouncedSearch || activeFilterCount > 0 ? 'Clear Filters' : undefined}
+            onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+          />
         ) : (
           <div className="space-y-6">
-            {/* Overdue Section */}
-            {(() => {
-              const overdueItems = inboxItems.filter(corr => {
-                const slaStatus = calculateSLAStatus(corr, slaTargets || undefined);
-                return slaStatus.status === 'overdue';
-              });
-              return overdueItems.length > 0 ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-destructive" />
-                    <h2 className="text-lg font-semibold text-destructive">Overdue ({overdueItems.length})</h2>
-                  </div>
-                  {overdueItems.map(corr => <ItemCard key={corr.id} corr={corr} showSLA={true} />)}
-                </div>
-              ) : null;
-            })()}
-
-            {/* Due Soon Section */}
-            {(() => {
-              const dueSoonItems = inboxItems.filter(corr => {
-                const slaStatus = calculateSLAStatus(corr, slaTargets || undefined);
-                return slaStatus.status === 'due-soon';
-              });
-              return dueSoonItems.length > 0 ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-orange-500" />
-                    <h2 className="text-lg font-semibold text-orange-600 dark:text-orange-400">Due Soon ({dueSoonItems.length})</h2>
-                  </div>
-                  {dueSoonItems.map(corr => <ItemCard key={corr.id} corr={corr} showSLA={true} />)}
-                </div>
-              ) : null;
-            })()}
-
             {/* Pending Approvals Section */}
             {pendingApprovals.length > 0 && (
-              <div className="space-y-3">
+              <div className={correspondenceQueueListStackClass}>
                 <div className="flex items-center gap-2">
                   <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400" />
                   <h2 className="text-lg font-semibold text-amber-600 dark:text-amber-400">Pending Approvals ({pendingApprovals.length})</h2>
@@ -603,29 +736,28 @@ const ExecutiveInbox = () => {
               </div>
             )}
 
-            {/* Regular Inbox Items - Only show if not focusing on tasks OR if there are pending items */}
+            {/* All Items - correspondence (overdue/due-soon/pending) + documents, sorted by SLA priority */}
             {(() => {
-              const regularItems = inboxItems.filter(corr => {
-                const slaStatus = calculateSLAStatus(corr, slaTargets || undefined);
-                return slaStatus.status === 'pending';
+              const slaPriority = (s: 'overdue' | 'due-soon' | 'pending') =>
+                s === 'overdue' ? 0 : s === 'due-soon' ? 1 : 2;
+              const sortedItems = [...inboxItems].sort((a, b) => {
+                const aStatus = calculateSLAStatus(a, slaTargets || undefined).status;
+                const bStatus = calculateSLAStatus(b, slaTargets || undefined).status;
+                return slaPriority(aStatus) - slaPriority(bStatus);
               });
-              
-              // When focusing on tasks, only show pending correspondence (not documents)
-              // When not focusing, show everything
-              const shouldShowRegular = !focusOnTasks || regularItems.length > 0;
+
               const shouldShowDocuments = !focusOnTasks && sharedDocuments.length > 0;
-              
-              return shouldShowRegular || shouldShowDocuments ? (
-                <div className="space-y-3">
-                  {(regularItems.length > 0 || shouldShowDocuments) && (
-                    <div className="flex items-center gap-2">
-                      <Inbox className="h-5 w-5 text-muted-foreground" />
-                      <h2 className="text-lg font-semibold">
-                        {focusOnTasks ? 'Pending Items' : 'All Items'} ({regularItems.length + (shouldShowDocuments ? sharedDocuments.length : 0)})
-                      </h2>
-                    </div>
-                  )}
-                  {regularItems.map(corr => <ItemCard key={corr.id} corr={corr} showSLA={true} />)}
+              const totalCount = sortedItems.length + (shouldShowDocuments ? sharedDocuments.length : 0);
+
+              return sortedItems.length > 0 || shouldShowDocuments ? (
+                <div className={correspondenceQueueListStackClass}>
+                  <div className="flex items-center gap-2">
+                    <Inbox className="h-5 w-5 text-muted-foreground" />
+                    <h2 className="text-lg font-semibold">
+                      {focusOnTasks ? 'Pending Items' : 'All Items'} ({totalCount})
+                    </h2>
+                  </div>
+                  {sortedItems.map(corr => <ItemCard key={corr.id} corr={corr} showSLA={true} />)}
                   {shouldShowDocuments && sharedDocuments.map(doc => <DocumentCard key={doc.id} doc={doc} />)}
                 </div>
               ) : null;
@@ -634,44 +766,14 @@ const ExecutiveInbox = () => {
         )}
 
         {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">Showing {count === 0 && documentCount === 0 ? 0 : `${(page - 1) * pageSize + 1}-${Math.min(count + documentCount, (page - 1) * pageSize + inboxItems.length + sharedDocuments.length)}`} of {count + documentCount} items</p>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-muted-foreground">Per page:</label>
-              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-                <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-                <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1 || loading}><ChevronLeft className="h-4 w-4" />Previous</Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
-                let pageNum: number;
-                if (pageCount <= 5) pageNum = i + 1;
-                else if (page <= 3) pageNum = i + 1;
-                else if (page >= pageCount - 2) pageNum = pageCount - 4 + i;
-                else pageNum = page - 2 + i;
-                if (pageNum > pageCount) return null;
-                return <Button key={pageNum} variant={page === pageNum ? 'default' : 'outline'} size="sm" className="w-8 h-8 p-0" onClick={() => setPage(pageNum)} disabled={loading}>{pageNum}</Button>;
-              })}
-                </div>
-            {pageCount > 5 && (
-              <div className="flex items-center gap-1">
-                <Input type="number" min={1} max={pageCount} value={goToPageInput} onChange={(e) => setGoToPageInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }} placeholder="Page" className="w-16 h-8 text-xs" />
-                <Button variant="outline" size="sm" className="h-8" onClick={handleGoToPage} disabled={loading}>Go</Button>
-              </div>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))} disabled={page >= pageCount || loading}>Next<ChevronRight className="h-4 w-4" /></Button>
-          </div>
-        </div>
+        {count > 0 && (
+          <PaginationControls
+            pagination={pagination}
+            showPageSizeSelector={true}
+            showGoToPage={true}
+            className="border-t border-border/60 pt-4"
+          />
+        )}
       </div>
     </DashboardLayout>
   );

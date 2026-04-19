@@ -145,7 +145,7 @@ class FormSubmissionViewSet(viewsets.ModelViewSet):
                 return response
             except Exception as e:
                 return Response(
-                    {"error": f"Failed to generate PDF: {str(e)}"},
+                    {"error": "Failed to generate PDF. Please try again or contact support."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
         else:

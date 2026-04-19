@@ -11,7 +11,6 @@ import { useRouter } from 'next/navigation';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
 import type { User, Division, Department } from '@/lib/npa-structure';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface RelatedCorrespondenceCardProps {
   relatedCorrespondence: Array<{
@@ -303,8 +302,8 @@ export const RelatedCorrespondenceCard = ({
                           </Button>
                         </div>
                       ) : expandedCorrespondence.has(correspondence.id) ? (
-                        <ScrollArea className="max-h-[400px]">
-                          <div className="space-y-2 pr-4">
+                        <div className="max-h-[400px] overflow-y-auto pr-2">
+                          <div className="space-y-2 pr-2">
                             {minutes.map((minute, index) => {
                               const minuteUser = userLookup.get(minute.userId);
                               const minuteDirection = minute.direction || 'downward';
@@ -401,7 +400,7 @@ export const RelatedCorrespondenceCard = ({
                               );
                             })}
                           </div>
-                        </ScrollArea>
+                        </div>
                       ) : (
                         <div className="space-y-1.5">
                           {minutes.slice(0, 2).map((minute) => {
@@ -470,7 +469,13 @@ export const RelatedCorrespondenceCard = ({
                               return (
                                 <div key={recipient.id || idx} className="flex items-start gap-2 text-xs">
                                   <Badge variant="outline" className="text-[10px] h-4 flex-shrink-0">
-                                    {recipient.type === 'directorate' ? 'Dir' : recipient.type === 'department' ? 'Dept' : 'Div'}
+                                    {recipient.type === 'office'
+                                      ? 'Off'
+                                      : recipient.type === 'directorate'
+                                        ? 'Dir'
+                                        : recipient.type === 'department'
+                                          ? 'Dept'
+                                          : 'Div'}
                                   </Badge>
                                   <span className="text-muted-foreground flex-1">{recipientName}</span>
                                   {recipient.purpose && (
@@ -506,5 +511,3 @@ export const RelatedCorrespondenceCard = ({
     </Card>
   );
 };
-
-

@@ -1105,6 +1105,8 @@ export interface DocumentAccessLog {
   id: string;
   documentId: string;
   userId: string;
+  userName?: string;
+  userEmail?: string;
   action: 'view' | 'download' | 'attempted-download';
   sensitivity: string;
   timestamp: string;
@@ -1125,10 +1127,26 @@ export const getDocumentAccessLogs = async (documentId: string): Promise<Documen
   
   return results.map((item: Record<string, unknown>) => {
     const user = item.user as Record<string, unknown> | undefined;
+    const userName = typeof item.user_name === 'string'
+      ? item.user_name
+      : (user
+          ? (() => {
+              const firstName = typeof user.first_name === 'string' ? user.first_name : '';
+              const lastName = typeof user.last_name === 'string' ? user.last_name : '';
+              const fullName = `${firstName} ${lastName}`.trim();
+              if (fullName.length > 0) return fullName;
+              return typeof user.username === 'string' ? user.username : undefined;
+            })()
+          : undefined);
+    const userEmail = typeof item.user_email === 'string'
+      ? item.user_email
+      : (user && typeof user.email === 'string' ? user.email : undefined);
     return {
       id: String(item.id as string),
       documentId: String(item.document ?? item.document_id ?? documentId),
       userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? ''),
+      userName,
+      userEmail,
       action: (item.action as 'view' | 'download' | 'attempted-download') ?? 'view',
       sensitivity: typeof item.sensitivity === 'string' ? item.sensitivity : 'internal',
       timestamp: typeof item.timestamp === 'string' ? item.timestamp : new Date().toISOString(),
@@ -1152,10 +1170,26 @@ export const logDocumentAccess = async (payload: CreateAccessLogPayload): Promis
   });
   
   const user = response.user as Record<string, unknown> | undefined;
+  const userName = typeof response.user_name === 'string'
+    ? response.user_name
+    : (user
+        ? (() => {
+            const firstName = typeof user.first_name === 'string' ? user.first_name : '';
+            const lastName = typeof user.last_name === 'string' ? user.last_name : '';
+            const fullName = `${firstName} ${lastName}`.trim();
+            if (fullName.length > 0) return fullName;
+            return typeof user.username === 'string' ? user.username : undefined;
+          })()
+        : undefined);
+  const userEmail = typeof response.user_email === 'string'
+    ? response.user_email
+    : (user && typeof user.email === 'string' ? user.email : undefined);
   return {
     id: String(response.id),
     documentId: String(response.document ?? response.document_id ?? payload.documentId),
     userId: String((user && 'id' in user) ? user.id : response.user_id ?? payload.userId),
+    userName,
+    userEmail,
     action: (response.action as 'view' | 'download' | 'attempted-download') ?? payload.action,
     sensitivity: typeof response.sensitivity === 'string' ? response.sensitivity : payload.sensitivity,
     timestamp: typeof response.timestamp === 'string' ? response.timestamp : new Date().toISOString(),
@@ -1223,29 +1257,11 @@ export const getSharedDocuments = async (
   }
   
   try {
-    // Use queryDocumentsExtended but filter client-side for shared documents
-    // The backend visibility logic already includes permissions__users
-    // We'll fetch all accessible documents and filter for those with explicit user permissions
-    const allDocs = await queryDocumentsExtended({
+    // Use backend shared_with_me filtering for performance and accurate pagination
+    return await queryDocumentsExtended({
       ...params,
-      pageSize: params.pageSize ?? 100, // Get more to filter
+      sharedWithMe: true,
     });
-    
-    // Filter for documents where user has explicit permission (not just author)
-    const sharedDocs = allDocs.results.filter((doc) => {
-      // Exclude documents authored by the user
-      if (doc.authorId === userId) return false;
-      
-      // Check if user has explicit permission
-      return doc.permissions.some((perm) => perm.userIds.includes(userId));
-    });
-    
-    return {
-      results: sharedDocs,
-      count: sharedDocs.length,
-      next: null,
-      previous: null,
-    };
       } catch (error: unknown) {
     logError('Failed to get shared documents', error);
     return { results: [], count: 0, next: null, previous: null };
@@ -1264,28 +1280,12 @@ export const getDocumentsSharedByUser = async (
   }
   
   try {
-    // Get all documents authored by the user
-    const userDocs = await queryDocumentsExtended({
+    // Use backend shared_by_me filtering for performance and accurate pagination
+    return await queryDocumentsExtended({
       ...params,
       authorId: userId,
+      sharedByMe: true,
     });
-    
-    // Filter for documents that have been shared (have permissions with users/divisions/departments)
-    const sharedDocs = userDocs.results.filter((doc) => {
-      // Document must have at least one permission that's not just the author
-      return doc.permissions.some((perm) => 
-        perm.userIds.length > 0 || 
-        perm.divisionIds.length > 0 || 
-        perm.departmentIds.length > 0
-      );
-    });
-    
-    return {
-      results: sharedDocs,
-      count: sharedDocs.length,
-      next: null,
-      previous: null,
-    };
       } catch (error: unknown) {
     logError('Failed to get documents shared by user', error);
     return { results: [], count: 0, next: null, previous: null };
@@ -1371,6 +1371,13 @@ export interface ExtendedDocumentQueryParams extends DocumentQueryParams {
   authorId?: string;
   dateFrom?: string;  // YYYY-MM-DD format
   dateTo?: string;    // YYYY-MM-DD format
+  sharedWithMe?: boolean;
+  sharedByMe?: boolean;
+  recentForMe?: boolean;
+  awaitingAction?: boolean;
+  recentDays?: number;
+  statusIn?: string[];
+  documentTypeIn?: string[];
 }
 
 /**
@@ -1390,6 +1397,13 @@ const buildExtendedDocumentQueryString = (params: ExtendedDocumentQueryParams) =
   if (params.authorId && params.authorId !== 'all') searchParams.set('author', params.authorId);
   if (params.dateFrom) searchParams.set('date_from', params.dateFrom);
   if (params.dateTo) searchParams.set('date_to', params.dateTo);
+  if (params.sharedWithMe) searchParams.set('shared_with_me', 'true');
+  if (params.sharedByMe) searchParams.set('shared_by_me', 'true');
+  if (params.recentForMe) searchParams.set('recent_for_me', 'true');
+  if (params.awaitingAction) searchParams.set('awaiting_action', 'true');
+  if (typeof params.recentDays === 'number' && params.recentDays > 0) searchParams.set('recent_days', String(params.recentDays));
+  if (params.statusIn && params.statusIn.length > 0) searchParams.set('status_in', params.statusIn.join(','));
+  if (params.documentTypeIn && params.documentTypeIn.length > 0) searchParams.set('document_type_in', params.documentTypeIn.join(','));
   return searchParams.toString();
 };
 

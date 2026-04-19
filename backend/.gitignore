@@ -35,6 +35,14 @@ db.sqlite3-journal
 /staticfiles
 /static
 
+# Environment variables (SECURITY: Never commit .env files with secrets)
+.env
+.env.local
+.env.*.local
+.env.*.prod
+.env.prod
+*.env
+
 # IDE
 .vscode/
 .idea/
@@ -46,3 +54,7 @@ db.sqlite3-journal
 .DS_Store
 Thumbs.db
 
+# Cache/Temp
+*.cache
+.pytest_cache/
+celerybeat-schedule

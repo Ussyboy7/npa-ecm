@@ -99,7 +99,7 @@ const UnifiedInbox = () => {
     router.replace(newUrl, { scroll: false });
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return (
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">

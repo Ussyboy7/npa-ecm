@@ -32,6 +32,8 @@ interface SealVerification {
   invalidated_at?: string;
   invalidated_reason?: string;
   error?: string;
+  signature_image_url?: string;
+  seal_image_url?: string;
 }
 
 export default function VerifyPage() {
@@ -313,6 +315,8 @@ export default function VerifyPage() {
                   size={220}
                   showQR={true}
                   verificationBaseUrl={typeof window !== 'undefined' ? window.location.origin : undefined}
+                  signatureImage={verification.signature_image_url || verification.seal_image_url || undefined}
+                  signatureText={verification.sealed_by}
                 />
               </div>
 

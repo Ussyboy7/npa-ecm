@@ -11,11 +11,13 @@ import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import {
   Users,
   Search,
   Building2,
   Shield,
+  Filter,
   X,
   ArrowUpDown,
   ArrowUp,
@@ -72,6 +74,39 @@ type SortState = {
 };
 
 const getGradeLabel = (code: string | undefined) => getGradeLevelByCode(code)?.name;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_ACTIVE_FILTER: ActiveFilter = { key: 'status', value: 'active', display: 'Status: Active' };
+
+const parseStoredFilters = (raw: string | null): ActiveFilter[] => {
+  if (!raw) return [DEFAULT_ACTIVE_FILTER];
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [DEFAULT_ACTIVE_FILTER];
+    const normalized = parsed
+      .filter((item): item is ActiveFilter => typeof item === 'object' && item !== null)
+      .map((item) => ({
+        key: String(item.key) as FilterCategory,
+        value: String(item.value ?? ''),
+        display: String(item.display ?? ''),
+      }))
+      .filter((item) => item.key && item.display);
+    return normalized.length > 0 ? normalized : [DEFAULT_ACTIVE_FILTER];
+  } catch {
+    return [DEFAULT_ACTIVE_FILTER];
+  }
+};
+
+const parseStoredSort = (raw: string | null): SortState | null => {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as SortState;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed.key || !parsed.direction) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
 
 export const UsersManagementTab = () => {
   const { divisions, departments, roles } = useOrganization();
@@ -98,14 +133,14 @@ export const UsersManagementTab = () => {
   const [filters, setFilters] = useState<ActiveFilter[]>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('admin_users_filters');
-      return stored ? JSON.parse(stored) : [];
+      return parseStoredFilters(stored);
     }
-    return [];
+    return [DEFAULT_ACTIVE_FILTER];
   });
   const [sortState, setSortState] = useState<SortState | null>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('admin_users_sort');
-      return stored ? JSON.parse(stored) : null;
+      return parseStoredSort(stored);
     }
     return null;
   });
@@ -119,11 +154,52 @@ export const UsersManagementTab = () => {
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
   const [showBulkRoleAssign, setShowBulkRoleAssign] = useState(false);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const roleIdByName = useMemo(() => {
+    const map = new Map<string, string>();
+    roles.forEach((role) => {
+      map.set(role.name.trim().toLowerCase(), role.id);
+    });
+    return map;
+  }, [roles]);
+  const resolveRoleId = useCallback((roleValue: string) => {
+    const value = roleValue.trim();
+    if (!value) return null;
+    if (UUID_REGEX.test(value)) return value;
+    return roleIdByName.get(value.toLowerCase()) || null;
+  }, [roleIdByName]);
   
   // Ensure client-side only rendering for localStorage-dependent UI
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Normalize legacy role filters (name-based) to UUID-based filters expected by backend.
+  useEffect(() => {
+    if (roles.length === 0) return;
+    setFilters((prev) => {
+      let changed = false;
+      const normalized = prev.flatMap((filter) => {
+        if (filter.key !== 'role') return [filter];
+        const roleId = resolveRoleId(filter.value);
+        if (!roleId) {
+          changed = true;
+          return [];
+        }
+        const roleName = roles.find((role) => role.id === roleId)?.name || filter.display.replace(/^Role:\s*/i, '') || 'Role';
+        const nextFilter: ActiveFilter = {
+          ...filter,
+          value: roleId,
+          display: `Role: ${roleName}`,
+        };
+        if (nextFilter.value !== filter.value || nextFilter.display !== filter.display) {
+          changed = true;
+        }
+        return [nextFilter];
+      });
+      return changed ? normalized : prev;
+    });
+  }, [roles, resolveRoleId]);
   
   // Load recent searches
   const recentSearches = typeof window !== 'undefined' ? getRecentSearches('users') : [];
@@ -169,7 +245,12 @@ export const UsersManagementTab = () => {
             queryParams.is_active = filter.value === 'active';
             break;
           case 'role':
-            queryParams.system_role = filter.value;
+            {
+              const roleId = resolveRoleId(filter.value);
+              if (roleId) {
+                queryParams.system_role = roleId;
+              }
+            }
             break;
           case 'division':
             queryParams.division = filter.value;
@@ -271,9 +352,21 @@ export const UsersManagementTab = () => {
     });
   };
 
-  const removeFilter = (filter: ActiveFilter) => {
-    setFilters((prev) => prev.filter((item) => item !== filter));
-  };
+  const getFilterValue = useCallback((key: FilterCategory) => {
+    return filters.find((filter) => filter.key === key)?.value || "all";
+  }, [filters]);
+
+  const setFilterValue = useCallback((key: FilterCategory, value: string, display: string) => {
+    setFilters((prev) => {
+      const withoutKey = prev.filter((item) => item.key !== key);
+      if (value === "all") {
+        return withoutKey;
+      }
+      return [...withoutKey, { key, value, display }];
+    });
+  }, []);
+  const activeFilterCount = useMemo(() => filters.length, [filters]);
+  const clearAllFilters = useCallback(() => setFilters([]), []);
 
   // Bulk operation handlers
   const handleBulkActivate = async () => {
@@ -552,6 +645,20 @@ export const UsersManagementTab = () => {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setShowFilters((prev) => !prev)}
+              aria-label="Toggle filters"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 const columns = [
                   { key: 'name' as keyof User, label: 'Name' },
@@ -741,6 +848,131 @@ export const UsersManagementTab = () => {
         )}
       </div>
 
+      {showFilters && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">User Filters</CardTitle>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearAllFilters}>
+                  Clear All
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Role</Label>
+                <Select
+                  value={getFilterValue("role")}
+                  onValueChange={(value) => {
+                    if (value === "all") {
+                      setFilterValue("role", "all", "");
+                      return;
+                    }
+                    const role = roles.find((item) => item.id === value);
+                    if (!role) return;
+                    setFilterValue("role", role.id, `Role: ${role.name}`);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Roles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Division</Label>
+                <Select
+                  value={getFilterValue("division")}
+                  onValueChange={(value) => {
+                    if (value === "all") {
+                      setFilterValue("division", "all", "");
+                      return;
+                    }
+                    const division = divisions.find((item) => item.id === value);
+                    if (!division) return;
+                    setFilterValue("division", division.id, `Division: ${division.name}`);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Divisions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Divisions</SelectItem>
+                    {divisions.map((division) => (
+                      <SelectItem key={division.id} value={division.id}>
+                        {division.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Department</Label>
+                <Select
+                  value={getFilterValue("department")}
+                  onValueChange={(value) => {
+                    if (value === "all") {
+                      setFilterValue("department", "all", "");
+                      return;
+                    }
+                    const department = departments.find((item) => item.id === value);
+                    if (!department) return;
+                    setFilterValue("department", department.id, `Department: ${department.name}`);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Departments" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Departments</SelectItem>
+                    {departments.map((department) => (
+                      <SelectItem key={department.id} value={department.id}>
+                        {department.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">Status</Label>
+                <Select
+                  value={getFilterValue("status")}
+                  onValueChange={(value) => {
+                    if (value === "all") {
+                      setFilterValue("status", "all", "");
+                      return;
+                    }
+                    setFilterValue("status", value, `Status: ${value === "active" ? "Active" : "Inactive"}`);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
 
       <Card>
         <CardHeader>
@@ -876,9 +1108,11 @@ export const UsersManagementTab = () => {
                       <Badge
                         variant="secondary"
                         className="cursor-pointer"
-                        onClick={() =>
-                          addFilter({ key: "role", value: user.systemRole, display: `Role: ${user.systemRole}` })
-                        }
+                        onClick={() => {
+                          const roleId = resolveRoleId(user.systemRole);
+                          if (!roleId) return;
+                          addFilter({ key: "role", value: roleId, display: `Role: ${user.systemRole}` });
+                        }}
                       >
                         {user.systemRole || "—"}
                       </Badge>
@@ -1180,4 +1414,3 @@ export const UsersManagementTab = () => {
     </ClientErrorBoundary>
   );
 };
-

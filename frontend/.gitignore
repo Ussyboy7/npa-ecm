@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Environment variables (SECURITY: Never commit .env files with secrets)
+.env
+.env.local
+.env.*.local
+.env.*.prod
+.env.prod
+*.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -26,3 +34,9 @@ dist-ssr
 # Next.js build output
 .next
 .npm-cache
+
+# Build outputs
+dist/
+build/
+out/
+

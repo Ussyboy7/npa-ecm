@@ -172,6 +172,24 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
   const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
 
+  const restoreBodyInteractivity = useCallback(() => {
+    if (typeof document === 'undefined') return;
+    let createdMinuteId: string | null = null;
+    let originalCorrespondenceUpdated = false;
+    let createdResponseCorrespondenceId: string | null = null;
+
+    try {
+      document.body.style.removeProperty('pointer-events');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+      document.documentElement.style.removeProperty('overflow');
+      document.body.removeAttribute('data-scroll-locked');
+      document.body.removeAttribute('data-radix-scroll-lock');
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const findUserById = useCallback(
     (id?: string | null) => (id ? users.find((user) => user.id === id) : undefined),
     [users],
@@ -199,6 +217,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   // Cleanup: Cancel ongoing requests when modal closes
   useEffect(() => {
     if (!isOpen) {
+      restoreBodyInteractivity();
       // Cancel any ongoing requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -207,11 +226,12 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     }
     return () => {
       // Cleanup on unmount
+      restoreBodyInteractivity();
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [isOpen]);
+  }, [isOpen, restoreBodyInteractivity]);
 
   // Load draft when modal opens
   useEffect(() => {
@@ -706,6 +726,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       return;
     }
 
+    setShowConfirmation(false);
     setIsSubmitting(true);
     // Create AbortController for request cancellation
     abortControllerRef.current = new AbortController();
@@ -748,6 +769,9 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     
     const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) : null;
     const division = currentUser.division ? divisions.find((div) => div.id === currentUser.division) : undefined;
+    let createdMinuteId: string | null = null;
+    let originalCorrespondenceUpdated = false;
+    let createdResponseCorrespondenceId: string | null = null;
 
     try {
       // Create treatment minute
@@ -757,7 +781,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       // Build minute text based on response type
       let minuteText = '';
       if (responseType === 'memo') {
-        minuteText = `[TREATMENT & RESPONSE]\n\nSubject: ${memoSubject.trim()}\n\n${memoContent.trim()}`;
+        // Include memo subject in minute text
+        minuteText = `[TREATMENT & RESPONSE]\n\nSubject: ${correspondence.subject}\nSubject: ${memoSubject.trim()}\n\n${memoContent.trim()}`;
       } else if (responseType === 'existing-document') {
         const selectedDoc = documents.find(d => d.id === selectedDocumentId);
         minuteText = `[RESPONSE WITH DOCUMENT]\n\nResponse sent with document: ${selectedDoc?.title || 'Document'}\n\n${memoContent.trim() || 'See attached document for details.'}`;
@@ -770,7 +795,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         }
       }
 
-      const minuteResponse = await apiFetch('/correspondence/minutes/', {
+      const minuteResponse = await apiFetch<{ id?: string }>('/correspondence/minutes/', {
         signal,
         method: 'POST',
         body: JSON.stringify({
@@ -787,11 +812,13 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           signature: applySignature && userSignature ? userSignature.imageData : null,
         }),
       });
+      createdMinuteId = minuteResponse?.id ?? null;
 
-      // Update original correspondence
+      // Update original correspondence - auto-complete when treating and responding
+      // This marks the original as completed since a response has been created
       const correspondenceUpdate: Record<string, unknown> = {
         direction: 'upward',
-        status: 'in-progress',
+        status: 'completed',
       };
       
       if (forwardTo) {
@@ -811,6 +838,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         body: JSON.stringify(correspondenceUpdate),
         signal,
       });
+      originalCorrespondenceUpdated = true;
 
       // Create new response correspondence with body_html and attachments
       const responseFormData = new FormData();
@@ -820,22 +848,38 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       // Include content based on response type
       if (responseType === 'memo') {
         responseFormData.append('body_html', memoContent.trim());
-        responseFormData.append('summary', memoContent.trim().substring(0, 500));
+        responseFormData.append('treatment_response', memoContent.trim());
       } else {
         // For document responses, use memo content as notes or default message
         const notes = memoContent.trim() || `Response to ${correspondence.referenceNumber}`;
-        responseFormData.append('summary', notes.substring(0, 500));
+        responseFormData.append('treatment_response', notes);
       }
       responseFormData.append('source', 'internal');
       responseFormData.append('received_date', formatDateForAPI(new Date()));
       responseFormData.append('sender_name', actingFor ? `${currentUser.name} (on behalf of ${actingFor.name})` : currentUser.name);
       responseFormData.append('sender_organization', division?.name ?? '');
+      if (currentUserOfficeId) {
+        responseFormData.append('owning_office', currentUserOfficeId);
+      }
       responseFormData.append('status', 'pending');
       responseFormData.append('priority', correspondence.priority);
-      if (recipient?.division) responseFormData.append('division', recipient.division);
-      else if (correspondence.divisionId) responseFormData.append('division', correspondence.divisionId);
-      if (recipient?.department) responseFormData.append('department', recipient.department);
-      else if (correspondence.departmentId) responseFormData.append('department', correspondence.departmentId);
+
+      // Only send org IDs that still exist in backend to avoid "Invalid pk ... does not exist".
+      const validDivisionIds = new Set(divisions.map((d) => d.id));
+      const validDepartmentIds = new Set(departments.map((d) => d.id));
+
+      const selectedOffice = targetOfficeId ? offices.find((office) => office.id === targetOfficeId) : undefined;
+      const divisionIdToSend =
+        (recipient?.division && validDivisionIds.has(recipient.division) ? recipient.division : undefined) ??
+        (selectedOffice?.divisionId && validDivisionIds.has(selectedOffice.divisionId) ? selectedOffice.divisionId : undefined) ??
+        (correspondence.divisionId && validDivisionIds.has(correspondence.divisionId) ? correspondence.divisionId : undefined);
+      if (divisionIdToSend) responseFormData.append('division', divisionIdToSend);
+
+      const departmentIdToSend =
+        (recipient?.department && validDepartmentIds.has(recipient.department) ? recipient.department : undefined) ??
+        (selectedOffice?.departmentId && validDepartmentIds.has(selectedOffice.departmentId) ? selectedOffice.departmentId : undefined) ??
+        (correspondence.departmentId && validDepartmentIds.has(correspondence.departmentId) ? correspondence.departmentId : undefined);
+      if (departmentIdToSend) responseFormData.append('department', departmentIdToSend);
       // Set recipient - prefer person, fallback to office primary member
       if (forwardTo) {
         responseFormData.append('current_approver_id', forwardTo);
@@ -864,6 +908,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         body: responseFormData,
         headers: {}, // Let browser set Content-Type for FormData
       });
+      createdResponseCorrespondenceId = responseCorrespondence.id;
 
       // Link document if existing document response type
       if (responseType === 'existing-document' && selectedDocumentId) {
@@ -889,13 +934,17 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         }
       }
 
-      setShowConfirmation(false);
       setIsSubmitting(false);
       
       toast.success('Response sent successfully', {
         description: actingFor
           ? `Sent to ${recipient?.name ?? 'selected user'} on behalf of ${actingFor.name}`
           : `Sent to ${recipient?.name ?? 'selected user'}`,
+      });
+
+      // Also notify that original correspondence was completed
+      toast.success('Original correspondence marked as completed', {
+        description: 'A completion package will be generated automatically.',
       });
 
       // Close modal
@@ -916,10 +965,34 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         setShowConfirmation(false);
         return;
       }
+
+      // Best-effort rollback to prevent orphan "treat" minute without response correspondence.
+      if (!createdResponseCorrespondenceId) {
+        if (createdMinuteId) {
+          try {
+            await apiFetch(`/correspondence/minutes/${createdMinuteId}/`, {
+              method: 'DELETE',
+            });
+          } catch (rollbackMinuteError: unknown) {
+            logError('Failed to rollback orphan treatment minute', rollbackMinuteError);
+          }
+        }
+
+        if (originalCorrespondenceUpdated) {
+          try {
+            await apiFetch(`/correspondence/items/${correspondence.id}/`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status: correspondence.status }),
+            });
+          } catch (rollbackStatusError: unknown) {
+            logError('Failed to rollback correspondence status after treatment failure', rollbackStatusError);
+          }
+        }
+      }
+
       logError('Failed to process treatment', error);
       const modalError = ModalErrorHandler.createErrorFromApi(error);
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
-      setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
       // Clear AbortController after request completes
@@ -971,7 +1044,12 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) ?? null : null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent 
         className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6"
       >
@@ -1447,7 +1525,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
       <ConfirmationDialog
         isOpen={showConfirmation}
-        onClose={() => !isSubmitting && setShowConfirmation(false)}
+        onClose={() => setShowConfirmation(false)}
         onConfirm={handleConfirm}
         type="treatment"
         data={{

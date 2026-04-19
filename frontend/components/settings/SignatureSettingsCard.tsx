@@ -66,6 +66,7 @@ import {
   updateSignatureSettings,
   type StoredSignature,
 } from '@/lib/signature-storage';
+import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import { logError } from '@/lib/client-logger';
 
 const MAX_SIGNATURE_SIZE_MB = 2;
@@ -602,7 +603,11 @@ export const SignatureSettingsCard = () => {
                       <div className="space-y-3">
                         <div className="p-4 border rounded-lg bg-white dark:bg-background flex items-center justify-center min-h-[100px]">
                           <img
-                            src={signature.imageData}
+                            src={
+                              signature.imageData.startsWith('data:')
+                                ? signature.imageData
+                                : (buildDownloadUrl(signature.imageData) ?? signature.imageData)
+                            }
                             alt="Your signature"
                             className="max-h-20 object-contain"
                           />
@@ -699,7 +704,7 @@ export const SignatureSettingsCard = () => {
                                 officeName={sealOfficeName}
                                 officeTitle={sealOfficeTitle || `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`}
                                 serialPrefix={sealPrefix}
-                                signatureImage={signature.imageData}
+                                signatureImage={signature?.imageData?.startsWith('data:') ? signature.imageData : (buildDownloadUrl(signature?.imageData) ?? signature?.imageData)}
                                 size={500}
                                 showQR={true}
                               />
@@ -720,7 +725,7 @@ export const SignatureSettingsCard = () => {
                           officeName={sealOfficeName}
                           officeTitle={sealOfficeTitle || `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`}
                           serialPrefix={sealPrefix}
-                          signatureImage={signature.imageData}
+                          signatureImage={signature?.imageData?.startsWith('data:') ? signature.imageData : (buildDownloadUrl(signature?.imageData) ?? signature?.imageData)}
                           size={previewSize}
                           showQR={true}
                         />

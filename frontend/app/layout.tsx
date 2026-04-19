@@ -1,87 +1,21 @@
-import type { Metadata } from "next";
-import Script from "next/script";
-import "./globals.css";
-import { Providers } from "@/components/Providers";
-import { AuthGuard } from "@/components/AuthGuard";
+import type { Metadata } from 'next';
+import { Providers } from '@/components/shared/Providers';
 
 export const metadata: Metadata = {
-  title: "NPA Electronic Content Management",
-  description: "Enterprise electronic content management system (ECM) and workflow system for NPA",
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/npalogo-256.png",
-  },
+  title: 'NPA ECM',
+  description: 'Electronic Correspondence Management System',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased">
-        {/* Polyfill for crypto.randomUUID - runs after page loads */}
-        <Script
-          id="crypto-polyfill"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                'use strict';
-                function generateUUIDFallback() {
-                  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                    var r = Math.random() * 16 | 0;
-                    var v = c === 'x' ? r : (r & 0x3 | 0x8);
-                    return v.toString(16);
-                  });
-                }
-                if (typeof window !== 'undefined') {
-                  try {
-                    if (typeof window.crypto !== 'undefined' && typeof window.crypto.randomUUID === 'function') {
-                      try {
-                        window.crypto.randomUUID();
-                        return;
-                      } catch (e) {}
-                    }
-                    if (typeof window.crypto === 'undefined') {
-                      window.crypto = {};
-                    }
-                    if (typeof window.crypto.randomUUID !== 'function') {
-                      window.crypto.randomUUID = generateUUIDFallback;
-                    }
-                  } catch (e) {
-                    if (typeof window.crypto === 'undefined') {
-                      window.crypto = {};
-                    }
-                    window.crypto.randomUUID = generateUUIDFallback;
-                  }
-                }
-                if (typeof global !== 'undefined') {
-                  try {
-                    if (typeof global.crypto === 'undefined' || typeof global.crypto?.randomUUID !== 'function') {
-                      if (typeof global.crypto === 'undefined') {
-                        global.crypto = {};
-                      }
-                      global.crypto.randomUUID = generateUUIDFallback;
-                    }
-                  } catch (e) {
-                    if (typeof global.crypto === 'undefined') {
-                      global.crypto = {};
-                    }
-                    global.crypto.randomUUID = generateUUIDFallback;
-                  }
-                }
-              })();
-            `,
-          }}
-        />
-        <Providers>
-          <AuthGuard>{children}</AuthGuard>
-        </Providers>
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
-

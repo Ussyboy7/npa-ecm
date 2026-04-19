@@ -26,13 +26,14 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import type { Correspondence, DistributionRecipient } from '@/lib/npa-structure';
-import type { DocumentRecord } from '@/lib/dms-storage';
+import { logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
 import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import { useDocumentPreview } from '@/hooks/use-document-preview';
 import { toast } from 'sonner';
-import { logError } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import { apiFetch } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
+import { useCurrentUser } from '@/hooks/use-current-user';
 
 interface DocumentPreviewPanelProps {
   correspondence: Correspondence;
@@ -113,6 +114,7 @@ export const DocumentPreviewPanel = ({
   onSyncFromApi,
 }: DocumentPreviewPanelProps) => {
   const router = useRouter();
+  const { currentUser } = useCurrentUser();
   const [dragActive, setDragActive] = useState(false);
   
   const firstAttachment = correspondence?.attachments?.[0];
@@ -120,8 +122,47 @@ export const DocumentPreviewPanel = ({
   
   // Get the auto-created document ID (first linked document, or use correspondence's auto_created_document_id if available)
   const autoCreatedDocumentId = (correspondence as Correspondence & { auto_created_document_id?: string })?.auto_created_document_id || linkedDocuments[0]?.id;
+  const resolveDmsAccessTarget = useCallback((): { documentId: string; sensitivity: string } | null => {
+    const completionDocId = correspondence.completionPackage?.documentId;
+    if (completionDocId) {
+      return { documentId: completionDocId, sensitivity: 'internal' };
+    }
+
+    const linkedDoc = linkedDocuments[0];
+    if (linkedDoc?.id) {
+      return { documentId: linkedDoc.id, sensitivity: linkedDoc.sensitivity ?? 'internal' };
+    }
+
+    const linkedDocId = correspondence.linkedDocumentIds?.[0];
+    if (linkedDocId) {
+      return { documentId: linkedDocId, sensitivity: 'internal' };
+    }
+
+    return null;
+  }, [correspondence.completionPackage?.documentId, correspondence.linkedDocumentIds, linkedDocuments]);
+
+  const logPreviewPanelDmsAccess = useCallback(async (action: 'view' | 'download' | 'attempted-download') => {
+    if (!currentUser?.id) return;
+    const target = resolveDmsAccessTarget();
+    if (!target) return;
+
+    try {
+      await logDocumentAccess({
+        documentId: target.documentId,
+        userId: currentUser.id,
+        action,
+        sensitivity: target.sensitivity,
+      });
+    } catch (error: unknown) {
+      logWarn('[DocumentPreviewPanel] Failed to write DMS access log', error);
+    }
+  }, [currentUser?.id, resolveDmsAccessTarget]);
 
   const resolveDistributionName = (recipient: DistributionRecipient) => {
+    if (recipient.type === 'office') {
+      return recipient.name ?? 'Office';
+    }
+
     if (recipient.type === 'directorate') {
       if (recipient.directorateId) {
         const directorate = directorates.find((dir) => dir.id === recipient.directorateId);
@@ -280,7 +321,10 @@ export const DocumentPreviewPanel = ({
                           variant="outline"
                           size="sm"
                           className="h-7 text-xs gap-1.5"
-                          onClick={() => router.push(`/dms/${autoCreatedDocumentId}`)}
+                          onClick={() => {
+                            void logPreviewPanelDmsAccess('view');
+                            router.push(`/dms/${autoCreatedDocumentId}`);
+                          }}
                           aria-label="View full document in DMS"
                           title="View full document with versions, comments, and access control"
                         >
@@ -294,11 +338,19 @@ export const DocumentPreviewPanel = ({
                           size="icon"
                           className="h-7 w-7"
                           onClick={() => {
-                            if (firstAttachment.fileUrl) {
-                              const url = buildDownloadUrl(firstAttachment.fileUrl);
-                              if (url) {
-                                window.open(url, '_blank');
-                              }
+                            if (!firstAttachment.fileUrl) {
+                              void logPreviewPanelDmsAccess('attempted-download');
+                              return;
+                            }
+                            void logPreviewPanelDmsAccess('download');
+                            const url = buildDownloadUrl(firstAttachment.fileUrl);
+                            if (!url) {
+                              void logPreviewPanelDmsAccess('attempted-download');
+                              return;
+                            }
+                            const opened = window.open(url, '_blank');
+                            if (!opened) {
+                              void logPreviewPanelDmsAccess('attempted-download');
                             }
                           }}
                           aria-label="Download document"
@@ -374,9 +426,20 @@ export const DocumentPreviewPanel = ({
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              const url = buildDownloadUrl(firstAttachment.fileUrl!);
-                              if (url) {
-                                window.open(url, '_blank');
+                              const fileUrl = firstAttachment.fileUrl;
+                              if (!fileUrl) {
+                                void logPreviewPanelDmsAccess('attempted-download');
+                                return;
+                              }
+                              void logPreviewPanelDmsAccess('download');
+                              const url = buildDownloadUrl(fileUrl);
+                              if (!url) {
+                                void logPreviewPanelDmsAccess('attempted-download');
+                                return;
+                              }
+                              const opened = window.open(url, '_blank');
+                              if (!opened) {
+                                void logPreviewPanelDmsAccess('attempted-download');
                               }
                             }}
                           >
@@ -453,7 +516,24 @@ export const DocumentPreviewPanel = ({
                   );
                 }
 
-                // No document available
+                // No document available - show treatment response if available
+                const treatmentResponse = correspondence.treatmentResponse;
+                if (treatmentResponse) {
+                  return (
+                    <div 
+                      className="h-full overflow-auto p-6"
+                      aria-label="Treatment response content"
+                    >
+                      <div className="mb-4 pb-4 border-b border-border">
+                        <h4 className="text-sm font-semibold text-muted-foreground mb-2">Treatment Response</h4>
+                      </div>
+                      <div className="whitespace-pre-wrap text-sm">
+                        {treatmentResponse}
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div 
                     className="h-full flex flex-col items-center justify-center p-8 text-center bg-muted/20"
@@ -474,7 +554,10 @@ export const DocumentPreviewPanel = ({
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => router.push(`/dms/${autoCreatedDocumentId}`)}
+                          onClick={() => {
+                            void logPreviewPanelDmsAccess('view');
+                            router.push(`/dms/${autoCreatedDocumentId}`);
+                          }}
                           className="w-full sm:w-auto"
                         >
                           <ExternalLink className="h-4 w-4 mr-2" />
@@ -605,11 +688,19 @@ export const DocumentPreviewPanel = ({
                         className="h-6 w-6 flex-shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (attachment.fileUrl) {
-                            const url = buildDownloadUrl(attachment.fileUrl);
-                            if (url) {
-                              window.open(url, '_blank');
-                            }
+                          if (!attachment.fileUrl) {
+                            void logPreviewPanelDmsAccess('attempted-download');
+                            return;
+                          }
+                          void logPreviewPanelDmsAccess('download');
+                          const url = buildDownloadUrl(attachment.fileUrl);
+                          if (!url) {
+                            void logPreviewPanelDmsAccess('attempted-download');
+                            return;
+                          }
+                          const opened = window.open(url, '_blank');
+                          if (!opened) {
+                            void logPreviewPanelDmsAccess('attempted-download');
                           }
                         }}
                         aria-label={`Download ${attachment.fileName}`}
@@ -627,4 +718,3 @@ export const DocumentPreviewPanel = ({
     </aside>
   );
 };
-

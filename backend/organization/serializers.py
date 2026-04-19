@@ -71,7 +71,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
 
 class RoleSerializer(serializers.ModelSerializer):
-    user_count = serializers.SerializerMethodField()
+    user_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Role
@@ -86,10 +86,6 @@ class RoleSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at", "user_count"]
-
-    def get_user_count(self, obj):
-        """Return the number of users assigned to this role."""
-        return obj.users.count()
 
 
 class OfficeSerializer(serializers.ModelSerializer):
@@ -117,6 +113,15 @@ class OfficeSerializer(serializers.ModelSerializer):
             "is_active",
             "allow_external_intake",
             "allow_lateral_routing",
+            # =============================================================================
+            # DELEGATION FIELDS - COMMENTED OUT FOR FUTURE USE
+            # Uncomment these fields and run migrations to enable office delegation
+            # =============================================================================
+            # "is_away",
+            # "away_start_date",
+            # "away_end_date",
+            # "delegate_user",
+            # "delegate_role",
             "created_at",
             "updated_at",
         ]

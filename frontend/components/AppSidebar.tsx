@@ -99,7 +99,13 @@ export function AppSidebar() {
   const officeInboxCount = counts.officeInbox;
   const myInboxCount = counts.myInbox;
   const outboxCount = counts.outbox;
+  const officeOutboxCount = counts.officeOutbox;
   const delegatedCount = counts.delegated;
+  const myCasesCount = counts.myCases;
+  const officeCasesCount = counts.officeCases;
+  const allCasesCount = counts.allCases;
+  const executiveApprovalsCount = counts.executiveApprovals;
+  const myDocumentsCount = counts.myDocuments;
 
   // Unified active path detection that handles exact matches, sub-paths, and query params
   const isActivePath = (path: string, exact: boolean = false): boolean => {
@@ -137,9 +143,9 @@ export function AppSidebar() {
   const isActive = (path: string) => isActivePath(path, true);
   const isCollapsed = state === "collapsed";
 
-  const showSkeleton = !hydrated && !currentUser;
+  const showSkeleton = !currentUser?.id;
 
-  if (showSkeleton || (!hydrated && !currentUser)) {
+  if (showSkeleton) {
     return (
       <Sidebar collapsible="icon" className="border-r border-sidebar-border">
         <SidebarHeader>
@@ -327,14 +333,22 @@ export function AppSidebar() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <SidebarMenuButton asChild isActive={isActive('/cases/my')}>
-                            <Link href="/cases/my">
+                            <Link href="/cases/my" className="relative">
                               <Briefcase className="h-4 w-4" />
+                              {myCasesCount > 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                                >
+                                  {myCasesCount > 99 ? '99+' : myCasesCount}
+                                </Badge>
+                              )}
                               <span className="sr-only">My Cases</span>
                             </Link>
                           </SidebarMenuButton>
                         </TooltipTrigger>
                         <TooltipContent side="right">
-                          <p>My Cases</p>
+                          <p>My Cases{myCasesCount > 0 && ` (${myCasesCount})`}</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             Cases assigned to you
                           </p>
@@ -342,43 +356,23 @@ export function AppSidebar() {
                       </Tooltip>
                   ) : (
                     <SidebarMenuButton asChild isActive={isActive('/cases/my')}>
-                      <Link href="/cases/my">
-                        <Briefcase className="h-4 w-4" />
-                        <span>My Cases</span>
+                      <Link href="/cases/my" className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4" />
+                          <span>My Cases</span>
+                        </div>
+                        {countsLoading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : myCasesCount > 0 ? (
+                          <Badge variant="secondary" className="ml-auto shrink-0">
+                            {myCasesCount > 99 ? '99+' : myCasesCount}
+                          </Badge>
+                        ) : null}
                       </Link>
                     </SidebarMenuButton>
                   )}
                 </SidebarMenuItem>
               )}
-
-              {/* My Documents - Moved from Documents & Records */}
-              <SidebarMenuItem>
-                {isCollapsed ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SidebarMenuButton asChild isActive={isActive('/documents') && !isActive('/documents/new')}>
-                          <Link href="/documents">
-                            <FileText className="h-4 w-4" />
-                            <span className="sr-only">My Documents</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        <p>My Documents</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Your personal document workspace
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                ) : (
-                  <SidebarMenuButton asChild isActive={isActive('/documents') && !isActive('/documents/new')}>
-                    <Link href="/documents">
-                      <FileText className="h-4 w-4" />
-                      <span>My Documents</span>
-                    </Link>
-                  </SidebarMenuButton>
-                )}
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -436,19 +430,19 @@ export function AppSidebar() {
                 {visibility.showRegisterCorrespondence && (
                 <SidebarMenuItem>
                   {isCollapsed ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
-                            <Link href="/correspondence/register">
-                              <FilePlus className="h-4 w-4" />
-                              <span className="sr-only">Register Correspondence</span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                          <p>Register Correspondence</p>
-                        </TooltipContent>
-                      </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
+                          <Link href="/correspondence/register">
+                            <FilePlus className="h-4 w-4" />
+                            <span className="sr-only">Register Correspondence</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Register Correspondence</p>
+                      </TooltipContent>
+                    </Tooltip>
                   ) : (
                     <SidebarMenuButton asChild isActive={isActive('/correspondence/register')}>
                       <Link href="/correspondence/register">
@@ -467,21 +461,38 @@ export function AppSidebar() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <SidebarMenuButton asChild isActive={isActive('/correspondence/office-outbox')}>
-                            <Link href="/correspondence/office-outbox">
+                            <Link href="/correspondence/office-outbox" className="relative">
                               <Send className="h-4 w-4" />
+                              {officeOutboxCount > 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                                >
+                                  {officeOutboxCount > 99 ? '99+' : officeOutboxCount}
+                                </Badge>
+                              )}
                               <span className="sr-only">Office Outbox</span>
                             </Link>
                           </SidebarMenuButton>
                         </TooltipTrigger>
                         <TooltipContent side="right">
-                          <p>Office Outbox</p>
+                          <p>Office Outbox{officeOutboxCount > 0 && ` (${officeOutboxCount})`}</p>
                         </TooltipContent>
                       </Tooltip>
                   ) : (
                     <SidebarMenuButton asChild isActive={isActive('/correspondence/office-outbox')}>
-                      <Link href="/correspondence/office-outbox">
-                        <Send className="h-4 w-4" />
-                        <span>Office Outbox</span>
+                      <Link href="/correspondence/office-outbox" className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <Send className="h-4 w-4" />
+                          <span>Office Outbox</span>
+                        </div>
+                        {countsLoading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : officeOutboxCount > 0 ? (
+                          <Badge variant="secondary" className="ml-auto shrink-0">
+                            {officeOutboxCount > 99 ? '99+' : officeOutboxCount}
+                          </Badge>
+                        ) : null}
                       </Link>
                     </SidebarMenuButton>
                   )}
@@ -495,14 +506,22 @@ export function AppSidebar() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <SidebarMenuButton asChild isActive={isActive('/cases/office')}>
-                            <Link href="/cases/office">
+                            <Link href="/cases/office" className="relative">
                               <Briefcase className="h-4 w-4" />
+                              {officeCasesCount > 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                                >
+                                  {officeCasesCount > 99 ? '99+' : officeCasesCount}
+                                </Badge>
+                              )}
                               <span className="sr-only">Office Cases</span>
                             </Link>
                           </SidebarMenuButton>
                         </TooltipTrigger>
                         <TooltipContent side="right">
-                          <p>Office Cases</p>
+                          <p>Office Cases{officeCasesCount > 0 && ` (${officeCasesCount})`}</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             Cases assigned to your office
                           </p>
@@ -510,9 +529,18 @@ export function AppSidebar() {
                       </Tooltip>
                   ) : (
                     <SidebarMenuButton asChild isActive={isActive('/cases/office')}>
-                      <Link href="/cases/office">
-                        <Briefcase className="h-4 w-4" />
-                        <span>Office Cases</span>
+                      <Link href="/cases/office" className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4" />
+                          <span>Office Cases</span>
+                        </div>
+                        {countsLoading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : officeCasesCount > 0 ? (
+                          <Badge variant="secondary" className="ml-auto shrink-0">
+                            {officeCasesCount > 99 ? '99+' : officeCasesCount}
+                          </Badge>
+                        ) : null}
                       </Link>
                     </SidebarMenuButton>
                   )}
@@ -526,14 +554,22 @@ export function AppSidebar() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <SidebarMenuButton asChild isActive={isActive('/cases/all')}>
-                            <Link href="/cases/all">
+                            <Link href="/cases/all" className="relative">
                               <Briefcase className="h-4 w-4" />
+                              {allCasesCount > 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                                >
+                                  {allCasesCount > 99 ? '99+' : allCasesCount}
+                                </Badge>
+                              )}
                               <span className="sr-only">All Cases</span>
                             </Link>
                           </SidebarMenuButton>
                         </TooltipTrigger>
                         <TooltipContent side="right">
-                          <p>All Cases</p>
+                          <p>All Cases{allCasesCount > 0 && ` (${allCasesCount})`}</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             All cases in your scope
                           </p>
@@ -541,9 +577,18 @@ export function AppSidebar() {
                       </Tooltip>
                   ) : (
                     <SidebarMenuButton asChild isActive={isActive('/cases/all')}>
-                      <Link href="/cases/all">
-                        <Briefcase className="h-4 w-4" />
-                        <span>All Cases</span>
+                      <Link href="/cases/all" className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4" />
+                          <span>All Cases</span>
+                        </div>
+                        {countsLoading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : allCasesCount > 0 ? (
+                          <Badge variant="secondary" className="ml-auto shrink-0">
+                            {allCasesCount > 99 ? '99+' : allCasesCount}
+                          </Badge>
+                        ) : null}
                       </Link>
                     </SidebarMenuButton>
                   )}
@@ -557,21 +602,38 @@ export function AppSidebar() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <SidebarMenuButton asChild isActive={isActive('/approvals')}>
-                            <Link href="/approvals">
+                            <Link href="/approvals" className="relative">
                               <Shield className="h-4 w-4" />
+                              {executiveApprovalsCount > 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                                >
+                                  {executiveApprovalsCount > 99 ? '99+' : executiveApprovalsCount}
+                                </Badge>
+                              )}
                               <span className="sr-only">Executive Approvals</span>
                             </Link>
                           </SidebarMenuButton>
                         </TooltipTrigger>
                         <TooltipContent side="right">
-                          <p>Executive Approvals</p>
+                          <p>Executive Approvals{executiveApprovalsCount > 0 && ` (${executiveApprovalsCount})`}</p>
                         </TooltipContent>
                       </Tooltip>
                   ) : (
                     <SidebarMenuButton asChild isActive={isActive('/approvals')}>
-                      <Link href="/approvals">
-                        <Shield className="h-4 w-4" />
-                        <span>Executive Approvals</span>
+                      <Link href="/approvals" className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          <span>Executive Approvals</span>
+                        </div>
+                        {countsLoading ? (
+                          <Skeleton className="h-5 w-8" />
+                        ) : executiveApprovalsCount > 0 ? (
+                          <Badge variant="secondary" className="ml-auto shrink-0">
+                            {executiveApprovalsCount > 99 ? '99+' : executiveApprovalsCount}
+                          </Badge>
+                        ) : null}
                       </Link>
                     </SidebarMenuButton>
                   )}
@@ -589,6 +651,52 @@ export function AppSidebar() {
           <SidebarGroupLabel>Documents & Records</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              {/* My Documents */}
+              <SidebarMenuItem>
+                {isCollapsed ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive('/documents')}>
+                          <Link href="/documents" className="relative">
+                            <FileText className="h-4 w-4" />
+                            {myDocumentsCount > 0 && (
+                              <Badge
+                                variant="secondary"
+                                className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
+                              >
+                                {myDocumentsCount > 99 ? '99+' : myDocumentsCount}
+                              </Badge>
+                            )}
+                            <span className="sr-only">My Documents</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>My Documents{myDocumentsCount > 0 && ` (${myDocumentsCount})`}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Your documents, shared with you, and awaiting action
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                ) : (
+                  <SidebarMenuButton asChild isActive={isActive('/documents')}>
+                    <Link href="/documents" className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        <span>My Documents</span>
+                      </div>
+                      {countsLoading ? (
+                        <Skeleton className="h-5 w-8" />
+                      ) : myDocumentsCount > 0 ? (
+                        <Badge variant="secondary" className="ml-auto shrink-0">
+                          {myDocumentsCount > 99 ? '99+' : myDocumentsCount}
+                        </Badge>
+                      ) : null}
+                    </Link>
+                  </SidebarMenuButton>
+                )}
+              </SidebarMenuItem>
+
               {/* Search Documents - renamed from Advanced Search */}
               <SidebarMenuItem>
                 {isCollapsed ? (
@@ -650,35 +758,33 @@ export function AppSidebar() {
               </SidebarMenuItem>
 
               {/* Content Capture */}
-              {permissions.canAccessDocumentManagement && (
-                <SidebarMenuItem>
-                  {isCollapsed ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <SidebarMenuButton asChild isActive={isActive('/forms')}>
-                            <Link href="/forms">
-                              <FileCheck className="h-4 w-4" />
-                              <span className="sr-only">Forms Library</span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                          <p>Forms Library</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Create and manage form documents
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                  ) : (
-                    <SidebarMenuButton asChild isActive={isActive('/forms')}>
-                      <Link href="/forms">
-                        <FileCheck className="h-4 w-4" />
-                        <span>Forms Library</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  )}
-                </SidebarMenuItem>
-              )}
+              <SidebarMenuItem>
+                {isCollapsed ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuButton asChild isActive={isActive('/forms')}>
+                          <Link href="/forms">
+                            <FileCheck className="h-4 w-4" />
+                            <span className="sr-only">Forms Library</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>Forms Library</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Create and manage form documents
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                ) : (
+                  <SidebarMenuButton asChild isActive={isActive('/forms')}>
+                    <Link href="/forms">
+                      <FileCheck className="h-4 w-4" />
+                      <span>Forms Library</span>
+                    </Link>
+                  </SidebarMenuButton>
+                )}
+              </SidebarMenuItem>
 
               {/* Verify Seal */}
               <SidebarMenuItem>
@@ -741,137 +847,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Analytics & Reports */}
-        {visibility.showAnalyticsReports && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Analytics & Reports</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {/* Analytics - Performance */}
-                {permissions.canAccessAnalytics && (
-                  <SidebarMenuItem>
-                    {isCollapsed ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <SidebarMenuButton asChild isActive={isActive("/analytics/performance")}>
-                              <Link href="/analytics/performance">
-                                <BarChart3 className="h-4 w-4" />
-                                <span className="sr-only">Performance Analytics</span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">
-                            <p>Performance Analytics</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              SLA compliance and efficiency metrics
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                    ) : (
-                      <SidebarMenuButton asChild isActive={isActive("/analytics/performance")}>
-                        <Link href="/analytics/performance" className="flex items-center gap-2">
-                          <BarChart3 className="h-4 w-4" />
-                          <span>Performance Analytics</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    )}
-                  </SidebarMenuItem>
-                )}
 
-                {/* Analytics - Executive Dashboard */}
-                {permissions.canAccessExecutiveDashboard && (
-                  <SidebarMenuItem>
-                    {isCollapsed ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <SidebarMenuButton asChild isActive={isActive("/analytics/executive")}>
-                              <Link href="/analytics/executive">
-                                <Activity className="h-4 w-4" />
-                                <span className="sr-only">Executive Dashboard</span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">
-                            <p>Executive Dashboard</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Strategic monitoring and escalations
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                    ) : (
-                      <SidebarMenuButton asChild isActive={isActive("/analytics/executive")}>
-                        <Link href="/analytics/executive" className="flex items-center gap-2">
-                          <Activity className="h-4 w-4" />
-                          <span>Executive Dashboard</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    )}
-                  </SidebarMenuItem>
-                )}
-
-                {/* Analytics - Reports */}
-                {permissions.canAccessReports && (
-                  <SidebarMenuItem>
-                    {isCollapsed ? (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <SidebarMenuButton asChild isActive={isActive("/analytics/reports")}>
-                              <Link href="/analytics/reports">
-                                <TrendingUp className="h-4 w-4" />
-                                <span className="sr-only">Reports</span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </TooltipTrigger>
-                          <TooltipContent side="right">
-                            <p>Reports</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Comprehensive reporting and analytics
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                    ) : (
-                      <SidebarMenuButton asChild isActive={isActive("/analytics/reports")}>
-                        <Link href="/analytics/reports" className="flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4" />
-                          <span>Reports</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    )}
-                  </SidebarMenuItem>
-                )}
-
-                {/* Analytics - Case Analytics */}
-                <SidebarMenuItem>
-                  {isCollapsed ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <SidebarMenuButton asChild isActive={isActive("/analytics/cases")}>
-                            <Link href="/analytics/cases">
-                              <FolderTree className="h-4 w-4" />
-                              <span className="sr-only">Case Analytics</span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                          <p>Case Analytics</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Case management analytics
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                  ) : (
-                    <SidebarMenuButton asChild isActive={isActive("/analytics/cases")}>
-                      <Link href="/analytics/cases" className="flex items-center gap-2">
-                        <FolderTree className="h-4 w-4" />
-                        <span>Case Analytics</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  )}
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
 
         {/* Administration */}
         {visibility.showAdministration && (

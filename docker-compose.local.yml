@@ -110,6 +110,7 @@ services:
     container_name: ecm-frontend-local
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8002/api/v1
+      INTERNAL_API_URL: http://backend:8002/api/v1
       NODE_ENV: development
     volumes:
       - ./frontend:/app

@@ -37,6 +37,7 @@ type FormState = {
   email: string;
   employeeId: string;
   isActive: boolean;
+  password?: string;
 };
 
 const defaultState: FormState = {
@@ -48,6 +49,7 @@ const defaultState: FormState = {
   email: "",
   employeeId: "",
   isActive: true,
+  password: "",
 };
 
 const EMPTY_VALUE = "__none";
@@ -70,7 +72,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
     deleteOfficeMembership,
   } = useOrganization();
   const { currentUser } = useCurrentUser();
-  const [formData, setFormData] = useState<FormState & { username?: string; firstName?: string; lastName?: string; password?: string }>(defaultState);
+  const [formData, setFormData] = useState<FormState & { username?: string; firstName?: string; lastName?: string }>(defaultState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isManagingOffices, setIsManagingOffices] = useState(false);
@@ -114,6 +116,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
         email: user.email ?? "",
         employeeId: user.employeeId ?? "",
         isActive: user.active ?? true,
+        password: "",
       });
     } else if (!user && open) {
       // Creating new user - reset to defaults
@@ -212,6 +215,9 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
       if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
         errors.email = 'Please enter a valid email address';
       }
+      if (formData.password && formData.password.length > 0 && formData.password.length < 8) {
+        errors.password = 'Password must be at least 8 characters';
+      }
     }
     
     setValidationErrors(errors);
@@ -252,6 +258,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
           email: formData.email || user.email,
           employeeId: formData.employeeId || null,
           isActive: formData.isActive,
+          password: formData.password && formData.password.length > 0 ? formData.password : undefined,
         });
 
         toast({
@@ -456,6 +463,28 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                         </p>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {user && (
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Reset Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={formData.password || ''}
+                      onChange={(event) =>
+                        setFormData((prev) => ({ ...prev, password: event.target.value }))
+                      }
+                      placeholder="Leave blank to keep current password"
+                      aria-invalid={!!validationErrors.password}
+                      aria-describedby={validationErrors.password ? "password-error" : undefined}
+                    />
+                    {validationErrors.password && (
+                      <p id="password-error" className="text-xs text-destructive" role="alert">
+                        {validationErrors.password}
+                      </p>
+                    )}
                   </div>
                 )}
 

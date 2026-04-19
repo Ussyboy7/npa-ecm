@@ -14,7 +14,7 @@ import { RolesManagementTab } from "@/components/admin/RolesManagementTab";
 // Import Assistants Management
 import { AssistantsManagementTab } from "@/components/admin/AssistantsManagementTab";
 
-export default function UsersRolesPage() {
+function UsersRolesForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>("users");
@@ -114,5 +114,13 @@ export default function UsersRolesPage() {
         </div>
       </DashboardLayout>
     </ClientErrorBoundary>
+  );
+}
+
+export default function UsersRolesPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <UsersRolesForm />
+    </Suspense>
   );
 }

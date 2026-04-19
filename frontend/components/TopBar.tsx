@@ -51,9 +51,16 @@ export const TopBar = () => {
   }, [mounted]);
 
   const handleLogout = async () => {
+    setRoleSwitcherOpen(false);
+    setShowImpersonationBanner(false);
     await logout();
     setAuthenticated(false);
-    router.push("/login");
+    // Use hard navigation to fully reset client state and avoid transient render errors.
+    if (typeof window !== 'undefined') {
+      window.location.assign('/login');
+      return;
+    }
+    router.push('/login');
   };
 
   // Handle Escape key to close the role switcher panel
@@ -88,9 +95,9 @@ export const TopBar = () => {
   };
 
   const getUserRoleDisplay = () => {
-    if (!currentUser) return 'User';
+    if (!currentUser) return '';
     if (currentUser.systemRole) return currentUser.systemRole;
-    return 'Staff';
+    return '';
   };
 
   // Format time as HH:MM AM/PM

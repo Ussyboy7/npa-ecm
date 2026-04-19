@@ -113,7 +113,7 @@ const ExecutiveSupportInboxContent = () => {
 
   // Fetch inbox items
   useEffect(() => {
-    if (!hydrated || !currentUser) return;
+    if (!currentUser?.id) return;
 
     const fetchInbox = async () => {
       setLoading(true);
@@ -158,8 +158,7 @@ const ExecutiveSupportInboxContent = () => {
 
     void fetchInbox();
   }, [
-    hydrated,
-    currentUser,
+    currentUser?.id,
     debouncedSearch,
     selectedStatuses,
     selectedPriorities,
@@ -196,7 +195,7 @@ const ExecutiveSupportInboxContent = () => {
     }
   };
 
-  if (!hydrated || !currentUser) {
+  if (!currentUser?.id) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

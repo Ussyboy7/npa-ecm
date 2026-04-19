@@ -446,8 +446,19 @@ export interface CaseTemplate {
   updated_at: string;
 }
 
+interface CaseTemplateListResponse {
+  results: CaseTemplate[];
+  count: number;
+  next?: string | null;
+  previous?: string | null;
+}
+
 export async function getCaseTemplates(): Promise<CaseTemplate[]> {
-  return apiFetch<CaseTemplate[]>('/correspondence/case-templates/');
+  const data = await apiFetch<CaseTemplate[] | CaseTemplateListResponse>('/correspondence/case-templates/');
+  if (Array.isArray(data)) {
+    return data;
+  }
+  return Array.isArray(data.results) ? data.results : [];
 }
 
 export async function getCaseTemplate(id: string): Promise<CaseTemplate> {
@@ -618,4 +629,3 @@ export async function getCaseSLAStatus(caseId: string, signal?: AbortSignal): Pr
     signal,
   });
 }
-

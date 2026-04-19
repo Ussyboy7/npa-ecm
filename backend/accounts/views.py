@@ -6,8 +6,10 @@ from datetime import datetime, timedelta
 import csv
 import io
 
+import mimetypes
 from django.conf import settings
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
+from django.core.files.base import ContentFile
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, generics, viewsets, status
 from rest_framework.decorators import action
@@ -46,9 +48,9 @@ except ImportError:
 
 class UserPagination(PageNumberPagination):
     """Pagination for user list."""
-    page_size = 25
+    page_size = 50
     page_size_query_param = 'page_size'
-    max_page_size = 1000  # Increased to allow fetching all users for role switcher
+    max_page_size = 200
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -64,9 +66,26 @@ class UserViewSet(viewsets.ModelViewSet):
     ordering_fields = ["username", "first_name", "last_name", "date_joined", "last_login"]
     ordering = ["username"]
 
-    def _ensure_super_admin(self):
-        if not self.request.user.is_superuser:
-            raise PermissionDenied("Only super administrators may modify user records.")
+    def _ensure_can_manage_users(self):
+        user = self.request.user
+        if getattr(user, "is_superuser", False):
+            return
+
+        role = getattr(user, "system_role", None)
+        permissions = getattr(role, "permissions", None)
+        if isinstance(permissions, dict) and permissions.get("can_manage_users"):
+            return
+
+        role_name = getattr(role, "name", "") or ""
+        if role_name in {
+            "Managing Director",
+            "Executive Director",
+            "General Manager",
+            "Assistant General Manager",
+        }:
+            return
+
+        raise PermissionDenied("You do not have permission to manage users.")
 
     def filter_queryset(self, queryset):
         """Override to add date range filtering."""
@@ -109,7 +128,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_update(self, serializer):
-        self._ensure_super_admin()
+        self._ensure_can_manage_users()
         old_instance = self.get_object()
         serializer.save()
         
@@ -125,7 +144,7 @@ class UserViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
-        self._ensure_super_admin()
+        self._ensure_can_manage_users()
         
         # Audit log
         from audit.models import ActivityLog
@@ -140,7 +159,7 @@ class UserViewSet(viewsets.ModelViewSet):
         super().perform_destroy(instance)
 
     def perform_create(self, serializer):
-        self._ensure_super_admin()
+        self._ensure_can_manage_users()
         instance = serializer.save()
         
         # Audit log
@@ -156,7 +175,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="bulk-archive")
     def bulk_archive(self, request):
         """Archive (deactivate) multiple users at once."""
-        self._ensure_super_admin()
+        self._ensure_can_manage_users()
         
         user_ids = request.data.get("user_ids", [])
         if not user_ids:
@@ -184,7 +203,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="bulk-delete")
     def bulk_delete(self, request):
         """Delete multiple users at once."""
-        self._ensure_super_admin()
+        self._ensure_can_manage_users()
         
         user_ids = request.data.get("user_ids", [])
         if not user_ids:
@@ -214,7 +233,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="bulk-activate")
     def bulk_activate(self, request):
         """Activate multiple users at once."""
-        self._ensure_super_admin()
+        self._ensure_can_manage_users()
         
         user_ids = request.data.get("user_ids", [])
         if not user_ids:
@@ -242,7 +261,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="bulk-deactivate")
     def bulk_deactivate(self, request):
         """Deactivate multiple users at once."""
-        self._ensure_super_admin()
+        self._ensure_can_manage_users()
         
         user_ids = request.data.get("user_ids", [])
         if not user_ids:
@@ -299,7 +318,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 user.last_name,
                 user.employee_id,
                 user.grade_level,
-                user.system_role.name if user.system_role else '',
+                user.system_role.name if user.system_role else ('System Administrator' if user.is_superuser else ''),
                 user.directorate.name if user.directorate else '',
                 user.division.name if user.division else '',
                 user.department.name if user.department else '',
@@ -341,7 +360,7 @@ class UserViewSet(viewsets.ModelViewSet):
             io_string = io.StringIO(decoded_file)
             reader = csv.DictReader(io_string)
         except Exception as e:
-            raise ValidationError({"file": f"Error reading CSV: {str(e)}"})
+            raise ValidationError({"file": "Error reading CSV file. Please check the file format and try again."})
         
         created_count = 0
         updated_count = 0
@@ -514,7 +533,12 @@ class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
         token["username"] = user.username
         try:
-            token["system_role"] = user.system_role.name if user.system_role else ""
+            if user.system_role:
+                token["system_role"] = user.system_role.name
+            elif user.is_superuser:
+                token["system_role"] = "System Administrator"
+            else:
+                token["system_role"] = ""
         except Exception:
             token["system_role"] = ""
         try:
@@ -522,30 +546,6 @@ class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
         except Exception:
             token["grade_level"] = ""
         return token
-
-    def validate(self, attrs):
-        try:
-            data = super().validate(attrs)
-            # Safely serialize user data with error handling
-            try:
-                data["user"] = UserSerializer(self.user).data
-            except Exception as e:
-                # If serialization fails, provide minimal user data
-                data["user"] = {
-                    "id": str(self.user.id),
-                    "username": self.user.username,
-                    "email": self.user.email,
-                    "first_name": self.user.first_name or "",
-                    "last_name": self.user.last_name or "",
-                    "is_active": self.user.is_active,
-                }
-            return data
-        except Exception as e:
-            # Log the error for debugging
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Login error: {str(e)}", exc_info=True)
-            raise
 
 
 class AuthTokenObtainPairView(TokenObtainPairView):
@@ -606,10 +606,19 @@ class AuthImpersonateView(APIView):
             raise ValidationError({"detail": "username is required"})
 
         try:
-            target = User.objects.get(pk=identifier)
+            if str(identifier).isdigit():
+                target = User.objects.get(pk=identifier, is_active=True)
+            else:
+                # Try UUID format
+                try:
+                    import uuid
+                    uuid.UUID(identifier)
+                    target = User.objects.get(pk=identifier, is_active=True)
+                except (ValueError, User.DoesNotExist):
+                    raise User.DoesNotExist("Not a valid UUID")
         except (User.DoesNotExist, ValueError):
             try:
-                target = User.objects.get(username=identifier)
+                target = User.objects.get(username=identifier, is_active=True)
             except User.DoesNotExist as exc:
                 # Create audit log for failed impersonation attempt
                 from audit.models import ActivityLog
@@ -713,7 +722,7 @@ class ExecutiveSignatureView(APIView):
                 "message": "No signature uploaded",
                 "user": request.user.id,
                 "user_name": request.user.get_full_name() or request.user.username,
-                "user_role": request.user.system_role.name if request.user.system_role else "",
+                "user_role": request.user.system_role.name if request.user.system_role else ('System Administrator' if request.user.is_superuser else ''),
             })
 
     def post(self, request):
@@ -822,6 +831,77 @@ class ExecutiveSignatureView(APIView):
             )
 
 
+class SealSignatureImageView(APIView):
+    """
+    Public endpoint to serve the seal's signature image (the uploaded image used when
+    the seal was created). Used by DigitalSealPreview to avoid CORS issues when
+    loading /media/ from a different origin. No authentication required.
+    """
+    permission_classes = []
+
+    def get(self, request, serial_number):
+        try:
+            seal = DocumentSeal.objects.select_related('signature_used').get(serial_number=serial_number)
+        except DocumentSeal.DoesNotExist:
+            return Response({"detail": "Seal not found"}, status=status.HTTP_404_NOT_FOUND)
+        if not seal.signature_used or not getattr(seal.signature_used, 'signature_image', None) or not seal.signature_used.signature_image:
+            return Response({"detail": "No signature image for this seal"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            f = seal.signature_used.signature_image.open('rb')
+        except (OSError, ValueError):
+            return Response({"detail": "Signature image file unavailable"}, status=status.HTTP_404_NOT_FOUND)
+        ct = mimetypes.guess_type(seal.signature_used.signature_image.name)[0] or 'image/png'
+        resp = FileResponse(f, content_type=ct, as_attachment=False)
+        resp['Access-Control-Allow-Origin'] = '*'
+        return resp
+
+
+class SealImageUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, serial_number):
+        try:
+            seal = DocumentSeal.objects.select_related("sealed_by").get(serial_number=serial_number)
+        except DocumentSeal.DoesNotExist:
+            raise NotFound("Seal not found")
+
+        if not (request.user.is_superuser or request.user == seal.sealed_by):
+            raise PermissionDenied("You cannot modify this seal")
+
+        data_url = request.data.get("image_data_url") or request.data.get("image") or ""
+        if not isinstance(data_url, str) or not data_url.startswith("data:image/png;base64,"):
+            raise ValidationError({"image_data_url": "Expected a PNG data URL"})
+
+        raw_b64 = data_url.split(",", 1)[1] if "," in data_url else ""
+        try:
+            image_bytes = base64.b64decode(raw_b64, validate=True)
+        except Exception:
+            raise ValidationError({"image_data_url": "Invalid base64 payload"})
+
+        if len(image_bytes) > 2_500_000:
+            raise ValidationError({"image_data_url": "Image too large"})
+
+        try:
+            if seal.seal_image:
+                seal.seal_image.delete(save=False)
+        except Exception:
+            pass
+
+        seal.seal_image.save(
+            f"{seal.serial_number}.png",
+            ContentFile(image_bytes),
+            save=True,
+        )
+
+        return Response(
+            {
+                "detail": "Seal image saved",
+                "seal_image_url": request.build_absolute_uri(seal.seal_image.url) if seal.seal_image else None,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 class SealVerificationView(APIView):
     """
     Public endpoint for verifying document seals via QR code.
@@ -833,9 +913,9 @@ class SealVerificationView(APIView):
     def get(self, request, serial_number):
         """Verify a seal by serial number."""
         try:
-            seal = DocumentSeal.objects.select_related('sealed_by', 'document', 'correspondence').get(
-                serial_number=serial_number
-            )
+            seal = DocumentSeal.objects.select_related(
+                'sealed_by', 'document', 'correspondence', 'signature_used'
+            ).get(serial_number=serial_number)
             
             response_data = {
                 "valid": seal.is_valid,
@@ -845,6 +925,14 @@ class SealVerificationView(APIView):
                 "office_title": seal.office_title,
                 "sealed_at": seal.sealed_at.isoformat(),
             }
+            
+            # Use proxy URL for signature image so it loads cross-origin (CORS-safe)
+            signature_image_url = None
+            if seal.signature_used and getattr(seal.signature_used, 'signature_image', None) and seal.signature_used.signature_image:
+                signature_image_url = request.build_absolute_uri(
+                    f"/api/v1/accounts/seal/signature-image/{seal.serial_number}/"
+                )
+            response_data["signature_image_url"] = signature_image_url
             
             if not seal.is_valid:
                 response_data["invalidated_at"] = seal.invalidated_at.isoformat() if seal.invalidated_at else None
@@ -942,7 +1030,7 @@ class ApplySealView(APIView):
             }, status=status.HTTP_201_CREATED)
             
         except ValueError as e:
-            raise ValidationError({"detail": str(e)})
+            raise ValidationError({"detail": "Invalid data format. Please check your input."})
 
 
 # ============================================================================
@@ -1063,7 +1151,7 @@ Electronic Correspondence Management System
         except Exception as e:
             # If email fails, delete the OTP
             otp.delete()
-            raise ValidationError({"detail": f"Failed to send email: {str(e)}"})
+            raise ValidationError({"detail": "Failed to send email. Please try again or contact support."})
 
 
 class VerifyEmailOTPView(APIView):
