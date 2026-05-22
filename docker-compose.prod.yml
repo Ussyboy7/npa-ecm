@@ -94,8 +94,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: ./frontend/Dockerfile.prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ecm.nigerianports.gov.ng/api}
         NEXT_PUBLIC_ENVIRONMENT: production
