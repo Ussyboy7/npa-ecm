@@ -86,12 +86,12 @@ export const DistributionSelector = ({
       return !selectedKeys.has(recipientKey(mapped));
     });
     return result.sort((a, b) => a.name.localeCompare(b.name));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     offices,
     officeFilterDirectorate,
     officeFilterDivision,
     selectedKeys,
-    purpose,
   ]);
 
   const filteredUsers = useMemo(() => {

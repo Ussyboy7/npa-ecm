@@ -43,6 +43,7 @@ function WorkflowTemplateEditorPageContent() {
     } else if (isClone && id !== "new") {
       loadTemplateForClone();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isNew, isClone]);
 
   const loadTemplate = async (templateId?: string) => {

@@ -160,6 +160,7 @@ const OutboxPage = () => {
 
   useEffect(() => {
     pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQuery, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo, pagination.pageSize]);
 
   useEffect(() => {

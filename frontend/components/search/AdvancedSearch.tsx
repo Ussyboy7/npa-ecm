@@ -142,6 +142,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
         if (Object.keys(urlFilters).length > 0) setFilters(urlFilters);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update search type when context prop changes

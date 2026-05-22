@@ -541,7 +541,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       saveCorrespondence(correspondenceList);
       setCorrespondence(correspondenceList);
     } catch (error: unknown) {
-      if (error instanceof Error && error.message.toLowerCase().includes('auth')) {
+      if ((error as any)?.status === 401) {
         logInfo('Correspondence data will sync after authentication is available.');
       } else {
         logError('Failed to load correspondence from API', error);

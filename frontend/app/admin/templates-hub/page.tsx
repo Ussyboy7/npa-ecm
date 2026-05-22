@@ -166,6 +166,7 @@ function TemplatesHubForm() {
 
   useEffect(() => {
     refreshTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -332,6 +333,7 @@ function TemplatesHubForm() {
     if (activeTab === "workflows") {
       loadWorkflowTemplates();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const filteredWorkflowTemplates = useMemo(() => {
@@ -415,6 +417,7 @@ function TemplatesHubForm() {
       const timeoutId = setTimeout(() => loadFormTemplates(), 300);
       return () => clearTimeout(timeoutId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formSearch, activeTab]);
 
   const handleDeleteFormClick = (id: string, name: string) => {

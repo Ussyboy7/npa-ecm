@@ -258,7 +258,7 @@ export const getUnreadCount = async (force = false): Promise<number> => {
         return 0;
       }
       
-      if (errorMessage === 'Authentication required' || errorMessage === 'Authentication expired') {
+      if ((error as any)?.status === 401 || errorMessage === 'Authentication required' || errorMessage === 'Authentication expired') {
         setGlobalUnreadCount(0);
         return 0;
       }

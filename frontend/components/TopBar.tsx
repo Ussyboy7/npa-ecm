@@ -164,6 +164,7 @@ export const TopBar = () => {
               src={NPA_LOGO_URL}
               alt={`${NPA_BRAND_NAME} crest`}
               fill
+              unoptimized
               className="object-contain p-0.5"
               sizes="32px"
               priority

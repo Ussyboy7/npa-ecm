@@ -1,29 +1,24 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   MessageSquare,
-  FileText,
   Download,
-  RefreshCw,
   CheckCircle,
   Clock,
-  AlertCircle,
-  Link,
-  Share2,
   Archive,
   Users,
-  User,
-  Briefcase,
-  ArrowRight
+  UserIcon,
+  ArrowUp,
+  ArrowRight,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatDateTime } from "@/lib/correspondence-helpers";
+import { formatDateShort } from "@/lib/correspondence-helpers";
+import { WorkflowProgressIndicator } from "@/components/correspondence/WorkflowProgressIndicator";
 import type { Correspondence, Minute } from "@/lib/npa-structure";
 
 interface ActionsPanelProps {
@@ -65,25 +60,18 @@ export function ActionsPanel({
   completionPackageUrl,
   completionGeneratedAt,
   activeDelegation,
+  organizationUsers = [],
+  offices = [],
+  officeMemberships = [],
+  lookupUser = () => undefined,
   onOpenMinuteModal,
   onOpenTreatmentModal,
+  onOpenParallelRouteModal,
   onOpenCompletionModal,
   onOpenDelegateModal,
   onDownloadCompletionPackage,
   onSyncFromApi,
 }: ActionsPanelProps) {
-  const [syncing, setSyncing] = useState(false);
-
-  const handleSync = async () => {
-    if (!onSyncFromApi) return;
-    setSyncing(true);
-    try {
-      await onSyncFromApi();
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   if (!correspondence) {
     return (
       <Card>
@@ -94,204 +82,270 @@ export function ActionsPanel({
     );
   }
 
+  const daysPending = correspondence.receivedDate
+    ? Math.floor((Date.now() - new Date(correspondence.receivedDate).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const lastMinute = minutes[minutes.length - 1];
+  let currentApproverId = correspondence.currentApproverId;
+  const routingActions = ["minute", "forward", "approve", "treat"];
+  if (lastMinute?.isRecalled && routingActions.includes(lastMinute.actionType) && lastMinute.userId) {
+    currentApproverId = lastMinute.userId;
+  }
+  const currentApprover = currentApproverId ? lookupUser(currentApproverId) : null;
+  const slaWarning = daysPending >= 5;
+  const slaBreach = daysPending >= 7;
+
   return (
     <div className="space-y-4">
-      {/* Status Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            {isCompleted ? (
-              <CheckCircle className="h-4 w-4 text-green-600" />
-            ) : isCurrentUserTurn ? (
-              <Clock className="h-4 w-4 text-blue-600" />
-            ) : (
-              <AlertCircle className="h-4 w-4 text-orange-600" />
-            )}
-            Status
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Current Status:</span>
-            <Badge
-              variant={isCompleted ? "default" : "secondary"}
-              className={cn(
-                isCompleted && "bg-green-100 text-green-800",
-                isCurrentUserTurn && !isCompleted && "bg-blue-100 text-blue-800"
+      {/* Current Status Card */}
+      <Card className={cn(slaBreach ? "border-destructive/50 bg-destructive/5" : slaWarning ? "border-warning/50 bg-warning/5" : "")}>
+        <CardContent className="p-3">
+          <div className="flex items-start gap-3">
+            <div className={cn(
+              "h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0",
+              isCompleted ? "bg-success/20" : isCurrentUserTurn ? "bg-primary animate-pulse" : "bg-muted"
+            )}>
+              {isCompleted ? (
+                <CheckCircle className="h-5 w-5 text-success" />
+              ) : isCurrentUserTurn ? (
+                <div className="h-3 w-3 rounded-full bg-primary-foreground" />
+              ) : (
+                <Clock className="h-5 w-5 text-muted-foreground" />
               )}
-            >
-              {isCompleted ? "Completed" : isCurrentUserTurn ? "Your Turn" : "Waiting"}
-            </Badge>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium truncate">
+                  {isCompleted ? "Completed" : currentApprover?.name ?? "Pending Assignment"}
+                </p>
+                {isCurrentUserTurn && !isCompleted && (
+                  <Badge variant="default" className="text-[10px] h-5">Your Turn</Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {isCompleted
+                  ? `Closed ${completionGeneratedAt ? formatDateShort(completionGeneratedAt) : ""}`
+                  : currentApprover?.systemRole ?? "Awaiting action"
+                }
+              </p>
+              {!isCompleted && (
+                <div className="flex items-center gap-2 mt-1.5">
+                  <Badge
+                    variant={slaBreach ? "destructive" : slaWarning ? "outline" : "secondary"}
+                    className={cn("text-[10px] h-5", slaWarning && !slaBreach && "border-warning text-warning")}
+                  >
+                    {daysPending} {daysPending === 1 ? "day" : "days"} pending
+                  </Badge>
+                  {slaBreach && (
+                    <Badge variant="destructive" className="text-[10px] h-5">SLA Breach</Badge>
+                  )}
+                  {slaWarning && !slaBreach && (
+                    <Badge variant="outline" className="text-[10px] h-5 border-warning text-warning">SLA Warning</Badge>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-
-          {activeDelegation && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Delegated to:</span>
-              <Badge variant="outline">{activeDelegation.delegateeName}</Badge>
-            </div>
-          )}
-
-          {isForInformationOnly && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm">Purpose:</span>
-              <Badge variant="outline">For Information</Badge>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Primary Actions */}
-      {!isCompleted && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {isCurrentUserTurn && !turnRestrictedDisabled && (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={onOpenMinuteModal}
-                      className="w-full justify-start"
-                      size="sm"
-                    >
-                      <MessageSquare className="h-4 w-4 mr-2" />
-                      Add Minute
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Add a new minute to this correspondence</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={onOpenTreatmentModal}
-                      variant="outline"
-                      className="w-full justify-start"
-                      size="sm"
-                    >
-                      <ArrowRight className="h-4 w-4 mr-2" />
-                      Process Correspondence
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Take action on this correspondence</TooltipContent>
-                </Tooltip>
-
-                {isExecutive && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        onClick={onOpenCompletionModal}
-                        variant="outline"
-                        className="w-full justify-start"
-                        size="sm"
-                      >
-                        <CheckCircle className="h-4 w-4 mr-2" />
-                        Complete Correspondence
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Mark this correspondence as completed</TooltipContent>
-                  </Tooltip>
-                )}
-              </>
-            )}
-
-            {!isForInformationOnly && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={onOpenDelegateModal}
-                    variant="outline"
-                    className="w-full justify-start"
-                    size="sm"
-                  >
-                    <Users className="h-4 w-4 mr-2" />
-                    Delegate
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Delegate this correspondence to another user</TooltipContent>
-              </Tooltip>
-            )}
-          </CardContent>
-        </Card>
+      {/* Workflow Progress Indicator */}
+      {!isCompleted && minutes.length > 0 && (
+        <WorkflowProgressIndicator
+          correspondence={correspondence}
+          minutes={minutes}
+          currentApprover={correspondence.currentApproverId ? lookupUser(correspondence.currentApproverId) : undefined}
+          users={organizationUsers}
+          offices={offices}
+          officeMemberships={officeMemberships}
+        />
       )}
 
-      {/* Completion Package */}
-      {isCompleted && (completionPackageUrl || completionGeneratedAt) && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Completion Package
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {completionGeneratedAt && (
-              <div className="text-xs text-muted-foreground">
-                Generated: {formatDateTime(completionGeneratedAt)}
-              </div>
-            )}
-            {completionPackageUrl && onDownloadCompletionPackage && (
+      {isCompleted ? (
+        <div className="space-y-3">
+          <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+            <p className="text-sm font-medium text-success">Correspondence Completed</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              Closed{completionGeneratedAt ? ` on ${formatDateShort(completionGeneratedAt)}` : ""}. This item is now archived and read-only for audit purposes.
+            </p>
+          </div>
+          {completionPackageUrl && onDownloadCompletionPackage && (
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => onDownloadCompletionPackage(completionPackageUrl, `completion-package-${correspondence.referenceNumber || correspondence.id}.pdf`)}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download completion package
+            </Button>
+          )}
+        </div>
+      ) : (
+        <>
+          {isCurrentUserTurn && (
+            <div className="p-3 bg-accent/10 border border-accent/20 rounded-lg">
+              <p className="text-sm font-medium text-accent flex items-center gap-2">
+                <CheckCircle className="h-4 w-4" />
+                Your Turn to Act
+              </p>
+            </div>
+          )}
+
+          {activeUser?.gradeLevel === "MDCS" ? (
+            <>
+              {isForInformationOnly ? (
+                <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Info className="h-4 w-4" />
+                    <span>For Information Only – No action required</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
+                    onClick={onOpenMinuteModal}
+                    disabled={turnRestrictedDisabled}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Minute & Approve
+                  </Button>
+                  <Button
+                    className="w-full"
+                    variant="secondary"
+                    onClick={onOpenTreatmentModal}
+                    disabled={turnRestrictedDisabled}
+                  >
+                    <ArrowRight className="h-4 w-4 mr-2" />
+                    Treat & Respond
+                  </Button>
+                </>
+              )}
+            </>
+          ) : correspondence.direction === "downward" ? (
+            <>
+              {isForInformationOnly ? (
+                <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Info className="h-4 w-4" />
+                    <span>For Information Only – No action required</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"
+                    onClick={onOpenMinuteModal}
+                    disabled={turnRestrictedDisabled}
+                  >
+                    <MessageSquare className="h-4 w-4 mr-2" />
+                    Minute & Route
+                  </Button>
+                  <Button
+                    className="w-full"
+                    variant="secondary"
+                    onClick={onOpenTreatmentModal}
+                    disabled={turnRestrictedDisabled}
+                  >
+                    <ArrowRight className="h-4 w-4 mr-2" />
+                    Treat & Respond
+                  </Button>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {isForInformationOnly ? (
+                <div className="w-full p-3 bg-muted/50 border border-border rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Info className="h-4 w-4" />
+                    <span>For Information Only – No action required</span>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  className="w-full bg-gradient-success hover:opacity-90 transition-opacity"
+                  onClick={onOpenMinuteModal}
+                  disabled={turnRestrictedDisabled}
+                >
+                  <ArrowUp className="h-4 w-4 mr-2" />
+                  Endorse & Forward
+                </Button>
+              )}
+            </>
+          )}
+
+          {!isForInformationOnly && (
+            <Button
+              className="w-full mt-3"
+              variant="outline"
+              onClick={onOpenCompletionModal}
+              disabled={turnRestrictedDisabled}
+            >
+              <Archive className="h-4 w-4 mr-2" />
+              Mark Complete & Archive
+            </Button>
+          )}
+
+          <Separator />
+
+          <div className="space-y-2">
+            {isExecutive && (
               <Button
-                onClick={() => onDownloadCompletionPackage(completionPackageUrl, `completion-${correspondence?.referenceNumber || 'package'}.pdf`)}
                 variant="outline"
                 className="w-full justify-start"
-                size="sm"
+                onClick={onOpenParallelRouteModal}
+                disabled={turnRestrictedDisabled}
               >
-                <Download className="h-4 w-4 mr-2" />
-                Download Package
+                <Users className="h-4 w-4 mr-2" />
+                Send to Multiple Recipients
               </Button>
             )}
-          </CardContent>
-        </Card>
+            {activeDelegation ? (
+              <div className="space-y-2">
+                <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-1">
+                    <UserIcon className="h-4 w-4" />
+                    <span className="text-xs font-medium">
+                      {String(activeUser?.id) === String(activeDelegation.principalId)
+                        ? "Active Delegation"
+                        : "Acting on Behalf"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {String(activeUser?.id) === String(activeDelegation.principalId) ? (
+                      <>
+                        Delegated to {organizationUsers.find((u) => String(u.id) === String(activeDelegation.assistantId))?.name || "Assistant"}
+                        {activeDelegation.delegatedAt && (
+                          <> on {new Date(activeDelegation.delegatedAt).toLocaleDateString()}</>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        Acting on behalf of {organizationUsers.find((u) => String(u.id) === String(activeDelegation.principalId))?.name || "Principal"}
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={onOpenDelegateModal}
+                disabled={turnRestrictedDisabled}
+              >
+                <UserIcon className="h-4 w-4 mr-2" />
+                Delegate to TA/PA
+              </Button>
+            )}
+          </div>
+
+          <Separator />
+        </>
       )}
 
-      {/* Utilities */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Utilities</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={handleSync}
-                disabled={syncing}
-                variant="ghost"
-                className="w-full justify-start"
-                size="sm"
-              >
-                <RefreshCw className={cn("h-4 w-4 mr-2", syncing && "animate-spin")} />
-                {syncing ? "Syncing..." : "Sync from API"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Refresh data from the server</TooltipContent>
-          </Tooltip>
-        </CardContent>
-      </Card>
 
-      {/* Statistics */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Activity</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Total Minutes:</span>
-            <Badge variant="outline">{minutes.length}</Badge>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span>Last Activity:</span>
-            <span className="text-muted-foreground">
-              {minutes.length > 0
-                ? formatDateTime(minutes[minutes.length - 1].timestamp)
-                : "None"
-              }
-            </span>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

@@ -96,7 +96,7 @@ export const subscribeToCurrentUser = (cb: (user: User | null, hydrated: boolean
 
 export const useCurrentUser = () => {
   const organization = useContext(OrganizationContext);
-  const users = organization?.users ?? [];
+  const users = useMemo(() => organization?.users ?? [], [organization?.users]);
   const [remoteUser, setRemoteUser] = useState<User | null>(globalUserState.user);
   const [hydrated, setHydrated] = useState(globalUserState.hydrated);
 
@@ -184,10 +184,10 @@ export const useCurrentUser = () => {
     }
 
     return () => {
-      // Remove this component as a subscriber
       globalSubscribers.delete(subscriber);
     };
-  }, []); // Empty deps - only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

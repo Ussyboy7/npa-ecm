@@ -46,6 +46,7 @@ export default function FormTemplateEditorPage() {
     if (!isNew) {
       loadTemplate();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isNew]);
 
   const loadTemplate = async () => {

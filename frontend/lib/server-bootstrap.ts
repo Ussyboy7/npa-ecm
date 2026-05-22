@@ -37,20 +37,6 @@ function unwrapResults(payload: unknown): unknown[] {
   return [];
 }
 
-export interface SidebarCounts {
-  officeInbox: number;
-  myInbox: number;
-  outbox: number;
-  officeOutbox: number;
-  delegated: number;
-  secretaryInbox?: number;
-  myCases: number;
-  officeCases: number;
-  allCases: number;
-  executiveApprovals: number;
-  myDocuments: number;
-}
-
 export interface BootstrapData {
   user: Record<string, unknown> | null;
   directorates: unknown[];
@@ -61,7 +47,7 @@ export interface BootstrapData {
   officeMemberships: unknown[];
   users: unknown[];
   assistantAssignments: unknown[];
-  sidebarCounts?: SidebarCounts | null;
+  sidebarCounts?: Record<string, number> | null;
 }
 
 export async function fetchBootstrap(): Promise<BootstrapData | null> {
@@ -75,16 +61,14 @@ export async function fetchBootstrap(): Promise<BootstrapData | null> {
   try {
     // Slim bootstrap: user + sidebarCounts + delegations only. Org data (directorates, divisions, etc.)
     // is fetched on-demand by OrganizationProvider to avoid slow startup.
-    const sidebarCountsPromise = fetchWithToken("/correspondence/items/sidebar-counts/", token).catch(() => null);
-
     const [userRes, delegationsRes, sidebarCountsRes] = await Promise.all([
       fetchWithToken("/accounts/auth/me/", token),
       fetchWithToken("/correspondence/delegations/", token),
-      sidebarCountsPromise,
+      fetchWithToken("/correspondence/items/sidebar-counts/", token),
     ]);
 
     const sidebarCounts = sidebarCountsRes && typeof sidebarCountsRes === "object" && !Array.isArray(sidebarCountsRes)
-      ? (sidebarCountsRes as SidebarCounts)
+      ? (sidebarCountsRes as Record<string, number>)
       : null;
 
     const delegations = delegationsRes ? unwrapResults(delegationsRes) : [];

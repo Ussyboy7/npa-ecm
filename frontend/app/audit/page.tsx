@@ -438,6 +438,7 @@ const AuditTrailPage = () => {
   useEffect(() => {
     void fetchLogs();
     void fetchSummaryStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, currentUser, page, pageSize, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateRangeFilter, customDateFrom, customDateTo]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));

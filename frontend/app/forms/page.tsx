@@ -92,6 +92,7 @@ const FormsPage = () => {
     if (pagination.page > 1) {
       pagination.setPage(1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, templateFilter, executiveFilter, debouncedSearch]);
   
   // Check if user is secretary
@@ -142,27 +143,6 @@ const FormsPage = () => {
       }
     };
     void loadAllTemplates();
-  }, []);
-
-  // Load forms
-  useEffect(() => {
-    loadForms();
-  }, [activeTab, statusFilter, templateFilter, executiveFilter, debouncedSearch, currentUser?.id]);
-
-  // Load pending signatures for current user
-  useEffect(() => {
-    if (currentUser && (activeTab === 'pending' || activeTab === 'my-forms')) {
-      loadPendingSignatures();
-    }
-  }, [currentUser, activeTab]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
   }, []);
 
   const loadForms = useCallback(async () => {
@@ -281,6 +261,26 @@ const FormsPage = () => {
     }
   }, [pagination.page, pagination.pageSize, sortField, sortOrder, allForms]);
 
+  // Load forms
+  useEffect(() => {
+    loadForms();
+  }, [activeTab, statusFilter, templateFilter, executiveFilter, debouncedSearch, currentUser?.id, loadForms]);
+
+  // Load pending signatures for current user
+  useEffect(() => {
+    if (currentUser && (activeTab === 'pending' || activeTab === 'my-forms')) {
+      loadPendingSignatures();
+    }
+  }, [currentUser, activeTab]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const loadPendingSignatures = async () => {
     try {

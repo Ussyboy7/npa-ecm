@@ -730,8 +730,7 @@ class Command(BaseCommand):
             reference_number="NPA/CORR/2025/015",
             defaults={
                 "subject": "Request for ECM Implementation Update",
-                "summary": "Update requested by Managing Director",
-                "body_html": "<p>Please provide an update on the ECM rollout milestones.</p>",
+                "body_html": "<p><strong>Update requested by Managing Director</strong></p><p>Please provide an update on the ECM rollout milestones.</p>",
                 "source": Correspondence.Source.INTERNAL,
                 "priority": Correspondence.Priority.HIGH,
                 "direction": Correspondence.Direction.UPWARD,
@@ -1720,8 +1719,7 @@ class Command(BaseCommand):
                 reference_number="NPA/CORR/2025/COMP-001",
                 defaults={
                     "subject": "Completion Confirmation – Wharf Rehabilitation Project",
-                    "summary": "User department confirms project completion",
-                    "body_html": "<p>This is to confirm that the Wharf Rehabilitation project has been fully completed as per contract specifications.</p>",
+                    "body_html": "<p><em>User department confirms project completion</em></p><p>This is to confirm that the Wharf Rehabilitation project has been fully completed as per contract specifications.</p>",
                     "source": Correspondence.Source.INTERNAL,
                     "priority": Correspondence.Priority.HIGH,
                     "direction": Correspondence.Direction.UPWARD,
@@ -1740,8 +1738,7 @@ class Command(BaseCommand):
                 reference_number="NPA/CORR/2025/INV-001",
                 defaults={
                     "subject": "Invoice Submission – Wharf Rehabilitation (₦2.45bn)",
-                    "summary": "Contractor submits final invoice for payment",
-                    "body_html": "<p>Please find attached the final invoice for the completed wharf rehabilitation project.</p>",
+                    "body_html": "<p><em>Contractor submits final invoice for payment</em></p><p>Please find attached the final invoice for the completed wharf rehabilitation project.</p>",
                     "source": Correspondence.Source.EXTERNAL,
                     "priority": Correspondence.Priority.HIGH,
                     "direction": Correspondence.Direction.UPWARD,

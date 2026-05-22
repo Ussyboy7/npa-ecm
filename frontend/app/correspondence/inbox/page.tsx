@@ -183,7 +183,7 @@ const CorrespondenceInbox = () => {
     // The office memberships above already capture the user's organizational units
 
     return { officeIds, divisionIds, departmentIds, directorateIds };
-  }, [userOfficeMemberships, offices, currentUser]);
+  }, [userOfficeMemberships, offices]);
 
   // Helper to check if user is a CC recipient and get the purpose
   const getCCInfo = (corr: Correspondence): { isCC: boolean; purpose?: string } => {
@@ -273,6 +273,7 @@ const CorrespondenceInbox = () => {
 
   useEffect(() => {
     pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOfficeId, debouncedSearch, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {

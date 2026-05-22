@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,8 +62,8 @@ export function DynamicFormRenderer({
   errors = {},
   disabled = false,
 }: DynamicFormRendererProps) {
-  const fields = template.structure?.fields || [];
-  const layout = template.structure?.layout || "single";
+  const fields = useMemo(() => template.structure?.fields || [], [template]);
+  const layout = useMemo(() => template.structure?.layout || "single", [template]);
   const workflowCollectedFieldNames = getWorkflowCollectedFieldNames(fields);
   const [formData, setFormData] = useState<Record<string, unknown>>(initialData);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -104,7 +104,7 @@ export function DynamicFormRenderer({
     });
     
     setValidationErrors(newErrors);
-  }, [formData, template]);
+  }, [formData, template, fields]);
 
   const markFieldTouched = (fieldName: string) => {
     setTouchedFields((prev) => (prev[fieldName] ? prev : { ...prev, [fieldName]: true }));

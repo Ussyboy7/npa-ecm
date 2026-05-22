@@ -1,45 +1,28 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextPlugin from "@next/eslint-plugin-next";
+import reactHooksPlugin from "eslint-plugin-react-hooks";
+import tseslint from "typescript-eslint";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+export default tseslint.config(
   {
+    ignores: [".next/**", "node_modules/**", "dist/**", ".next"],
+  },
+  ...tseslint.configs.recommended,
+  {
+    plugins: {
+      "@next/next": nextPlugin,
+      "react-hooks": reactHooksPlugin,
+    },
     rules: {
-      // Prevent console statements
-      "no-console": ["warn", { 
-        allow: ["warn", "error"] // Allow console.warn/error for critical errors only
-      }],
-      
-      // Prevent explicit any types
-      "@typescript-eslint/no-explicit-any": ["warn", {
-        ignoreRestArgs: false
-      }],
-      
-      // Enforce React hooks dependencies
-      "react-hooks/exhaustive-deps": "warn",
-      
-      // Additional code quality rules
+      ...nextPlugin.configs["core-web-vitals"].rules,
+      ...reactHooksPlugin.configs.recommended.rules,
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+      "@typescript-eslint/no-explicit-any": ["warn", { ignoreRestArgs: false }],
       "@typescript-eslint/no-unused-vars": ["warn", {
         argsIgnorePattern: "^_",
-        varsIgnorePattern: "^_"
+        varsIgnorePattern: "^_",
       }],
-      
-      // Prefer const
       "prefer-const": "warn",
-      
-      // No var
       "no-var": "error",
     },
   },
-];
-
-export default eslintConfig;
-
+);

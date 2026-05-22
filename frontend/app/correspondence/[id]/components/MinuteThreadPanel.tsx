@@ -33,6 +33,7 @@ interface MinuteThreadPanelProps {
   onEditMinute: (minute: Minute) => void;
   onRecallMinute: (minute: Minute) => void;
   onAddNote: (minute: Minute) => void;
+  fullWidth?: boolean;
 }
 
 export const MinuteThreadPanel = ({
@@ -46,6 +47,7 @@ export const MinuteThreadPanel = ({
   onEditMinute,
   onRecallMinute,
   onAddNote,
+  fullWidth,
 }: MinuteThreadPanelProps) => {
   // Helper to check if minute is recalled (defensive check)
   const isMinuteRecalled = (minute: Minute): boolean => {
@@ -53,7 +55,7 @@ export const MinuteThreadPanel = ({
   };
 
   return (
-    <main className="w-full md:w-[60%] md:max-w-[750px] md:min-w-[450px] max-w-full flex flex-col border-b md:border-b-0 md:border-r border-border bg-background rounded-lg">
+    <main className={`${fullWidth ? "w-full border-b md:border-b-0" : "w-full md:w-[60%] md:max-w-[750px] md:min-w-[450px] border-b md:border-b-0 md:border-r rounded-lg"} max-w-full flex flex-col border-border bg-background`}>
       <div className="p-4 border-b border-border bg-background flex-shrink-0">
         <h3 className="font-semibold text-sm flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-secondary" />

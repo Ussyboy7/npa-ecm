@@ -185,7 +185,8 @@ export const AccessActivityCard = ({
     });
 
     return result;
-  }, [accessLogs, accessLogFilter, accessLogDateFilter, searchQuery, sortOption, userLookup]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessLogs, accessLogFilter, accessLogDateFilter, searchQuery, sortOption]);
 
   // Calculate statistics from filtered logs
   const stats = useMemo(() => {

@@ -392,6 +392,7 @@ function ApprovalsForm() {
   // Reset page when filters change
   useEffect(() => {
     pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, filterRole, filterStatus, dateRangeFilter, sortBy, sortOrder]);
 
   // Sync pagination with URL

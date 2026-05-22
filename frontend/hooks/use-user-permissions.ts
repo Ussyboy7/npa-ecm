@@ -60,6 +60,6 @@ export const useUserPermissions = (user?: User | null): PermissionProfile => {
     }
 
     return enhancedProfile;
-  }, [assistantAssignments, user?.id, user?.gradeLevel, user?.systemRole, user?.isSuperuser]);
+  }, [assistantAssignments, user]);
 };
 

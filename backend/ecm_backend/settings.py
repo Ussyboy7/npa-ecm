@@ -30,6 +30,8 @@ else:
 # Core Settings
 # ---------------------------------------------------------------------------
 
+DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     if DEBUG:
@@ -38,7 +40,6 @@ if not SECRET_KEY:
         raise ValueError(
             "DJANGO_SECRET_KEY environment variable is required in production"
         )
-DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -234,6 +235,17 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": int(os.getenv("PAGINATION_PAGE_SIZE", "20")),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "ecm_backend.exception_handler.custom_exception_handler",
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.getenv("THROTTLE_ANON_RATE", "10/minute"),
+        "user": os.getenv("THROTTLE_USER_RATE", "100/minute"),
+        "login": os.getenv("THROTTLE_LOGIN_RATE", "5/minute"),
+        "otp": os.getenv("THROTTLE_OTP_RATE", "3/minute"),
+        "password_change": os.getenv("THROTTLE_PASSWORD_CHANGE_RATE", "3/hour"),
+    },
 }
 
 SPECTACULAR_SETTINGS = {

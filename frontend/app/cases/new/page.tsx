@@ -87,8 +87,9 @@ const NewCasePage = () => {
         setAutoSaveStatus('saved');
       }
     } catch (err) {
-      logError('Failed to load draft', err);
+        logError('Failed to load draft', err);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Auto-save to localStorage
@@ -125,6 +126,7 @@ const NewCasePage = () => {
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData]);
   
   // Track unsaved changes

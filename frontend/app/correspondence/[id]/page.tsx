@@ -5,7 +5,7 @@ import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { handleAuthenticationError } from '@/lib/auth-errors';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +56,7 @@ import {
   Maximize2,
   Minimize2,
   Filter,
+  Paperclip,
   Plus,
   Clock,
   RotateCcw as RotateCcwIcon,
@@ -291,6 +292,7 @@ const CorrespondenceDetailContent = () => {
     return () => {
       ignore = true;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setLinkedDocuments is stable
   }, [correspondence?.linkedDocumentIds]);
 
   // Document preview is now handled by useDocumentPreview hook (see above)
@@ -388,6 +390,7 @@ const CorrespondenceDetailContent = () => {
       ignore = true;
       abortController.abort();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchWithRetry is stable (useApiRetry), set* setters are stable
   }, [id, getMinutesByCorrespondenceId]);
 
   useEffect(() => {
@@ -430,7 +433,7 @@ const CorrespondenceDetailContent = () => {
         )
       );
     }
-  }, [correspondence?.id, activeUser?.id, correspondence?.currentOfficeId, correspondence?.currentApproverId, detailLoading]);
+  }, [correspondence, activeUser?.id, detailLoading, minutes]);
 
   // Fetch parallel routing groups
   // Only fetch when id changes or when detailLoading becomes false (data loaded)
@@ -489,18 +492,18 @@ const CorrespondenceDetailContent = () => {
           setParallelRoutingGroups(uniqueGroups);
         }
       } catch (error: unknown) {
-        // Handle authentication errors - redirect to login
         if (handleAuthenticationError(error)) {
-          return; // Redirect is happening, exit early
+          return;
         }
-        logError('[ParallelRouting] Failed to fetch parallel routing groups', error);
+        logWarn('[ParallelRouting] Failed to fetch parallel routing groups', error);
       }
     };
     void fetchParallelGroups();
     return () => {
       ignore = true;
     };
-  }, [id, detailLoading]); // Removed fetchWithRetry from deps - it's stable from useApiRetry hook
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchWithRetry is stable (useApiRetry), setParallelRoutingGroups is stable
+  }, [id, detailLoading]);
 
   // Function to refresh minutes from API with retry logic
   const refreshMinutes = useCallback(async () => {
@@ -647,7 +650,7 @@ const CorrespondenceDetailContent = () => {
       (m) => m.purpose === 'information' && correspondence.currentApproverId === activeUser.id
     );
     return !!infoMinute || userMinutes.some((m) => m.purpose === 'information');
-  }, [minutes, activeUser?.id, correspondence?.currentApproverId, correspondence?.currentOfficeId]);
+  }, [minutes, activeUser?.id, correspondence]);
 
   // Determine which parallel routing groups to show in the UI.
   // We avoid clutter by:
@@ -926,6 +929,27 @@ const CorrespondenceDetailContent = () => {
     }
   };
 
+  const resolveDistributionName = (recipient: DistributionRecipient) => {
+    if (recipient.type === 'directorate') {
+      if (recipient.directorateId) {
+        const dir = directorates.find((d) => d.id === recipient.directorateId);
+        if (dir) return dir.name;
+      }
+      return recipient.name ?? 'Directorate';
+    }
+    if (recipient.type === 'department') {
+      if (recipient.departmentId) {
+        const dept = departments.find((d) => d.id === recipient.departmentId);
+        if (dept) return dept.name;
+      }
+    }
+    if (recipient.divisionId) {
+      const div = divisions.find((d) => d.id === recipient.divisionId);
+      if (div) return div.name;
+    }
+    return recipient.name ?? 'Recipient';
+  };
+
   return (
     <DashboardLayout>
       <div className="flex flex-col min-w-0">
@@ -992,9 +1016,81 @@ const CorrespondenceDetailContent = () => {
           </div>
         </div>
 
-        {/* Main Content Area - 2-Panel Layout: Thread | Actions */}
-        <div className="flex flex-col md:flex-row md:gap-4 px-0 md:px-4 lg:px-6 py-4 md:py-6">
-          {/* Left Panel - Minute Thread (60%) */}
+        {/* Desktop 2-Column Layout */}
+        <div className="hidden md:flex flex-1 min-h-0 overflow-hidden">
+          <MinuteThreadPanel
+            minutes={minutes}
+            activeUserId={activeUser.id}
+            isCompleted={isCompleted}
+            isCurrentUserTurn={isCurrentUserTurn}
+            lookupUser={lookupUser}
+            getActionIcon={getActionIcon}
+            fullWidth
+            onMinuteClick={(minute) => {
+              setSelectedMinute(minute);
+              openModal('minute-detail');
+            }}
+            onEditMinute={(minute) => {
+              setSelectedMinute(minute);
+              openModal('edit-minute');
+            }}
+            onRecallMinute={(minute) => {
+              if (minute.isRecalled || minute.recalledAt) {
+                logWarn('[CorrespondenceDetail] Cannot recall already recalled minute', { minuteId: minute.id });
+                toast.error('This minute has already been recalled.');
+                return;
+              }
+              setSelectedMinute(minute);
+              openModal('recall-minute');
+            }}
+            onAddNote={(minute) => {
+              setSelectedMinute(minute);
+              openModal('additional-minute');
+            }}
+          />
+
+          <aside className="w-[35%] min-w-0 border-l border-border bg-background flex flex-col overflow-hidden">
+            <div className="p-4 border-b border-border flex-shrink-0">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Send className="h-4 w-4 text-accent" />
+                Actions
+              </h3>
+            </div>
+            <ScrollArea className="h-full w-full">
+              <div className="p-4 space-y-4 overflow-x-hidden">
+                <ActionsPanel
+                  correspondence={correspondence}
+                  minutes={minutes}
+                  activeUser={activeUser}
+                  onOpenParallelRouteModal={() => openModal('parallel-route')}
+                  onOpenLinkCaseModal={() => openModal('link-case')}
+                  isCompleted={isCompleted}
+                  isCurrentUserTurn={isCurrentUserTurn}
+                  isForInformationOnly={isForInformationOnly}
+                  isExecutive={isExecutive}
+                  turnRestrictedDisabled={turnRestrictedDisabled}
+                  completionPackageUrl={completionPackageUrl}
+                  completionGeneratedAt={completionGeneratedAt}
+                  activeDelegation={activeDelegation}
+                  organizationUsers={organizationUsers}
+                  offices={offices}
+                  officeMemberships={officeMemberships}
+                  lookupUser={lookupUser}
+                  onOpenMinuteModal={() => openModal('minute')}
+                  onOpenTreatmentModal={() => openModal('treatment')}
+                  onOpenCompletionModal={() => openModal('completion')}
+                  onOpenDelegateModal={() => openModal('delegate')}
+                  onDownloadCompletionPackage={handleCompletionPackageDownload}
+                  onSyncFromApi={syncFromApi}
+                />
+              </div>
+            </ScrollArea>
+          </aside>
+        </div>
+
+        {/* Mobile Tab Content */}
+      {mobileActiveTab === 'thread' && (
+        <div className="md:hidden">
           <MinuteThreadPanel
             minutes={minutes}
             activeUserId={activeUser.id}
@@ -1011,7 +1107,6 @@ const CorrespondenceDetailContent = () => {
               openModal('edit-minute');
             }}
             onRecallMinute={(minute) => {
-              // Prevent opening recall modal if minute is already recalled
               if (minute.isRecalled || minute.recalledAt) {
                 logWarn('[CorrespondenceDetail] Cannot recall already recalled minute', { minuteId: minute.id });
                 toast.error('This minute has already been recalled.');
@@ -1025,8 +1120,10 @@ const CorrespondenceDetailContent = () => {
               openModal('additional-minute');
             }}
           />
-
-          {/* Right Panel - Actions (40%) */}
+        </div>
+      )}
+      {mobileActiveTab === 'actions' && (
+        <div className="md:hidden">
           <ActionsPanel
             correspondence={correspondence}
             minutes={minutes}
@@ -1048,81 +1145,14 @@ const CorrespondenceDetailContent = () => {
             onOpenMinuteModal={() => openModal('minute')}
             onOpenTreatmentModal={() => openModal('treatment')}
             onOpenCompletionModal={() => openModal('completion')}
-            // onOpenParallelRouteModal removed - Use Distribution (CC) in MinuteModal instead
             onOpenDelegateModal={() => openModal('delegate')}
-            // onOpenLinkCaseModal moved to CorrespondenceHeader
             onDownloadCompletionPackage={handleCompletionPackageDownload}
             onSyncFromApi={syncFromApi}
-                              />
-                            </div>
-                            </div>
-
-      {/* Mobile Tab Content */}
-      {mobileActiveTab === 'thread' && (
-        <div className="md:hidden">
-          <MinuteThreadPanel
-            minutes={minutes}
-            activeUserId={activeUser.id}
-            isCompleted={isCompleted}
-            isCurrentUserTurn={isCurrentUserTurn}
-            lookupUser={lookupUser}
-            getActionIcon={getActionIcon}
-            onMinuteClick={(minute) => {
-              setSelectedMinute(minute);
-              openModal('minute-detail');
-            }}
-            onEditMinute={(minute) => {
-              setSelectedMinute(minute);
-              openModal('edit-minute');
-            }}
-            onRecallMinute={(minute) => {
-              // Prevent opening recall modal if minute is already recalled
-              if (minute.isRecalled || minute.recalledAt) {
-                logWarn('[CorrespondenceDetail] Cannot recall already recalled minute', { minuteId: minute.id });
-                toast.error('This minute has already been recalled.');
-                return;
-              }
-              setSelectedMinute(minute);
-              openModal('recall-minute');
-            }}
-            onAddNote={(minute) => {
-              setSelectedMinute(minute);
-              openModal('additional-minute');
-            }}
           />
-                                    </div>
+        </div>
       )}
-      {mobileActiveTab === 'actions' && (
-        <div className="md:hidden">
-          <ActionsPanel
-            correspondence={correspondence}
-            minutes={minutes}
-            activeUser={activeUser}
-            onOpenParallelRouteModal={() => openModal('parallel-route')}
-            onOpenLinkCaseModal={() => openModal('link-case')}
-            isCompleted={isCompleted}
-            isCurrentUserTurn={isCurrentUserTurn}
-            isForInformationOnly={isForInformationOnly}
-            isExecutive={isExecutive}
-            turnRestrictedDisabled={turnRestrictedDisabled}
-            completionPackageUrl={completionPackageUrl}
-            completionGeneratedAt={completionGeneratedAt}
-            activeDelegation={activeDelegation}
-            organizationUsers={organizationUsers}
-                  offices={offices}
-                  officeMemberships={officeMemberships}
-            lookupUser={lookupUser}
-            onOpenMinuteModal={() => openModal('minute')}
-            onOpenTreatmentModal={() => openModal('treatment')}
-            onOpenCompletionModal={() => openModal('completion')}
-            // onOpenParallelRouteModal removed - Use Distribution (CC) in MinuteModal instead
-            onOpenDelegateModal={() => openModal('delegate')}
-            // onOpenLinkCaseModal moved to CorrespondenceHeader
-            onDownloadCompletionPackage={handleCompletionPackageDownload}
-            onSyncFromApi={syncFromApi}
-          />
-                    </div>
-                  )}
+
+      </div>
 
       {/* Modals */}
       <MinuteModal
@@ -1339,5 +1369,10 @@ const CorrespondenceDetailContent = () => {
   );
 };
 
-// Export the content component directly - Suspense is handled by Next.js for useSearchParams
-export default CorrespondenceDetailContent;
+const CorrespondenceDetailPage = () => (
+  <CorrespondenceProvider>
+    <CorrespondenceDetailContent />
+  </CorrespondenceProvider>
+);
+
+export default CorrespondenceDetailPage;

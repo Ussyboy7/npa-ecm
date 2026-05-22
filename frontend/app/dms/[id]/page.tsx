@@ -592,7 +592,8 @@ const DocumentDetailPage = () => {
       ignore = true;
       isLoadingRef.current = false;
     };
-  }, [params?.id, hydrated, currentUser?.id]); // loadDocument is stable (memoized with params?.id) and doesn't need to be in deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDocument stable (memoized with params?.id), normalizeId and router are stable
+  }, [params?.id, hydrated, currentUser?.id]);
 
 
 
@@ -770,8 +771,8 @@ const DocumentDetailPage = () => {
           dispatchOCR({ type: 'SET_JOB', versionId, job: finalJob });
           dispatchOCR({ type: 'SET_ERROR', versionId, error: 'OCR processing timed out. The job may still be running in the background.' });
         }
-      }).catch(() => {
-        // Ignore errors on final check
+      }).catch((err) => {
+        console.warn("[OCR] Final status check failed:", err);
       });
     }, 5 * 60 * 1000);
   };
@@ -950,6 +951,7 @@ const DocumentDetailPage = () => {
       logError('Failed to refresh related correspondence', error);
       throw error;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- normalizeId is stable (pure utility)
   }, [document?.id]);
 
   // Memoize access logs refresh handler

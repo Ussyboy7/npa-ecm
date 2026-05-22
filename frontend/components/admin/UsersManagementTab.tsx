@@ -8,6 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
+import { cn } from "@/lib/utils";
+import {
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from "@/components/shared/registry-queue-styles";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -209,6 +217,7 @@ export const UsersManagementTab = () => {
     if (currentPage !== 1) {
       setCurrentPage(1);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, filters]);
   
   const loadUsers = useCallback(async () => {
@@ -290,7 +299,7 @@ export const UsersManagementTab = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, filters, sortState]);
+  }, [currentPage, pageSize, searchQuery, filters, sortState, resolveRoleId]);
   
   // Map API users to local User type (must be before useEffects that use it)
   const mappedUsers = useMemo(() => {
@@ -712,53 +721,31 @@ export const UsersManagementTab = () => {
         />
 
         <div className="grid gap-4 md:grid-cols-3">
-          <Card>
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <Users className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Users</p>
-                <p className="text-2xl font-bold">{totalCount}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="p-3 bg-success/10 rounded-lg">
-                <Shield className="h-6 w-6 text-success" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Management Level</p>
-                <p className="text-2xl font-bold">
-                  {
-                    mappedUsers.filter((user) =>
-                      ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(user.gradeLevel)
-                    ).length
-                  }
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="p-3 bg-info/10 rounded-lg">
-                <Building2 className="h-6 w-6 text-info" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Divisions Covered</p>
-                <p className="text-2xl font-bold">
-                  {
-                    Array.from(
-                      new Set(mappedUsers.map((user) => user.division).filter(Boolean))
-                    ).length
-                  }
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          {[
+            { label: 'Total Users', value: totalCount, icon: Users, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+            { label: 'Management Level', icon: Shield, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Divisions Covered', icon: Building2, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>
+                      {value ?? (
+                        label === 'Management Level'
+                          ? mappedUsers.filter((user) => ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(user.gradeLevel)).length
+                          : Array.from(new Set(mappedUsers.map((user) => user.division).filter(Boolean))).length
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
       <div className="relative max-w-xl">

@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api-client';
 import { AlertCircle, ArrowLeft, FileText, Users, ArrowRight, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useCorrespondence, mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { useCorrespondence, mapApiCorrespondence, CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useApiRetry } from '@/hooks/use-api-retry';
@@ -223,7 +223,8 @@ const CorrespondenceRegisterForm = () => {
         payload: { referenceNumber: generateReferenceNumber() },
       });
     }
-  }, []); // Only run once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only run once on mount
+  }, []);
 
   // Draft auto-save hook - memoize callbacks to prevent infinite loops
   const handleDraftLoaded = useCallback((draft: { flowType?: FlowType; formData?: FormData; directorateDistribution?: string[]; divisionDistribution?: string[]; departmentDistribution?: string[] }) => {
@@ -377,7 +378,7 @@ const CorrespondenceRegisterForm = () => {
         payload: { owningOfficeId: membership.officeId },
       });
     }
-  }, [mounted, currentUser?.id, officeMemberships, formData.owningOfficeId, membershipOffices]);
+  }, [mounted, currentUser, officeMemberships, formData.owningOfficeId, membershipOffices]);
 
   // Update sender name when flow type or office changes
   useEffect(() => {
@@ -907,7 +908,9 @@ const CorrespondenceRegisterForm = () => {
 
 const CorrespondenceRegister = () => (
   <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
-    <CorrespondenceRegisterForm />
+    <CorrespondenceProvider>
+      <CorrespondenceRegisterForm />
+    </CorrespondenceProvider>
   </Suspense>
 );
 

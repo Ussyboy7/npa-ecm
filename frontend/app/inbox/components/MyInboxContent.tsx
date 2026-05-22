@@ -61,7 +61,7 @@ const UnifiedInbox = () => {
     return assistantAssignments.some(
       (assignment) => String(assignment.assistantId) === String(currentUser.id)
     );
-  }, [assistantAssignments, currentUser?.id]);
+  }, [assistantAssignments, currentUser]);
 
   const officeInboxCount = counts.officeInbox;
   const myInboxCount = counts.myInbox;

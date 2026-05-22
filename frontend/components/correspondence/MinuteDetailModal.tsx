@@ -275,6 +275,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
     } else {
       setPdfBlobUrl(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewAttachment]);
 
   // Generate PDF blob URL or Word HTML for view modal
@@ -399,6 +400,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
       setWordHtml(null);
       setWordError(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewAttachment]);
 
   const formatFileSize = (bytes?: number) => {

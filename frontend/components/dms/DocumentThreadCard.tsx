@@ -101,6 +101,7 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
     if (documentId) {
       loadThreadDocuments();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentId, parentDocumentId]);
 
   const handleRefresh = async () => {

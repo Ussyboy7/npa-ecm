@@ -186,6 +186,7 @@ function LoginForm() {
               src={NPA_LOGO_URL}
               alt={`${NPA_BRAND_NAME} crest`}
               fill
+              unoptimized
               sizes="56px"
               className="object-contain"
               priority
@@ -239,6 +240,7 @@ function LoginForm() {
                 src={NPA_LOGO_URL}
                 alt={`${NPA_BRAND_NAME} crest`}
                 fill
+                unoptimized
                 sizes="40px"
                 className="object-contain"
               />

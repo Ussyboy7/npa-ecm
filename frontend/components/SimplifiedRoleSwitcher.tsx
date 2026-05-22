@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Search, Shield, User as UserIcon, Loader2, ChevronDown, ChevronRight, Star, StarOff, X, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,6 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   
   const [searchQuery, setSearchQuery] = useState<string>("");
   const debouncedSearchQuery = useDebounce(searchQuery, DEBOUNCE_DELAY);
-  const [, startTransition] = useTransition();
   const [isSwitching, setIsSwitching] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -161,6 +160,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
         abortControllerRef.current.abort();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearchQuery, shouldUseBackendSearch]);
 
   // Re-fetch when backend pagination changes
@@ -168,7 +168,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     if (shouldUseBackendSearch && debouncedSearchQuery.trim() && !isSearchingBackend) {
       performBackendSearch(debouncedSearchQuery, backendPagination.page, backendPagination.pageSize);
     }
-  }, [backendPagination.page, backendPagination.pageSize]);
+  }, [backendPagination.page, backendPagination.pageSize, debouncedSearchQuery, isSearchingBackend, shouldUseBackendSearch]);
 
   const performBackendSearch = async (query: string, page: number = 1, pageSize: number = DEFAULT_PAGE_SIZE) => {
     // Cancel previous request if still in progress
@@ -321,7 +321,6 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     backendSearchResults,
     debouncedSearchQuery,
     departmentMap,
-    directorateMap,
     divisionMap,
     getDirectorateNameForUser,
     shouldUseBackendSearch,
@@ -335,7 +334,8 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     if (!isUsingBackendSearch && debouncedSearchQuery.trim()) {
       frontendPagination.goToFirstPage();
     }
-  }, [debouncedSearchQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchQuery, isUsingBackendSearch]);
 
   // Update frontend pagination when filtered users change
   useEffect(() => {
@@ -346,6 +346,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
         frontendPagination.goToFirstPage();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredUsers.length, isUsingBackendSearch, frontendPagination.page, frontendPagination.pageSize]);
 
   // Get paginated users (for frontend filtering)
@@ -359,7 +360,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     const start = (frontendPagination.page - 1) * frontendPagination.pageSize;
     const end = start + frontendPagination.pageSize;
     return filteredUsers.slice(start, end);
-  }, [filteredUsers, frontendPagination.page, frontendPagination.pageSize, users.length, debouncedSearchQuery]);
+  }, [filteredUsers, frontendPagination.page, frontendPagination.pageSize, debouncedSearchQuery, shouldUseBackendSearch]);
 
   // Get recent and favorite users
   const recentUserObjects = useMemo(() => {
@@ -508,15 +509,12 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       setRecentUsers(getRecentUsers());
       
       toast.success(`Switched to ${displayName}`);
-      
+
       // Close modal on success
       onClose?.();
-      
-      // Refresh data in background
-      startTransition(() => {
-        void refreshCurrentUser();
-        void refreshOrganizationData();
-      });
+
+      // Hard reload to re-render everything with the impersonated user's data
+      setTimeout(() => window.location.reload(), 500);
       } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to switch user";
       toast.error(message);
@@ -574,13 +572,10 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       storeTokens(originalTokens.access, originalTokens.refresh, secondsRemaining);
       clearOriginalTokens();
       toast.success("Returned to your primary account");
-      
+
       onClose?.();
-      
-      startTransition(() => {
-        void refreshCurrentUser();
-        void refreshOrganizationData();
-      });
+
+      setTimeout(() => window.location.reload(), 500);
       } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unable to restore your session";
       toast.error(message);

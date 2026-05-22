@@ -58,7 +58,8 @@ export function SignatureWorkflowDialog({
         }))
       );
     }
-  }, [open, signatureFields.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, signatureFields]);
 
   const handleAddAssignment = () => {
     if (signatureFields.length > 0) {

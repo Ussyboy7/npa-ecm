@@ -17,6 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+import {
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
 import {
   Mail,
   Search,
@@ -27,6 +35,7 @@ import {
   ChevronRight,
   Loader2,
   UserCheck,
+  Inbox,
 } from 'lucide-react';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
@@ -255,40 +264,28 @@ const ExecutiveSupportInboxContent = () => {
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{summary.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Urgent</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-destructive">{summary.urgent}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Overdue</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{summary.overdue}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-muted-foreground">
-              {inboxItems.filter((item) => item.status as string === 'pending' || item.status as string === 'in-progress').length}
-            </div>
-          </CardContent>
-        </Card>
+        {[
+          { label: 'Total', value: summary.total, icon: Inbox, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+          { label: 'Urgent', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
+          { label: 'Overdue', value: summary.overdue, icon: Clock, bgClass: 'bg-warning/10', iconClass: 'text-warning' },
+          { label: 'Pending', icon: AlertCircle, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+        ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+          <Card key={label}>
+            <CardContent className={registryQueueStatCardContentClass}>
+              <div className="flex items-center gap-4">
+                <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                  <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                </div>
+                <div>
+                  <p className={registryQueueStatLabelClass}>{label}</p>
+                  <p className={registryQueueStatValueClass}>
+                    {value ?? inboxItems.filter((item) => item.status as string === 'pending' || item.status as string === 'in-progress').length}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Filters Panel */}

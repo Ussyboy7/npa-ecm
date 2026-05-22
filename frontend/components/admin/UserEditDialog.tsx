@@ -162,7 +162,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
   const userMemberships = useMemo(() => {
     if (!user) return [];
     return officeMemberships.filter((m) => String(m.userId) === String(user.id));
-  }, [officeMemberships, user?.id]);
+  }, [officeMemberships, user]);
 
   const officeOptions = useMemo(() => {
     return offices

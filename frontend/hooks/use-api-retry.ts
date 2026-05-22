@@ -3,8 +3,8 @@
  * Handles retries for critical API calls with exponential backoff
  */
 
-import { useCallback } from 'react';
-import { logError, logWarn } from '@/lib/client-logger';
+import { useCallback, useMemo } from 'react';
+import { logWarn } from '@/lib/client-logger';
 import { isAuthenticationError } from '@/lib/auth-errors';
 
 export interface RetryOptions {
@@ -37,7 +37,7 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
  * }
  */
 export const useApiRetry = (options: RetryOptions = {}) => {
-  const config = { ...DEFAULT_OPTIONS, ...options };
+  const config = useMemo(() => ({ ...DEFAULT_OPTIONS, ...options }), [options]);
 
   const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 

@@ -269,7 +269,7 @@ const OutboxDetailPage = () => {
 
       // Fetch case links
       try {
-        const caseLinksResponse = await apiFetch<Array<Record<string, unknown>>>(`/cases/case-correspondence-links/?correspondence=${id}`).catch(() => []);
+        const caseLinksResponse = await apiFetch<Array<Record<string, unknown>>>(`/correspondence/case-correspondence-links/?correspondence=${id}`);
         if (Array.isArray(caseLinksResponse)) {
           const links = caseLinksResponse.map((link) => ({
             id: String((link.case && typeof link.case === 'object' && 'id' in link.case ? (link.case as Record<string, unknown>).id : null) || link.case_id || ''),

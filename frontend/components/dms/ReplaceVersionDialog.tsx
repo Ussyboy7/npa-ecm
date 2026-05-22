@@ -75,6 +75,13 @@ export const ReplaceVersionDialog = ({
     }
   }, []);
 
+  const handleClose = useCallback(() => {
+    setFile(null);
+    setNotes('');
+    setError(null);
+    onOpenChange(false);
+  }, [onOpenChange]);
+
   const handleSubmit = useCallback(async () => {
     if (!file || !version || !document) {
       toast.error('Please select a file to replace the version');
@@ -106,14 +113,7 @@ export const ReplaceVersionDialog = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [file, version, document, notes, onComplete]);
-
-  const handleClose = useCallback(() => {
-    setFile(null);
-    setNotes('');
-    setError(null);
-    onOpenChange(false);
-  }, [onOpenChange]);
+  }, [file, version, document, notes, onComplete, handleClose]);
 
   if (!version || !document) return null;
 

@@ -55,6 +55,7 @@ export const LegalHoldsManager = () => {
         abortControllerRef.current.abort();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadLegalHolds = useCallback(async () => {

@@ -287,6 +287,7 @@ const OfficeOutboxPage = () => {
 
   useEffect(() => {
     pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {

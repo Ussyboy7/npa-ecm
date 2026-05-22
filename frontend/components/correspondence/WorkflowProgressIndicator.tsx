@@ -229,7 +229,7 @@ export function WorkflowProgressIndicator({
       steps,
       isMdDirectorate,
     };
-  }, [correspondence, minutes, currentApprover, users]);
+  }, [correspondence, minutes, currentApprover, users, officeMemberships, offices]);
 
   const { steps, workflowName, flowType } = workflowAnalysis;
   

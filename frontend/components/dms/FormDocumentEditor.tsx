@@ -82,6 +82,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
 
   useEffect(() => {
     loadFormDocument();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formDocumentId]);
 
   const loadFormDocument = async () => {

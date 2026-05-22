@@ -24,6 +24,13 @@ import {
   FolderTree,
 } from "lucide-react";
 import { useOrganization, type Directorate, type Division, type Department } from "@/contexts/OrganizationContext";
+import {
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from "@/components/shared/registry-queue-styles";
 import { DirectorateFormModal } from "@/components/admin/DirectorateFormModal";
 import { DirectorateLeadershipDialog } from "@/components/admin/DirectorateLeadershipDialog";
 import { DivisionFormModal } from "@/components/admin/DivisionFormModal";
@@ -100,6 +107,7 @@ const OrganizationStructurePage = () => {
     setMounted(true);
     // Expand all by default for better UX
     setExpandedDirectorates(new Set(directorates.map(d => d.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Filter logic for search
@@ -180,7 +188,7 @@ const OrganizationStructurePage = () => {
       setExpandedDirectorates(dirsToExpand);
       setExpandedDivisions(divsToExpand);
     }
-  }, [searchQuery, filteredData]);
+  }, [searchQuery, filteredData, departments, divisions]);
 
   // Stats
   const stats = useMemo(() => ({
@@ -351,53 +359,26 @@ const OrganizationStructurePage = () => {
 
           {/* Stats */}
           <div className="grid gap-4 md:grid-cols-4">
-            <Card>
-              <CardContent className="p-6 flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-primary/10">
-                  <Building2 className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Directorates</p>
-                  <p className="text-2xl font-bold">{stats.directorates}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6 flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-success/10">
-                  <Network className="h-6 w-6 text-success" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Divisions</p>
-                  <p className="text-2xl font-bold">{stats.divisions}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6 flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-info/10">
-                  <Layers className="h-6 w-6 text-info" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Departments</p>
-                  <p className="text-2xl font-bold">{stats.departments}</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6 flex items-center gap-4">
-                <div className="p-3 rounded-lg bg-warning/10">
-                  <UserCircle2 className="h-6 w-6 text-warning" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">With Leadership</p>
-                  <p className="text-2xl font-bold">{stats.withLeadership}</p>
-                </div>
-              </CardContent>
-            </Card>
+            {[
+              { label: 'Directorates', value: stats.directorates, icon: Building2, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+              { label: 'Divisions', value: stats.divisions, icon: Network, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
+              { label: 'Departments', value: stats.departments, icon: Layers, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+              { label: 'With Leadership', value: stats.withLeadership, icon: UserCircle2, bgClass: 'bg-amber-500/10', iconClass: 'text-amber-600 dark:text-amber-400' },
+            ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+              <Card key={label}>
+                <CardContent className={registryQueueStatCardContentClass}>
+                  <div className="flex items-center gap-4">
+                    <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                      <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                    </div>
+                    <div>
+                      <p className={registryQueueStatLabelClass}>{label}</p>
+                      <p className={registryQueueStatValueClass}>{value}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
           {/* Search & Controls */}

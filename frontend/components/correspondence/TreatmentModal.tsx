@@ -263,6 +263,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     }).catch((error) => {
       logError('Failed to load draft', error);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, correspondence.id, currentUser]);
 
   // Load documents - simple callback like LinkDocumentDialog
@@ -384,6 +385,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       }));
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const behalfOfOptions = useMemo(() => getBehalfOfOptions(), [activeUsers, currentUser, divisions]);
 
   // Get suggested approvers for routing (like MinuteModal)

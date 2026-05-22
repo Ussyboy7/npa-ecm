@@ -367,7 +367,7 @@ export async function updateCaseStatus(
   caseId: string,
   status: Case['status']
 ): Promise<Case> {
-  return apiFetch<Case>(`${BASE_PATH}/${caseId}/update_status/`, {
+  return apiFetch<Case>(`${BASE_PATH}/${caseId}/update-status/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
@@ -378,7 +378,7 @@ export async function updateCaseStatus(
  * Generate completion package for a case
  */
 export async function generateCaseCompletionPackage(caseId: string): Promise<Case> {
-  return apiFetch<Case>(`${BASE_PATH}/${caseId}/generate_completion_package/`, {
+  return apiFetch<Case>(`${BASE_PATH}/${caseId}/generate-completion-package/`, {
     method: 'POST',
   });
 }

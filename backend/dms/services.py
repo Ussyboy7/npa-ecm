@@ -407,6 +407,72 @@ Summary:"""
         return summary
 
 
+class FileUploadService:
+    """Service for processing file uploads (base64 decode, save to disk, OCR)."""
+
+    SUPPORTED_OCR_TYPES = {
+        'image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'application/pdf',
+    }
+
+    @classmethod
+    def process_data_url(cls, file_url: str, file_name: str, file_type: str,
+                         document_identifier: str | None = None,
+                         version: object | None = None) -> dict:
+        """Process a base64 data URL: decode, validate, save to disk, run OCR.
+
+        Returns a dict with keys: file_url, file_size, file_type, file_name, ocr_text (optional).
+        Raises ValidationError on failure.
+        """
+        from django.core.files.base import ContentFile
+        from django.core.files.storage import default_storage
+        from common.upload_validators import validate_file_upload
+
+        data: dict[str, object] = {}
+
+        header, encoded = file_url.split(',', 1)
+        mime_type = header.split(';')[0].split(':')[1] if ':' in header else file_type
+        file_data = base64.b64decode(encoded)
+
+        safe_name = file_name or f"upload-{document_identifier or 'pending'}"
+        validate_file_upload(
+            file_name=safe_name,
+            mime_type=mime_type,
+            file_bytes=file_data,
+            field_name="file_url",
+        )
+
+        data["file_size"] = len(file_data)
+        if not file_type and mime_type:
+            data["file_type"] = mime_type
+        if not file_name:
+            data["file_name"] = safe_name
+
+        doc_id = document_identifier or 'pending'
+        media_root = settings.MEDIA_ROOT
+        dms_dir = os.path.join(media_root, 'dms_versions', doc_id)
+        os.makedirs(dms_dir, exist_ok=True)
+
+        safe_filename = (data.get('file_name', safe_name) or safe_name).replace(' ', '_').replace('/', '_')
+        file_path = os.path.join('dms_versions', doc_id, safe_filename)
+        saved_path = default_storage.save(file_path, ContentFile(file_data, name=safe_filename))
+
+        media_url = settings.MEDIA_URL or '/media/'
+        if not media_url.startswith('/'):
+            media_url = f'/{media_url}'
+        data['file_url'] = f"{media_url.rstrip('/')}/{saved_path}"
+
+        if mime_type in cls.SUPPORTED_OCR_TYPES:
+            try:
+                file_full_path = os.path.join(media_root, saved_path)
+                ocr_text = OCRService.extract_text(file_full_path, mime_type)
+                if ocr_text:
+                    data['ocr_text'] = ocr_text
+            except Exception as e:
+                logger.warning("OCR extraction failed after upload: %s", e)
+
+        return data
+
+
 class DocumentAnalyticsService:
     """Service for document analytics and statistics."""
     

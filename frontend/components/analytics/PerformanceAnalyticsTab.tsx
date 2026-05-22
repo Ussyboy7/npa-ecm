@@ -68,9 +68,9 @@ export const PerformanceAnalyticsTab = () => {
 
   const slaMetrics = data?.sla ?? { total: 0, compliant: 0, breached: 0, complianceRate: 0 };
   const turnaroundMetrics = data?.turnaround ?? { average: 0, fastest: 0, slowest: 0 };
-  const divisionPerformance = data?.divisionPerformance ?? [];
-  const responseDistribution = data?.responseDistribution ?? [];
-  const rolePerformance = data?.rolePerformance ?? [];
+  const divisionPerformance = useMemo(() => data?.divisionPerformance ?? [], [data]);
+  const responseDistribution = useMemo(() => data?.responseDistribution ?? [], [data]);
+  const rolePerformance = useMemo(() => data?.rolePerformance ?? [], [data]);
 
   const radarData = useMemo(() => {
     return divisionPerformance.slice(0, 6).map((division) => ({

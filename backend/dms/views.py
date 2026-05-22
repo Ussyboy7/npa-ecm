@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-import base64
 import logging
 import os
 from datetime import timedelta
 from datetime import datetime
 
 from django.conf import settings
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 from django.db import connection
 from django.db.models import Max, Q
 from django.utils import timezone
 from django.utils.text import slugify
-from common.upload_validators import validate_file_upload
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
@@ -39,7 +35,6 @@ from .models import (
     DocumentTemplate,
     DocumentVersion,
     DocumentWorkspace,
-    FormDocument,
 )
 from .serializers import (
     DocumentAccessLogSerializer,
@@ -52,9 +47,8 @@ from .serializers import (
     DocumentTemplateSerializer,
     DocumentVersionSerializer,
     DocumentWorkspaceSerializer,
-    FormDocumentSerializer,
 )
-from .services import OCRService, DocumentSummaryService
+from .services import FileUploadService, OCRService, DocumentSummaryService
 
 logger = logging.getLogger(__name__)
 
@@ -166,14 +160,14 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 from_date = datetime.strptime(date_from, "%Y-%m-%d").date()
                 queryset = queryset.filter(created_at__date__gte=from_date)
             except ValueError:
-                pass  # Invalid date format, ignore
+                logger.warning("Invalid date_from format: %s", date_from)
         
         if date_to:
             try:
                 to_date = datetime.strptime(date_to, "%Y-%m-%d").date()
                 queryset = queryset.filter(created_at__date__lte=to_date)
             except ValueError:
-                pass  # Invalid date format, ignore
+                logger.warning("Invalid date_to format: %s", date_to)
 
         if status_in:
             statuses = [value.strip() for value in status_in.split(",") if value.strip()]
@@ -257,8 +251,8 @@ class DocumentViewSet(viewsets.ModelViewSet):
                                     output_field=IntegerField(),
                                 )
                             ).order_by("search_priority", "-updated_at")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Full-text search enhancement failed: %s", e)
         else:
             # No search query, just apply standard filters
             queryset = super().filter_queryset(queryset)
@@ -336,7 +330,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
                     if parsed > 0:
                         recent_days = min(parsed, 365)
                 except (TypeError, ValueError):
-                    pass
+                    logger.warning("Invalid recent_days value: %s", raw_recent_days)
             cutoff = timezone.now() - timedelta(days=recent_days)
             recent_logs = (
                 DocumentAccessLog.objects.filter(user=user, timestamp__gte=cutoff)
@@ -647,63 +641,18 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         file_type = data.get('file_type', '')
         document_identifier = str(data.get('document', ''))
         
-        # If file_url is a data URL (base64), save it to disk
+        # If file_url is a data URL (base64), process via shared service
         if file_url and file_url.startswith('data:'):
             try:
-                # Parse data URL: data:type/subtype;base64,<data>
-                header, encoded = file_url.split(',', 1)
-                # Extract mime type if available
-                mime_type = header.split(';')[0].split(':')[1] if ':' in header else file_type
-                
-                # Decode base64 data
-                file_data = base64.b64decode(encoded)
-                safe_name = file_name or f"upload-{document_identifier or 'pending'}"
-                validate_file_upload(
-                    file_name=safe_name,
-                    mime_type=mime_type,
-                    file_bytes=file_data,
-                    field_name="file_url",
+                result = FileUploadService.process_data_url(
+                    file_url=file_url,
+                    file_name=file_name,
+                    file_type=file_type,
+                    document_identifier=document_identifier,
                 )
-                data["file_size"] = len(file_data)
-                if not data.get('file_type') and mime_type:
-                    data['file_type'] = mime_type
-                if not data.get('file_name'):
-                    data['file_name'] = safe_name
-
-                # Ensure media directory exists
-                media_root = settings.MEDIA_ROOT
-                document_id = document_identifier or 'pending'
-                dms_dir = os.path.join(media_root, 'dms_versions', document_id)
-                os.makedirs(dms_dir, exist_ok=True)
-                
-                # Generate file path
-                safe_filename = (data['file_name'] or safe_name).replace(' ', '_').replace('/', '_')
-                file_path = os.path.join('dms_versions', document_id, safe_filename)
-                
-                # Save file to storage
-                saved_path = default_storage.save(file_path, ContentFile(file_data, name=safe_filename))
-                
-                # Build relative URL for the file (browser will resolve to current domain)
-                media_url = settings.MEDIA_URL or '/media/'
-                if not media_url.startswith('/'):
-                    media_url = f'/{media_url}'
-                file_url = f"{media_url.rstrip('/')}/{saved_path}"
-                
-                # Update data with the new file URL
-                data['file_url'] = file_url
-                
-                # Run OCR if it's an image or PDF
-                if mime_type in ['image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'application/pdf']:
-                    try:
-                        file_full_path = os.path.join(media_root, saved_path)
-                        ocr_text = OCRService.extract_text(file_full_path, mime_type)
-                        if ocr_text:
-                            data['ocr_text'] = ocr_text
-                    except Exception as e:
-                        logger.warning(f"OCR extraction failed: {e}")
-                        
+                data.update(result)
             except Exception as e:
-                logger.error(f"Failed to process data URL for document version: {e}")
+                logger.error("Failed to process data URL for document version: %s", e)
                 raise ValidationError({"file_url": "Failed to process uploaded file. Please try again or contact support."})
         
         # Create serializer with modified data
@@ -730,85 +679,6 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         """Replace an existing version with new file content."""
         version = self.get_object()
         
-        # Create a mutable copy of request data
-        data = dict(request.data)
-        
-        # Extract file data from request if it's a data URL
-        file_url = data.get('file_url', '')
-        file_name = data.get('file_name', version.file_name)
-        file_type = data.get('file_type', version.file_type)
-        
-        # If file_url is a data URL (base64), save it to disk
-        if file_url and file_url.startswith('data:'):
-            try:
-                # Parse data URL: data:type/subtype;base64,<data>
-                header, encoded = file_url.split(',', 1)
-                # Extract mime type if available
-                mime_type = header.split(';')[0].split(':')[1] if ':' in header else file_type
-                
-                # Decode base64 data
-                file_data = base64.b64decode(encoded)
-                safe_name = file_name or version.file_name
-                validate_file_upload(
-                    file_name=safe_name,
-                    mime_type=mime_type,
-                    file_bytes=file_data,
-                    field_name="file_url",
-                )
-                data["file_size"] = len(file_data)
-                if not data.get('file_type') and mime_type:
-                    data['file_type'] = mime_type
-                if not data.get('file_name'):
-                    data['file_name'] = safe_name
-
-                # Ensure media directory exists
-                media_root = settings.MEDIA_ROOT
-                document_id = str(version.document.id)
-                dms_dir = os.path.join(media_root, 'dms_versions', document_id)
-                os.makedirs(dms_dir, exist_ok=True)
-                
-                # Generate file path
-                safe_filename = (data['file_name'] or safe_name).replace(' ', '_').replace('/', '_')
-                file_path = os.path.join('dms_versions', document_id, safe_filename)
-                
-                # Save file to storage
-                saved_path = default_storage.save(file_path, ContentFile(file_data, name=safe_filename))
-                
-                # Build relative URL for the file
-                media_url = settings.MEDIA_URL or '/media/'
-                if not media_url.startswith('/'):
-                    media_url = f'/{media_url}'
-                file_url = f"{media_url.rstrip('/')}/{saved_path}"
-                
-                # Update data with the new file URL
-                data['file_url'] = file_url
-                
-                # Run OCR if it's an image or PDF
-                if mime_type in ['image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'application/pdf']:
-                    try:
-                        file_full_path = os.path.join(media_root, saved_path)
-                        ocr_text = OCRService.extract_text(file_full_path, mime_type)
-                        if ocr_text:
-                            data['ocr_text'] = ocr_text
-                    except Exception as e:
-                        logger.warning(f"OCR extraction failed: {e}")
-                        
-            except Exception as e:
-                logger.error(f"Failed to process data URL for version replacement: {e}")
-                raise ValidationError({"file_url": "Failed to process uploaded file. Please try again or contact support."})
-        
-        # Update the version
-        serializer = self.get_serializer(version, data=data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["post"], url_path="replace")
-    def replace_version(self, request, pk=None):
-        """Replace an existing version with new file content."""
-        version = self.get_object()
-        
         # Check permissions - only author or document owner can replace
         if version.uploaded_by != request.user and version.document.author != request.user:
             raise PermissionDenied("You can only replace versions you uploaded or documents you own")
@@ -821,63 +691,18 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         file_name = data.get('file_name', version.file_name)
         file_type = data.get('file_type', version.file_type)
         
-        # If file_url is a data URL (base64), save it to disk
+        # If file_url is a data URL (base64), process via shared service
         if file_url and file_url.startswith('data:'):
             try:
-                # Parse data URL: data:type/subtype;base64,<data>
-                header, encoded = file_url.split(',', 1)
-                # Extract mime type if available
-                mime_type = header.split(';')[0].split(':')[1] if ':' in header else file_type
-                
-                # Decode base64 data
-                file_data = base64.b64decode(encoded)
-                safe_name = file_name or version.file_name
-                validate_file_upload(
-                    file_name=safe_name,
-                    mime_type=mime_type,
-                    file_bytes=file_data,
-                    field_name="file_url",
+                result = FileUploadService.process_data_url(
+                    file_url=file_url,
+                    file_name=file_name or version.file_name,
+                    file_type=file_type or version.file_type,
+                    document_identifier=str(version.document.id),
                 )
-                data["file_size"] = len(file_data)
-                if not data.get('file_type') and mime_type:
-                    data['file_type'] = mime_type
-                if not data.get('file_name'):
-                    data['file_name'] = safe_name
-
-                # Ensure media directory exists
-                media_root = settings.MEDIA_ROOT
-                document_id = str(version.document.id)
-                dms_dir = os.path.join(media_root, 'dms_versions', document_id)
-                os.makedirs(dms_dir, exist_ok=True)
-                
-                # Generate file path
-                safe_filename = (data['file_name'] or safe_name).replace(' ', '_').replace('/', '_')
-                file_path = os.path.join('dms_versions', document_id, safe_filename)
-                
-                # Save file to storage
-                saved_path = default_storage.save(file_path, ContentFile(file_data, name=safe_filename))
-                
-                # Build relative URL for the file
-                media_url = settings.MEDIA_URL or '/media/'
-                if not media_url.startswith('/'):
-                    media_url = f'/{media_url}'
-                file_url = f"{media_url.rstrip('/')}/{saved_path}"
-                
-                # Update data with the new file URL
-                data['file_url'] = file_url
-                
-                # Run OCR if it's an image or PDF
-                if mime_type in ['image/png', 'image/jpeg', 'image/jpg', 'image/tiff', 'application/pdf']:
-                    try:
-                        file_full_path = os.path.join(media_root, saved_path)
-                        ocr_text = OCRService.extract_text(file_full_path, mime_type)
-                        if ocr_text:
-                            data['ocr_text'] = ocr_text
-                    except Exception as e:
-                        logger.warning(f"OCR extraction failed: {e}")
-                        
+                data.update(result)
             except Exception as e:
-                logger.error(f"Failed to process data URL for version replacement: {e}")
+                logger.error("Failed to process data URL for version replacement: %s", e)
                 raise ValidationError({"file_url": "Failed to process uploaded file. Please try again or contact support."})
         
         # Update the version (preserve version_number, uploaded_by, uploaded_at)

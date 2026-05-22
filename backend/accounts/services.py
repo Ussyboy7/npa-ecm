@@ -1,6 +1,7 @@
 """Services for seal generation and verification."""
 
 import hashlib
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional, Tuple
@@ -10,6 +11,84 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 
 from .models import ExecutiveSignature, DocumentSeal, User
+
+logger = logging.getLogger(__name__)
+
+
+class VerificationTokenService:
+    """
+    Service for generating and verifying short-lived verification tokens.
+    Tokens are stored in the cache (Redis) and expire after a configurable TTL.
+    """
+
+    TOKEN_PREFIX = "verify_token_"
+    DEFAULT_TTL_SECONDS = 300  # 5 minutes
+
+    @classmethod
+    def generate_token(cls, user_id: str, purpose: str = "seal_application") -> str:
+        """Generate a token, store it in cache, and return it."""
+        import hashlib
+        import time
+        from django.core.cache import cache
+
+        timestamp = int(time.time())
+        raw = f"{user_id}:{purpose}:{timestamp}:{uuid.uuid4().hex}"
+        token = hashlib.sha256(raw.encode()).hexdigest()[:48]
+
+        cache_key = f"{cls.TOKEN_PREFIX}{token}"
+        cache.set(
+            cache_key,
+            {"user_id": str(user_id), "purpose": purpose, "created_at": timestamp},
+            timeout=cls.DEFAULT_TTL_SECONDS,
+        )
+
+        return f"{token}:{timestamp}"
+
+    @classmethod
+    def verify_token(cls, token: str, user_id: str, purpose: str = "seal_application") -> bool:
+        """
+        Verify a token. Returns True if valid and not expired.
+        Deletes the token after verification (single-use).
+        """
+        from django.core.cache import cache
+
+        if ":" not in token:
+            return False
+
+        token_hash = token.split(":")[0]
+        cache_key = f"{cls.TOKEN_PREFIX}{token_hash}"
+        stored = cache.get(cache_key)
+
+        if stored is None:
+            return False
+
+        if stored.get("user_id") != str(user_id) or stored.get("purpose") != purpose:
+            return False
+
+        # Single-use: delete after verification
+        cache.delete(cache_key)
+        return True
+
+    @classmethod
+    def consume_token(cls, token: str) -> dict | None:
+        """
+        Consume a token and return its data. Returns None if invalid/expired.
+        Token is deleted after consumption.
+        """
+        from django.core.cache import cache
+
+        if ":" not in token:
+            return None
+
+        token_hash = token.split(":")[0]
+        cache_key = f"{cls.TOKEN_PREFIX}{token_hash}"
+        stored = cache.get(cache_key)
+
+        if stored is None:
+            return None
+
+        cache.delete(cache_key)
+        return stored
 
 
 class SealGenerationService:
@@ -82,7 +161,7 @@ class SealGenerationService:
             try:
                 with document.current_version.file.open('rb') as f:
                     doc_hash = cls.compute_document_hash(f.read())
-            except Exception:
+            except (OSError, ValueError, AttributeError):
                 doc_hash = hashlib.sha256(str(document.id).encode()).hexdigest()
         elif correspondence:
             # For correspondence, hash the subject + ID
@@ -152,8 +231,8 @@ class SealGenerationService:
                 ContentFile(seal_png),
                 save=True,
             )
-        except Exception:
-            pass
+        except (OSError, ValueError, AttributeError):
+            logger.warning("Failed to render seal PNG for seal %s", serial)
         
         # Record signature usage
         signature.record_usage()
@@ -161,7 +240,7 @@ class SealGenerationService:
         # signature_image.url can fail if file was removed from storage
         try:
             signature_url = signature.signature_image.url if signature.signature_image else None
-        except (ValueError, OSError):
+        except (ValueError, OSError, AttributeError):
             signature_url = None
 
         # Build seal data for rendering
@@ -186,7 +265,7 @@ class SealGenerationService:
             if bold:
                 return ImageFont.truetype("DejaVuSans-Bold.ttf", size)
             return ImageFont.truetype("DejaVuSans.ttf", size)
-        except Exception:
+        except (OSError, ValueError):
             return ImageFont.load_default()
 
     @classmethod
@@ -357,7 +436,7 @@ class SealGenerationService:
                 logo = Image.open(str(logo_path)).convert("RGBA")
                 logo = logo.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
                 img.alpha_composite(logo, (int(center_x - logo_size / 2), int(logo_y - logo_size / 2)))
-            except Exception:
+            except (OSError, ValueError):
                 pass
 
         if signature_image_field:
@@ -369,7 +448,7 @@ class SealGenerationService:
                 sig_img = sig_img.resize((sig_target_w, sig_target_h), Image.Resampling.LANCZOS)
                 sig_y = center_y + (size * 0.06 * render_scale)
                 img.alpha_composite(sig_img, (int(center_x - sig_target_w / 2), int(sig_y - sig_target_h / 2)))
-            except Exception:
+            except (OSError, ValueError):
                 pass
 
         approved_text = "DIGITALLY APPROVED"

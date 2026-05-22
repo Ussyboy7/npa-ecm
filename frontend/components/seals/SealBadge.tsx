@@ -41,14 +41,58 @@ interface SealBadgeProps {
 }
 
 export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBadgeProps) {
-  // Build verification URL dynamically based on current environment
-  // This ensures it works in local/stag/prod regardless of stored URL
+  const [open, setOpen] = useState(false);
+  const previewRef = useRef<DigitalSealPreviewHandle>(null);
+  const uploadedSerialRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!sealData?.serialNumber) return;
+    if (uploadedSerialRef.current === sealData.serialNumber) return;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const tick = async () => {
+      attempts += 1;
+      const canvas = previewRef.current?.getCanvas();
+      if (!canvas) return;
+
+      try {
+        const dataUrl = canvas.toDataURL("image/png");
+        if (!dataUrl.startsWith("data:image/png;base64,")) return;
+
+        await uploadSealImage(sealData.serialNumber, dataUrl);
+        if (cancelled) return;
+        uploadedSerialRef.current = sealData.serialNumber;
+      } catch (err) {
+        if (!cancelled) {
+          logWarn("Failed to upload seal image", err);
+        }
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+      if (attempts >= 12) {
+        window.clearInterval(interval);
+        return;
+      }
+      tick();
+    }, 500);
+
+    tick();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [open, sealData?.serialNumber]);
+
   const getVerificationUrl = () => {
     if (typeof window !== 'undefined') {
-      // Use current window origin to build URL dynamically
       return `${window.location.origin}/verify/${sealData.serialNumber}`;
     }
-    // Fallback to stored URL if window is not available (SSR)
     return sealData.verificationUrl;
   };
 
@@ -97,54 +141,6 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
         </Tooltip>
     );
   }
-
-  const [open, setOpen] = useState(false);
-  const previewRef = useRef<DigitalSealPreviewHandle>(null);
-  const uploadedSerialRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!sealData?.serialNumber) return;
-    if (uploadedSerialRef.current === sealData.serialNumber) return;
-
-    let cancelled = false;
-    let attempts = 0;
-
-    const tick = async () => {
-      attempts += 1;
-      const canvas = previewRef.current?.getCanvas();
-      if (!canvas) return;
-
-      try {
-        const dataUrl = canvas.toDataURL("image/png");
-        if (!dataUrl.startsWith("data:image/png;base64,")) return;
-
-        await uploadSealImage(sealData.serialNumber, dataUrl);
-        if (cancelled) return;
-        uploadedSerialRef.current = sealData.serialNumber;
-      } catch (err) {
-        if (!cancelled) {
-          logWarn("Failed to upload seal image", err);
-        }
-      }
-    };
-
-    const interval = window.setInterval(() => {
-      if (cancelled) return;
-      if (attempts >= 12) {
-        window.clearInterval(interval);
-        return;
-      }
-      tick();
-    }, 500);
-
-    tick();
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [open, sealData?.serialNumber]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

@@ -397,6 +397,7 @@ export default function SettingsPage() {
     };
     
     loadSignatureData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id]);
 
   useEffect(() => {

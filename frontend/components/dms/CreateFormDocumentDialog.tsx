@@ -105,6 +105,7 @@ export function CreateFormDocumentDialog({
     }
     // Don't reset state in useEffect - it causes blocking
     // State will be reset when dialog opens next time if needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialTemplate, currentUser?.division, currentUser?.department]);
   
   // Reset state only when dialog closes, with a delay

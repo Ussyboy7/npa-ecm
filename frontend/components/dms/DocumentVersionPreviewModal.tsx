@@ -139,6 +139,7 @@ export const DocumentVersionPreviewModal = ({
         URL.revokeObjectURL(pdfBlobUrl);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isPDF, isWordDocx, version.fileUrl, version.contentHtml]);
 
   // Initialize edited text when version changes or modal opens

@@ -126,11 +126,12 @@ export default function LandingPage() {
           <Link href="/" className="flex items-center gap-3">
             <div className="relative h-12 w-12 overflow-hidden rounded-xl shadow-soft ring-1 ring-primary/20 bg-white">
               <Image
-                src={NPA_LOGO_URL}
-                alt={`${NPA_BRAND_NAME} crest`}
-                fill
-                className="object-contain"
-                sizes="48px"
+              src={NPA_LOGO_URL}
+              alt={`${NPA_BRAND_NAME} crest`}
+              fill
+              unoptimized
+              sizes="48px"
+              className="object-contain"
                 priority
               />
             </div>

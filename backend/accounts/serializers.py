@@ -31,29 +31,28 @@ class UserSerializer(serializers.ModelSerializer):
         try:
             if obj.system_role:
                 return obj.system_role.name
-            # Fallback: if user is superuser, show "System Administrator"
             if getattr(obj, 'is_superuser', False):
                 return "System Administrator"
             return ""
-        except Exception:
+        except (AttributeError, ValueError):
             return ""
     
     def get_directorate_name(self, obj):
         try:
             return obj.directorate.name if obj.directorate else ""
-        except Exception:
+        except (AttributeError, ValueError):
             return ""
     
     def get_division_name(self, obj):
         try:
             return obj.division.name if obj.division else ""
-        except Exception:
+        except (AttributeError, ValueError):
             return ""
     
     def get_department_name(self, obj):
         try:
             return obj.department.name if obj.department else ""
-        except Exception:
+        except (AttributeError, ValueError):
             return ""
 
     def get_permissions(self, obj):
@@ -69,7 +68,7 @@ class UserSerializer(serializers.ModelSerializer):
             candidate = getattr(role, "permissions", None) if role else None
             if isinstance(candidate, dict):
                 role_perms = candidate
-        except Exception:
+        except (AttributeError, TypeError):
             role_perms = {}
 
         # Ensure booleans are booleans and enforce superuser override.

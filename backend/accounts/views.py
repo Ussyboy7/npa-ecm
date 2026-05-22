@@ -1,7 +1,5 @@
 """Viewsets and helper endpoints for the accounts application."""
 
-from datetime import timedelta
-
 from datetime import datetime, timedelta
 import csv
 import io
@@ -11,7 +9,7 @@ from django.conf import settings
 from django.http import FileResponse, HttpResponse
 from django.core.files.base import ContentFile
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, generics, viewsets, status
+from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -23,13 +21,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from audit.services import AuditService
+from common.throttles import LoginRateThrottle, OTPRateThrottle, PasswordChangeRateThrottle
 from .models import User, ExecutiveSignature, DocumentSeal, SealOTP, SignatureTemplate, UserSignaturePreferences
 from .serializers import (
     UserSerializer, 
     ExecutiveSignatureSerializer,
     ExecutiveSignatureUploadSerializer,
-    DocumentSealSerializer,
-    SealVerificationSerializer,
     SignatureTemplateSerializer,
     UserSignaturePreferencesSerializer,
 )
@@ -37,7 +34,6 @@ from .serializers import (
 # For TOTP
 import pyotp
 import base64
-import io
 
 try:
     import qrcode
@@ -87,6 +83,10 @@ class UserViewSet(viewsets.ModelViewSet):
 
         raise PermissionDenied("You do not have permission to manage users.")
 
+    def _ensure_super_admin(self):
+        if not self.request.user.is_superuser:
+            raise PermissionDenied("Only super administrators may perform this action.")
+
     def filter_queryset(self, queryset):
         """Override to add date range filtering."""
         queryset = super().filter_queryset(queryset)
@@ -97,33 +97,36 @@ class UserViewSet(viewsets.ModelViewSet):
         last_login_from = self.request.query_params.get("last_login_from")
         last_login_to = self.request.query_params.get("last_login_to")
         
+        import logging
+        logger = logging.getLogger(__name__)
+
         if date_joined_from:
             try:
                 from_date = datetime.strptime(date_joined_from, "%Y-%m-%d").date()
                 queryset = queryset.filter(date_joined__date__gte=from_date)
             except ValueError:
-                pass
+                logger.warning("Invalid date_joined_from format: %s", date_joined_from)
         
         if date_joined_to:
             try:
                 to_date = datetime.strptime(date_joined_to, "%Y-%m-%d").date()
                 queryset = queryset.filter(date_joined__date__lte=to_date)
             except ValueError:
-                pass
+                logger.warning("Invalid date_joined_to format: %s", date_joined_to)
         
         if last_login_from:
             try:
                 from_date = datetime.strptime(last_login_from, "%Y-%m-%d").date()
                 queryset = queryset.filter(last_login__date__gte=from_date)
             except ValueError:
-                pass
+                logger.warning("Invalid last_login_from format: %s", last_login_from)
         
         if last_login_to:
             try:
                 to_date = datetime.strptime(last_login_to, "%Y-%m-%d").date()
                 queryset = queryset.filter(last_login__date__lte=to_date)
             except ValueError:
-                pass
+                logger.warning("Invalid last_login_to format: %s", last_login_to)
         
         return queryset
 
@@ -539,17 +542,18 @@ class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
                 token["system_role"] = "System Administrator"
             else:
                 token["system_role"] = ""
-        except Exception:
+        except (AttributeError, ValueError):
             token["system_role"] = ""
         try:
             token["grade_level"] = getattr(user, "grade_level", "") or ""
-        except Exception:
+        except (AttributeError, ValueError):
             token["grade_level"] = ""
         return token
 
 
 class AuthTokenObtainPairView(TokenObtainPairView):
     serializer_class = AuthTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request, *args, **kwargs):
         """Handle login and create audit log."""
@@ -661,6 +665,7 @@ class ChangePasswordView(APIView):
     """Allow authenticated users to change their password."""
 
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PasswordChangeRateThrottle]
 
     def post(self, request):
         """Change the user's password."""
@@ -964,7 +969,7 @@ class ApplySealView(APIView):
     
     def post(self, request):
         """Apply seal to document or correspondence."""
-        from .services import SealGenerationService
+        from .services import SealGenerationService, VerificationTokenService
         from correspondence.models import Correspondence
         from dms.models import Document
         
@@ -973,6 +978,18 @@ class ApplySealView(APIView):
         
         if not document_id and not correspondence_id:
             raise ValidationError({"detail": "Either document_id or correspondence_id is required"})
+        
+        # Require 2FA verification token for seal application
+        verification_token = request.data.get('verification_token')
+        if not verification_token:
+            raise ValidationError({"detail": "2FA verification is required. Please complete 2FA verification first."})
+        
+        if not VerificationTokenService.verify_token(
+            token=verification_token,
+            user_id=str(request.user.id),
+            purpose="seal_application",
+        ):
+            raise ValidationError({"detail": "Invalid or expired verification token. Please complete 2FA verification again."})
         
         # Check if user has an active signature
         try:
@@ -1081,6 +1098,7 @@ class RequestEmailOTPView(APIView):
     Sends a 6-digit code to the user's email.
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [OTPRateThrottle]
     
     def post(self, request):
         correspondence_id = request.data.get('correspondence_id')
@@ -1160,6 +1178,7 @@ class VerifyEmailOTPView(APIView):
     Returns a verification token if successful.
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [OTPRateThrottle]
     
     def post(self, request):
         otp_id = request.data.get('otp_id')
@@ -1207,19 +1226,13 @@ class VerifyEmailOTPView(APIView):
                     "remaining_attempts": remaining_attempts,
                 }, status=status.HTTP_400_BAD_REQUEST)
     
-    def _generate_verification_token(self, user, otp):
-        """Generate a short-lived token for seal application."""
-        import hashlib
-        import time
-        
-        # Simple token: hash of user_id + otp_id + timestamp
-        timestamp = int(time.time())
-        data = f"{user.id}:{otp.id}:{timestamp}"
-        token = hashlib.sha256(data.encode()).hexdigest()[:32]
-        
-        # Store token in cache or session (for now, just return it)
-        # In production, you'd store this in Redis/cache with TTL
-        return f"{token}:{timestamp}"
+    def _generate_verification_token(self, user, otp=None):
+        """Generate a short-lived token for seal application, stored in cache."""
+        from .services import VerificationTokenService
+        return VerificationTokenService.generate_token(
+            user_id=str(user.id),
+            purpose="seal_application",
+        )
 
 
 class SetupTOTPView(APIView):
@@ -1278,6 +1291,7 @@ class VerifyTOTPView(APIView):
     Can be used for both setup confirmation and seal application.
     """
     permission_classes = [IsAuthenticated]
+    throttle_classes = [OTPRateThrottle]
     
     def post(self, request):
         code = request.data.get('code')
@@ -1330,14 +1344,12 @@ class VerifyTOTPView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
     
     def _generate_verification_token(self, user):
-        """Generate a short-lived token for seal application."""
-        import hashlib
-        import time
-        
-        timestamp = int(time.time())
-        data = f"{user.id}:totp:{timestamp}"
-        token = hashlib.sha256(data.encode()).hexdigest()[:32]
-        return f"{token}:{timestamp}"
+        """Generate a short-lived token for seal application, stored in cache."""
+        from .services import VerificationTokenService
+        return VerificationTokenService.generate_token(
+            user_id=str(user.id),
+            purpose="seal_application:totp",
+        )
 
 
 class DisableTOTPView(APIView):

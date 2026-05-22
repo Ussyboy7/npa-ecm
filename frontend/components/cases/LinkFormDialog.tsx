@@ -85,6 +85,7 @@ export function LinkFormDialog({
         abortControllerRef.current.abort();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, caseId]);
 
   const fetchLinkedIds = async () => {
@@ -162,12 +163,14 @@ export function LinkFormDialog({
       }, 300);
       return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, open]);
   
   useEffect(() => {
     if (open) {
       fetchForms();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.pageSize, searchQuery, open]);
 
   const toggleSelection = (id: string) => {

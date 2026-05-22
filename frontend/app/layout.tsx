@@ -1,9 +1,15 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/shared/Providers';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'NPA ECM',
   description: 'Electronic Correspondence Management System',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -12,8 +18,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="min-h-screen bg-background font-sans antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

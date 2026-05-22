@@ -98,6 +98,7 @@ export function LinkCaseDialog({
       setHasMore(false);
       setTotalCount(0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const fetchCases = useCallback(async (pageNum: number = 1, append: boolean = false) => {

@@ -74,7 +74,7 @@ export const AssistantAssignmentModal = ({ open, onOpenChange, executiveId, assi
     return assistantAssignments
       .filter((a) => a.executiveId === executiveId && (!assignment || a.id !== assignment.id))
       .map((a) => a.assistantId);
-  }, [assistantAssignments, executiveId, assignment?.id]);
+  }, [assistantAssignments, executiveId, assignment]);
 
   const availableAssistants = useMemo(() => {
     const base = users

@@ -95,6 +95,7 @@ export const PrintPreviewModal = ({
         URL.revokeObjectURL(pdfBlobUrl);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isPDF, isWordDocx, attachmentUrl]);
   
   const handlePrint = () => {

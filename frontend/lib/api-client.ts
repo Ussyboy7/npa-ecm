@@ -41,14 +41,48 @@ export const getBaseUrl = (): string => {
   if (!baseUrl || baseUrl.trim() === "") {
     throw new Error("NEXT_PUBLIC_API_URL environment variable is not set");
   }
-  const normalized = baseUrl.trim().replace(/\/$/, "");
-  return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
+  return baseUrl.trim().replace(/\/$/, "");
 };
 
 type FetchOptions = RequestInit & {
   skipAuth?: boolean;
   responseType?: "json" | "text" | "blob";
 };
+
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+async function attemptTokenRefresh(): Promise<boolean> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+  isRefreshing = true;
+  refreshPromise = (async () => {
+    const refreshToken = getStoredRefreshToken();
+    if (!refreshToken) return false;
+    try {
+      const res = await fetch(`${getBaseUrl()}/accounts/auth/token/refresh/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh: refreshToken }),
+      });
+      if (!res.ok) {
+        clearTokens();
+        return false;
+      }
+      const data = await res.json();
+      storeTokens(data.access, data.refresh, data.expires_in ?? 3600);
+      return true;
+    } catch {
+      clearTokens();
+      return false;
+    } finally {
+      isRefreshing = false;
+      refreshPromise = null;
+    }
+  })();
+  return refreshPromise;
+}
 
 export const apiFetch = async <T = unknown>(path: string, options: FetchOptions = {}): Promise<T> => {
   const {
@@ -58,57 +92,72 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
     ...rest
   } = options;
 
-  const requestHeaders = new Headers(headers);
+  const execute = async (): Promise<T> => {
+    const requestHeaders = new Headers(headers);
 
-  if (!skipAuth) {
-    const token = getStoredAccessToken();
-    if (token) {
-      requestHeaders.set("Authorization", `Bearer ${token}`);
-    }
-  }
-
-  if (!requestHeaders.has("Content-Type") && rest.body && !(rest.body instanceof FormData)) {
-    requestHeaders.set("Content-Type", "application/json");
-  }
-
-  const fullUrl = `${getBaseUrl()}${path}`;
-
-  const response = await fetch(fullUrl, {
-    ...rest,
-    headers: requestHeaders,
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    let responseBody = '';
-    try {
-      responseBody = await response.text();
-    } catch (e) {
-      responseBody = 'Could not read response body';
-    }
-
-    let apiMessage: string | undefined;
-    try {
-      const parsed = JSON.parse(responseBody);
-      if (parsed && typeof parsed === "object") {
-        apiMessage = (parsed as any).detail || (parsed as any).message || (parsed as any).error;
+    if (!skipAuth) {
+      const token = getStoredAccessToken();
+      if (token) {
+        requestHeaders.set("Authorization", `Bearer ${token}`);
       }
-    } catch {
-      // Not JSON
     }
 
-    const err = new Error(apiMessage || `HTTP ${response.status}`);
-    (err as any).status = response.status;
-    (err as any).apiMessage = apiMessage;
-    (err as any).body = responseBody;
-    throw err;
-  }
+    if (!requestHeaders.has("Content-Type") && rest.body && !(rest.body instanceof FormData)) {
+      requestHeaders.set("Content-Type", "application/json");
+    }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
+    const fullUrl = `${getBaseUrl()}${path}`;
 
-  return await response.json() as T;
+    const response = await fetch(fullUrl, {
+      ...rest,
+      headers: requestHeaders,
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      let responseBody = '';
+      try {
+        responseBody = await response.text();
+      } catch (e) {
+        responseBody = 'Could not read response body';
+      }
+
+      let apiMessage: string | undefined;
+      try {
+        const parsed = JSON.parse(responseBody);
+        if (parsed && typeof parsed === "object") {
+          apiMessage = (parsed as any).detail || (parsed as any).message || (parsed as any).error;
+        }
+      } catch {
+        // Not JSON
+      }
+
+      const err = new Error(apiMessage || `HTTP ${response.status}`);
+      (err as any).status = response.status;
+      (err as any).apiMessage = apiMessage;
+      (err as any).body = responseBody;
+      throw err;
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return await response.json() as T;
+  };
+
+  try {
+    return await execute();
+  } catch (error: unknown) {
+    if ((error as any)?.status === 401 && !skipAuth && !path.includes("token/refresh/")) {
+      const refreshed = await attemptTokenRefresh();
+      if (refreshed) {
+        return await execute();
+      }
+      clearTokens();
+    }
+    throw error;
+  }
 };
 
 export interface LoginResponse {
@@ -167,7 +216,6 @@ export const logout = async () => {
   clearTokens();
 };
 
-// Impersonation functions (simplified)
 export const storeOriginalTokens = () => {
   if (!isBrowser()) return;
   const access = localStorage.getItem('access_token');
@@ -198,8 +246,26 @@ export const hasOriginalTokens = () => {
   return Boolean(tokens && tokens.access && tokens.refresh);
 };
 
-export const impersonateUser = async (username: string) => {
-  // Simplified impersonation - just login as the user
-  // This might need to be implemented properly in the backend
-  throw new Error("Impersonation not implemented");
+export const impersonateUser = async (userId: string) => {
+  const response = await fetch(`${getBaseUrl()}/accounts/auth/impersonate/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getStoredAccessToken()}`,
+    },
+    credentials: "include",
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    let detail = `HTTP ${response.status}`;
+    try {
+      const parsed = JSON.parse(body);
+      detail = parsed.detail || detail;
+    } catch {}
+    throw new Error(detail);
+  }
+  const data = await response.json();
+  storeTokens(data.access, data.refresh, data.expires_in ?? 3600);
 };
+

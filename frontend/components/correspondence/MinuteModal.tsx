@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
+
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -267,7 +267,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
             (membership) => membership.userId === currentUser.id && membership.isPrimary && membership.isActive,
           )
         : undefined,
-    [officeMemberships, currentUser?.id],
+    [officeMemberships, currentUser],
   );
 
   // Fetch SLA targets on mount

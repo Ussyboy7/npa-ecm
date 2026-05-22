@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     CaseCommentViewSet,
+    CaseCorrespondenceLinkViewSet,
     CaseSLAViewSet,
     CaseTemplateViewSet,
     CaseViewSet,
@@ -35,6 +36,7 @@ router.register(r"drafts", CorrespondenceDraftViewSet, basename="correspondence-
 router.register(r"cases", CaseViewSet, basename="case")
 router.register(r"case-templates", CaseTemplateViewSet, basename="case-template")
 router.register(r"case-comments", CaseCommentViewSet, basename="case-comment")
+router.register(r"case-correspondence-links", CaseCorrespondenceLinkViewSet, basename="case-correspondence-link")
 router.register(r"case-workflow-rules", CaseWorkflowRuleViewSet, basename="case-workflow-rule")
 router.register(r"case-slas", CaseSLAViewSet, basename="case-sla")
 

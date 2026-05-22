@@ -48,7 +48,6 @@ A modern, full-featured electronic content management system (ECM) built with Dj
 - TypeScript
 - Tailwind CSS
 - Shadcn/ui Components
-- Zustand (State Management)
 - Axios
 
 ## 📦 Installation

@@ -43,6 +43,14 @@ import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
+import { cn } from '@/lib/utils';
+import {
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { fetchSLATargets, type SLATargets } from '@/lib/sla-client';
 import { exportToCSV } from '@/lib/admin-export';
@@ -177,7 +185,7 @@ const CorrespondenceInbox = () => {
     // The office memberships above already capture the user's organizational units
 
     return { officeIds, divisionIds, departmentIds, directorateIds };
-  }, [userOfficeMemberships, offices, currentUser]);
+  }, [userOfficeMemberships, offices]);
 
   // Helper to check if user is a CC recipient and get the purpose
   const getCCInfo = (corr: Correspondence): { isCC: boolean; purpose?: string } => {
@@ -267,6 +275,7 @@ const CorrespondenceInbox = () => {
 
   useEffect(() => {
     pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOfficeId, debouncedSearch, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   // Load SLA targets on mount
@@ -836,10 +845,10 @@ const CorrespondenceInbox = () => {
             { label: 'Assigned to You', value: summary.assigned_to_user, icon: UserIcon, bgClass: 'bg-info/10', iconClass: 'text-info' },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
-              <CardContent className="p-6">
+              <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-lg ${bgClass}`}><Icon className={`h-6 w-6 ${iconClass}`} /></div>
-                  <div><p className="text-sm text-muted-foreground">{label}</p><p className="text-2xl font-semibold">{value}</p></div>
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}><Icon className={cn(registryQueueStatIconClass, iconClass)} /></div>
+                  <div><p className={registryQueueStatLabelClass}>{label}</p><p className={registryQueueStatValueClass}>{value}</p></div>
                 </div>
               </CardContent>
             </Card>

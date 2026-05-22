@@ -29,7 +29,6 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
   signatureText = "Signature",
   signatureImage,
   serialNumber,
-  timestamp,
   size = 350,
   showQR = true,
   verificationBaseUrl,
@@ -37,7 +36,7 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Increments when logo/signature/QR load (or logo gives up); ensures redraw so logo/QR appear after async load
   const [loadCount, setLoadCount] = useState(0);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [, setQrDataUrl] = useState<string | null>(null);
   const logoRef = useRef<HTMLImageElement | null>(null);
   const signatureRef = useRef<HTMLImageElement | null>(null);
   const qrRef = useRef<HTMLImageElement | null>(null);
@@ -64,18 +63,6 @@ export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSe
       document.body.removeChild(link);
     },
   }), [serialPrefix]);
-
-  const dateTime = useMemo(() => {
-    if (timestamp) return timestamp;
-    return new Date().toLocaleString("en-NG", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZoneName: "short",
-    });
-  }, [timestamp]);
 
   // Memoize verification URL
   const verificationUrl = useMemo(() => {

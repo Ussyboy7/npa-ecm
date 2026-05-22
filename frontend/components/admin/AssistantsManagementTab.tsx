@@ -60,6 +60,8 @@ import { toast } from "@/hooks/use-toast";
 type ViewMode = "executives" | "all";
 type TypeFilter = "all" | "TA" | "PA";
 
+const MANAGEMENT_GRADES = ["MDCS", "EDCS", "MSS1", "MSS2"];
+
 export const AssistantsManagementTab = () => {
   const { assistantAssignments, users, deleteAssignment } = useOrganization();
   const { currentUser } = useCurrentUser();
@@ -77,11 +79,9 @@ export const AssistantsManagementTab = () => {
   const [assignmentToRemove, setAssignmentToRemove] = useState<string>("");
 
   const isSuperAdmin = currentUser?.systemRole === "Super Admin";
-  const managementGrades = ["MDCS", "EDCS", "MSS1", "MSS2"];
-
   // Get executives (MD, ED, GM, AGM)
   const executives = useMemo(() => 
-    users.filter((user) => managementGrades.includes(user.gradeLevel)),
+    users.filter((user) => MANAGEMENT_GRADES.includes(user.gradeLevel)),
     [users]
   );
 

@@ -154,7 +154,8 @@ const RecordsArchiveForm = () => {
   const [selectedDirections, setSelectedDirections] = useState<string[]>(() => getInitialFilter('directions', []) as string[]);
   const [selectedArchiveLevel, setSelectedArchiveLevel] = useState<string>(() => getInitialFilter('archiveLevel', 'all') as string);
   const [hasCompletionPackage, setHasCompletionPackage] = useState<boolean>(() => {
-    const saved = localStorage?.getItem('records_filter_hasCompletionPackage');
+    if (typeof window === 'undefined') return false;
+    const saved = localStorage.getItem('records_filter_hasCompletionPackage');
     return saved === 'true';
   });
   const [sortBy, setSortBy] = useState<string>(() => getInitialFilter('sortBy', 'completed') as string);
@@ -405,6 +406,7 @@ const RecordsArchiveForm = () => {
   // Reset page when filters change
   useEffect(() => {
     pagination.setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder]);
   
   // Sync pagination with URL
@@ -418,6 +420,7 @@ const RecordsArchiveForm = () => {
     } else if (pagination.page !== 1) {
       pagination.setPage(1);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- pagination.setPage is stable, only react to URL changes
   }, [searchParams]);
 
   // Fetch records
@@ -547,7 +550,7 @@ const RecordsArchiveForm = () => {
         setRefreshing(false);
       }
     }
-  }, [hydrated, currentUser, pagination.page, pagination.pageSize, debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, customDateFrom, customDateTo, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder, userScope]);
+  }, [currentUser, pagination.page, pagination.pageSize, debouncedSearch, yearFilter, dateRangeFilter, customDateFrom, customDateTo, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder]);
 
   // Store fetchRecords ref
   useEffect(() => {

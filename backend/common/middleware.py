@@ -65,8 +65,7 @@ class UserActivityMiddleware:
                     # Use update() for efficiency
                     from accounts.models import User
                     User.objects.filter(id=user.id).update(last_activity=timezone.now())
-            except Exception:
-                # Silently fail to avoid breaking requests
+            except (AttributeError, TypeError, ValueError):
                 pass
 
         return self.get_response(request)

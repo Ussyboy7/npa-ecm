@@ -57,6 +57,7 @@ export const DispositionsManager = () => {
         abortControllerRef.current.abort();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadDispositions = useCallback(async () => {

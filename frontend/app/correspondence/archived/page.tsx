@@ -34,6 +34,14 @@ import { PaginationControls } from '@/components/shared/PaginationControls';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
+import { cn } from '@/lib/utils';
+import {
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from '@/components/shared/registry-queue-styles';
 
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: '#ef4444',
@@ -124,6 +132,7 @@ const ArchivedCorrespondence = () => {
 
   useEffect(() => {
     pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, yearFilter, selectedPriorities, selectedStatuses, archiveLevelFilter, selectedDirections, sortBy, sortOrder, receivedFrom, receivedTo, pagination.pageSize]);
 
   useEffect(() => {
@@ -310,16 +319,21 @@ const ArchivedCorrespondence = () => {
         {/* Summary Cards */}
         <div className="grid gap-4 md:grid-cols-4">
           {[
-            { label: 'Total Archived', value: summary.total, icon: Archive, iconClass: 'text-muted-foreground' },
-            { label: 'Downward', value: summary.downward, icon: ArrowDown, iconClass: 'text-info' },
-            { label: 'Upward', value: summary.upward, icon: ArrowUp, iconClass: 'text-success' },
-            { label: 'This Year', value: summary.thisYear, icon: Calendar, iconClass: 'text-primary' },
-          ].map(({ label, value, icon: Icon, iconClass }) => (
+            { label: 'Total Archived', value: summary.total, icon: Archive, bgClass: 'bg-muted', iconClass: 'text-muted-foreground' },
+            { label: 'Downward', value: summary.downward, icon: ArrowDown, bgClass: 'bg-info/10', iconClass: 'text-info' },
+            { label: 'Upward', value: summary.upward, icon: ArrowUp, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'This Year', value: summary.thisYear, icon: Calendar, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
             <Card key={label}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div><p className="text-xs text-muted-foreground">{label}</p><p className="text-2xl font-bold">{value}</p></div>
-                  <Icon className={`h-8 w-8 opacity-50 ${iconClass}`} />
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -127,6 +127,7 @@ const RegisteredCorrespondencePage = () => {
   // Reset page when filters change
   useEffect(() => {
     pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, statusFilter, priorityFilter]);
 
   const canViewRegistry = permissions.canViewCorrespondenceRegistry;

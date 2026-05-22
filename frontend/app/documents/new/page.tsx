@@ -49,30 +49,22 @@ export default function CreateDocumentPage() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto max-w-7xl p-4 sm:p-6 flex flex-col min-h-0 flex-1 gap-4">
-        <section className="rounded-xl border border-border bg-card p-4 sm:p-5 shadow-sm">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1">
-              <h1 className="text-lg sm:text-xl font-semibold tracking-tight">Create Document</h1>
-              <p className="text-sm text-muted-foreground">
-                Compose or upload your document using the Quill editor.
-              </p>
-            </div>
-            <span className="inline-flex rounded-lg border border-border bg-muted/40 px-3 py-1.5 text-sm font-medium">
-              Quill
-            </span>
-          </div>
-        </section>
-
-        <div className="min-h-0 flex-1">
-          <DocumentUploadDialog
-            mode="create"
-            currentUser={currentUser}
-            onComplete={handleComplete}
-            onCancel={handleCancel}
-            asPage
-          />
+      <div className="container mx-auto max-w-5xl p-4 sm:p-6 flex flex-col gap-4">
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold tracking-tight">Create Document</h1>
+          <p className="text-sm text-muted-foreground">
+            Compose or upload a document with metadata, templates, and content.
+          </p>
         </div>
+
+        <DocumentUploadDialog
+          open
+          onOpenChange={() => router.back()}
+          mode="create"
+          currentUser={currentUser}
+          onComplete={handleComplete}
+          asPage
+        />
       </div>
     </DashboardLayout>
   );
