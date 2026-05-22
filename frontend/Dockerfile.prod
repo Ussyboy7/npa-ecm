@@ -9,11 +9,14 @@ ARG NEXT_PUBLIC_ENVIRONMENT
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_ENVIRONMENT=$NEXT_PUBLIC_ENVIRONMENT
 
-COPY frontend/package.json package-lock.json ./
+# Install workspace dependencies (root package.json defines the "frontend" workspace)
+COPY package.json package-lock.json ./
+COPY frontend/package.json ./frontend/package.json
 RUN npm ci
 
-COPY frontend/ .
-RUN npm run build
+# Copy frontend source and build
+COPY frontend/ ./frontend
+RUN npm run build --workspace=frontend
 
 # Minimal runtime image using Next.js standalone output
 FROM node:20-alpine AS runner
@@ -22,9 +25,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Copy standalone server and required files (no runtime npm install)
-COPY --from=builder --chown=node:node /app/.next/standalone ./
-COPY --from=builder --chown=node:node /app/.next/static ./.next/static
-COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/frontend/.next/standalone ./
+COPY --from=builder --chown=node:node /app/frontend/.next/static ./.next/static
+COPY --from=builder --chown=node:node /app/frontend/public ./public
 
 USER node
 EXPOSE 3000
