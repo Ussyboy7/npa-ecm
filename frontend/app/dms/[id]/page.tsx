@@ -1,6 +1,7 @@
 "use client";
 
 import { logError, logInfo, logWarn } from '@/lib/client-logger';
+import { formatDistanceToNow } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState, useReducer, useRef, startTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -1550,14 +1551,7 @@ const DocumentDetailPage = () => {
               const isFirstAccess = sortedUserLogs.length > 0 && sortedUserLogs[0].id === selectedAccessLog.id;
               
               // Format relative time
-              const relativeTime = (() => {
-                try {
-                  const { formatDistanceToNow } = require('date-fns');
-                  return formatDistanceToNow(new Date(selectedAccessLog.timestamp), { addSuffix: true });
-                } catch {
-                  return null;
-                }
-              })();
+               const relativeTime = formatDistanceToNow(new Date(selectedAccessLog.timestamp), { addSuffix: true });
 
               return (
                 <div className="space-y-4">
