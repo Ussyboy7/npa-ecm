@@ -12,7 +12,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 
 interface SidebarNavItemProps {
   href: string;
@@ -23,7 +22,6 @@ interface SidebarNavItemProps {
   badge?: number;
   badgeVariant?: "default" | "secondary" | "destructive";
   description?: string;
-  countsLoading?: boolean;
 }
 
 export function SidebarNavItem({
@@ -35,25 +33,20 @@ export function SidebarNavItem({
   badge,
   badgeVariant = "default",
   description,
-  countsLoading,
 }: SidebarNavItemProps) {
-  const badgeContent = badge != null && badge > 0 && (
+  const badgeContent = badge != null && badge > 0 ? (
     <Badge variant={badgeVariant} className="ml-auto shrink-0">
       {badge > 99 ? "99+" : badge}
     </Badge>
-  );
+  ) : null;
 
-  const badgeOverlay = badge != null && badge > 0 && (
+  const badgeOverlay = badge != null && badge > 0 ? (
     <Badge
       variant={badgeVariant}
       className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
     >
       {badge > 99 ? "99+" : badge}
     </Badge>
-  );
-
-  const badgeSkeleton = badge != null && countsLoading ? (
-    <Skeleton className="h-5 w-8" />
   ) : null;
 
   if (isCollapsed) {
@@ -88,7 +81,7 @@ export function SidebarNavItem({
             <Icon className="h-4 w-4" />
             <span>{label}</span>
           </div>
-          {badgeSkeleton || badgeContent}
+          {badgeContent}
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>

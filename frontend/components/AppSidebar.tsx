@@ -31,7 +31,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { currentUser } = useCurrentUser();
   const { officeMemberships } = useOrganization();
-  const { counts, loading: countsLoading } = useSidebarCounts();
+  const counts = useSidebarCounts();
   const permissions = useUserPermissions(currentUser ?? undefined);
   const visibility = useSidebarVisibility();
 
@@ -57,19 +57,6 @@ export function AppSidebar() {
   };
 
   const isCollapsed = state === "collapsed";
-
-  if (!currentUser?.id) {
-    return (
-      <Sidebar collapsible="icon" className="border-r border-sidebar-border">
-        <SidebarHeader>
-          <div className="flex items-center justify-between w-full">
-            <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
-          </div>
-        </SidebarHeader>
-      </Sidebar>
-    );
-  }
-
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border overflow-hidden">
       <SidebarHeader className="px-2 py-3">
@@ -102,12 +89,12 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarNavItem href="/dashboard" icon={LayoutDashboard} label="Dashboard" isCollapsed={isCollapsed} isActive={isActivePath('/dashboard')} />
-              <SidebarNavItem href="/inbox" icon={Inbox} label="My Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/inbox')} badge={counts.myInbox} countsLoading={countsLoading} />
+              <SidebarNavItem href="/inbox" icon={Inbox} label="My Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/inbox')} badge={counts.myInbox} />
               {visibility.showMyOutbox && (
-                <SidebarNavItem href="/correspondence/outbox" icon={Send} label="My Outbox" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/outbox')} badge={counts.outbox} badgeVariant="secondary" countsLoading={countsLoading} />
+                <SidebarNavItem href="/correspondence/outbox" icon={Send} label="My Outbox" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/outbox')} badge={counts.outbox} badgeVariant="secondary" />
               )}
               {visibility.showMyCases && (
-                <SidebarNavItem href="/cases/my" icon={Briefcase} label="My Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/my')} badge={counts.myCases} badgeVariant="secondary" description="Cases assigned to you" countsLoading={countsLoading} />
+                <SidebarNavItem href="/cases/my" icon={Briefcase} label="My Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/my')} badge={counts.myCases} badgeVariant="secondary" description="Cases assigned to you" />
               )}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -120,22 +107,22 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {visibility.showOfficeInbox && (
-                  <SidebarNavItem href="/correspondence/inbox" icon={Mail} label="Office Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/inbox')} badge={counts.officeInbox} badgeVariant="destructive" countsLoading={countsLoading} />
+                  <SidebarNavItem href="/correspondence/inbox" icon={Mail} label="Office Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/inbox')} badge={counts.officeInbox} badgeVariant="destructive" />
                 )}
                 {visibility.showRegisterCorrespondence && (
                   <SidebarNavItem href="/correspondence/register" icon={FilePlus} label="Register Correspondence" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/register')} />
                 )}
                 {visibility.showOfficeOutbox && (
-                  <SidebarNavItem href="/correspondence/office-outbox" icon={Send} label="Office Outbox" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/office-outbox')} badge={counts.officeOutbox} badgeVariant="secondary" countsLoading={countsLoading} />
+                  <SidebarNavItem href="/correspondence/office-outbox" icon={Send} label="Office Outbox" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/office-outbox')} badge={counts.officeOutbox} badgeVariant="secondary" />
                 )}
                 {visibility.showOfficeCases && (
-                  <SidebarNavItem href="/cases/office" icon={Briefcase} label="Office Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/office')} badge={counts.officeCases} badgeVariant="secondary" description="Cases assigned to your office" countsLoading={countsLoading} />
+                  <SidebarNavItem href="/cases/office" icon={Briefcase} label="Office Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/office')} badge={counts.officeCases} badgeVariant="secondary" description="Cases assigned to your office" />
                 )}
                 {visibility.showAllCases && (
-                  <SidebarNavItem href="/cases/all" icon={Briefcase} label="All Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/all')} badge={counts.allCases} badgeVariant="secondary" description="All cases in your scope" countsLoading={countsLoading} />
+                  <SidebarNavItem href="/cases/all" icon={Briefcase} label="All Cases" isCollapsed={isCollapsed} isActive={isActivePath('/cases/all')} badge={counts.allCases} badgeVariant="secondary" description="All cases in your scope" />
                 )}
                 {hasCorrespondenceAccess && (
-                  <SidebarNavItem href="/approvals" icon={Shield} label="Executive Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals')} badge={counts.executiveApprovals} badgeVariant="secondary" countsLoading={countsLoading} />
+                  <SidebarNavItem href="/approvals" icon={Shield} label="Executive Approvals" isCollapsed={isCollapsed} isActive={isActivePath('/approvals')} badge={counts.executiveApprovals} badgeVariant="secondary" />
                 )}
               </SidebarMenu>
             </SidebarGroupContent>
@@ -147,7 +134,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Documents & Records</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              <SidebarNavItem href="/documents" icon={FileText} label="My Documents" isCollapsed={isCollapsed} isActive={isActivePath('/documents')} badge={counts.myDocuments} badgeVariant="secondary" description="Your documents, shared with you, and awaiting action" countsLoading={countsLoading} />
+              <SidebarNavItem href="/documents" icon={FileText} label="My Documents" isCollapsed={isCollapsed} isActive={isActivePath('/documents')} badge={counts.myDocuments} badgeVariant="secondary" description="Your documents, shared with you, and awaiting action" />
               <SidebarNavItem href="/search" icon={Search} label="Search Documents" isCollapsed={isCollapsed} isActive={isActivePath('/search')} description="Full-text search with context filters" />
               <SidebarNavItem href="/verify" icon={Shield} label="Verify Seal" isCollapsed={isCollapsed} isActive={isActivePath('/verify')} description="Verify digital executive seals" />
               <SidebarNavItem href="/forms" icon={FileCheck} label="Forms Library" isCollapsed={isCollapsed} isActive={isActivePath('/forms')} description="Create and manage form documents" />

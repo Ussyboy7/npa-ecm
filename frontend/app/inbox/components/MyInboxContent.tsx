@@ -40,7 +40,7 @@ const UnifiedInbox = () => {
   const { currentUser, hydrated } = useCurrentUser();
   const { officeMemberships, assistantAssignments } = useOrganization();
   const permissions = useUserPermissions(currentUser ?? undefined);
-  const { counts, loading: countsLoading } = useSidebarCounts();
+  const counts = useSidebarCounts();
 
   const [activeTab, setActiveTab] = useState<string>('my');
 
@@ -121,14 +121,12 @@ const UnifiedInbox = () => {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            {!countsLoading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Total:</span>
-                <Badge variant="destructive">
-                  {officeInboxCount + myInboxCount + delegatedCount + secretaryInboxCount}
-                </Badge>
-              </div>
-            )}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Total:</span>
+              <Badge variant="destructive">
+                {officeInboxCount + myInboxCount + delegatedCount + secretaryInboxCount}
+              </Badge>
+            </div>
           </div>
         </div>
 
@@ -139,7 +137,7 @@ const UnifiedInbox = () => {
               <TabsTrigger value="office" className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
                 Office Inbox
-                {!countsLoading && officeInboxCount > 0 && (
+                  {officeInboxCount > 0 && (
                   <Badge variant="destructive" className="ml-1">
                     {officeInboxCount > 99 ? '99+' : officeInboxCount}
                   </Badge>
@@ -149,7 +147,7 @@ const UnifiedInbox = () => {
             <TabsTrigger value="my" className="flex items-center gap-2">
               <Inbox className="h-4 w-4" />
               My Inbox
-              {!countsLoading && myInboxCount > 0 && (
+               {myInboxCount > 0 && (
                 <Badge variant="default" className="ml-1">
                   {myInboxCount > 99 ? '99+' : myInboxCount}
                 </Badge>
@@ -159,7 +157,7 @@ const UnifiedInbox = () => {
               <TabsTrigger value="delegated" className="flex items-center gap-2">
                 <Users2 className="h-4 w-4" />
                 Delegated
-                {!countsLoading && delegatedCount > 0 && (
+                {delegatedCount > 0 && (
                   <Badge
                     variant="secondary"
                     className="ml-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
@@ -173,7 +171,7 @@ const UnifiedInbox = () => {
               <TabsTrigger value="executive-support" className="flex items-center gap-2">
                 <UserCheck className="h-4 w-4" />
                 Executive Support
-                {!countsLoading && secretaryInboxCount > 0 && (
+                {secretaryInboxCount > 0 && (
                   <Badge
                     variant="secondary"
                     className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"

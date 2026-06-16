@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { apiFetch } from '@/lib/api-client';
-import { logError, logInfo } from '@/lib/client-logger';
 
 export interface SidebarCounts {
   officeInbox: number;
@@ -18,41 +17,22 @@ export interface SidebarCounts {
   myDocuments: number;
 }
 
+const INITIAL_COUNTS: SidebarCounts = {
+  officeInbox: 0, myInbox: 0, outbox: 0, officeOutbox: 0,
+  delegated: 0, secretaryInbox: 0, myCases: 0, officeCases: 0,
+  allCases: 0, executiveApprovals: 0, myDocuments: 0,
+};
+
 export function useSidebarCounts() {
-  const [counts, setCounts] = useState<SidebarCounts>({
-    officeInbox: 0,
-    myInbox: 0,
-    outbox: 0,
-    officeOutbox: 0,
-    delegated: 0,
-    secretaryInbox: 0,
-    myCases: 0,
-    officeCases: 0,
-    allCases: 0,
-    executiveApprovals: 0,
-    myDocuments: 0,
-  });
-  const [loading, setLoading] = useState(true);
+  const [counts, setCounts] = useState<SidebarCounts>(INITIAL_COUNTS);
 
   useEffect(() => {
-    const fetchCounts = async () => {
-      try {
-        setLoading(true);
-        const data = await apiFetch<SidebarCounts>('/correspondence/items/sidebar-counts/');
-        setCounts(data);
-      } catch (error) {
-        if ((error as any)?.status === 401) {
-          logInfo('Sidebar counts will sync after authentication.');
-        } else {
-          logError('Failed to fetch sidebar counts', error);
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCounts();
+    let cancelled = false;
+    apiFetch<SidebarCounts>('/correspondence/items/sidebar-counts/')
+      .then((data) => { if (!cancelled) setCounts(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
-  return { counts, loading };
+  return counts;
 }

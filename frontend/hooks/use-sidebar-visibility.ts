@@ -3,7 +3,6 @@ import { useCurrentUser } from './use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from './use-role-checks';
 import { useScopeChecks } from './use-scope-checks';
-import type { SidebarVisibilityConfig } from '@/lib/role-permissions';
 
 export interface SidebarVisibility {
   // My Workspace
@@ -138,20 +137,6 @@ export function useSidebarVisibility(): SidebarVisibility {
 
     // Check if user's role has custom sidebar visibility configuration
     const userRole = roles.find(r => r.id === currentUser.systemRole || r.name === currentUser.systemRole);
-    const roleSidebarConfig: SidebarVisibilityConfig | undefined = userRole?.permissions as SidebarVisibilityConfig | undefined;
-    
-    // If role has sidebar visibility config, use it (but still respect super admin)
-    const hasCustomSidebarConfig = roleSidebarConfig && (
-      roleSidebarConfig.showDashboard !== undefined ||
-      roleSidebarConfig.showMyInbox !== undefined ||
-      roleSidebarConfig.showOfficeInbox !== undefined ||
-      roleSidebarConfig.showMyCases !== undefined ||
-      roleSidebarConfig.showSearchDocuments !== undefined ||
-      roleSidebarConfig.showAnalyticsReports !== undefined ||
-      roleSidebarConfig.showAdministration !== undefined
-    );
-    
-    // If role has sidebar_show_* permissions, use those (but still respect office membership)
     const rolePermissions = userRole?.permissions || {};
     const hasSidebarPermissions = Object.keys(rolePermissions).some(key => key.startsWith('sidebar_show_'));
     
