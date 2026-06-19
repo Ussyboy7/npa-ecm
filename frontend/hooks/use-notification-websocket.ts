@@ -44,7 +44,7 @@ class WebSocketManager {
     try {
       const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
       if (wsUrl) {
-        let cleanUrl = wsUrl.endsWith('/') ? wsUrl.slice(0, -1) : wsUrl;
+        const cleanUrl = wsUrl.endsWith('/') ? wsUrl.slice(0, -1) : wsUrl;
         if (cleanUrl.endsWith('/ws/notifications')) {
           return `${cleanUrl}/`;
         } else if (cleanUrl.endsWith('/ws')) {
@@ -57,7 +57,7 @@ class WebSocketManager {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       if (apiUrl) {
         const protocol = apiUrl.startsWith('https://') ? 'wss' : 'ws';
-        let host = apiUrl.replace(/^https?:\/\//, '').replace(/\/api(\/v\d+)?\/?$/, '').split('/')[0];
+        const host = apiUrl.replace(/^https?:\/\//, '').replace(/\/api(\/v\d+)?\/?$/, '').split('/')[0];
         if (host) {
           return `${protocol}://${host}/ws/notifications/`;
         }

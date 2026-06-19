@@ -33,6 +33,15 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
+# opencode
+.opencode/
+
+# TypeScript
+*.tsbuildinfo
+
+# Backups
+*.backup
+
 # IDE
 .vscode/
 .idea/

@@ -1,4 +1,5 @@
 "use client";
+import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -12,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { QuillEditor } from "@/components/dms/QuillEditor";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -23,7 +23,6 @@ import {
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
   correspondenceQueueListStackClass,
-  correspondenceQueueMetaIconClass,
   correspondenceQueueMetaItemClass,
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
@@ -134,7 +133,7 @@ function TemplatesHubForm() {
   const [formLoading, setFormLoading] = useState(true);
   const [formSearch, setFormSearch] = useState("");
   const [formCategoryFilter, setFormCategoryFilter] = useState<string>("all");
-  const [deletingFormId, setDeletingFormId] = useState<string | null>(null);
+  const [_deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [showFormDeleteConfirm, setShowFormDeleteConfirm] = useState(false);
   const [formToDelete, setFormToDelete] = useState<{ id: string; name: string } | null>(null);
   const [formDeleteConfirmText, setFormDeleteConfirmText] = useState("");
@@ -144,12 +143,12 @@ function TemplatesHubForm() {
 
   // Personal template users
   const personalTemplateUsers = useMemo(
-    () => organizationUsers.filter((user) => user.systemRole !== "Super Admin"),
+    () => organizationUsers.filter((user) => user.systemRole !== SYSTEM_ROLE_SUPER_ADMIN),
     [organizationUsers]
   );
 
   // ============ DOCUMENT TEMPLATES LOGIC ============
-  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [_templatesLoading, setTemplatesLoading] = useState(false);
   
   const refreshTemplates = async () => {
     setTemplatesLoading(true);
@@ -503,19 +502,13 @@ function TemplatesHubForm() {
   const minuteCount = templates.filter(t => t.templateType === "minute").length;
 
   // ============ LOADING STATE ============
-  if (!userHydrated || isSyncing) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!userHydrated || isSyncing ? (
         <div className="container mx-auto p-6">
           <LoadingState message="Loading templates hub…" />
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
+      ) : !currentUser ? (
         <div className="container mx-auto p-6 space-y-6">
           <HelpGuideCard
             title="Select a persona"
@@ -523,14 +516,9 @@ function TemplatesHubForm() {
             links={[{ label: "Role Switcher", href: "/settings" }]}
           />
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <ClientErrorBoundary>
-      <DashboardLayout>
-        <div className="container mx-auto space-y-6 p-6">
+      ) : (
+        <ClientErrorBoundary>
+          <div className="container mx-auto space-y-6 p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-3xl font-bold text-foreground">Templates Hub</h1>
@@ -1179,8 +1167,9 @@ function TemplatesHubForm() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </DashboardLayout>
-    </ClientErrorBoundary>
+        </ClientErrorBoundary>
+      )}
+    </DashboardLayout>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,14 +36,11 @@ import {
   Undo2,
   Trash2,
   User as UserIcon,
-  ArrowDown,
-  ArrowUp,
-  Calendar,
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
+import { formatDateShort } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
@@ -119,7 +116,7 @@ const getPriorityColor = (priority: string) => {
 
 const OfficeOutboxPage = () => {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const systemRoleObj = currentUser?.systemRole as Record<string, unknown> | undefined;
   const isAdmin = currentUser?.isSuperuser || (systemRoleObj && typeof systemRoleObj.name === 'string' && systemRoleObj.name.toLowerCase() === 'admin');
   const { officeMemberships, offices, divisions, users: organizationUsers } = useOrganization();
@@ -218,6 +215,27 @@ const OfficeOutboxPage = () => {
     }
   };
 
+  const getFilterParams = useCallback((): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (debouncedQuery) params.append('search', debouncedQuery);
+    if (selectedOfficeId !== 'all') {
+      params.append('office', selectedOfficeId);
+    } else {
+      userOfficeIds.forEach((officeId) => {
+        params.append('office', officeId);
+      });
+    }
+    if (selectedStatuses.length > 0) {
+      selectedStatuses.forEach((status) => params.append('status', status));
+    }
+    if (selectedPriorities.length > 0) {
+      selectedPriorities.forEach((priority) => params.append('priority', priority));
+    }
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+    return params;
+  }, [debouncedQuery, selectedOfficeId, userOfficeIds, selectedStatuses, selectedPriorities, dateFrom, dateTo]);
+
   const handleExport = async () => {
     if (outboxItems.length === 0) {
       toast.error('No items to export');
@@ -227,25 +245,7 @@ const OfficeOutboxPage = () => {
     setExporting(true);
     try {
       // Fetch all items matching current filters
-      const params = new URLSearchParams();
-      if (debouncedQuery) params.append('search', debouncedQuery);
-      
-      if (selectedOfficeId !== 'all') {
-        params.append('office', selectedOfficeId);
-      } else {
-        userOfficeIds.forEach((officeId) => {
-          params.append('office', officeId);
-        });
-      }
-      
-      if (selectedStatuses.length > 0) {
-        selectedStatuses.forEach((status) => params.append('status', status));
-      }
-      if (selectedPriorities.length > 0) {
-        selectedPriorities.forEach((priority) => params.append('priority', priority));
-      }
-      if (dateFrom) params.append('date_from', dateFrom);
-      if (dateTo) params.append('date_to', dateTo);
+      const params = getFilterParams();
       params.append('page_size', '1000'); // Reasonable limit for export
 
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/outbox/?${params.toString()}`);
@@ -310,27 +310,7 @@ const OfficeOutboxPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const params = new URLSearchParams();
-        if (debouncedQuery) params.append('search', debouncedQuery);
-        
-        // Filter by office(s)
-        if (selectedOfficeId !== 'all') {
-          params.append('office', selectedOfficeId);
-        } else {
-          // Include all user's offices
-          userOfficeIds.forEach((officeId) => {
-            params.append('office', officeId);
-          });
-        }
-        
-        if (selectedStatuses.length > 0) {
-          selectedStatuses.forEach((status) => params.append('status', status));
-        }
-        if (selectedPriorities.length > 0) {
-          selectedPriorities.forEach((priority) => params.append('priority', priority));
-        }
-        if (dateFrom && !dateError) params.append('date_from', dateFrom);
-        if (dateTo && !dateError) params.append('date_to', dateTo);
+        const params = getFilterParams();
         params.append('sort_by', sortBy);
         params.append('sort_order', sortOrder);
         params.append('page', String(pagination.page));
@@ -373,7 +353,7 @@ const OfficeOutboxPage = () => {
     return () => {
       controller.abort();
     };
-  }, [userOfficeIds, pagination.page, pagination.pageSize, debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, dateFrom, dateTo, sortBy, sortOrder, dateError]);
+  }, [userOfficeIds, pagination.page, pagination.pageSize, debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, dateFrom, dateTo, sortBy, sortOrder, dateError, getFilterParams]);
 
   const handleWithdrawClick = (item: Correspondence) => {
     if (item.status as string !== 'pending' && item.status as string !== 'in-progress') {
@@ -474,9 +454,9 @@ const OfficeOutboxPage = () => {
     }
   };
 
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!currentUser ? (
         <div className="container mx-auto p-6">
           <Card>
             <CardContent className="py-12 text-center">
@@ -485,13 +465,7 @@ const OfficeOutboxPage = () => {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!userOfficeIds.length) {
-    return (
-      <DashboardLayout>
+      ) : !userOfficeIds.length ? (
         <div className="container mx-auto p-6 space-y-6">
           <div>
             <h1 className="text-3xl font-bold">Office Outbox</h1>
@@ -508,14 +482,9 @@ const OfficeOutboxPage = () => {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <ErrorBoundary>
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
+      ) : (
+        <ErrorBoundary>
+          <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex justify-between items-start">
           <div>
@@ -1000,8 +969,9 @@ const OfficeOutboxPage = () => {
           </AlertDialogContent>
         </AlertDialog>
         </div>
-      </DashboardLayout>
-    </ErrorBoundary>
+        </ErrorBoundary>
+      )}
+    </DashboardLayout>
   );
 };
 

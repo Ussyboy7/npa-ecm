@@ -1,8 +1,7 @@
 /** API client for form documents in DMS. */
 
 import { apiFetch } from "@/lib/api-client";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
-import type { FormTemplate } from "@/lib/types/forms";
+import { logError, logInfo } from '@/lib/client-logger';
 
 const BASE_PATH = "/dms";
 

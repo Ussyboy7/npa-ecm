@@ -41,7 +41,6 @@ import {
   ArrowLeft,
   Send,
   Mail,
-  Calendar,
   User as UserIcon,
   Building2,
   ArrowDown,
@@ -72,7 +71,7 @@ import {
 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence, Minute, CorrespondenceAttachment } from '@/lib/npa-structure';
-import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
+import { formatDateTime } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
 import { toast } from 'sonner';
@@ -186,7 +185,7 @@ const OutboxDetailPage = () => {
             newMap.set(index, { wordHtml: sanitized });
             return newMap;
           });
-        } catch (mammothErr) {
+        } catch (_mammothErr) {
           throw new Error('Failed to convert Word document');
         }
       }
@@ -337,80 +336,13 @@ const OutboxDetailPage = () => {
     return null;
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="p-6 flex items-center justify-center min-h-[400px]">
-          <div className="text-center space-y-4">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-            <p className="text-muted-foreground">Loading outbox item...</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error || !correspondence) {
-    return (
-      <DashboardLayout>
-        <div className="p-6">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
-              <h3 className="text-lg font-semibold mb-2">Failed to Load Outbox Item</h3>
-              <p className="text-muted-foreground mb-4">{error || 'The requested outbox item could not be found.'}</p>
-              <div className="flex gap-2 justify-center">
-                <Button onClick={() => router.push('/correspondence/outbox')} variant="outline">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Outbox
-                </Button>
-                <Button onClick={() => void loadData()} variant="default" disabled={loading}>
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                  Retry
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  // Verify this is an outbox item (created by current user and pending/in-progress)
   const isOutboxItem =
-    correspondence.createdById === currentUser?.id &&
-    (correspondence.status === 'pending' || correspondence.status === 'in-progress');
+    correspondence?.createdById === currentUser?.id &&
+    (correspondence?.status === 'pending' || correspondence?.status === 'in-progress');
 
-  if (!isOutboxItem) {
-    return (
-      <DashboardLayout>
-        <div className="p-6">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-warning" />
-              <h3 className="text-lg font-semibold mb-2">Not an Outbox Item</h3>
-              <p className="text-muted-foreground mb-4">
-                This item is not in your outbox. It may have been dispatched or you may not have created it.
-              </p>
-              <div className="flex gap-2 justify-center">
-                <Button onClick={() => router.push('/correspondence/outbox')} variant="outline">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Outbox
-                </Button>
-                <Button onClick={() => router.push(`/correspondence/${id}`)} variant="default">
-                  View Correspondence
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const division = correspondence.divisionId ? divisions.find((d) => d.id === correspondence.divisionId) : null;
-  const department = correspondence.departmentId ? departments.find((d) => d.id === correspondence.departmentId) : null;
-  const directorate = correspondence.directorateId ? directorates.find((d) => d.id === correspondence.directorateId) : null;
+  const division = correspondence?.divisionId ? divisions.find((d) => d.id === correspondence?.divisionId) : null;
+  const department = correspondence?.departmentId ? departments.find((d) => d.id === correspondence?.departmentId) : null;
+  const directorate = correspondence?.directorateId ? directorates.find((d) => d.id === correspondence?.directorateId) : null;
   const daysPending = calculateDaysPending();
 
   const getPriorityColor = (priority: string) => {
@@ -450,7 +382,7 @@ const OutboxDetailPage = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(blobUrl);
-    } catch (err) {
+    } catch (_err) {
       await logOutboxDmsAccess('attempted-download');
       toast.error('Failed to download file');
     }
@@ -583,7 +515,7 @@ const OutboxDetailPage = () => {
     try {
       router.push(`/correspondence/register?duplicate=${id}`);
       toast.info('Opening duplicate form...');
-    } catch (err) {
+    } catch (_err) {
       toast.error('Failed to duplicate correspondence');
     }
   };
@@ -630,7 +562,56 @@ const OutboxDetailPage = () => {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col min-h-screen">
+      {loading ? (
+        <div className="p-6 flex items-center justify-center min-h-[400px]">
+          <div className="text-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+            <p className="text-muted-foreground">Loading outbox item...</p>
+          </div>
+        </div>
+      ) : error || !correspondence ? (
+        <div className="p-6">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-destructive" />
+              <h3 className="text-lg font-semibold mb-2">Failed to Load Outbox Item</h3>
+              <p className="text-muted-foreground mb-4">{error || 'The requested outbox item could not be found.'}</p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => router.push('/correspondence/outbox')} variant="outline">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Outbox
+                </Button>
+                <Button onClick={() => void loadData()} variant="default" disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  Retry
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : !isOutboxItem ? (
+        <div className="p-6">
+          <Card>
+            <CardContent className="py-12 text-center">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-warning" />
+              <h3 className="text-lg font-semibold mb-2">Not an Outbox Item</h3>
+              <p className="text-muted-foreground mb-4">
+                This item is not in your outbox. It may have been dispatched or you may not have created it.
+              </p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => router.push('/correspondence/outbox')} variant="outline">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Outbox
+                </Button>
+                <Button onClick={() => router.push(`/correspondence/${id}`)} variant="default">
+                  View Correspondence
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <div className="flex flex-col min-h-screen">
         {/* Header - Reorganized to match Document Detail pattern */}
         <div className="border-b border-border bg-background px-3 md:px-6 py-2 md:py-3">
           <div className="flex items-center justify-between gap-2">
@@ -1494,7 +1475,6 @@ const OutboxDetailPage = () => {
           </div>
           </div>
         </div>
-      </div>
 
       {/* Resend Reminder Confirmation Dialog */}
       <AlertDialog open={resendDialogOpen} onOpenChange={setResendDialogOpen}>
@@ -1633,7 +1613,9 @@ const OutboxDetailPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DashboardLayout>
+      </div>
+    )}
+  </DashboardLayout>
   );
 };
 

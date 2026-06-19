@@ -9,14 +9,14 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { getUnreadCount, type Notification } from '@/lib/notifications-storage';
+import { getUnreadCount } from '@/lib/notifications-storage';
 import { NotificationList } from './NotificationList';
 import { useNotificationWebSocket } from '@/hooks/use-notification-websocket';
 import { usePolling } from '@/hooks/use-polling';
 import { NOTIFICATION_POLL_INTERVAL_MS } from '@/lib/constants';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { logError, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 
 export const NotificationBell = () => {
   const router = useRouter();

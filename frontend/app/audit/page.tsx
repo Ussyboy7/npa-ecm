@@ -45,7 +45,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical } from 'lucide-react';
 import {
   Activity,
   Search,
@@ -61,6 +60,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  MoreVertical,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -479,19 +479,14 @@ const AuditTrailPage = () => {
     successFilter !== 'all' ||
     dateRangeFilter !== 'all';
 
-  if (!hydrated || !currentUser) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!hydrated || !currentUser ? (
         <div className="container mx-auto p-6">
           <LoadingState message="Loading audit trail…" />
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout>
-      <div className="container mx-auto space-y-6 p-6">
+      ) : (
+        <div className="container mx-auto space-y-6 p-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -881,7 +876,8 @@ const AuditTrailPage = () => {
                       </div>
                     </div>
       </div>
-    </DashboardLayout>
+    )}
+  </DashboardLayout>
   );
 };
 

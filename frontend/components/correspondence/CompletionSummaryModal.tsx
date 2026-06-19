@@ -15,7 +15,7 @@ interface CompletionSummaryModalProps {
   correspondence?: Correspondence;
   minutes?: Minute[];
   documentContentHtml?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export function CompletionSummaryModal({

@@ -19,7 +19,6 @@ import {
   CheckCircle2,
   FileArchive,
   Filter,
-  Loader2,
 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';

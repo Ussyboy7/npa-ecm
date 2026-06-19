@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from analytics.models import ReportSnapshot, UsageMetric
+from common.grade_utils import MANAGEMENT_GRADES
 from correspondence.models import (
     Case,
     CaseCorrespondenceLink,
@@ -449,7 +450,7 @@ class Command(BaseCommand):
         created_users: dict[str, User] = {}
         pending_assignments: list[tuple[str, str | None, str | None]] = []
 
-        management_grades = {"MSS1", "MSS2", "MSS3", "MSS4", "MSS5", "EDCS", "MDCS"}
+        management_grades = MANAGEMENT_GRADES
 
         alias_map = {
             "user-md": "md",
@@ -1048,7 +1049,7 @@ class Command(BaseCommand):
         payment_form = FormTemplate.objects.filter(slug="payment-certification").first()
 
         if not all([completion_form, audit_form, payment_form]):
-            self.stdout.write(self.style.WARNING("Form templates not found. Run seed_form_templates first."))
+            self.stdout.write(self.style.WARNING("Form templates not found. Seed form templates first."))
             return
 
         # Get required divisions and offices

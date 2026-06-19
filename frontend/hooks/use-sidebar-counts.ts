@@ -27,11 +27,11 @@ export function useSidebarCounts() {
   const [counts, setCounts] = useState<SidebarCounts>(INITIAL_COUNTS);
 
   useEffect(() => {
-    let cancelled = false;
-    apiFetch<SidebarCounts>('/correspondence/items/sidebar-counts/')
-      .then((data) => { if (!cancelled) setCounts(data); })
+    const controller = new AbortController();
+    apiFetch<SidebarCounts>('/correspondence/items/sidebar-counts/', { signal: controller.signal })
+      .then((data) => setCounts(data))
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, []);
 
   return counts;

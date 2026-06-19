@@ -3,12 +3,11 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
-import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileCheck, Plus, Search, FileText, Clock, CheckCircle2, Users, Send, FileDown, Filter, Inbox, MoreHorizontal } from 'lucide-react';
 import { getFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
@@ -388,7 +387,7 @@ const FormsPage = () => {
     router.push(`/forms/${documentId}`);
   };
 
-  const handleTemplateSelect = (template: FormTemplate) => {
+  const _handleTemplateSelect = (template: FormTemplate) => {
     setSelectedTemplate(template);
     setCreateDialogOpen(true);
   };
@@ -445,8 +444,7 @@ const FormsPage = () => {
     executiveFilter !== 'all';
 
   return (
-    <ErrorBoundary>
-      <ClientErrorBoundary>
+    <ClientErrorBoundary>
         <DashboardLayout>
           <div className="container mx-auto p-6 space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -770,7 +768,6 @@ const FormsPage = () => {
 
       </DashboardLayout>
       </ClientErrorBoundary>
-    </ErrorBoundary>
   );
 };
 

@@ -7,7 +7,6 @@ import {
   GRADE_LEVELS,
   getDivisionById,
   getDepartmentById,
-  getDirectorateById,
   type User,
   type Correspondence,
   type Minute,
@@ -79,7 +78,7 @@ export function getSuggestedApprovers(options: RoutingOptions): User[] {
   // Get current user's division, department, and directorate info
   const division = currentUser?.division ? getDivisionById(currentUser.division) : null;
   const currentDirectorate = division?.directorateId ?? currentUser?.directorate ?? null;
-  const currentDepartment = currentUser?.department;
+  const _currentDepartment = currentUser?.department;
   const currentDivisionId = currentUser?.division;
 
   const candidates = new Map<string, User>();
@@ -209,7 +208,7 @@ export function getForwardingOptions(options: {
   const gradeOrder = [...GRADE_LEVELS].sort((a, b) => b.level - a.level).map((g) => g.code);
   const currentGradeIndex = gradeOrder.indexOf(currentUser.gradeLevel);
   if (currentGradeIndex === -1) return [];
-  const higherGrades = gradeOrder.slice(0, currentGradeIndex);
+  const _higherGrades = gradeOrder.slice(0, currentGradeIndex);
 
   const currentDivision = currentUser.division
     ? (divisions.find((div) => div && div.id === currentUser.division) ?? undefined)

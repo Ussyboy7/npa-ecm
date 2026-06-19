@@ -1,7 +1,7 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, FileText, Inbox, Users, Settings, BarChart3, Mail } from 'lucide-react';
+import { AlertTriangle, FileText, Inbox, Settings, BarChart3, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { logError } from '@/lib/client-logger';
 

@@ -32,7 +32,7 @@ export function OfficeSelectionCard({
 }: OfficeSelectionCardProps) {
   const hasSingleOffice = offices.length === 1;
   const hasNoOffice = offices.length === 0;
-  const selectedOffice = offices.find((o) => o.id === selectedOfficeId);
+  const _selectedOffice = offices.find((o) => o.id === selectedOfficeId);
 
   return (
     <Card>

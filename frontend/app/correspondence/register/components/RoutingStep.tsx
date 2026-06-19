@@ -237,10 +237,10 @@ export const RoutingStep = memo(function RoutingStep({
           {/* Source Type Detection & Selection */}
           {(() => {
             const detectedSource = detectCorrespondenceSource(flowType, formData, distributions);
-            const hasDistributions = distributions.directorates.length > 0 || 
+            const _hasDistributions = distributions.directorates.length > 0 || 
                                      distributions.divisions.length > 0 || 
                                      distributions.departments.length > 0;
-            const hasExternalRecipient = !!(formData.recipientName || formData.recipientEmail || formData.senderOrganization);
+            const _hasExternalRecipient = !!(formData.recipientName || formData.recipientEmail || formData.senderOrganization);
             const isAmbiguous = detectedSource === 'ambiguous';
             const explicitSource = formData.correspondenceSource;
             const displaySource = explicitSource || (detectedSource === 'ambiguous' ? 'internal' : detectedSource);

@@ -1,17 +1,17 @@
 "use client";
 
+import Image from 'next/image';
 import { useState, useEffect } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ImageIcon, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { signForm, getSignatureWorkflow } from "@/lib/api/forms";
+import { signForm } from "@/lib/api/forms";
 import { loadUserSignature, type StoredSignature } from "@/lib/signature-storage";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
@@ -132,10 +132,12 @@ export function FormSignatureDialog({
                         </p>
                       </div>
                       <div className="p-3 border rounded-lg bg-background self-start">
-                        <img
+                        <Image
                           src={userSignature.imageData}
                           alt="Digital signature preview"
-                          className="max-h-24 object-contain"
+                          width={200}
+                          height={96}
+                          className="max-h-24 w-auto object-contain"
                         />
                       </div>
                     </div>

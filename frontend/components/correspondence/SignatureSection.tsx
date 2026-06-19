@@ -5,7 +5,9 @@
 
 'use client';
 
+import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 import React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
@@ -14,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertCircle, ImageIcon, Shield, Upload, Settings } from 'lucide-react';
+import { AlertCircle, ImageIcon, Shield, Upload } from 'lucide-react';
 import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
 import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import type { StoredSignature, SignatureTemplate } from '@/lib/signature-storage';
@@ -76,7 +78,7 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
             <CardContent className="p-4 bg-white">
               <div className="flex flex-col items-center justify-center space-y-3">
                 <DigitalSealPreview
-                  officeName={signature.sealOfficeName || 'NIGERIAN PORTS AUTHORITY'}
+                  officeName={signature.sealOfficeName || DEFAULT_SEAL_OFFICE_NAME}
                   officeTitle={
                     signature.sealOfficeTitle ||
                     `OFFICE OF THE ${currentUser?.systemRole?.toUpperCase() || 'EXECUTIVE'}`
@@ -142,10 +144,12 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
                   </p>
                 </div>
                 <div className="p-3 border rounded-lg bg-background self-start">
-                  <img
+                  <Image
                     src={signature.imageData}
                     alt="Digital signature preview"
-                    className="max-h-24 object-contain"
+                    width={200}
+                    height={96}
+                    className="max-h-24 w-auto object-contain"
                   />
                 </div>
               </div>

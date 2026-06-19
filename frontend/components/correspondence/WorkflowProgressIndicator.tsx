@@ -109,7 +109,7 @@ function getSuggestedWorkflow(
   if (currentGradeIdx < 0) return [];
   
   // For MD directorate, skip ED level
-  let relevantGrades = GRADE_HIERARCHY.filter(g => {
+  const relevantGrades = GRADE_HIERARCHY.filter(g => {
     if (isMdDirectorate && g.grade === 'EDCS') return false;
     return true;
   });

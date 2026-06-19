@@ -8,14 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import {
   Users2,
   Search,
   Mail,
-  Clock,
-  AlertCircle,
   User as UserIcon,
   Loader2,
   CheckCircle2,
@@ -24,7 +21,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
+import { formatDateShort } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
 
 interface DelegatedItem {
@@ -51,7 +48,7 @@ interface DelegatedItem {
 
 const DelegatedInbox = () => {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [delegatedItems, setDelegatedItems] = useState<DelegatedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,9 +111,9 @@ const DelegatedInbox = () => {
     }
   };
 
-  if (!currentUser?.id) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!currentUser?.id ? (
         <div className="container mx-auto p-6 space-y-6">
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
@@ -124,13 +121,7 @@ const DelegatedInbox = () => {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
+      ) : !currentUser ? (
         <div className="container mx-auto p-6 space-y-6">
           <HelpGuideCard
             title="Select a persona"
@@ -138,13 +129,8 @@ const DelegatedInbox = () => {
             links={[{ label: 'Role Switcher', href: '/settings' }]}
           />
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
+      ) : (
+        <div className="container mx-auto p-6 space-y-6">
         {/* Back Button and Header */}
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -298,7 +284,8 @@ const DelegatedInbox = () => {
             ))}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </DashboardLayout>
   );
 };

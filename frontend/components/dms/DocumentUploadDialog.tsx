@@ -1,4 +1,5 @@
 "use client";
+import { ERROR_UNKNOWN, SENSITIVITY_OPTIONS } from '@/lib/constants';
 
 import { logError, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
@@ -34,7 +35,6 @@ import {
   createDocument,
   createDocumentVersion,
   fetchWorkspaces,
-  queryDocuments,
   type DocumentRecord,
   type DocumentType,
   type DocumentStatus,
@@ -58,13 +58,13 @@ import { sanitizeRichText } from '@/lib/sanitize-html';
 import { processOCR } from '@/lib/capture-storage';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
-const SENSITIVITY_OPTIONS: DocumentSensitivity[] = ['public', 'internal', 'confidential', 'restricted'];
+const _SENSITIVITY_OPTIONS: DocumentSensitivity[] = ['public', 'internal', 'confidential', 'restricted'];
 const DRAFT_STORAGE_KEY = 'dms_upload_draft';
 const MAX_TITLE_LENGTH = 500;
 const MAX_REFERENCE_LENGTH = 100;
-const MAX_DESCRIPTION_LENGTH = 2000;
+const _MAX_DESCRIPTION_LENGTH = 2000;
 
-const sensitivityLabel = (value: DocumentSensitivity) => {
+const _sensitivityLabel = (value: DocumentSensitivity) => {
   switch (value) {
     case 'public':
       return 'Public';
@@ -143,7 +143,7 @@ export const DocumentUploadDialog = ({
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [scanMode, setScanMode] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
+  const _formRef = useRef<HTMLFormElement>(null);
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const isMountedRef = useRef(true);
 
@@ -244,7 +244,7 @@ export const DocumentUploadDialog = ({
       
       try {
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
-      } catch (err) {
+      } catch (_err) {
         // Ignore localStorage errors
       }
       saveDraftRef.current = null;
@@ -284,7 +284,7 @@ export const DocumentUploadDialog = ({
           toast.info('Draft restored from previous session', { duration: 3000 });
         }
       }
-    } catch (err) {
+    } catch (_err) {
       // Ignore parse errors
     }
   }, [open, mode]);
@@ -412,7 +412,7 @@ export const DocumentUploadDialog = ({
     onOpenChange(nextOpen);
   }, [onOpenChange]);
 
-  const handleFileSelect = useCallback((selectedFile: File | null) => {
+  const _handleFileSelect = useCallback((selectedFile: File | null) => {
     setFile(selectedFile);
     setScanMode(false);
     if (selectedFile && validationErrors.file) {
@@ -545,7 +545,7 @@ export const DocumentUploadDialog = ({
         // Clear draft after successful creation
         try {
           localStorage.removeItem(DRAFT_STORAGE_KEY);
-        } catch (err) {
+        } catch (_err) {
           // Ignore
         }
         toast.success('Document created successfully');
@@ -621,7 +621,7 @@ export const DocumentUploadDialog = ({
           }
         }
       } else if (error instanceof Error) {
-        errorMessage = (error instanceof Error ? error.message : "Unknown error");
+        errorMessage = (error instanceof Error ? error.message : ERROR_UNKNOWN);
       }
       
       toast.error('Failed to process document', {
@@ -632,7 +632,7 @@ export const DocumentUploadDialog = ({
       setIsSubmitting(false);
       setUploadProgress(0);
     }
-  }, [mode, validateForm, tagsInput, composeMode, editorHtml, file, title, description, documentType, status, sensitivity, divisionId, departmentId, referenceNumber, currentUser, selectedWorkspaceIds, document, scanMode, onComplete, replaceTemplateTokens]);
+  }, [mode, validateForm, tagsInput, composeMode, editorHtml, file, title, description, documentType, status, sensitivity, divisionId, departmentId, referenceNumber, currentUser, selectedWorkspaceIds, document, scanMode, onComplete, replaceTemplateTokens, handleClose, notes]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -656,12 +656,12 @@ export const DocumentUploadDialog = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, isSubmitting, showTemplateConfirm, showSaveTemplateDialog, handleSubmit, handleClose]);
 
-  const dialogTitle = mode === 'create' ? 'Upload New Document' : 'Add New Version';
-  const dialogDescription =
+  const _dialogTitle = mode === 'create' ? 'Upload New Document' : 'Add New Version';
+  const _dialogDescription =
     mode === 'create'
       ? 'Create a new document with metadata and content or upload a file.'
       : `Upload a new version for "${document?.title ?? 'Document'}".`;
-  const DialogIcon = mode === 'create' ? FilePlus : UploadIcon;
+  const _DialogIcon = mode === 'create' ? FilePlus : UploadIcon;
 
   const formContent = (
     <div className="space-y-6">
@@ -868,10 +868,9 @@ export const DocumentUploadDialog = ({
             <Select value={sensitivity} onValueChange={(value) => setSensitivity(value as DocumentSensitivity)}>
               <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="public">Public</SelectItem>
-                <SelectItem value="internal">Internal</SelectItem>
-                <SelectItem value="confidential">Confidential</SelectItem>
-                <SelectItem value="restricted">Restricted</SelectItem>
+                {SENSITIVITY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

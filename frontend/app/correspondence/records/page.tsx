@@ -106,8 +106,8 @@ type UserScope = {
 const RecordsArchiveForm = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { currentUser, hydrated } = useCurrentUser();
-  const { directorates, divisions, departments, offices, officeMemberships } = useOrganization();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
+  const {directorates, divisions, departments, offices: _offices, officeMemberships } = useOrganization();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Initialize filters from URL params or localStorage
@@ -433,6 +433,43 @@ const RecordsArchiveForm = () => {
     };
   }, []);
 
+  const getFilterParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.append('search', debouncedSearch);
+    if (yearFilter !== 'all') params.append('year', yearFilter);
+    if (dateRangeFilter === 'last30') {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 30);
+      params.append('from_date', fromDate.toISOString().split('T')[0]);
+    } else if (dateRangeFilter === 'last90') {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 90);
+      params.append('from_date', fromDate.toISOString().split('T')[0]);
+    } else if (dateRangeFilter === 'thisYear') {
+      const fromDate = new Date();
+      fromDate.setMonth(0, 1);
+      params.append('from_date', fromDate.toISOString().split('T')[0]);
+    } else if (dateRangeFilter === 'custom') {
+      if (customDateFrom) params.append('from_date', customDateFrom);
+      if (customDateTo) params.append('to_date', customDateTo);
+    }
+    if (selectedPriorities.length > 0) {
+      selectedPriorities.forEach((p) => params.append('priority', p));
+    }
+    if (selectedDirections.length > 0) {
+      selectedDirections.forEach((d) => params.append('direction', d));
+    }
+    if (selectedArchiveLevel !== 'all') {
+      params.append('archive_level', selectedArchiveLevel);
+    }
+    if (hasCompletionPackage) {
+      params.append('has_completion_package', 'true');
+    }
+    params.append('status', 'completed');
+    params.append('status', 'archived');
+    return params;
+  }, [debouncedSearch, yearFilter, dateRangeFilter, customDateFrom, customDateTo, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage]);
+
   const fetchRecords = useCallback(async () => {
     if (!currentUser?.id) return;
 
@@ -448,52 +485,11 @@ const RecordsArchiveForm = () => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
-        page: String(pagination.page),
-        page_size: String(pagination.pageSize),
-      });
-
-      // Note: Don't send division/department params - backend handles scoping automatically
-      // This avoids UUID validation errors with large number of IDs
-
-      // Add other filters
-      if (debouncedSearch) params.append('search', debouncedSearch);
-      if (yearFilter !== 'all') params.append('year', yearFilter);
-      
-      // Date range filtering
-      if (dateRangeFilter === 'last30') {
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 30);
-        params.append('from_date', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'last90') {
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 90);
-        params.append('from_date', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'thisYear') {
-        const fromDate = new Date();
-        fromDate.setMonth(0, 1);
-        params.append('from_date', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'custom') {
-        if (customDateFrom) params.append('from_date', customDateFrom);
-        if (customDateTo) params.append('to_date', customDateTo);
-      }
-      
-      if (selectedPriorities.length > 0) {
-        selectedPriorities.forEach((p) => params.append('priority', p));
-      }
-      if (selectedDirections.length > 0) {
-        selectedDirections.forEach((d) => params.append('direction', d));
-      }
-      if (selectedArchiveLevel !== 'all') {
-        params.append('archive_level', selectedArchiveLevel);
-      }
-      if (hasCompletionPackage) {
-        params.append('has_completion_package', 'true');
-      }
+      const params = getFilterParams();
+      params.append('page', String(pagination.page));
+      params.append('page_size', String(pagination.pageSize));
       params.append('sort_by', sortBy);
       params.append('sort_order', sortOrder);
-      params.append('status', 'completed');
-      params.append('status', 'archived');
 
       // FIX: Correct endpoint name
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/archive-records/?${params.toString()}`, {
@@ -550,7 +546,7 @@ const RecordsArchiveForm = () => {
         setRefreshing(false);
       }
     }
-  }, [currentUser, pagination.page, pagination.pageSize, debouncedSearch, yearFilter, dateRangeFilter, customDateFrom, customDateTo, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder]);
+  }, [currentUser?.id, getFilterParams, pagination.page, pagination.pageSize, sortBy, sortOrder]);
 
   // Store fetchRecords ref
   useEffect(() => {
@@ -570,8 +566,7 @@ const RecordsArchiveForm = () => {
     setExporting(true);
     try {
       // Fetch all records for export (without pagination)
-      const params = new URLSearchParams();
-      
+      const params = getFilterParams();
       if (selectedDirectorate !== 'all') {
         params.append('directorate', selectedDirectorate);
       }
@@ -581,38 +576,6 @@ const RecordsArchiveForm = () => {
       if (selectedDepartment !== 'all') {
         params.append('department', selectedDepartment);
       }
-      if (debouncedSearch) params.append('search', debouncedSearch);
-      if (yearFilter !== 'all') params.append('year', yearFilter);
-      if (dateRangeFilter === 'last30') {
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 30);
-        params.append('from_date', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'last90') {
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 90);
-        params.append('from_date', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'thisYear') {
-        const fromDate = new Date();
-        fromDate.setMonth(0, 1);
-        params.append('from_date', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'custom') {
-        if (customDateFrom) params.append('from_date', customDateFrom);
-        if (customDateTo) params.append('to_date', customDateTo);
-      }
-      if (selectedPriorities.length > 0) {
-        selectedPriorities.forEach((p) => params.append('priority', p));
-      }
-      if (selectedDirections.length > 0) {
-        selectedDirections.forEach((d) => params.append('direction', d));
-      }
-      if (selectedArchiveLevel !== 'all') {
-        params.append('archive_level', selectedArchiveLevel);
-      }
-      if (hasCompletionPackage) {
-        params.append('has_completion_package', 'true');
-      }
-      params.append('status', 'completed');
-      params.append('status', 'archived');
       params.append('page_size', '1000'); // Reasonable limit for export
 
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/archive-records/?${params.toString()}`);
@@ -846,22 +809,14 @@ const RecordsArchiveForm = () => {
     );
   };
 
-  if (!currentUser) {
-    return (
-      <ErrorBoundary>
-        <DashboardLayout>
-          <div className="container mx-auto p-6 space-y-6">
-            <LoadingState message="Loading records…" />
-          </div>
-        </DashboardLayout>
-      </ErrorBoundary>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <DashboardLayout>
         <div className="container mx-auto p-6 space-y-6">
+          {!currentUser ? (
+            <LoadingState message="Loading records…" />
+          ) : (
+            <>
           {/* Header */}
           <div className="flex justify-between items-start">
             <div>
@@ -1173,6 +1128,8 @@ const RecordsArchiveForm = () => {
             className="border-t border-border/60 pt-4"
           />
         )}
+        </>
+      )}
       </div>
     </DashboardLayout>
     </ErrorBoundary>

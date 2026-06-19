@@ -22,8 +22,6 @@ import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
 import { Search, Loader2, Mail } from "lucide-react";
 import { formatDateShort } from "@/lib/correspondence-helpers";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 
@@ -98,8 +96,8 @@ export function LinkCorrespondenceDialog({
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/cases/${caseId}/`, {
         signal: abortControllerRef.current.signal,
       });
-      const linked = ((response.correspondence as any[]) || []).map((link: Record<string, unknown>) =>
-        link.correspondence_id || (link.correspondence as any)?.id
+      const linked = ((response.correspondence as unknown[]) || []).map((link: Record<string, unknown>) =>
+        link.correspondence_id || (link.correspondence as unknown)?.id
       ).filter(Boolean);
       setLinkedIds(new Set(linked));
     } catch (err: unknown) {
@@ -138,7 +136,7 @@ export function LinkCorrespondenceDialog({
       
       if (signal.aborted) return;
       
-      const items = ((response.results as any[]) || []).map((item: Record<string, unknown>) => ({
+      const items = ((response.results as unknown[]) || []).map((item: Record<string, unknown>) => ({
         id: item.id as string as string,
         referenceNumber: (item.reference_number as string) || '',
         subject: (item.subject as string) || '',

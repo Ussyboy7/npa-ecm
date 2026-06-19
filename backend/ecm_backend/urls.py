@@ -22,7 +22,6 @@ api_v1_patterns = [
     path('audit/', include('audit.urls')),
     path('forms/', include('forms.urls')),
     path('capture/', include('capture.urls')),
-    path('records/', include('records.urls')),
     path('search/', include('search.urls')),
     path('integrations/', include('integrations.urls')),
 ]

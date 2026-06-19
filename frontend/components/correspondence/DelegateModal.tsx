@@ -88,14 +88,6 @@ const DURATION_OPTIONS = [
   { value: 'custom', label: 'Custom Date', description: 'Set a specific expiry date' },
 ];
 
-interface DelegationOptions {
-  assistantId: string;
-  assistantType: 'TA' | 'PA';
-  notes: string;
-  duration: string;
-  expiresAt?: string; // ISO date string for custom expiry
-}
-
 interface DelegateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -107,11 +99,11 @@ interface DelegateModalProps {
 export const DelegateModal = ({
   open,
   onOpenChange,
-  correspondenceId,
+  _correspondenceId,
   executiveId,
   onDelegate,
 }: DelegateModalProps) => {
-  const { assistantAssignments, users, addAssignment, directorates, divisions, departments, refreshOrganizationData } = useOrganization();
+  const {assistantAssignments, users, addAssignment, directorates: _directorates, divisions, departments, refreshOrganizationData } = useOrganization();
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');

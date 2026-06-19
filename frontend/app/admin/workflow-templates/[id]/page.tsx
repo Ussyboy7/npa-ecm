@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -169,9 +169,11 @@ function WorkflowTemplateEditorPageContent() {
     }
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
+  const _currentTemplateId = template?.id || (isNew ? undefined : id);
+
+  return (
+    <DashboardLayout>
+      {loading ? (
         <div className="flex-1 overflow-y-auto">
           <div className="container mx-auto p-6 space-y-6">
             <div className="flex items-center justify-center min-h-[400px]">
@@ -182,15 +184,8 @@ function WorkflowTemplateEditorPageContent() {
             </div>
           </div>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  const currentTemplateId = template?.id || (isNew ? undefined : id);
-
-  return (
-    <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
+      ) : (
+        <div className="container mx-auto p-6 space-y-6">
           {/* Header Section */}
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -351,6 +346,7 @@ function WorkflowTemplateEditorPageContent() {
             </Card>
           )}
       </div>
+      )}
     </DashboardLayout>
   );
 }

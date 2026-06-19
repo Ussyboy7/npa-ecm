@@ -1,5 +1,8 @@
 "use client";
+import Image from 'next/image';
+import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 
+import { ALLOWED_SIGNATURE_MIME_TYPES, ACCEPT_IMAGE_SIGNATURE } from '@/lib/file-types';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { 
@@ -20,10 +23,7 @@ import {
   Loader2,
   Info,
   Lock,
-  Check,
-  AlertTriangle,
   Maximize2,
-  Minimize2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -76,7 +76,7 @@ const MAX_PREFIX_LENGTH = 10;
 
 // Default seal settings
 const DEFAULT_SEAL_SETTINGS = {
-  sealOfficeName: 'NIGERIAN PORTS AUTHORITY',
+  sealOfficeName: DEFAULT_SEAL_OFFICE_NAME,
   sealOfficeTitle: '',
   sealPrefix: 'NPA',
   require2fa: true,
@@ -97,7 +97,7 @@ export const SignatureSettingsCard = () => {
   const sealPreviewRef = useRef<DigitalSealPreviewHandle>(null);
   
   // Seal settings with validation
-  const [sealOfficeName, setSealOfficeName] = useState('NIGERIAN PORTS AUTHORITY');
+  const [sealOfficeName, setSealOfficeName] = useState(DEFAULT_SEAL_OFFICE_NAME);
   const [sealOfficeTitle, setSealOfficeTitle] = useState('');
   const [sealPrefix, setSealPrefix] = useState('NPA');
   const [require2fa, setRequire2fa] = useState(true);
@@ -224,8 +224,7 @@ export const SignatureSettingsCard = () => {
     }
 
     // Validate file type
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/svg+xml'];
-    if (!allowedTypes.includes(file.type)) {
+    if (!ALLOWED_SIGNATURE_MIME_TYPES.includes(file.type)) {
       const error = `Invalid file type. Please upload a PNG, JPG, or SVG file. Current type: ${file.type}`;
       setErrors(prev => ({ ...prev, file: error }));
       toast.error(error);
@@ -572,7 +571,7 @@ export const SignatureSettingsCard = () => {
                     <Label className="text-base font-medium">Upload Signature</Label>
                     <Input
                       type="file"
-                      accept="image/png,image/jpeg,image/svg+xml"
+                      accept={ACCEPT_IMAGE_SIGNATURE}
                       onChange={handleSignatureUpload}
                       disabled={isUploading}
                       aria-label="Upload signature file"
@@ -602,13 +601,15 @@ export const SignatureSettingsCard = () => {
                     {signature ? (
                       <div className="space-y-3">
                         <div className="p-4 border rounded-lg bg-white dark:bg-background flex items-center justify-center min-h-[100px]">
-                          <img
+                          <Image
                             src={
                               signature.imageData.startsWith('data:')
                                 ? signature.imageData
                                 : (buildDownloadUrl(signature.imageData) ?? signature.imageData)
                             }
                             alt="Your signature"
+                            width={300}
+                            height={80}
                             className="max-h-20 object-contain"
                           />
                         </div>
@@ -762,7 +763,7 @@ export const SignatureSettingsCard = () => {
                               id="sealOfficeName"
                               value={sealOfficeName}
                               onChange={(e) => handleOfficeNameChange(e.target.value)}
-                              placeholder="NIGERIAN PORTS AUTHORITY"
+                              placeholder={DEFAULT_SEAL_OFFICE_NAME}
                               maxLength={MAX_OFFICE_NAME_LENGTH}
                               aria-invalid={!!errors.officeName}
                               aria-describedby={errors.officeName ? "officeName-error" : undefined}

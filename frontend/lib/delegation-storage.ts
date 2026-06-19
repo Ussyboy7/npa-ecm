@@ -20,7 +20,7 @@ export const loadDelegations = async (): Promise<Delegation[]> => {
 /**
  * @deprecated Not needed - backend handles saving automatically
  */
-export const saveDelegations = (delegations: Delegation[]): void => {
+export const saveDelegations = (_delegations: Delegation[]): void => {
   // No-op - backend handles persistence
   logWarn('saveDelegations is deprecated - backend handles persistence automatically');
 };

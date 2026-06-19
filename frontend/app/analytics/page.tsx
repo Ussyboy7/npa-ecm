@@ -11,7 +11,7 @@ import { useUserPermissions } from '@/hooks/use-user-permissions';
  */
 export default function AnalyticsPage() {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
 
   useEffect(() => {

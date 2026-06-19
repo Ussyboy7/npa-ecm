@@ -2,8 +2,10 @@
  * Authentication error types and utilities
  */
 
+import { ERROR_AUTHENTICATION_REQUIRED, ERROR_UNKNOWN } from "./constants";
+
 export class AuthenticationError extends Error {
-  constructor(message: string = "Authentication required") {
+  constructor(message: string = ERROR_AUTHENTICATION_REQUIRED) {
     super(message);
     this.name = "AuthenticationError";
   }
@@ -24,13 +26,14 @@ export const isAuthenticationError = (error: unknown): boolean => {
     return true;
   }
   if (error instanceof Error) {
+    const message = error.message || ERROR_UNKNOWN;
     return (
       error.name === "AuthenticationError" ||
       error.name === "AuthenticationExpiredError" ||
-      (error instanceof Error ? error.message : "Unknown error") === "Authentication required" ||
-      (error instanceof Error ? error.message : "Unknown error") === "Authentication expired" ||
-      (error instanceof Error ? error.message : "Unknown error").includes("Authentication required") ||
-      (error instanceof Error ? error.message : "Unknown error").includes("Authentication expired")
+      message === ERROR_AUTHENTICATION_REQUIRED ||
+      message === "Authentication expired" ||
+      message.includes(ERROR_AUTHENTICATION_REQUIRED) ||
+      message.includes("Authentication expired")
     );
   }
   return false;

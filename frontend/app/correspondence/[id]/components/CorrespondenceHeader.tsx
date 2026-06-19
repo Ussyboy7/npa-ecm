@@ -28,12 +28,11 @@ import { downloadAsPDF, downloadAsWord } from '@/lib/document-generator';
 import { toast } from 'sonner';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
 import type { DocumentRecord } from '@/lib/dms-storage';
-import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
-import { User as UserIcon, Calendar, Mail, Phone, Building2, Users, Paperclip } from 'lucide-react';
+import { formatDateShort } from '@/lib/correspondence-helpers';
+import { User as UserIcon, Calendar, Building2, Users, Paperclip } from 'lucide-react';
 import { ShareWithDepartmentButton } from '@/components/correspondence/ShareWithDepartmentButton';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import type { DistributionRecipient } from '@/lib/npa-structure';
 
 interface CorrespondenceHeaderProps {
   correspondence: Correspondence;

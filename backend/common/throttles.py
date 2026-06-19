@@ -1,6 +1,6 @@
 """Custom DRF throttle classes for rate limiting."""
 
-from rest_framework.throttling import UserRateThrottle, AnonRateThrottle
+from rest_framework.throttling import UserRateThrottle
 
 
 class LoginRateThrottle(UserRateThrottle):

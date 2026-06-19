@@ -11,24 +11,19 @@ import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { CaseAnalyticsTab } from '@/components/analytics/CaseAnalyticsTab';
 
 export default function CaseAnalyticsPage() {
-  const { currentUser, hydrated } = useCurrentUser();
-  const permissions = useUserPermissions(currentUser ?? undefined);
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
+  const _permissions = useUserPermissions(currentUser ?? undefined);
 
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!currentUser ? (
         <div className="container mx-auto p-6 space-y-6">
           <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading case analytics…</CardContent></Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <ErrorBoundary>
-      <ClientErrorBoundary>
-        <DashboardLayout>
-          <div className="container mx-auto p-6 space-y-6">
+      ) : (
+        <ErrorBoundary>
+          <ClientErrorBoundary>
+            <div className="container mx-auto p-6 space-y-6">
             {/* Header */}
             <div className="flex justify-between items-start">
               <div>
@@ -62,9 +57,10 @@ export default function CaseAnalyticsPage() {
             {/* Analytics Content */}
             <CaseAnalyticsTab />
           </div>
-        </DashboardLayout>
-      </ClientErrorBoundary>
-    </ErrorBoundary>
+        </ClientErrorBoundary>
+      </ErrorBoundary>
+    )}
+  </DashboardLayout>
   );
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { logError, logInfo, logWarn } from '@/lib/client-logger';
+import { logError, logInfo } from '@/lib/client-logger';
 import { formatDistanceToNow } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState, useReducer, useRef, startTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -9,14 +9,8 @@ import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
   fetchDocumentById,
-  updateDocumentMetadata,
-  createDocumentVersion,
-  replaceDocumentVersion,
   fetchWorkspaces,
   getDocumentComments,
   updateDocumentWorkspaces,
@@ -30,32 +24,26 @@ import {
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
 import { type DistributionRecipient } from '@/lib/npa-structure';
-import { formatDate, formatDateTime } from '@/lib/correspondence-helpers';
+import { formatDateTime } from '@/lib/correspondence-helpers';
 import { formatFileSize } from '@/lib/file-utils';
-import { ArrowLeft, FileText, Download, Layers, Filter, User as UserIcon, Tag, Pencil, FilePlus, Clock, Eye, MessageSquare, Users, Plus, X, CheckCircle2, Circle, Activity, Shield, Loader2, FolderKanban, Share2, AlertCircle, FolderTree, PenTool, Scan, Download as DownloadIcon } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Layers, User as UserIcon, Pencil, FilePlus, Clock, Eye, Activity, Shield, Loader2, AlertCircle, PenTool, Scan, Download as DownloadIcon } from 'lucide-react';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
 import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
 import { FormDocumentEditor } from '@/components/dms/FormDocumentEditor';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { apiFetch } from '@/lib/api-client';
 import { Correspondence, Minute } from '@/lib/npa-structure';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { unlinkDocumentFromCase } from '@/lib/api/cases';
-import { processOCR, getCaptureJob, getOCRResult, cancelCaptureJob, type CaptureJob } from '@/lib/capture-storage';
+import { processOCR, getCaptureJob, cancelCaptureJob, type CaptureJob } from '@/lib/capture-storage';
 import { DocumentHeader } from '@/components/dms/DocumentHeader';
 import { CollaborationPanel } from '@/components/dms/CollaborationPanel';
 import { AccessActivityCard } from '@/components/dms/AccessActivityCard';
@@ -63,7 +51,7 @@ import { RelatedCorrespondenceCard } from '@/components/dms/RelatedCorrespondenc
 import { DocumentCommentsCard } from '@/components/dms/DocumentCommentsCard';
 import { DocumentThreadCard } from '@/components/dms/DocumentThreadCard';
 
-const statusLabel = (status: DocumentRecord['status']) => {
+const _statusLabel = (status: DocumentRecord['status']) => {
   switch (status) {
     case 'draft':
       return 'Draft';
@@ -76,7 +64,7 @@ const statusLabel = (status: DocumentRecord['status']) => {
   }
 };
 
-const statusVariant = (status: DocumentRecord['status']): 'outline' | 'default' | 'secondary' => {
+const _statusVariant = (status: DocumentRecord['status']): 'outline' | 'default' | 'secondary' => {
   switch (status) {
     case 'draft':
       return 'outline';
@@ -1016,9 +1004,13 @@ const DocumentDetailPage = () => {
     return user.name.substring(0, 2).toUpperCase();
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
+  const author = document ? userLookup.get(document.authorId) : undefined;
+  const versions = Array.isArray(document?.versions) ? document?.versions : [];
+  const primaryVersion = versions?.[0];
+
+  return (
+    <DashboardLayout>
+      {loading ? (
         <div className="container mx-auto p-6">
           <Card>
             <CardContent className="py-12 text-center text-muted-foreground">
@@ -1027,13 +1019,7 @@ const DocumentDetailPage = () => {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (documentError || !document) {
-    return (
-      <DashboardLayout>
+      ) : documentError || !document ? (
         <div className="container mx-auto p-6">
           <Card>
             <CardContent className="py-12 text-center">
@@ -1051,18 +1037,9 @@ const DocumentDetailPage = () => {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  const author = userLookup.get(document.authorId);
-  const versions = Array.isArray(document.versions) ? document.versions : [];
-  const primaryVersion = versions[0];
-
-  return (
-    <ClientErrorBoundary>
-      <DashboardLayout>
-        <div className="flex flex-col min-h-screen">
+      ) : (
+        <ClientErrorBoundary>
+          <div className="flex flex-col min-h-screen">
           {/* Header */}
           <DocumentHeader
             document={document}
@@ -1625,8 +1602,9 @@ const DocumentDetailPage = () => {
         </Dialog>
       )}
 
-      </DashboardLayout>
-    </ClientErrorBoundary>
+      </ClientErrorBoundary>
+    )}
+  </DashboardLayout>
   );
 };
 

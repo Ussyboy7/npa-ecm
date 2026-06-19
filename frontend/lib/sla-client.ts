@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from './api-client';
+import { isRecord, asString } from '@/lib/type-utils';
 
 // =============================================================================
 // Types
@@ -269,14 +270,6 @@ const buildQuery = (params: Record<string, string | number | boolean | undefined
     query.set(key, String(value));
   });
   return query.toString();
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-
-const asString = (value: unknown, fallback = ''): string => {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return fallback;
-  return String(value);
 };
 
 const asStringOrNull = (value: unknown): string | null => {

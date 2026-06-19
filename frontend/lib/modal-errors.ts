@@ -1,16 +1,16 @@
+import { ERROR_UNKNOWN } from '@/lib/constants';
 /**
  * Error handling utilities for modals
  * Provides consistent error message formatting and handling
  */
+
+import { isRecord } from '@/lib/type-utils';
 
 export interface ModalError {
   field?: string;
   message: string;
   type: 'validation' | 'api' | 'network' | 'permission' | 'unknown';
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
 
 const getString = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
 
@@ -80,16 +80,16 @@ export class ModalErrorHandler {
   static getUserFriendlyMessage(error: ModalError): string {
     switch (error.type) {
       case 'validation':
-        return (error instanceof Error ? error.message : "Unknown error");
+        return (error instanceof Error ? error.message : ERROR_UNKNOWN);
       case 'api':
-        return `Server error: ${(error instanceof Error ? error.message : "Unknown error")}`;
+        return `Server error: ${(error instanceof Error ? error.message : ERROR_UNKNOWN)}`;
       case 'network':
         return 'Network error. Please check your connection and try again.';
       case 'permission':
         return 'You do not have permission to perform this action.';
       case 'unknown':
       default:
-        return (error instanceof Error ? error.message : "Unknown error") || 'An unexpected error occurred. Please try again.';
+        return (error instanceof Error ? error.message : ERROR_UNKNOWN) || 'An unexpected error occurred. Please try again.';
     }
   }
 

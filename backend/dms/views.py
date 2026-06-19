@@ -21,6 +21,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from audit.services import AuditService
+from common.constants import (
+    SENSITIVITY_HIGH_CONFIDENTIAL_GRADES,
+    SENSITIVITY_HIGH_RESTRICTED_GRADES,
+)
+from common.storage_utils import resolve_media_path
 from notifications.models import Notification
 from notifications.services import NotificationService
 
@@ -391,15 +396,13 @@ class DocumentViewSet(viewsets.ModelViewSet):
             Q(permissions__grade_levels__contains=[user.grade_level])
         ) if user.grade_level else Q()
         
-        high_confidential_grades = {"MSS5", "MSS4", "MSS3", "MSS2", "MSS1", "EDCS", "MDCS"}
-        if user.grade_level in high_confidential_grades:
+        if user.grade_level in SENSITIVITY_HIGH_CONFIDENTIAL_GRADES:
             visibility_filter |= (
                 Q(sensitivity=Document.Sensitivity.CONFIDENTIAL) & has_confidential_permission
             )
-        
+
         # Restricted: need top grade AND explicit permission
-        high_restricted_grades = {"MSS1", "EDCS", "MDCS"}
-        if user.grade_level in high_restricted_grades:
+        if user.grade_level in SENSITIVITY_HIGH_RESTRICTED_GRADES:
             visibility_filter |= (
                 Q(sensitivity=Document.Sensitivity.RESTRICTED) & has_confidential_permission
             )
@@ -766,15 +769,12 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         file_url = version.file_url
         logger.info(f"OCR request for version {version.id}: file_url={file_url}, file_type={version.file_type}")
         
-        if file_url.startswith('/media/'):
-            file_path = os.path.join(settings.MEDIA_ROOT, file_url.replace('/media/', ''))
-        elif file_url.startswith('http'):
+        if file_url.startswith('http'):
             raise ValidationError({"detail": "Cannot process remote files for OCR"})
-        elif file_url.startswith('data:'):
+        if file_url.startswith('data:'):
             raise ValidationError({"detail": "File is still in data URL format. Please wait for file processing to complete."})
-        else:
-            file_path = os.path.join(settings.MEDIA_ROOT, file_url)
-        
+
+        file_path = resolve_media_path(file_url)
         logger.info(f"Resolved file path: {file_path}, exists: {os.path.exists(file_path)}")
         
         if not os.path.exists(file_path):

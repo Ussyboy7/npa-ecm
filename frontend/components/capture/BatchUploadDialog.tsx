@@ -12,8 +12,18 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { Upload, X, FileText, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { processBatch, getBatchUpload, type BatchUpload } from '@/lib/capture-storage';
-import { createDocument, createDocumentVersion } from '@/lib/dms-storage';
+import { createDocument } from '@/lib/dms-storage';
 import { logError } from '@/lib/client-logger';
+import {
+  MIME_TYPE_PDF,
+  MIME_TYPE_DOCX,
+  MIME_TYPE_DOC,
+  MIME_TYPE_PNG,
+  MIME_TYPE_JPEG,
+  MIME_TYPE_WEBP,
+  MIME_TYPE_TIFF,
+  MIME_TYPE_BMP,
+} from '@/lib/file-types';
 
 interface BatchUploadDialogProps {
   open: boolean;
@@ -32,16 +42,14 @@ interface UploadFile {
 
 const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB
 const ALLOWED_TYPES = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/tiff',
-  'image/bmp',
+  MIME_TYPE_PDF,
+  MIME_TYPE_DOC,
+  MIME_TYPE_DOCX,
+  MIME_TYPE_TIFF,
+  MIME_TYPE_BMP,
+  MIME_TYPE_PNG,
+  MIME_TYPE_JPEG,
+  MIME_TYPE_WEBP,
 ];
 
 export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploadDialogProps) => {

@@ -1,3 +1,4 @@
+import { ERROR_AUTHENTICATION_REQUIRED } from '@/lib/constants';
 import { logError, logInfo, logWarn } from '@/lib/client-logger';
 /**
  * Frontend API client for notifications.
@@ -185,7 +186,7 @@ export const getNotifications = async (params?: {
 };
 
 // Singleton state for unread count - only one fetch should happen regardless of how many components call it
-let globalUnreadCountState: {
+const globalUnreadCountState: {
   count: number;
   timestamp: number;
   loading: boolean;
@@ -258,7 +259,7 @@ export const getUnreadCount = async (force = false): Promise<number> => {
         return 0;
       }
       
-      if ((error as any)?.status === 401 || errorMessage === 'Authentication required' || errorMessage === 'Authentication expired') {
+      if ((error as {status?: number})?.status === 401 || errorMessage === ERROR_AUTHENTICATION_REQUIRED || errorMessage === 'Authentication expired') {
         setGlobalUnreadCount(0);
         return 0;
       }
@@ -290,7 +291,7 @@ export const subscribeToUnreadCount = (callback: (count: number) => void): (() =
  * Mark a notification as read.
  */
 export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
 
   await apiFetch(`/notifications/notifications/${notificationId}/mark_read/`, {
     method: 'POST',
@@ -302,7 +303,7 @@ export const markNotificationAsRead = async (notificationId: string): Promise<vo
  * Mark a notification as archived.
  */
 export const markNotificationAsArchived = async (notificationId: string): Promise<void> => {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
 
   await apiFetch(`/notifications/notifications/${notificationId}/mark_archived/`, {
     method: 'POST',
@@ -314,7 +315,7 @@ export const markNotificationAsArchived = async (notificationId: string): Promis
  * Mark all notifications as read.
  */
 export const markAllNotificationsAsRead = async (): Promise<number> => {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
 
   const response = await apiFetch<{ count: number }>('/notifications/notifications/mark_all_read/', {
     method: 'POST',
@@ -332,7 +333,7 @@ export const getNotificationPreferences = async (): Promise<NotificationPreferen
   try {
     const response = await apiFetch<NotificationPreferences>('/notifications/preferences/');
     return response;
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     // Preferences might not exist yet, return null
     return null;
   }
@@ -344,7 +345,7 @@ export const getNotificationPreferences = async (): Promise<NotificationPreferen
 export const updateNotificationPreferences = async (
   preferences: Partial<NotificationPreferences>
 ): Promise<NotificationPreferences> => {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
 
   const response = await apiFetch<NotificationPreferences>('/notifications/preferences/', {
     method: 'PUT',
@@ -359,7 +360,7 @@ export const updateNotificationPreferences = async (
 export const createNotification = async (
   payload: CreateNotificationPayload
 ): Promise<Notification> => {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
 
   const response = await apiFetch<Notification>('/notifications/notifications/', {
     method: 'POST',

@@ -1,9 +1,11 @@
+import { ERROR_AUTHENTICATION_REQUIRED } from '@/lib/constants';
 /**
  * API client for correspondence/minute content templates
  */
 
 import { apiFetch, hasTokens } from '../api-client';
 import { logError } from '../client-logger';
+import { isRecord, asString } from '@/lib/type-utils';
 
 export type TemplateScope = 'organization' | 'directorate' | 'division' | 'department' | 'user';
 export type TemplateType = 'document' | 'minute' | 'treatment';
@@ -27,12 +29,6 @@ export interface DocumentTemplate {
   isActive?: boolean;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-const asString = (value: unknown, fallback = ''): string => {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return fallback;
-  return String(value);
-};
 const asStringOrNull = (value: unknown): string | null => {
   if (value === null) return null;
   if (value === undefined) return null;
@@ -140,7 +136,7 @@ export const createTemplate = async (data: {
   isDefault?: boolean;
 }): Promise<DocumentTemplate> => {
   if (!hasTokens()) {
-    throw new Error('Authentication required');
+    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   }
 
   try {
@@ -186,7 +182,7 @@ export const updateTemplate = async (
   }>
 ): Promise<DocumentTemplate> => {
   if (!hasTokens()) {
-    throw new Error('Authentication required');
+    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   }
 
   try {
@@ -218,7 +214,7 @@ export const updateTemplate = async (
  */
 export const deleteTemplate = async (id: string): Promise<void> => {
   if (!hasTokens()) {
-    throw new Error('Authentication required');
+    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   }
 
   try {

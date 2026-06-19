@@ -26,17 +26,13 @@ import {
   AlertCircle,
   Clock,
   User as UserIcon,
-  ArrowDown,
-  ArrowUp,
   Filter,
-  Calendar,
   Building2,
-  Loader2,
   FileText,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
+import { formatDateShort } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
@@ -94,7 +90,7 @@ const calculateDaysPending = (item: Correspondence): number => {
 
 const OutboxPage = () => {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, users: organizationUsers } = useOrganization();
 
   const [query, setQuery] = useState('');
@@ -375,19 +371,13 @@ const OutboxPage = () => {
     );
   };
 
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
-          <LoadingState message="Loading outbox…" />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
     <DashboardLayout>
       <div className="container mx-auto p-6 space-y-6">
+        {!currentUser ? (
+          <LoadingState message="Loading outbox…" />
+        ) : (
+          <>
         {/* Header */}
         <div className="flex justify-between items-start">
           <div>
@@ -694,6 +684,8 @@ const OutboxPage = () => {
             className="border-t border-border/60 pt-4"
           />
         )}
+        </>
+      )}
 
         {/* Withdraw Confirmation Dialog */}
         <AlertDialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>

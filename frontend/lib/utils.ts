@@ -14,7 +14,7 @@ export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     try {
       return crypto.randomUUID();
-    } catch (e) {
+    } catch (_e) {
       // Fall through to fallback if randomUUID fails (e.g., insecure context)
     }
   }

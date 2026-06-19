@@ -45,7 +45,7 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
   const isAGM = grade === "MSS2";
   const isPrincipalManager = grade === "MSS3";
   const isSeniorManager = grade === "MSS4";
-  const isAssistantManager = grade === "SSS1";
+  const _isAssistantManager = grade === "SSS1";
   const isSeniorOfficer = grade === "SSS2";
   const isOfficerI = grade === "SSS3";
   const isOfficerII = grade === "SSS4";
@@ -80,7 +80,7 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
     profile.canViewCorrespondenceRegistry = true;
   }
 
-  const canRegisterByGrade =
+  const _canRegisterByGrade =
     isSuperAdmin ||
     role === "Secretary" ||
     isSeniorOfficer ||

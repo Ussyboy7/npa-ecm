@@ -11,34 +11,23 @@ import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { ExecutiveDashboardTab } from '@/components/analytics/ExecutiveDashboardTab';
 
 export default function ExecutiveDashboardPage() {
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
 
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!currentUser ? (
         <div className="container mx-auto p-6 space-y-6">
           <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading executive dashboard…</CardContent></Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!permissions.canAccessExecutiveDashboard) {
-    return (
-      <DashboardLayout>
+      ) : !permissions.canAccessExecutiveDashboard ? (
         <div className="container mx-auto p-6 space-y-6">
           <Card><CardContent className="py-12 text-center"><p className="text-lg font-semibold">Access Denied</p><p className="text-sm text-muted-foreground mt-2">You don't have permission to access the Executive Dashboard.</p></CardContent></Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <ErrorBoundary>
-      <ClientErrorBoundary>
-        <DashboardLayout>
-          <div className="container mx-auto p-6 space-y-6">
+      ) : (
+        <ErrorBoundary>
+          <ClientErrorBoundary>
+            <div className="container mx-auto p-6 space-y-6">
             {/* Header */}
             <div className="flex justify-between items-start">
               <div>
@@ -72,9 +61,10 @@ export default function ExecutiveDashboardPage() {
             {/* Analytics Content */}
             <ExecutiveDashboardTab />
           </div>
-        </DashboardLayout>
-      </ClientErrorBoundary>
-    </ErrorBoundary>
+        </ClientErrorBoundary>
+      </ErrorBoundary>
+    )}
+  </DashboardLayout>
   );
 }
 

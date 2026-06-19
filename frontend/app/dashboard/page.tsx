@@ -8,7 +8,7 @@ import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from '@/hooks/use-role-checks';
-import { hasTokens, apiFetch } from '@/lib/api-client';
+import { apiFetch } from '@/lib/api-client';
 import { ExecutivePortfolio, fetchExecutivePortfolio } from '@/lib/analytics-client';
 import { logError } from '@/lib/client-logger';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
@@ -51,7 +51,7 @@ const Dashboard = () => {
   const { isSecretary } = useRoleChecks();
 
   useEffect(() => {
-    if (!currentUser && hasTokens()) {
+    if (!currentUser) {
       const attemptRefresh = async () => {
         try {
           await refresh();
@@ -241,23 +241,17 @@ const Dashboard = () => {
   const approvalsList = executivePortfolio?.approvals ?? [];
   const delegationSnapshot = executivePortfolio?.delegations ?? [];
 
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
+  return (
+    <DashboardLayout>
+      <div className="container mx-auto p-6 space-y-6">
+        {!currentUser ? (
           <HelpGuideCard
             title="Select a persona"
             description="Use the Role Switcher to choose a user context after signing in."
             links={[{ label: 'Role Switcher', href: '/settings' }]}
           />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
+        ) : (
+          <>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Welcome back, {currentUser.name}</h1>
@@ -336,6 +330,8 @@ const Dashboard = () => {
             ) : null}
           </>
         )}
+        </>
+      )}
       </div>
     </DashboardLayout>
   );

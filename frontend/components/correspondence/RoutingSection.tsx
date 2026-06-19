@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -19,7 +19,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import type { User, DistributionRecipient } from '@/lib/npa-structure';
+import type { User } from '@/lib/npa-structure';
 
 interface RoutingSectionProps {
   // Route type (person or office)
@@ -82,7 +82,7 @@ export const RoutingSection = ({
   offices,
   directorates,
   divisions,
-  users,
+  _users,
   assistantList,
   approverList,
   suggestedNext,

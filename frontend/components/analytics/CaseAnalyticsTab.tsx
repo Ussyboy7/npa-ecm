@@ -5,7 +5,7 @@ import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, FolderTree, TrendingUp, Clock, CheckCircle2, Users, Building2, FileText, AlertCircle, Target } from 'lucide-react';
+import { Loader2, Clock, Users, Building2, FileText, AlertCircle, Target } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiFetch } from '@/lib/api-client';

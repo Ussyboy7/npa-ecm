@@ -42,11 +42,11 @@ const recipientKey = (recipient: DistributionRecipient): string => {
 export const DistributionSelector = ({
   selectedDistribution,
   onDistributionChange,
-  currentDivisionId,
-  currentDepartmentId,
+  _currentDivisionId,
+  _currentDepartmentId,
 }: DistributionSelectorProps) => {
   const { currentUser } = useCurrentUser();
-  const { users, offices, divisions, departments, directorates } = useOrganization();
+  const {users, offices, divisions, departments: _departments, directorates } = useOrganization();
 
   const canCreateParallelRouting = useMemo(() => {
     if (!currentUser?.gradeLevel) return false;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -16,7 +16,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { FormSubmission, FormField } from "@/lib/types/forms";
+import type { FormSubmission } from "@/lib/types/forms";
 
 interface SignatureWorkflowDialogProps {
   open: boolean;

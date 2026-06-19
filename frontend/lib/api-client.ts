@@ -1,6 +1,6 @@
 "use client";
 
-import { logError, logWarn, logInfo } from './client-logger';
+import { logWarn } from './client-logger';
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -88,7 +88,6 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
   const {
     skipAuth,
     headers,
-    responseType = "json",
     ...rest
   } = options;
 
@@ -118,7 +117,7 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
       let responseBody = '';
       try {
         responseBody = await response.text();
-      } catch (e) {
+      } catch (_e) {
         responseBody = 'Could not read response body';
       }
 
@@ -126,16 +125,17 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
       try {
         const parsed = JSON.parse(responseBody);
         if (parsed && typeof parsed === "object") {
-          apiMessage = (parsed as any).detail || (parsed as any).message || (parsed as any).error;
+          const p = parsed as Record<string, unknown>;
+          apiMessage = (p.detail || p.message || p.error) as string | undefined;
         }
       } catch {
         // Not JSON
       }
 
       const err = new Error(apiMessage || `HTTP ${response.status}`);
-      (err as any).status = response.status;
-      (err as any).apiMessage = apiMessage;
-      (err as any).body = responseBody;
+      (err as Record<string, unknown>).status = response.status;
+      (err as Record<string, unknown>).apiMessage = apiMessage;
+      (err as Record<string, unknown>).body = responseBody;
       throw err;
     }
 
@@ -149,7 +149,7 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
   try {
     return await execute();
   } catch (error: unknown) {
-    if ((error as any)?.status === 401 && !skipAuth && !path.includes("token/refresh/")) {
+    if ((error as Record<string, unknown>)?.status === 401 && !skipAuth && !path.includes("token/refresh/")) {
       const refreshed = await attemptTokenRefresh();
       if (refreshed) {
         return await execute();
@@ -188,7 +188,7 @@ export const login = async (username: string, password: string): Promise<LoginRe
     storeTokens(data.access, data.refresh);
     return data;
   } catch (error: unknown) {
-    const errorObj = error as any;
+    const errorObj = error as Record<string, unknown>;
     if (errorObj?.message === "Failed to fetch" || errorObj?.name === "TypeError") {
       const baseUrl = getBaseUrl();
       throw new Error(`Unable to connect to the API server at ${baseUrl}`);

@@ -11,7 +11,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiFetch, hasTokens } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 import { NPA_ECM_CONTACT_EMAIL, NPA_ECM_SUPPORT_EMAIL, NPA_ECM_FEEDBACK_EMAIL } from "@/lib/branding";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
@@ -260,12 +260,6 @@ export default function HelpAndGuidePage() {
   };
 
   const loadGuides = useCallback(async () => {
-    if (!hasTokens()) {
-      setGuides([]);
-      setLoadingGuides(false);
-      return;
-    }
-
     setLoadingGuides(true);
     setGuidesError(null);
 
@@ -284,12 +278,6 @@ export default function HelpAndGuidePage() {
   }, []);
 
   const loadFaqs = useCallback(async () => {
-    if (!hasTokens()) {
-      setFaqs([]);
-      setLoadingFaqs(false);
-      return;
-    }
-
     setLoadingFaqs(true);
     setFaqsError(null);
 

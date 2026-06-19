@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, startTransition, useMemo, useRef } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { useState, useEffect, useMemo, useRef } from "react";
+import { logError, logInfo } from '@/lib/client-logger';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,7 @@ import { getFormTemplates } from "@/lib/api/forms";
 import { createFormDocument } from "@/lib/api/dms-forms";
 import { queryDocuments } from "@/lib/dms-storage";
 import { toast } from "sonner";
-import { FileText, Loader2, FileCheck, AlertTriangle } from "lucide-react";
+import { FileText, Loader2, FileCheck } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import type { FormTemplate } from "@/lib/types/forms";
@@ -82,7 +82,7 @@ export function CreateFormDocumentDialog({
           doc.referenceNumber?.toLowerCase() === referenceNumber.trim().toLowerCase()
         );
         setReferenceNumberExists(exists);
-      } catch (error: unknown) {
+      } catch (_error: unknown) {
         // Silently fail - duplicate check is optional
       } finally {
         setCheckingReferenceNumber(false);

@@ -4,9 +4,8 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, FileText, Mail, FileCheck, User, Calendar, Clock, CheckCircle2, AlertCircle, Archive, FolderTree, Filter } from 'lucide-react';
+import { Loader2, FileText, Mail, FileCheck, User, Clock, CheckCircle2, AlertCircle, Archive, FolderTree, Filter } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { logError } from '@/lib/client-logger';
 import { apiFetch } from '@/lib/api-client';
@@ -109,7 +108,7 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
         } catch (auditErr: unknown) {
           if (auditErr instanceof Error && auditErr.name === 'AbortError') return;
           // If audit endpoint doesn't exist or returns 404, just log and continue
-          if ((auditErr instanceof Error && 'status' in auditErr && (auditErr as any).status === 404) || (auditErr instanceof Error && auditErr.message?.includes('Not found'))) {
+          if ((auditErr instanceof Error && 'status' in auditErr && (auditErr as unknown as { status: number }).status === 404) || (auditErr instanceof Error && auditErr.message?.includes('Not found'))) {
             setAuditError("Audit logs unavailable");
             logError('Audit logs endpoint not found, continuing without audit data', auditErr);
           } else {
@@ -247,7 +246,7 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
               timestamp: caseData.completionPackageGeneratedAt || caseData.closedAt || '',
               user: {
                 id: caseData.createdById || '',
-                  name: (caseData as any).createdByName || 'System',
+                  name: (caseData as unknown).createdByName || 'System',
               },
               description: `Completion package generated`,
               metadata: {
@@ -452,7 +451,7 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
             <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-border" aria-hidden="true" />
             
             <div className="space-y-6" role="list">
-              {filteredActivities.map((activity, index) => (
+              {filteredActivities.map((activity, _index) => (
                 <div key={activity.id} className="relative flex gap-4" role="listitem">
                   {/* Icon */}
                   <div className="relative z-10 flex-shrink-0" aria-hidden="true">

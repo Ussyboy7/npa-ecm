@@ -1,15 +1,16 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Link, FileText, ArrowUp, ArrowDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
+import { FileText, ArrowUp, ArrowDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
 import { toast } from 'sonner';
+import { isRecord } from '@/lib/type-utils';
 
 interface DocumentThreadCardProps {
   documentId: string;
@@ -28,8 +29,6 @@ interface ThreadDocument {
     name: string;
   };
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
 export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThreadCardProps) => {
   const router = useRouter();
@@ -109,7 +108,7 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
     try {
       await loadThreadDocuments();
       toast.success('Document thread refreshed');
-    } catch (error: unknown) {
+    } catch {
       toast.error('Failed to refresh document thread');
     } finally {
       setIsRefreshing(false);

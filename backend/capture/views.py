@@ -48,7 +48,7 @@ class CaptureJobViewSet(viewsets.ModelViewSet):
         if job.status in [CaptureJob.JobStatus.PENDING, CaptureJob.JobStatus.PROCESSING]:
             job.status = CaptureJob.JobStatus.CANCELLED
             job.save(update_fields=["status"])
-            return Response({"status": "cancelled"})
+            return Response({"status": CaptureJob.JobStatus.CANCELLED})
         return Response(
             {"error": "Job cannot be cancelled in current state"},
             status=status.HTTP_400_BAD_REQUEST,

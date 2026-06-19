@@ -1,3 +1,4 @@
+import { ERROR_AUTHENTICATION_REQUIRED } from '@/lib/constants';
 /**
  * Admin API Client
  * Centralized API functions for admin operations with proper TypeScript types
@@ -102,7 +103,7 @@ export interface UserQueryParams {
  */
 export async function fetchUsers(params: UserQueryParams = {}): Promise<PaginatedUsers> {
   if (!hasTokens()) {
-    throw new Error('Authentication required');
+    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   }
 
   const searchParams = new URLSearchParams();
@@ -125,7 +126,7 @@ export async function fetchUsers(params: UserQueryParams = {}): Promise<Paginate
  * Bulk archive (deactivate) users
  */
 export async function bulkArchiveUsers(userIds: string[]): Promise<BulkOperationResult> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   
   return apiFetch<BulkOperationResult>('/accounts/users/bulk-archive/', {
     method: 'POST',
@@ -137,7 +138,7 @@ export async function bulkArchiveUsers(userIds: string[]): Promise<BulkOperation
  * Bulk delete users
  */
 export async function bulkDeleteUsers(userIds: string[]): Promise<BulkOperationResult> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   
   return apiFetch<BulkOperationResult>('/accounts/users/bulk-delete/', {
     method: 'POST',
@@ -149,7 +150,7 @@ export async function bulkDeleteUsers(userIds: string[]): Promise<BulkOperationR
  * Bulk activate users
  */
 export async function bulkActivateUsers(userIds: string[]): Promise<BulkOperationResult> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   
   return apiFetch<BulkOperationResult>('/accounts/users/bulk-activate/', {
     method: 'POST',
@@ -161,7 +162,7 @@ export async function bulkActivateUsers(userIds: string[]): Promise<BulkOperatio
  * Bulk deactivate users
  */
 export async function bulkDeactivateUsers(userIds: string[]): Promise<BulkOperationResult> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   
   return apiFetch<BulkOperationResult>('/accounts/users/bulk-deactivate/', {
     method: 'POST',
@@ -173,7 +174,7 @@ export async function bulkDeactivateUsers(userIds: string[]): Promise<BulkOperat
  * Export users to CSV
  */
 export async function exportUsers(params: UserQueryParams = {}): Promise<Blob> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
 
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
@@ -205,7 +206,7 @@ export async function exportUsers(params: UserQueryParams = {}): Promise<Blob> {
  * Import users from CSV
  */
 export async function importUsers(file: File): Promise<UserImportResult> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
 
   const formData = new FormData();
   formData.append('file', file);
@@ -234,7 +235,7 @@ export async function importUsers(file: File): Promise<UserImportResult> {
  * Download user import template
  */
 export async function downloadUserTemplate(): Promise<Blob> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
 
   const response = await fetch(
     `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api/v1'}/accounts/users/export-template/`,
@@ -262,7 +263,7 @@ export async function downloadUserTemplate(): Promise<Blob> {
  * Fetch all roles
  */
 export async function fetchRoles(): Promise<Role[]> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   return apiFetch<Role[]>('/organization/roles/');
 }
 
@@ -270,7 +271,7 @@ export async function fetchRoles(): Promise<Role[]> {
  * Bulk assign role to multiple users
  */
 export async function bulkAssignRole(roleId: string, userIds: string[]): Promise<BulkOperationResult> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   
   return apiFetch<BulkOperationResult>('/organization/roles/bulk-assign/', {
     method: 'POST',
@@ -282,7 +283,7 @@ export async function bulkAssignRole(roleId: string, userIds: string[]): Promise
  * Clone an existing role
  */
 export async function cloneRole(roleId: string, newName: string, description?: string, isActive?: boolean): Promise<Role> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   
   return apiFetch<Role>(`/organization/roles/${roleId}/clone/`, {
     method: 'POST',
@@ -298,7 +299,7 @@ export async function cloneRole(roleId: string, newName: string, description?: s
  * Get role templates
  */
 export async function fetchRoleTemplates(): Promise<{ templates: RoleTemplate[] }> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   return apiFetch<{ templates: RoleTemplate[] }>('/organization/roles/templates/');
 }
 
@@ -306,7 +307,7 @@ export async function fetchRoleTemplates(): Promise<{ templates: RoleTemplate[] 
  * Create role from template
  */
 export async function createRoleFromTemplate(templateName: string, customName?: string): Promise<Role> {
-  if (!hasTokens()) throw new Error('Authentication required');
+  if (!hasTokens()) throw new Error(ERROR_AUTHENTICATION_REQUIRED);
   
   return apiFetch<Role>('/organization/roles/create-from-template/', {
     method: 'POST',

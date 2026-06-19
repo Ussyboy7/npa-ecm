@@ -1,4 +1,5 @@
 "use client";
+import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
@@ -45,8 +46,7 @@ import { getRecentSearches, addRecentSearch, getSearchSuggestions, clearRecentSe
 import { 
   fetchUsers, 
   type User as ApiUser, 
-  type UserQueryParams, 
-  formatDateForAPI,
+  type UserQueryParams,
   bulkActivateUsers,
   bulkDeactivateUsers,
   bulkArchiveUsers,
@@ -153,10 +153,10 @@ export const UsersManagementTab = () => {
     return null;
   });
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
-  const [isBulkActionMode, setIsBulkActionMode] = useState(false);
+  const [_isBulkActionMode, setIsBulkActionMode] = useState(false);
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
-  const [mounted, setMounted] = useState(false);
+  const [_mounted, setMounted] = useState(false);
   const [showBulkDeactivateConfirm, setShowBulkDeactivateConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
@@ -288,7 +288,7 @@ export const UsersManagementTab = () => {
       
     } catch (error: unknown) {
       // Handle "Invalid page" error specifically
-      if ((error instanceof Error && (error instanceof Error ? error.message : "Unknown error")?.includes('Invalid page')) || (typeof error === 'object' && error && 'detail' in error && error.detail === 'Invalid page.')) {
+      if ((error instanceof Error && (error instanceof Error ? error.message : ERROR_UNKNOWN)?.includes('Invalid page')) || (typeof error === 'object' && error && 'detail' in error && error.detail === 'Invalid page.')) {
         // Reset to page 1 if page is invalid
         if (currentPage !== 1) {
           setCurrentPage(1);
@@ -1060,7 +1060,7 @@ export const UsersManagementTab = () => {
                 const division = user.division
                   ? divisions.find((div) => div.id === user.division)
                   : undefined;
-                const department = user.department
+                const _department = user.department
                   ? departments.find((dept) => dept.id === user.department)
                   : undefined;
                 const isSelected = selectedUserIds.has(user.id);

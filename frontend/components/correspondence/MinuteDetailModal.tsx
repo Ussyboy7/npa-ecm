@@ -1,4 +1,7 @@
+import { ERROR_UNKNOWN } from '@/lib/constants';
+import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import Image from "next/image";
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -125,7 +128,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
       apiFetch(`/correspondence/distribution/?${qs}`)
         .then((response) => {
           const responseData = response as Record<string, unknown>;
-          const results = Array.isArray(responseData) ? responseData : (responseData.results as any[]) || [];
+          const results = Array.isArray(responseData) ? responseData : (responseData.results as unknown[]) || [];
           // Filter only active distribution entries
           const activeDistribution = results.filter((dist: Record<string, unknown>) => dist.is_active !== false);
           setDistribution(activeDistribution);
@@ -154,7 +157,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
       apiFetch(`/correspondence/items/?parent_correspondence=${minute.correspondenceId}`)
         .then((response) => {
           const responseData = response as Record<string, unknown>;
-          const results = (Array.isArray(responseData) ? responseData : (responseData.results as any[]) || []) as Record<string, unknown>[];
+          const results = (Array.isArray(responseData) ? responseData : (responseData.results as unknown[]) || []) as Record<string, unknown>[];
           let matching = pickBestResponseCandidate(results, minute);
 
           // Fallback: if parent filter returns nothing, search by parent reference in treatment response.
@@ -167,7 +170,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 return apiFetch(`/correspondence/items/?search=${encodeURIComponent(parentRef)}`)
                   .then((searchResponse) => {
                     const searchData = searchResponse as Record<string, unknown>;
-                    const searchResults = (Array.isArray(searchData) ? searchData : (searchData.results as any[]) || []) as Record<string, unknown>[];
+                    const searchResults = (Array.isArray(searchData) ? searchData : (searchData.results as unknown[]) || []) as Record<string, unknown>[];
                     const candidates = searchResults.filter((corr) => {
                       const corrId = String(corr.id ?? '');
                       if (corrId === minute.correspondenceId) return false;
@@ -289,7 +292,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
     const isPDF = viewAttachment.fileType === 'application/pdf' || viewAttachment.fileName?.toLowerCase().endsWith('.pdf');
     const isWordDocx = viewAttachment.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
                        viewAttachment.fileName?.toLowerCase().endsWith('.docx');
-    const isWordDoc = viewAttachment.fileType === 'application/msword' || 
+    const _isWordDoc = viewAttachment.fileType === 'application/msword' || 
                      viewAttachment.fileName?.toLowerCase().endsWith('.doc');
     const isHtml = viewAttachment.fileType === 'text/html' ||
       viewAttachment.fileName?.toLowerCase().endsWith('.html') ||
@@ -361,7 +364,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
         })
         .catch((error) => {
           logError('Error converting Word document:', error);
-          setWordError((error instanceof Error ? error.message : "Unknown error") || 'Failed to convert Word document');
+          setWordError((error instanceof Error ? error.message : ERROR_UNKNOWN) || 'Failed to convert Word document');
           setWordHtml(null);
           setLoadingAttachments(false);
         });
@@ -811,7 +814,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                     <div className="flex flex-col sm:flex-row gap-4">
                       <div className="p-3 border border-emerald-200 dark:border-emerald-800 rounded-lg bg-emerald-50/50 dark:bg-emerald-950/20 flex items-center justify-center min-h-[200px]">
                         <DigitalSealPreview
-                          officeName="NIGERIAN PORTS AUTHORITY"
+                          officeName={DEFAULT_SEAL_OFFICE_NAME}
                           officeTitle="OFFICE OF THE MANAGING DIRECTOR"
                           serialNumber={minute.id}
                           signatureImage={
@@ -1012,10 +1015,13 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 </div>
               ) : previewAttachment && previewAttachment.fileType?.startsWith('image/') && previewAttachment.fileUrl ? (
                 <div className="flex items-center justify-center p-4">
-                  <img 
+                  <Image 
                     src={previewAttachment.fileUrl} 
                     alt={previewAttachment.fileName}
+                    width={1200}
+                    height={900}
                     className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                    unoptimized
                   />
                 </div>
               ) : previewAttachment && previewAttachment.fileType === 'application/pdf' && pdfBlobUrl ? (
@@ -1069,10 +1075,13 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
               </div>
             ) : viewAttachment && viewAttachment.fileType?.startsWith('image/') && viewAttachment.fileUrl ? (
               <div className="flex items-center justify-center p-4 py-8">
-                <img 
+                <Image 
                   src={viewAttachment.fileUrl} 
                   alt={viewAttachment.fileName}
+                  width={1200}
+                  height={900}
                   className="max-w-full max-h-[calc(90vh-250px)] object-contain rounded-lg shadow-lg"
+                  unoptimized
                 />
               </div>
             ) : viewAttachment && viewAttachment.fileType === 'application/pdf' && viewPdfBlobUrl ? (

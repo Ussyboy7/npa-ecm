@@ -9,18 +9,7 @@ import type {
   Office,
 } from "@/contexts/OrganizationContext";
 import type { User } from "@/lib/npa-structure";
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null;
-
-const unwrapResults = (payload: unknown): Record<string, unknown>[] => {
-  if (Array.isArray(payload)) return payload.filter(isRecord);
-  if (isRecord(payload) && "results" in payload) {
-    const r = (payload as { results?: unknown }).results;
-    return Array.isArray(r) ? r.filter(isRecord) : [];
-  }
-  return [];
-};
+import { unwrapResults } from "@/lib/type-utils";
 
 // Shared mappers (minimal - just enough for dropdown display)
 const mapOffice = (o: Record<string, unknown>): Office => ({
@@ -101,9 +90,13 @@ export function useOfficesSearch(options: {
   const [items, setItems] = useState<Office[]>([]);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetch_ = useCallback(async () => {
     if (!hasTokens() || !enabled) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -114,8 +107,8 @@ export function useOfficesSearch(options: {
       if (directorateId) params.set("directorate", directorateId);
       if (divisionId) params.set("division", divisionId);
       if (departmentId) params.set("department", departmentId);
-      const res = await apiFetch<unknown>(`/organization/offices/?${params}`);
-      setItems(unwrapResults(res).map(mapOffice));
+      const res = await apiFetch<unknown>(`/organization/offices/?${params}`, { signal: controller.signal });
+      setItems(unwrapResults<Record<string, unknown>>(res).map(mapOffice));
     } catch {
       setItems([]);
     } finally {
@@ -132,6 +125,7 @@ export function useOfficesSearch(options: {
     debounceRef.current = setTimeout(fetch_, DEBOUNCE_MS);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
     };
   }, [fetch_, enabled]);
 
@@ -144,9 +138,13 @@ export function useUsersSearch(options: { search: string; enabled?: boolean }) {
   const [items, setItems] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetch_ = useCallback(async () => {
     if (!hasTokens() || !enabled) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -155,8 +153,8 @@ export function useUsersSearch(options: { search: string; enabled?: boolean }) {
       params.set("page_size", "50");
       params.set("page", "1");
       if (search.trim()) params.set("search", search.trim());
-      const res = await apiFetch<unknown>(`/accounts/users/?${params}`);
-      setItems(unwrapResults(res).map(mapUser));
+      const res = await apiFetch<unknown>(`/accounts/users/?${params}`, { signal: controller.signal });
+      setItems(unwrapResults<Record<string, unknown>>(res).map(mapUser));
     } catch {
       setItems([]);
     } finally {
@@ -173,6 +171,7 @@ export function useUsersSearch(options: { search: string; enabled?: boolean }) {
     debounceRef.current = setTimeout(fetch_, DEBOUNCE_MS);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
     };
   }, [fetch_, enabled]);
 
@@ -190,19 +189,13 @@ export function useDirectoratesSearch(options?: { enabled?: boolean }) {
       setItems([]);
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
-    apiFetch<unknown>("/organization/directorates/?ordering=name&page_size=200&page=1")
-      .then((res) => {
-        if (!cancelled) setItems(unwrapResults(res).map(mapDirectorate));
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+    apiFetch<unknown>("/organization/directorates/?ordering=name&page_size=200&page=1", { signal: controller.signal })
+      .then((res) => setItems(unwrapResults<Record<string, unknown>>(res).map(mapDirectorate)))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+    return () => controller.abort();
   }, [enabled]);
 
   return { items, loading };
@@ -219,21 +212,15 @@ export function useDivisionsSearch(options: { directorateId?: string | null; ena
       setItems([]);
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     const params = new URLSearchParams({ ordering: "name", page_size: "200", page: "1" });
     if (directorateId) params.set("directorate", directorateId);
-    apiFetch<unknown>(`/organization/divisions/?${params}`)
-      .then((res) => {
-        if (!cancelled) setItems(unwrapResults(res).map(mapDivision));
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+    apiFetch<unknown>(`/organization/divisions/?${params}`, { signal: controller.signal })
+      .then((res) => setItems(unwrapResults<Record<string, unknown>>(res).map(mapDivision)))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+    return () => controller.abort();
   }, [directorateId, enabled]);
 
   return { items, loading };
@@ -250,21 +237,15 @@ export function useDepartmentsSearch(options: { divisionId?: string | null; enab
       setItems([]);
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     const params = new URLSearchParams({ ordering: "name", page_size: "200", page: "1" });
     if (divisionId) params.set("division", divisionId);
-    apiFetch<unknown>(`/organization/departments/?${params}`)
-      .then((res) => {
-        if (!cancelled) setItems(unwrapResults(res).map(mapDepartment));
-      })
-      .catch(() => {
-        if (!cancelled) setItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
+    apiFetch<unknown>(`/organization/departments/?${params}`, { signal: controller.signal })
+      .then((res) => setItems(unwrapResults<Record<string, unknown>>(res).map(mapDepartment)))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+    return () => controller.abort();
   }, [divisionId, enabled]);
 
   return { items, loading };

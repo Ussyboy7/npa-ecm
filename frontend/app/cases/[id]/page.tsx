@@ -7,8 +7,6 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CaseTimeline } from "@/components/cases/CaseTimeline";
 import { CaseComments } from "@/components/cases/CaseComments";
@@ -26,43 +24,19 @@ import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ListRowCard } from "@/components/shared/ListRowCard";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  ArrowLeft,
   FileText,
   Link as LinkIcon,
-  Download,
-  CheckCircle2,
   Clock,
-  Archive,
-  AlertCircle,
   Trash2,
-  Loader2,
-  Calendar,
-  Building2,
-  User,
-  MoreVertical,
-  Printer,
-  Edit,
-  ExternalLink,
   MessageSquare,
-  Upload,
-  AlertTriangle,
   FileCheck,
   Mail,
 } from "lucide-react";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
 import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -82,13 +56,8 @@ import {
   registryQueueEmptyIconClass,
 } from "@/components/shared/registry-queue-styles";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
+
 
 const CaseDetailPage = () => {
   const params = useParams();
@@ -120,8 +89,8 @@ const CaseDetailPage = () => {
   const [showLinkCorrespondenceDialog, setShowLinkCorrespondenceDialog] = useState(false);
   const [showLinkDocumentDialog, setShowLinkDocumentDialog] = useState(false);
   const [showLinkFormDialog, setShowLinkFormDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-  const [editingCase, setEditingCase] = useState(false);
+  const [_showEditDialog, setShowEditDialog] = useState(false);
+  const [_editingCase, setEditingCase] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<CaseDetail>>({});
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -301,7 +270,7 @@ const CaseDetailPage = () => {
     }
   };
   
-  const handleEditClick = () => {
+  const _handleEditClick = () => {
     if (!caseData) return;
     setEditFormData({
       title: caseData.title,
@@ -315,7 +284,7 @@ const CaseDetailPage = () => {
     setShowEditDialog(true);
   };
   
-  const handleEditSubmit = async () => {
+  const _handleEditSubmit = async () => {
     if (!caseData) return;
     
     setEditingCase(true);
@@ -338,40 +307,28 @@ const CaseDetailPage = () => {
     return null;
   }
 
-  if (loading) {
-    return (
-      <DashboardLayout>
+  const _division = caseData ? divisions.find((d) => d.id === caseData.divisionId) : undefined;
+  const _department = caseData ? departments.find((d) => d.id === caseData.departmentId) : undefined;
+  const owningOffice = caseData ? offices.find((o) => o.id === caseData.owningOfficeId) : undefined;
+  const assignedTo = caseData ? users.find((u) => u.id === caseData.assignedToId) : undefined;
+  const createdBy = caseData ? users.find((u) => u.id === caseData.createdById) : undefined;
+
+  return (
+    <DashboardLayout>
+      {loading ? (
         <div className="container mx-auto p-6">
           <LoadingState message="Loading case…" />
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (error || !caseData) {
-    return (
-      <DashboardLayout>
+      ) : error || !caseData ? (
         <div className="container mx-auto p-6">
           <ErrorState
             message={error || "Case not found"}
             onRetry={() => setRefreshKey((k) => k + 1)}
           />
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  const division = divisions.find((d) => d.id === caseData.divisionId);
-  const department = departments.find((d) => d.id === caseData.departmentId);
-  const owningOffice = offices.find((o) => o.id === caseData.owningOfficeId);
-  const assignedTo = users.find((u) => u.id === caseData.assignedToId);
-  const createdBy = users.find((u) => u.id === caseData.createdById);
-
-  return (
-    <ErrorBoundary>
-      <DashboardLayout>
-        {/* Case Header */}
-        <CaseHeader
+      ) : (
+        <ErrorBoundary>
+          <CaseHeader
           caseData={caseData}
           slaStatus={slaStatus}
           slaError={slaError}
@@ -775,8 +732,9 @@ const CaseDetailPage = () => {
           </AlertDialogContent>
         </AlertDialog>
       </div>
+      </ErrorBoundary>
+      )}
     </DashboardLayout>
-    </ErrorBoundary>
   );
 };
 

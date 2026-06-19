@@ -7,16 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCaseTemplates, createCaseFromTemplate, type CaseTemplate } from "@/lib/api/cases";
+import { PRIORITY_OPTIONS } from "@/lib/constants";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
 import {
-  FileText,
   Plus,
   Loader2,
   Search,
-  ArrowRight,
   CheckCircle2,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -40,7 +38,7 @@ import {
 
 export default function CaseTemplatesPage() {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const [templates, setTemplates] = useState<CaseTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -232,10 +230,9 @@ export default function CaseTemplatesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
+                    {PRIORITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

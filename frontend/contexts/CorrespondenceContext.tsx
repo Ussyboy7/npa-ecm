@@ -1,3 +1,4 @@
+import { ERROR_UNKNOWN } from '@/lib/constants';
 import { logError, logInfo } from '@/lib/client-logger';
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { Correspondence, Minute, MinuteSignaturePayload } from '@/lib/npa-structure';
@@ -10,6 +11,7 @@ import {
 import { Delegation } from '@/lib/delegation-storage';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { isRecord, asString, unwrapResults } from '@/lib/type-utils';
 
 interface CorrespondenceContextType {
   correspondence: Correspondence[];
@@ -25,23 +27,6 @@ interface CorrespondenceContextType {
 }
 
 const CorrespondenceContext = createContext<CorrespondenceContextType | undefined>(undefined);
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-
-const unwrapResults = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) return payload;
-  if (isRecord(payload) && 'results' in payload) {
-    const results = (payload as { results?: unknown }).results;
-    if (Array.isArray(results)) return results;
-  }
-  return [];
-};
-
-const asString = (value: unknown, fallback = ''): string => {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return fallback;
-  return String(value);
-};
 
 const asStringOptional = (value: unknown): string | undefined => {
   if (value === null || value === undefined) return undefined;
@@ -490,12 +475,12 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   const [correspondence, setCorrespondence] = useState<Correspondence[]>([]);
   const [minutes, setMinutes] = useState<Minute[]>([]);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser: _currentUser, hydrated: _hydrated } = useCurrentUser();
 
   // Initialize data on mount
   useEffect(() => {
     refreshData();
-  }, []);
+  }, [refreshData]);
 
   const syncFromApi = useCallback(async () => {
     // Only requirement: authenticated (has token)
@@ -525,23 +510,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       setMinutes(minutesList);
       setDelegations(delegationsList);
     } catch (error: unknown) {
-      if (error instanceof Error && (error instanceof Error ? error.message : "Unknown error").toLowerCase().includes('auth')) {
-        logInfo('Correspondence data will sync after authentication is available.');
-      } else {
-        logError('Failed to load correspondence from API', error);
-      }
-    }
-  }, []);
-
-  const syncInitialFromApi = useCallback(async () => {
-    if (!hasTokens()) return;
-    try {
-      const correspondenceRaw = await apiFetch('/correspondence/items/?page_size=25&page=1');
-      const correspondenceList = unwrapResults(correspondenceRaw).filter(isRecord).map(mapApiCorrespondence);
-      saveCorrespondence(correspondenceList);
-      setCorrespondence(correspondenceList);
-    } catch (error: unknown) {
-      if ((error as any)?.status === 401) {
+      if (error instanceof Error && (error instanceof Error ? error.message : ERROR_UNKNOWN).toLowerCase().includes('auth')) {
         logInfo('Correspondence data will sync after authentication is available.');
       } else {
         logError('Failed to load correspondence from API', error);
@@ -563,31 +532,31 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     const run = async () => {
       if (ignore) return;
       syncedRef.current = true;
-      await syncInitialFromApi();
+      await syncFromApi();
     };
     void run();
     return () => {
       ignore = true;
     };
-  }, [syncInitialFromApi]);
+  }, [syncFromApi]);
 
-  const refreshData = () => {
+  const refreshData = useCallback(() => {
     const loadedCorrespondence = loadCorrespondence() ?? [];
     const loadedMinutes = loadMinutes() ?? [];
     setCorrespondence(loadedCorrespondence);
     setMinutes(loadedMinutes);
     setDelegations([]);
-  };
+  }, []);
 
-  const getCorrespondenceById = (id: string) => {
+  const getCorrespondenceById = useCallback((id: string) => {
     return correspondence.find(c => c.id === id);
-  };
+  }, [correspondence]);
 
-  const getMinutesByCorrespondenceId = (id: string) => {
+  const getMinutesByCorrespondenceId = useCallback((id: string) => {
     return minutes.filter(m => m.correspondenceId === id);
-  };
+  }, [minutes]);
 
-  const addMinute = async (minute: Minute) => {
+  const addMinute = useCallback(async (minute: Minute) => {
     try {
       const payload = normalizeMinutePayload(buildMinuteCreatePayload(minute));
       const response = await apiFetch<Record<string, unknown>>('/correspondence/minutes/', {
@@ -605,9 +574,9 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       logError('Failed to add minute via API', error);
       throw error;
     }
-  };
+  }, []);
 
-  const updateCorrespondence = async (id: string, updates: Partial<Correspondence>) => {
+  const updateCorrespondence = useCallback(async (id: string, updates: Partial<Correspondence>) => {
     const payload = buildCorrespondencePatchPayload(updates);
     if (Object.keys(payload).length === 0) {
       return;
@@ -629,9 +598,9 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       logError('Failed to update correspondence via API', error);
       throw error;
     }
-  };
+  }, []);
 
-  const addCorrespondence = async (newCorr: Correspondence) => {
+  const addCorrespondence = useCallback(async (newCorr: Correspondence) => {
     try {
       const response = await apiFetch<Record<string, unknown>>('/correspondence/items/', {
         method: 'POST',
@@ -649,22 +618,35 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       logError('Failed to create correspondence via API', error);
       throw error;
     }
-  };
+  }, []);
+
+  const contextValue = React.useMemo(() => ({
+    correspondence,
+    minutes,
+    delegations,
+    getCorrespondenceById,
+    getMinutesByCorrespondenceId,
+    addMinute,
+    updateCorrespondence,
+    addCorrespondence,
+    refreshData,
+    syncFromApi,
+  }), [
+    correspondence,
+    minutes,
+    delegations,
+    getCorrespondenceById,
+    getMinutesByCorrespondenceId,
+    addMinute,
+    updateCorrespondence,
+    addCorrespondence,
+    refreshData,
+    syncFromApi,
+  ]);
 
   return (
     <CorrespondenceContext.Provider
-      value={{
-        correspondence,
-        minutes,
-        delegations,
-        getCorrespondenceById,
-        getMinutesByCorrespondenceId,
-        addMinute,
-        updateCorrespondence,
-        addCorrespondence,
-        refreshData,
-        syncFromApi,
-      }}
+      value={contextValue}
     >
       {children}
     </CorrespondenceContext.Provider>

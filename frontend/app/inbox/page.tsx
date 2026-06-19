@@ -247,23 +247,17 @@ const ExecutiveInbox = () => {
   const shouldShowDocuments = !focusOnTasks && sharedDocuments.length > 0;
   const totalDisplayCount = sortedItems.length + (shouldShowDocuments ? sharedDocuments.length : 0);
 
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
+  return (
+    <DashboardLayout>
+      <div className="container mx-auto p-6 space-y-6">
+        {!currentUser ? (
           <HelpGuideCard
             title="Select a persona"
             description="Use the Role Switcher to choose a user context before viewing your inbox."
             links={[{ label: 'Role Switcher', href: '/settings' }]}
           />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
+        ) : (
+          <>
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-3xl font-bold">My Inbox</h1>
@@ -388,6 +382,8 @@ const ExecutiveInbox = () => {
             className="border-t border-border/60 pt-4"
           />
         )}
+        </>
+      )}
       </div>
     </DashboardLayout>
   );

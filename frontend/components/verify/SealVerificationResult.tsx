@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { CheckCircle2, XCircle, Shield, Calendar, User, FileText, AlertTriangle, ExternalLink, Eye, Copy, Share2, Printer, Download } from "lucide-react";
 import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
 import { Card, CardContent } from "@/components/ui/card";

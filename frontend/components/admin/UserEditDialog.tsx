@@ -1,4 +1,5 @@
 "use client";
+import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -157,7 +158,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
 
   const selectedUserName = user?.name ?? "";
 
-  const isSuperAdmin = Boolean(currentUser?.isSuperuser || currentUser?.systemRole === "Super Admin");
+  const isSuperAdmin = Boolean(currentUser?.isSuperuser || currentUser?.systemRole === SYSTEM_ROLE_SUPER_ADMIN);
 
   const userMemberships = useMemo(() => {
     if (!user) return [];

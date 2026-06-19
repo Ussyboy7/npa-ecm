@@ -1,3 +1,4 @@
+import { ERROR_UNKNOWN } from '@/lib/constants';
 /**
  * Standardized Error Handler for Admin Pages
  * Provides consistent error handling and user feedback across all admin interfaces
@@ -36,29 +37,29 @@ export function handleApiError(error: unknown, context?: string): void {
 
   if (error instanceof AdminError) {
     title = error.code.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-    description = (error instanceof Error ? error.message : "Unknown error");
+    description = (error instanceof Error ? error.message : ERROR_UNKNOWN);
   } else if (error instanceof Error) {
-    if ((error instanceof Error ? error.message : "Unknown error").includes('fetch')) {
+    if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('fetch')) {
       title = 'Network Error';
       description = 'Unable to connect to the server. Please check your internet connection.';
-    } else if ((error instanceof Error ? error.message : "Unknown error").includes('401') || (error instanceof Error ? error.message : "Unknown error").includes('Unauthorized')) {
+    } else if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('401') || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('Unauthorized')) {
       title = 'Authentication Error';
       description = 'Your session has expired. Please log in again.';
       // Optionally redirect to login
       setTimeout(() => {
         window.location.href = '/login';
       }, 2000);
-    } else if ((error instanceof Error ? error.message : "Unknown error").includes('403') || (error instanceof Error ? error.message : "Unknown error").includes('Forbidden')) {
+    } else if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('403') || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('Forbidden')) {
       title = 'Permission Denied';
       description = 'You do not have permission to perform this action.';
-    } else if ((error instanceof Error ? error.message : "Unknown error").includes('404')) {
+    } else if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('404')) {
       title = 'Not Found';
       description = 'The requested resource was not found.';
-    } else if ((error instanceof Error ? error.message : "Unknown error").includes('500')) {
+    } else if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('500')) {
       title = 'Server Error';
       description = 'A server error occurred. Please try again later or contact support.';
     } else {
-      description = (error instanceof Error ? error.message : "Unknown error");
+      description = (error instanceof Error ? error.message : ERROR_UNKNOWN);
     }
   }
 

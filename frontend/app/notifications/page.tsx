@@ -3,7 +3,7 @@
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,11 +16,10 @@ import {
   type Notification,
 } from '@/lib/notifications-storage';
 import { formatDateTime } from '@/lib/correspondence-helpers';
-import { Check, CheckCheck, Archive, ExternalLink, Settings, Bell, Inbox, Loader2 } from 'lucide-react';
+import { Check, CheckCheck, Archive, ExternalLink, Settings, Bell, Inbox } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import Link from 'next/link';
 import { NotificationPreferencesDialog } from '@/components/notifications/NotificationPreferencesDialog';
 import { usePolling } from '@/hooks/use-polling';
 import { NOTIFICATION_POLL_INTERVAL_MS } from '@/lib/constants';
@@ -35,7 +34,7 @@ export default function NotificationsPage() {
   const loadNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      let params: { status?: string } = {};
+      const params: { status?: string } = {};
       if (activeTab === 'unread') {
         params.status = 'unread';
       } else if (activeTab === 'read') {
@@ -73,7 +72,7 @@ export default function NotificationsPage() {
     try {
       await markNotificationAsRead(notification.id);
       await loadNotifications();
-    } catch (error: unknown) {
+    } catch (_error: unknown) {
       toast.error('Failed to mark notification as read');
     }
   };
@@ -83,7 +82,7 @@ export default function NotificationsPage() {
       await markAllNotificationsAsRead();
       await loadNotifications();
       toast.success('All notifications marked as read');
-    } catch (error: unknown) {
+    } catch (_error: unknown) {
       toast.error('Failed to mark all as read');
     }
   };
@@ -93,7 +92,7 @@ export default function NotificationsPage() {
       await markNotificationAsArchived(notification.id);
       await loadNotifications();
       toast.success('Notification archived');
-    } catch (error: unknown) {
+    } catch (_error: unknown) {
       toast.error('Failed to archive notification');
     }
   };
@@ -128,7 +127,7 @@ export default function NotificationsPage() {
   };
 
   // Count from the current filtered list for display
-  const displayCount = notifications.length;
+  const _displayCount = notifications.length;
   const unreadInList = notifications.filter((n) => n.status === 'unread').length;
 
   return (

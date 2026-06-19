@@ -22,8 +22,6 @@ import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
 import { Search, Loader2, FileText } from "lucide-react";
 import { formatDateShort } from "@/lib/correspondence-helpers";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 
@@ -95,7 +93,7 @@ export function LinkDocumentDialog({
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/cases/${caseId}/`, {
         signal: abortControllerRef.current.signal,
       });
-      const linked = ((response.documents as any[]) || []).map((link: Record<string, unknown>) =>
+      const linked = ((response.documents as unknown[]) || []).map((link: Record<string, unknown>) =>
         link.document_id || link.documentId
       ).filter(Boolean);
       setLinkedIds(new Set(linked as string[]));
@@ -135,7 +133,7 @@ export function LinkDocumentDialog({
       
       if (signal.aborted) return;
       
-      const items = ((response.results as any[]) || []).map((item: Record<string, unknown>) => ({
+      const items = ((response.results as unknown[]) || []).map((item: Record<string, unknown>) => ({
         id: item.id as string as string,
         title: (item.title as string as string) || '',
         documentType: item.document_type as string,

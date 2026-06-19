@@ -12,7 +12,7 @@ import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { generateId, generateReferenceNumber, getNextStepNumber, formatDateForAPI } from '@/lib/correspondence-helpers';
 import { saveDraft, getDraftByCorrespondence, deleteDraft } from '@/lib/storage';
-import type { Correspondence, Minute, User } from '@/lib/npa-structure';
+import type { Correspondence, User } from '@/lib/npa-structure';
 import { GRADE_LEVELS } from '@/lib/npa-structure';
 import {
   Select,
@@ -25,7 +25,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Switch } from '@/components/ui/switch';
 import {
   Collapsible,
   CollapsibleContent,
@@ -37,20 +36,13 @@ import {
   Send,
   Save,
   User as UserIcon,
-  Building2,
   AlertCircle,
   Search,
   Loader2,
-  Upload,
   X,
-  File,
   ChevronDown,
   ChevronUp,
-  CheckCircle,
   Paperclip,
-  Eye,
-  Image as ImageIcon,
-  Trash2,
   Hash,
   Link as LinkIcon,
 } from 'lucide-react';
@@ -58,21 +50,17 @@ import { apiFetch } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRouter } from 'next/navigation';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
-import { getForwardingOptions, filterUsersBySearch, getSuggestedApprovers } from '@/lib/routing-utils';
+import { getForwardingOptions, getSuggestedApprovers } from '@/lib/routing-utils';
 import { RoutingSection } from './RoutingSection';
-import { 
-  type SignatureTemplate, 
-  type UserSignaturePreferences 
-} from '@/lib/signature-storage';
+
+
 import { useSignature } from '@/hooks/use-signature';
 import { SignatureSection } from './SignatureSection';
 import { FileUploadArea } from './FileUploadArea';
 import { MemoCompositionSection } from './MemoCompositionSection';
-import { useFileUpload, type UploadedFile } from '@/hooks/use-file-upload';
+import { type UploadedFile } from '@/hooks/use-file-upload';
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import React from 'react';
@@ -99,8 +87,8 @@ interface TreatmentModalProps {
 // UploadedFile type is now imported from use-file-upload hook
 
 const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentModalProps) => {
-  const router = useRouter();
-  const { addCorrespondence, addMinute, updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
+  const _router = useRouter();
+  const {addCorrespondence: _addCorrespondence, addMinute: _addMinute, updateCorrespondence: _updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const { currentUser: activeUser } = useCurrentUser();
   const { users, divisions, departments, offices, officeMemberships, directorates } = useOrganization();
   
@@ -135,7 +123,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [_searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   const [attachmentsSectionOpen, setAttachmentsSectionOpen] = useState(false);
@@ -165,7 +153,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   
   // File upload state - managed locally, FileUploadArea handles UI
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [isDragActive, setIsDragActive] = useState(false);
+  const [_isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Request cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -174,9 +162,9 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
   const restoreBodyInteractivity = useCallback(() => {
     if (typeof document === 'undefined') return;
-    let createdMinuteId: string | null = null;
-    let originalCorrespondenceUpdated = false;
-    let createdResponseCorrespondenceId: string | null = null;
+    const _createdMinuteId: string | null = null;
+    const _originalCorrespondenceUpdated = false;
+    const _createdResponseCorrespondenceId: string | null = null;
 
     try {
       document.body.style.removeProperty('pointer-events');
@@ -349,7 +337,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setSelectedSignatureTemplateId(null);
   };
 
-  const forwardingOptions = useMemo(() => {
+  const _forwardingOptions = useMemo(() => {
     if (!currentUser) return [];
     return getForwardingOptions({
       currentUser,
@@ -528,27 +516,27 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setShowSuggestedNote(false);
   };
 
-  const handleRemoveFile = (fileId: string) => {
+  const _handleRemoveFile = (fileId: string) => {
     setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const _handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragActive(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const _handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragActive(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const _handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragActive(false);
     handleFileSelect(e.dataTransfer.files);
   };
 
-  const formatFileSize = (bytes: number) => {
+  const _formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -1042,7 +1030,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     ? divisions.find((division) => division.id === currentUser.division) ?? null
     : null;
   const selectedRecipient = forwardTo ? findUserById(forwardTo) ?? null : null;
-  const selectedOffice = targetOfficeId ? offices.find(o => o.id === targetOfficeId) : null;
+  const _selectedOffice = targetOfficeId ? offices.find(o => o.id === targetOfficeId) : null;
   const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) ?? null : null;
 
   return (

@@ -172,7 +172,7 @@ export function generateDocumentHTML(content: DocumentContent): string {
   // No document available - show message
   const division = getDivisionById(correspondence.divisionId);
   
-  const minutesHTML = minutes.map((minute, idx) => {
+  const minutesHTML = minutes.map((minute, _idx) => {
     const user = getUserById(minute.userId);
     const isDownward = minute.direction === 'downward';
     const borderColor = isDownward ? 'hsl(210 85% 55%)' : 'hsl(145 65% 45%)';

@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
   getCaseComments,
   createCaseComment,
@@ -30,12 +28,9 @@ import {
   Loader2,
   Edit,
   Trash2,
-  MoreVertical,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
 
 interface CaseCommentsProps {
   caseId: string;
@@ -51,8 +46,8 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
   const [newComment, setNewComment] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
-  const [mentionQuery, setMentionQuery] = useState("");
-  const [showMentions, setShowMentions] = useState(false);
+  const [_mentionQuery, _setMentionQuery] = useState("");
+  const [_showMentions, _setShowMentions] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);

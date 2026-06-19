@@ -27,7 +27,7 @@ export default function FormTemplateEditorPage() {
   const id = params.id as string;
   const isNew = id === "new";
 
-  const [template, setTemplate] = useState<FormTemplate | null>(null);
+  const [_template, setTemplate] = useState<FormTemplate | null>(null);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -135,24 +135,18 @@ export default function FormTemplateEditorPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
+  return (
+    <DashboardLayout>
+      <div className="container mx-auto p-6 space-y-6">
+        {loading ? (
           <div className="flex items-center justify-center min-h-[400px]">
             <div className="text-center space-y-4">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
               <p className="text-muted-foreground">Loading form template...</p>
             </div>
           </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
+        ) : (
+          <>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
             <Button
@@ -296,6 +290,8 @@ export default function FormTemplateEditorPage() {
             />
           </CardContent>
         </Card>
+          </>
+      )}
       </div>
     </DashboardLayout>
   );

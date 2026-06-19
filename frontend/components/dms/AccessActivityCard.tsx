@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Activity, Download as DownloadIcon, Eye, Filter, Clock, User as UserIcon, Shield, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical } from 'lucide-react';
+import { Activity, Download as DownloadIcon, Eye, Filter, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -124,7 +124,7 @@ export const AccessActivityCard = ({
     try {
       await onRefresh();
       toast.success('Access logs refreshed');
-      } catch (error: unknown) {
+      } catch (_error: unknown) {
       toast.error('Failed to refresh access logs');
     } finally {
       setIsRefreshing(false);

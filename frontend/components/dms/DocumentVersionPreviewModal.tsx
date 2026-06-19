@@ -1,5 +1,6 @@
 "use client";
 
+import Image from 'next/image';
 import { logError, logInfo } from '@/lib/client-logger';
 import { useState, useEffect } from "react";
 import {
@@ -375,9 +376,11 @@ export const DocumentVersionPreviewModal = ({
                       </div>
                     ) : isImage ? (
                       <div className="flex items-center justify-center p-6 min-h-[600px]">
-                        <img
+                        <Image
                           src={version.fileUrl}
                           alt={version.fileName || 'Document'}
+                          width={800}
+                          height={600}
                           className="max-w-full max-h-[70vh] object-contain"
                         />
                       </div>
@@ -577,9 +580,11 @@ export const DocumentVersionPreviewModal = ({
                 </div>
               ) : isImage ? (
                 <div className="flex items-center justify-center p-6 min-h-[600px]">
-                  <img
+                  <Image
                     src={version.fileUrl}
                     alt={version.fileName || 'Document'}
+                    width={800}
+                    height={600}
                     className="max-w-full max-h-[70vh] object-contain"
                   />
                 </div>

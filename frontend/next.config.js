@@ -1,3 +1,5 @@
+import withBundleAnalyzer from '@next/bundle-analyzer';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -12,7 +14,16 @@ const nextConfig = {
       },
     ],
   },
+  experimental: {
+    // React Compiler (memoization) — enable when stable; currently opt-in experimental
+    // reactCompiler: true,
+  },
 };
 
-export default nextConfig;
+const withAnalyzer = withBundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+  openAnalyzer: false,
+});
+
+export default withAnalyzer(nextConfig);
 

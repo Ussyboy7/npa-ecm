@@ -12,6 +12,7 @@ from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 
 from accounts.models import User
+from common.grade_utils import LEADERSHIP_GRADES
 from correspondence.models import Correspondence, Minute
 from dms.models import Document
 from organization.models import Division, Office, OfficeMembership
@@ -191,7 +192,6 @@ class AnalyticsService:
         {"name": "11-15 days", "min": 11, "max": 15},
         {"name": "15+ days", "min": 16, "max": None},
     ]
-    LEADERSHIP_GRADES = {"MDCS", "EDCS", "MSS1", "MSS2"}
     EXECUTIVE_OFFICE_TIERS = {
         Office.OfficeTier.MANAGING_DIRECTOR,
         Office.OfficeTier.EXECUTIVE_DIRECTOR,
@@ -339,7 +339,7 @@ class AnalyticsService:
             if item.current_approver_id == user.id or (
                 item.current_approver
                 and item.current_approver.grade_level
-                and item.current_approver.grade_level in cls.LEADERSHIP_GRADES
+                and item.current_approver.grade_level in LEADERSHIP_GRADES
             ):
                 approvals.append(item)
 
@@ -940,7 +940,7 @@ class AnalyticsService:
             approver: User | None = item.current_approver
             if not approver or not approver.grade_level:
                 continue
-            if approver.grade_level not in cls.LEADERSHIP_GRADES:
+            if approver.grade_level not in LEADERSHIP_GRADES:
                 continue
             days_pending = round(cls._turnaround_days(item, now), 2)
             pending.append(
@@ -985,17 +985,15 @@ class AnalyticsService:
             buckets[key]["count"] += 1
             delta = (document.updated_at - document.created_at).total_seconds() / 86400.0
             buckets[key]["turnaround_sum"] += max(0.0, delta)
-        labels = {
-            "public": "Public",
-            "internal": "Internal",
-            "confidential": "Confidential",
-            "restricted": "Restricted",
-        }
         output = []
         for key, bucket in buckets.items():
             count = bucket["count"]
             avg = bucket["turnaround_sum"] / count if count else 0.0
-            output.append({"sensitivity": key, "label": labels.get(key, key.title()), "count": count, "avgTurnaround": round(avg, 2)})
+            try:
+                label = Document.Sensitivity(key).label
+            except ValueError:
+                label = key.title()
+            output.append({"sensitivity": key, "label": label, "count": count, "avgTurnaround": round(avg, 2)})
         return output
 
     @classmethod
@@ -1034,13 +1032,7 @@ class AnalyticsService:
     def _build_priority_distribution(correspondences: Iterable[Correspondence]) -> list[dict[str, Any]]:
         counter: Counter[str] = Counter(item.priority for item in correspondences)
         order = [Correspondence.Priority.URGENT, Correspondence.Priority.HIGH, Correspondence.Priority.MEDIUM, Correspondence.Priority.LOW]
-        labels = {
-            Correspondence.Priority.URGENT: "Urgent",
-            Correspondence.Priority.HIGH: "High",
-            Correspondence.Priority.MEDIUM: "Medium",
-            Correspondence.Priority.LOW: "Low",
-        }
-        return [{"name": labels[key], "value": counter.get(key, 0), "priority": key} for key in order]
+        return [{"name": key.label, "value": counter.get(key, 0), "priority": key} for key in order]
 
     @staticmethod
     def _compute_daily_trend(correspondences: Iterable[Correspondence], *, days: int) -> list[dict[str, Any]]:

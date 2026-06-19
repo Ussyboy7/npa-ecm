@@ -15,13 +15,13 @@ export default function CreateDocumentPage() {
     router.push(`/dms/${document.id}`);
   };
 
-  const handleCancel = () => {
+  const _handleCancel = () => {
     router.back();
   };
 
-  if (!hydrated) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!hydrated ? (
         <div className="container mx-auto p-6">
           <Card>
             <CardContent className="py-12 text-center">
@@ -29,13 +29,7 @@ export default function CreateDocumentPage() {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!currentUser?.id) {
-    return (
-      <DashboardLayout>
+      ) : !currentUser?.id ? (
         <div className="container mx-auto p-6">
           <Card>
             <CardContent className="py-12 text-center">
@@ -43,29 +37,25 @@ export default function CreateDocumentPage() {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
+      ) : (
+        <div className="container mx-auto max-w-5xl p-4 sm:p-6 flex flex-col gap-4">
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold tracking-tight">Create Document</h1>
+            <p className="text-sm text-muted-foreground">
+              Compose or upload a document with metadata, templates, and content.
+            </p>
+          </div>
 
-  return (
-    <DashboardLayout>
-      <div className="container mx-auto max-w-5xl p-4 sm:p-6 flex flex-col gap-4">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">Create Document</h1>
-          <p className="text-sm text-muted-foreground">
-            Compose or upload a document with metadata, templates, and content.
-          </p>
+          <DocumentUploadDialog
+            open
+            onOpenChange={() => router.back()}
+            mode="create"
+            currentUser={currentUser}
+            onComplete={handleComplete}
+            asPage
+          />
         </div>
-
-        <DocumentUploadDialog
-          open
-          onOpenChange={() => router.back()}
-          mode="create"
-          currentUser={currentUser}
-          onComplete={handleComplete}
-          asPage
-        />
-      </div>
+      )}
     </DashboardLayout>
   );
 }

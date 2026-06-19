@@ -12,8 +12,6 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
-  Line,
-  LineChart,
   PolarAngleAxis,
   PolarGrid,
   PolarRadiusAxis,
@@ -24,7 +22,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Clock, Users, Target, Award, FileText, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Clock, Target, FileText, AlertTriangle } from 'lucide-react';
 import { fetchPerformanceAnalytics, type PerformanceAnalytics } from '@/lib/analytics-client';
 import { fetchSLATargets, type SLATargets } from '@/lib/sla-client';
 
@@ -81,7 +79,7 @@ export const PerformanceAnalyticsTab = () => {
     }));
   }, [divisionPerformance]);
 
-  const totalActions = rolePerformance.reduce((sum, role) => sum + role.actions, 0);
+  const _totalActions = rolePerformance.reduce((sum, role) => sum + role.actions, 0);
   
   // Calculate average SLA target (weighted by typical distribution)
   const avgSLATargetDays = useMemo(() => {

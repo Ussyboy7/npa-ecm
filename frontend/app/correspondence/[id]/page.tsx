@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, useReducer, useRef } from 'react';
+import { useEffect, useMemo, useCallback, useReducer, useRef } from 'react';
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { handleAuthenticationError } from '@/lib/auth-errors';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu,
@@ -20,56 +17,20 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import {
-  ArrowLeft,
-  FileText,
   User as UserIcon,
-  Calendar,
-  Building2,
-  ArrowDown,
-  ArrowUp,
   MessageSquare,
   CheckCircle,
   Send,
   Archive,
-  Download,
-  Printer,
   ChevronRight,
-  Users,
-  Image as ImageIcon,
-  Link as LinkIcon,
-  ExternalLink,
-  X,
-  Eye,
-  Upload,
-  File,
-  FileSpreadsheet,
-  FileImage,
-  FileVideo,
-  FileCode,
-  AlertCircle,
-  Loader2,
-  RefreshCw,
-  Search,
-  Mail,
-  Phone,
   Info,
-  Maximize2,
-  Minimize2,
-  Filter,
-  Paperclip,
-  Plus,
-  Clock,
-  RotateCcw as RotateCcwIcon,
-  Shield,
 } from 'lucide-react';
 import type { Minute, DistributionRecipient, Correspondence, ParallelRoutingGroup } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { fetchDocumentById, logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
-import type { Delegation } from '@/lib/delegation-storage';
 import { apiFetch } from '@/lib/api-client';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { EditMinuteModal } from '@/components/correspondence/EditMinuteModal';
-import { ParallelBranchStatus } from '@/components/correspondence/ParallelBranchStatus';
 import { AdditionalMinuteModal } from '@/components/correspondence/AdditionalMinuteModal';
 import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { TreatmentModal } from '@/components/correspondence/TreatmentModal';
@@ -78,28 +39,15 @@ import { CompletionSummaryModal } from '@/components/correspondence/CompletionSu
 import { DelegateModal } from '@/components/correspondence/DelegateModal';
 import { PrintPreviewModal } from '@/components/correspondence/PrintPreviewModal';
 import { DocumentPreviewModal } from '@/components/correspondence/DocumentPreviewModal';
-import { WorkflowProgressIndicator } from '@/components/correspondence/WorkflowProgressIndicator';
-import { SealBadge } from '@/components/seals/SealBadge';
-import { downloadAsPDF, downloadAsWord } from '@/lib/document-generator';
-import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import { LinkDocumentDialog } from '@/components/correspondence/LinkDocumentDialog';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
-import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
 // Forms moved to DMS - FormsChecklistCard removed
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+
+
 import { buildDownloadUrl, fixMediaUrl, ensureAbsoluteUrl } from '@/lib/correspondence-url-utils';
-import { getBaseUrl } from '@/lib/api-client';
 import { useModalState } from '@/hooks/use-modal-state';
 import { useApiRetry } from '@/hooks/use-api-retry';
 import { correspondenceDetailReducer, initialState } from './correspondence-state-reducer';
@@ -108,7 +56,7 @@ import { MinuteThreadPanel } from './components/MinuteThreadPanel';
 import { ActionsPanel } from './components/ActionsPanel';
 
 // Download handler that forces download instead of opening in new tab
-const handleDownload = async (url: string, filename: string) => {
+const _handleDownload = async (url: string, filename: string) => {
   try {
     // Fix URL using utility function
     let fixedUrl = fixMediaUrl(url);
@@ -160,11 +108,11 @@ const handleDownload = async (url: string, filename: string) => {
 const CorrespondenceDetailContent = () => {
   const params = useParams();
   const id = params.id as string;
-  const router = useRouter();
-  const { getCorrespondenceById, getMinutesByCorrespondenceId, updateCorrespondence, refreshData, syncFromApi } =
+  const _router = useRouter();
+  const {getCorrespondenceById, getMinutesByCorrespondenceId, updateCorrespondence: _updateCorrespondence, refreshData, syncFromApi } =
     useCorrespondence();
   const cachedCorrespondence = id ? getCorrespondenceById(id) : null;
-  const contextMinutes = id ? getMinutesByCorrespondenceId(id) : [];
+  const _contextMinutes = id ? getMinutesByCorrespondenceId(id) : [];
   const { currentUser: activeUser } = useCurrentUser();
   const {
     directorates,
@@ -173,7 +121,6 @@ const CorrespondenceDetailContent = () => {
     users: organizationUsers,
     offices,
     officeMemberships,
-    assistantAssignments,
     refreshOrganizationData,
   } = useOrganization();
   
@@ -190,10 +137,6 @@ const CorrespondenceDetailContent = () => {
     parallelRoutingGroups,
     selectedMinute,
     selectedAttachmentIndex,
-    attachmentSearchQuery,
-    selectedLinkedDocVersion,
-    isPreviewFullscreen,
-    dragActive,
     mobileActiveTab,
   } = state;
   
@@ -222,16 +165,16 @@ const CorrespondenceDetailContent = () => {
   const setSelectedAttachmentIndex = useCallback((index: number | null) => {
     dispatch({ type: 'SET_SELECTED_ATTACHMENT_INDEX', payload: index });
   }, []);
-  const setAttachmentSearchQuery = useCallback((query: string) => {
+  const _setAttachmentSearchQuery = useCallback((query: string) => {
     dispatch({ type: 'SET_ATTACHMENT_SEARCH_QUERY', payload: query });
   }, []);
-  const setSelectedLinkedDocVersion = useCallback((version: Record<string, number>) => {
+  const _setSelectedLinkedDocVersion = useCallback((version: Record<string, number>) => {
     dispatch({ type: 'SET_SELECTED_LINKED_DOC_VERSION', payload: version });
   }, []);
-  const setIsPreviewFullscreen = useCallback((fullscreen: boolean) => {
+  const _setIsPreviewFullscreen = useCallback((fullscreen: boolean) => {
     dispatch({ type: 'SET_PREVIEW_FULLSCREEN', payload: fullscreen });
   }, []);
-  const setDragActive = useCallback((active: boolean) => {
+  const _setDragActive = useCallback((active: boolean) => {
     dispatch({ type: 'SET_DRAG_ACTIVE', payload: active });
   }, []);
   const setMobileActiveTab = useCallback((tab: 'document' | 'thread' | 'actions') => {
@@ -245,7 +188,7 @@ const CorrespondenceDetailContent = () => {
   const isCompleted = (remoteCorrespondence?.status ?? initialStatus) === 'completed';
 
   // Use modal state hook to consolidate modal states
-  const { activeModal, openModal, closeModal, isOpen } = useModalState();
+  const {activeModal: _activeModal, openModal, closeModal, isOpen } = useModalState();
   
   // Use API retry hook for critical requests
   const { fetchWithRetry } = useApiRetry({ maxRetries: 3 });
@@ -657,7 +600,7 @@ const CorrespondenceDetailContent = () => {
   // - de-duplicating by id
   // - if there are active (incomplete) groups, showing only the most recent one
   // - otherwise, showing only the most recently completed group
-  const visibleParallelGroups = useMemo(() => {
+  const _visibleParallelGroups = useMemo(() => {
     if (!parallelRoutingGroups || parallelRoutingGroups.length === 0) {
       return [] as ParallelRoutingGroup[];
     }
@@ -774,29 +717,11 @@ const CorrespondenceDetailContent = () => {
     wasDocumentPreviewOpenRef.current = isOpenNow;
   }, [isOpen, logCorrespondenceDmsAccess]);
 
-  if (!correspondence) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-full">
-          {detailLoading ? (
-            <p className="text-sm text-muted-foreground">Loading correspondence…</p>
-          ) : (
-            <p>Correspondence not found</p>
-          )}
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!activeUser) {
-    return null;
-  }
-
-  const division = correspondence.divisionId
-    ? divisions.find((entry) => entry.id === correspondence.divisionId) ?? null
+  const _division = correspondence?.divisionId
+    ? divisions.find((entry) => entry.id === correspondence?.divisionId) ?? null
     : null;
-  const department = correspondence.departmentId
-    ? departments.find((entry) => entry.id === correspondence.departmentId) ?? null
+  const _department = correspondence?.departmentId
+    ? departments.find((entry) => entry.id === correspondence?.departmentId) ?? null
     : null;
   // Use backend delegation (loaded from API)
   const activeDelegation = backendDelegation;
@@ -806,12 +731,13 @@ const CorrespondenceDetailContent = () => {
   // (Once routed to someone else, the delegatee can no longer act on it)
   const isDelegateeAndPrincipalTurn = 
     activeDelegation && 
+    activeUser && 
     String(activeDelegation.assistantId) === String(activeUser.id) && 
     activeDelegation.status === 'active' &&
-    String(correspondence.currentApproverId) === String(activeDelegation.principalId);
+    String(correspondence?.currentApproverId) === String(activeDelegation.principalId);
   
   const isCurrentUserTurn: boolean = 
-    Boolean(correspondence.currentApproverId === activeUser?.id || isDelegateeAndPrincipalTurn);
+    Boolean(correspondence?.currentApproverId === activeUser?.id || isDelegateeAndPrincipalTurn);
 
   // Check if last minute was recalled and routing was reverted
   const lastMinute = minutes[minutes.length - 1];
@@ -824,19 +750,19 @@ const CorrespondenceDetailContent = () => {
   // If routing was reverted after recall, enable actions for the sender
   const actionsDisabled = detailLoading || (isCompleted && !isRecalledAndReverted) || isForInformationOnly;
   const turnRestrictedDisabled = actionsDisabled || (!isCurrentUserTurn && !isRecalledAndReverted);
-  const completionPackageUrl = buildDownloadUrl(correspondence.completionPackage?.fileUrl ?? null) ?? null;
+  const completionPackageUrl = buildDownloadUrl(correspondence?.completionPackage?.fileUrl ?? null) ?? null;
   const completionGeneratedAt =
-    correspondence.completionPackage?.generatedAt ??
-    correspondence.completionSummaryGeneratedAt ??
-    correspondence.completedAt;
+    correspondence?.completionPackage?.generatedAt ??
+    correspondence?.completionSummaryGeneratedAt ??
+    correspondence?.completedAt;
   const selectedAttachment =
-    selectedAttachmentIndex !== null && correspondence.attachments?.[selectedAttachmentIndex]
-      ? correspondence.attachments[selectedAttachmentIndex]
+    selectedAttachmentIndex !== null && correspondence?.attachments?.[selectedAttachmentIndex]
+      ? correspondence?.attachments[selectedAttachmentIndex]
       : null;
   const completionPackageFileName = completionPackageUrl
     ? (
         completionPackageUrl.split('/').filter(Boolean).pop() ||
-        `${correspondence.referenceNumber || 'completion-package'}.pdf`
+        `${correspondence?.referenceNumber || 'completion-package'}.pdf`
       )
     : undefined;
   const linkedDocumentLatestVersion = linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1];
@@ -848,14 +774,14 @@ const CorrespondenceDetailContent = () => {
         ? linkedDocumentPreviewUrl
         : (isCompleted && completionPackageUrl
             ? completionPackageUrl
-            : buildDownloadUrl(correspondence.attachments?.[0]?.fileUrl)));
+            : buildDownloadUrl(correspondence?.attachments?.[0]?.fileUrl)));
   const defaultPreviewAttachmentFileName = selectedAttachment
     ? selectedAttachment.fileName
     : (linkedDocumentPreviewFileName
         ? linkedDocumentPreviewFileName
         : (isCompleted && completionPackageUrl
             ? completionPackageFileName
-            : correspondence.attachments?.[0]?.fileName));
+            : correspondence?.attachments?.[0]?.fileName));
   const defaultPreviewAttachmentSource: 'attachment' | 'completion-package' =
     selectedAttachment
       ? 'attachment'
@@ -867,7 +793,7 @@ const CorrespondenceDetailContent = () => {
   };
 
   // Wrapper for CorrespondenceTreeView that expects specific return type
-  const lookupUserForTree = (userId: string): { name: string; email?: string } | null => {
+  const _lookupUserForTree = (userId: string): { name: string; email?: string } | null => {
     const user = organizationUsers.find((u) => u.id === userId);
     if (!user) return null;
     return { name: user.name, email: user.email };
@@ -876,8 +802,8 @@ const CorrespondenceDetailContent = () => {
   // Helper functions moved to DocumentPreviewPanel component
 
   const handleLinkDocumentsSave = async (documentIds: string[]) => {
+    if (!correspondence) return;
     try {
-      // Update correspondence via API with linked document IDs
       await apiFetch(`/correspondence/items/${correspondence.id}/`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -894,10 +820,10 @@ const CorrespondenceDetailContent = () => {
     }
   };
 
-  const handleRemoveLink = async (docId: string) => {
+  const _handleRemoveLink = async (docId: string) => {
+    if (!correspondence) return;
     try {
       const updatedIds = (correspondence.linkedDocumentIds ?? []).filter((idValue) => idValue !== docId);
-      // Update correspondence via API with updated linked document IDs
       await apiFetch(`/correspondence/items/${correspondence.id}/`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -929,7 +855,7 @@ const CorrespondenceDetailContent = () => {
     }
   };
 
-  const resolveDistributionName = (recipient: DistributionRecipient) => {
+  const _resolveDistributionName = (recipient: DistributionRecipient) => {
     if (recipient.type === 'directorate') {
       if (recipient.directorateId) {
         const dir = directorates.find((d) => d.id === recipient.directorateId);
@@ -952,6 +878,16 @@ const CorrespondenceDetailContent = () => {
 
   return (
     <DashboardLayout>
+      {!correspondence ? (
+        <div className="flex items-center justify-center h-full">
+          {detailLoading ? (
+            <p className="text-sm text-muted-foreground">Loading correspondence…</p>
+          ) : (
+            <p>Correspondence not found</p>
+          )}
+        </div>
+      ) : !activeUser ? null : (
+        <>
       <div className="flex flex-col min-w-0">
         {/* Header - Full Width */}
         <div className="flex-shrink-0">
@@ -1208,7 +1144,7 @@ const CorrespondenceDetailContent = () => {
               // Also fetch the correspondence detail again to get updated routing
               if (correspondence?.id) {
                 try {
-                  const updated = await apiFetch<Record<string, unknown>>(`/correspondence/${correspondence.id}/`);
+                  const updated = await apiFetch<Record<string, unknown>>(`/correspondence/items/${correspondence.id}/`);
                   if (updated) {
                     setRemoteCorrespondence(mapApiCorrespondence(updated as Record<string, unknown>));
                   }
@@ -1364,6 +1300,8 @@ const CorrespondenceDetailContent = () => {
             )}
           </div>
         </div>
+      )}
+        </>
       )}
     </DashboardLayout>
   );

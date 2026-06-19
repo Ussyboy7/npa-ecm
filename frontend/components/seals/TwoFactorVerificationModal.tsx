@@ -1,7 +1,8 @@
 "use client";
 
+import Image from 'next/image';
 import { useState, useEffect, useRef } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { 
   Mail, 
   Smartphone, 
@@ -456,9 +457,11 @@ export function TwoFactorVerificationModal({
                   </p>
                   {setupData?.qr_code && (
                     <div className="flex justify-center mb-3">
-                      <img 
+                      <Image 
                         src={setupData.qr_code} 
                         alt="TOTP QR Code" 
+                        width={192}
+                        height={192}
                         className="w-48 h-48 border rounded-lg"
                       />
                     </div>

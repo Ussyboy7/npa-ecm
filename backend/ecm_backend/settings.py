@@ -95,7 +95,6 @@ LOCAL_APPS = [
     "audit",
     "forms",
     "capture",
-    "records",
     "search",
     "integrations",
 ]

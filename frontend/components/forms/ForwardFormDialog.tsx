@@ -9,9 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, Users, User, Building2, Briefcase } from 'lucide-react';
+import { Loader2, Send, User, Building2, Briefcase } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useCurrentUser } from '@/hooks/use-current-user';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
 import { updateFormDocument } from '@/lib/api/dms-forms';
@@ -25,19 +24,12 @@ interface ForwardFormDialogProps {
   onForwarded?: () => void;
 }
 
-type ForwardTarget = {
-  type: 'user' | 'division' | 'department';
-  id: string;
-  name: string;
-};
-
 export function ForwardFormDialog({
   open,
   onOpenChange,
   form,
   onForwarded,
 }: ForwardFormDialogProps) {
-  const { currentUser } = useCurrentUser();
   const { users, divisions, departments } = useOrganization();
   const [forwarding, setForwarding] = useState(false);
   const [targetType, setTargetType] = useState<'user' | 'division' | 'department'>('user');

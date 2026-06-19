@@ -306,35 +306,6 @@ class ExecutiveSignatureUploadSerializer(serializers.Serializer):
         return value
 
 
-class DocumentSealSerializer(serializers.ModelSerializer):
-    """Serializer for document seals (verification records)."""
-    
-    sealed_by_name = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = DocumentSeal
-        fields = [
-            "id",
-            "document",
-            "correspondence",
-            "sealed_by",
-            "sealed_by_name",
-            "serial_number",
-            "seal_hash",
-            "verification_url",
-            "office_name",
-            "office_title",
-            "sealed_at",
-            "is_valid",
-            "invalidated_at",
-            "invalidated_reason",
-        ]
-        read_only_fields = fields
-    
-    def get_sealed_by_name(self, obj):
-        return obj.sealed_by.get_full_name() or obj.sealed_by.username
-
-
 class SealVerificationSerializer(serializers.Serializer):
     """Serializer for seal verification requests."""
     

@@ -6,6 +6,7 @@
 import { useCallback, useMemo } from 'react';
 import { logWarn } from '@/lib/client-logger';
 import { isAuthenticationError } from '@/lib/auth-errors';
+import { isRecord } from '@/lib/type-utils';
 
 export interface RetryOptions {
   maxRetries?: number;
@@ -38,8 +39,6 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
  */
 export const useApiRetry = (options: RetryOptions = {}) => {
   const config = useMemo(() => ({ ...DEFAULT_OPTIONS, ...options }), [options]);
-
-  const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
   const fetchWithRetry = useCallback(
     async <T>(

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Printer, Download } from "lucide-react";
 import { downloadAsPDF } from "@/lib/document-generator";
 import type { Correspondence, Minute } from "@/lib/npa-structure";
+import Image from "next/image";
 import mammoth from "mammoth";
 
 interface DocumentPreviewModalProps {
@@ -247,10 +248,13 @@ export const DocumentPreviewModal = ({
     if (isImage) {
       return (
         <div className="flex items-center justify-center p-6 min-h-[600px]">
-          <img
+          <Image
             src={attachmentUrl}
             alt={attachmentFileName || 'Document'}
+            width={1600}
+            height={1200}
             className="max-w-full max-h-[70vh] object-contain"
+            unoptimized
           />
         </div>
       );

@@ -1,10 +1,11 @@
 "use client";
+import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LogOut, Shield, Bell, HelpCircle, UserCog, Clock, Calendar, Settings, User, Inbox, AlertTriangle, X } from "lucide-react";
+import { LogOut, Shield, Bell, HelpCircle, UserCog, Clock, Calendar, Settings, Inbox, AlertTriangle, X } from "lucide-react";
 import { NotificationBell } from "./notifications/NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
@@ -272,7 +273,7 @@ export const TopBar = () => {
                   </Link>
                 </DropdownMenuItem>
                 {/* Role Switcher - Only show for Super Admins */}
-                {currentUser?.systemRole === "Super Admin" && (
+                {currentUser?.systemRole === SYSTEM_ROLE_SUPER_ADMIN && (
                   <DropdownMenuItem onClick={() => setRoleSwitcherOpen(true)} className="cursor-pointer">
                     <UserCog className="h-4 w-4 mr-2" />
                     Switch Role

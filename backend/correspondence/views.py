@@ -20,6 +20,13 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.exceptions import ValidationError, PermissionDenied
 
 from audit.services import AuditService
+from common.grade_utils import (
+    DEPARTMENT_GRADES,
+    DIRECTORATE_GRADES,
+    DIVISION_GRADES,
+    LEADERSHIP_GRADES,
+    get_grade_level,
+)
 from notifications.models import Notification
 from notifications.services import NotificationService
 from rest_framework.permissions import IsAuthenticated
@@ -1846,9 +1853,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         # Determine user's organizational scope
         grade = (user.grade_level or "").upper()
         is_superuser = getattr(user, "is_superuser", False)
-        directorate_grades = {"MDCS", "EDCS", "MD", "ED"}
-        division_grades = {"MSS1", "GM", "GMCS"}
-        department_grades = {"MSS2", "AGM", "AGMCS"}
 
         user_directorate_id = getattr(user, "directorate_id", None)
         user_division_id = getattr(user, "division_id", None)
@@ -1859,19 +1863,19 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if is_superuser:
             # Superuser sees everything
             pass
-        elif grade in directorate_grades and user_directorate_id:
+        elif grade in DIRECTORATE_GRADES and user_directorate_id:
             # ED/MD level - sees all in their directorate
             queryset = queryset.filter(
                 Q(division__directorate_id=user_directorate_id) |
                 Q(department__division__directorate_id=user_directorate_id)
             )
-        elif grade in division_grades and user_division_id:
+        elif grade in DIVISION_GRADES and user_division_id:
             # GM level - sees all in their division
             queryset = queryset.filter(
                 Q(division_id=user_division_id) |
                 Q(department__division_id=user_division_id)
             )
-        elif grade in department_grades and user_department_id:
+        elif grade in DEPARTMENT_GRADES and user_department_id:
             # AGM level - sees all in their department
             queryset = queryset.filter(department_id=user_department_id)
         else:
@@ -2065,6 +2069,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         )
 
     def _get_allowed_archive_levels(self, user) -> list[str]:
+        from common.grade_utils import LEADERSHIP_GRADES
+
         if not user or not getattr(user, "is_authenticated", False):
             return []
         role_name = getattr(getattr(user, "system_role", None), "name", "") or ""
@@ -2072,9 +2078,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         is_super_admin = getattr(user, "is_superuser", False) or role_name.lower() == "super admin"
         is_secretary = role_name.lower() == "secretary"
         allowed = {Correspondence.ArchiveLevel.DEPARTMENT}
-        if grade in {"MDCS", "EDCS", "MSS1", "MSS2"} or is_super_admin or is_secretary:
+        if grade in LEADERSHIP_GRADES or is_super_admin or is_secretary:
             allowed.add(Correspondence.ArchiveLevel.DIVISION)
-        if grade in {"MDCS", "EDCS"} or is_super_admin or is_secretary:
+        if grade in DIRECTORATE_GRADES or is_super_admin or is_secretary:
             allowed.add(Correspondence.ArchiveLevel.DIRECTORATE)
         return list(allowed)
 
@@ -2524,18 +2530,11 @@ class MinuteViewSet(viewsets.ModelViewSet):
         
         if memberships.exists():
             # Sort by grade level (higher is better)
-            # Grade levels: MDCS=19, EDCS=18, GMCS=17, AGMCS=16, etc.
-            grade_order = ['MDCS', 'EDCS', 'GMCS', 'AGMCS', 'MSS1', 'MSS2', 'MSS3', 'MSS4', 'MSS5', 
-                          'SSS1', 'SSS2', 'SSS3', 'SSS4', 'JSS1', 'JSS2', 'JSS3']
-            
-            def get_grade_level(user):
-                grade = getattr(user, 'grade_level', '')
-                try:
-                    return grade_order.index(grade) if grade in grade_order else 999
-                except (ValueError, AttributeError):
-                    return 999
-            
-            sorted_memberships = sorted(memberships, key=lambda m: get_grade_level(m.user), reverse=True)
+            sorted_memberships = sorted(
+                memberships,
+                key=lambda m: get_grade_level(getattr(m.user, 'grade_level', None)),
+                reverse=True,
+            )
             highest_grade = sorted_memberships[0]
             return (highest_grade.user, False)
         

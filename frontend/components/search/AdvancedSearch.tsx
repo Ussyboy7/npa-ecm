@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Search, Filter, Save, History, X, FileText, Mail, Loader2, Calendar, User, Building2, Briefcase, Shield, ExternalLink, FolderTree } from 'lucide-react';
+import { Search, Filter, Save, History, X, FileText, Mail, Loader2, Calendar, User, Shield, FolderTree } from 'lucide-react';
 import {
   search,
   getSearchSuggestions,
@@ -24,21 +24,21 @@ import {
   type SearchHistory,
 } from '@/lib/search-storage';
 import { logError } from '@/lib/client-logger';
+import { SENSITIVITY_OPTIONS } from '@/lib/constants';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDate } from '@/lib/correspondence-helpers';
 import { highlightText } from '@/lib/search-highlight';
-import Link from 'next/link';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { exportToCSV } from '@/lib/admin-export';
 import { Download } from 'lucide-react';
+import { isRecord } from '@/lib/type-utils';
 
 interface AdvancedSearchProps {
   onResultSelect?: (result: Record<string, unknown>) => void;
   context?: 'all' | 'documents' | 'correspondence' | 'cases';
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 const isUnifiedSearchResult = (value: unknown): value is UnifiedSearchResult =>
   isRecord(value) && ('documents' in value || 'correspondence' in value || 'cases' in value);
 
@@ -170,7 +170,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     try {
       const saved = await getSavedSearches();
       setSavedSearches(saved);
-      } catch (error: unknown) {
+      } catch (_error: unknown) {
       // Silently fail
     }
   };
@@ -179,7 +179,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
     try {
       const history = await getSearchHistory(10);
       setSearchHistory(history);
-      } catch (error: unknown) {
+      } catch (_error: unknown) {
       // Silently fail
     }
   };
@@ -514,10 +514,9 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">All levels</SelectItem>
-                      <SelectItem value="public">Public</SelectItem>
-                      <SelectItem value="internal">Internal</SelectItem>
-                      <SelectItem value="confidential">Confidential</SelectItem>
-                      <SelectItem value="restricted">Restricted</SelectItem>
+                      {SENSITIVITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from common.grade_utils import get_grade_level
 from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 from dms.models import Document
 
@@ -776,18 +777,12 @@ class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
                         ).select_related('user').all()
                         
                         if memberships.exists():
-                            # Sort by grade level (simplified - you may want to use a proper grade level model)
-                            grade_order = ['MDCS', 'EDCS', 'GMCS', 'AGMCS', 'MSS1', 'MSS2', 'MSS3', 'MSS4', 'MSS5', 
-                                          'SSS1', 'SSS2', 'SSS3', 'SSS4', 'JSS1', 'JSS2', 'JSS3']
-                            
-                            def get_grade_level(user):
-                                grade = getattr(user, 'grade_level', '')
-                                try:
-                                    return grade_order.index(grade) if grade in grade_order else 999
-                                except (ValueError, AttributeError):
-                                    return 999
-                            
-                            sorted_memberships = sorted(memberships, key=lambda m: get_grade_level(m.user), reverse=True)
+                            # Sort by grade level (highest first)
+                            sorted_memberships = sorted(
+                                memberships,
+                                key=lambda m: get_grade_level(getattr(m.user, 'grade_level', None)),
+                                reverse=True,
+                            )
                             recipient_user_id = sorted_memberships[0].user_id
 
             # If we have a recipient, check if they've created a subsequent minute (completed their action)

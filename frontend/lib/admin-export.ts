@@ -55,26 +55,21 @@ export function exportToExcel<T extends Record<string, unknown>>(
   columns: { key: keyof T; label: string }[],
   options: ExportOptions = {}
 ): void {
-  // For Excel export, we'll use CSV format with .xlsx extension
-  // In production, you might want to use a library like xlsx or exceljs
-  const { filename = 'export.xlsx' } = options;
+  // Generates TSV (tab-separated) which Excel can open natively
+  const { filename = 'export.tsv' } = options;
   
-  // Create CSV content (Excel can open CSV files)
   const header = columns.map(col => col.label).join('\t');
-  
-  const rows = data.map(item => {
-    return columns.map(col => {
+  const rows = data.map(item =>
+    columns.map(col => {
       const value = item[col.key];
       if (value === null || value === undefined) return '';
       if (typeof value === 'object') return JSON.stringify(value);
       return String(value);
-    }).join('\t');
-  });
+    }).join('\t')
+  );
   
   const content = [header, ...rows].join('\n');
-  
-  // Create blob with Excel-compatible MIME type
-  const blob = new Blob([content], { type: 'application/vnd.ms-excel' });
+  const blob = new Blob([content], { type: 'text/tab-separated-values' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
   link.setAttribute('href', url);

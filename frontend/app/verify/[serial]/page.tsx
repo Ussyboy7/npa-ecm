@@ -4,19 +4,14 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { CheckCircle2, XCircle, Shield, Calendar, User, FileText, Clock, AlertTriangle, ExternalLink, Eye, ArrowLeft } from "lucide-react";
+import { CheckCircle2, Shield, Calendar, User, FileText, ExternalLink, Eye, ArrowLeft } from "lucide-react";
 import { DigitalSealPreview } from "@/components/seals/DigitalSealPreview";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
-import { useSealVerification } from "@/hooks/use-seal-verification";
 import { SealVerificationResult } from "@/components/verify/SealVerificationResult";
 import { VerifyForm } from "@/components/verify/VerifyForm";
-import { SealVerificationErrorBoundary } from "@/components/verify/ErrorBoundary";
-import { validateSerialNumber } from "@/lib/api/seal-verification";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
 
 interface SealVerification {
   valid: boolean;
@@ -71,8 +66,6 @@ export default function VerifyPage() {
     if (hasFetched || !serial) return;
     
     let isMounted = true;
-    let abortController: AbortController | null = null;
-    
     const verifySeal = async () => {
       try {
         setLoading(true);
@@ -101,9 +94,6 @@ export default function VerifyPage() {
         
         const verifyUrl = `${baseUrl}/accounts/seal/verify/${serial}/`;
         
-        console.log('[Seal Verification] Fetching from:', verifyUrl);
-        console.log('[Seal Verification] About to call fetch...');
-        
         // Use Promise.race with timeout - don't use AbortController signal
         // to avoid issues with React StrictMode unmounting/remounting
         const fetchPromise = fetch(verifyUrl, {
@@ -122,32 +112,18 @@ export default function VerifyPage() {
         
         let response: Response;
         try {
-          console.log('[Seal Verification] Calling fetch now...');
           response = await Promise.race([fetchPromise, timeoutPromise]);
-          console.log('[Seal Verification] Fetch promise resolved!');
         } catch (fetchError: unknown) {
-          console.error('[Seal Verification] Fetch exception caught:', fetchError);
-          // If component unmounted (React StrictMode), just return silently
-          if (!isMounted) {
-            console.log('[Seal Verification] Component unmounted, ignoring error');
-            return;
-          }
-          // For timeout or other errors, show error message
+          if (!isMounted) return;
           throw fetchError;
         }
-        
-        console.log('[Seal Verification] Response received:', response.status, response.statusText);
-        console.log('[Seal Verification] Response ok:', response.ok);
-        console.log('[Seal Verification] Response headers:', Object.fromEntries(response.headers.entries()));
         
         // Parse response - API returns JSON even for 404 errors
         // Read as text first, then parse JSON (can only read body once)
         let responseText: string;
         try {
           responseText = await response.text();
-          console.log('[Seal Verification] Response text:', responseText);
-        } catch (textError) {
-          console.error('[Seal Verification] Failed to read response text:', textError);
+        } catch (_textError) {
           // If we can't read the body, create error response
           const errorData: SealVerification = { 
             valid: false, 
@@ -167,9 +143,7 @@ export default function VerifyPage() {
         let data: SealVerification;
         try {
           data = JSON.parse(responseText);
-          console.log('[Seal Verification] Parsed data:', data);
-        } catch (parseError) {
-          console.error('[Seal Verification] JSON parse error:', parseError, 'Response text:', responseText);
+        } catch (_parseError) {
           // If JSON parsing fails, create error response
           data = { 
             valid: false, 
@@ -182,29 +156,19 @@ export default function VerifyPage() {
           } as SealVerification;
         }
         
-        // Handle 404 or invalid seal - API returns valid:false in JSON
         if (!response.ok || !data.valid) {
-          console.log('[Seal Verification] Seal not found or invalid, response.ok:', response.ok, 'data.valid:', data.valid);
-          // Ensure we have the serial number even if API didn't return it
           if (!data.serial_number) {
             data.serial_number = serial;
           }
-          // Always set state, even if component appears unmounted (React StrictMode)
-          console.log('[Seal Verification] Setting invalid seal state:', data);
           setVerification(data);
           setError(data.error || "Seal not found");
           setLoading(false);
-          console.log('[Seal Verification] Invalid seal state set, loading:', false);
           return;
         }
         
-        // Valid seal - set the verification data
-        console.log('[Seal Verification] Valid seal found');
         setVerification(data);
         setLoading(false);
-        console.log('[Seal Verification] State updated successfully');
       } catch (err) {
-        console.error('[Seal Verification] Fetch error:', err);
         if (!isMounted) return;
         const errorMessage = err instanceof Error ? err.message : "Failed to verify seal. Please try again.";
         setError(errorMessage);

@@ -1,5 +1,6 @@
 import { apiFetch } from '../api-client';
 import { logError } from '@/lib/client-logger';
+import { isRecord } from '@/lib/type-utils';
 
 export interface ApiDelegation {
   id: string;
@@ -45,8 +46,6 @@ export interface Delegation {
   duration?: string;
   expiresAt?: string;
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
 const mapApiCorrespondenceDelegationToFrontend = (
   api: ApiCorrespondenceDelegation

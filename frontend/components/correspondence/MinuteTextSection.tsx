@@ -8,7 +8,6 @@
 import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { AlertCircle, MessageSquare, Shield } from 'lucide-react';
 import { TemplateManager } from './TemplateManager';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';

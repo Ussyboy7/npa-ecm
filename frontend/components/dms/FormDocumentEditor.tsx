@@ -5,13 +5,12 @@ import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { DynamicFormRenderer } from "@/components/forms/DynamicFormRenderer";
 import { SignatureWorkflowDialog } from "@/components/forms/SignatureWorkflowDialog";
 import { FormSignatureDialog } from "@/components/forms/FormSignatureDialog";
-import { getFormTemplates, getFormTemplate } from "@/lib/api/forms";
+import { getFormTemplate } from "@/lib/api/forms";
 import {
   getFormDocument,
   updateFormDocument,
@@ -22,14 +21,10 @@ import {
 import {
   getSignatures,
   getSignatureWorkflow,
-  signForm,
-  createFormSubmission,
 } from "@/lib/api/forms";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 import { toast } from "sonner";
-import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, CheckCircle, Paperclip, Upload, X, Download, Send, Eye } from "lucide-react";
-import { useCurrentUser } from "@/hooks/use-current-user";
-import { LinkDocumentDialog } from "@/components/correspondence/LinkDocumentDialog";
+import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, Paperclip, Upload, Download, Send, Eye } from "lucide-react";
 import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { FormTemplate } from "@/lib/types/forms";
@@ -57,7 +52,6 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
     "text/plain",
     "text/csv",
   ];
-  const { currentUser } = useCurrentUser();
   const [formDoc, setFormDoc] = useState<FormDocumentType | null>(null);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
@@ -70,7 +64,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
     signature: FormSignature;
     workflow: FormSignatureWorkflow;
   } | null>(null);
-  const [showLinkCorrespondence, setShowLinkCorrespondence] = useState(false);
+  const [, setShowLinkCorrespondence] = useState(false);
   const [showForwardDialog, setShowForwardDialog] = useState(false);
   const [allSignatures, setAllSignatures] = useState<FormSignature[]>([]);
   const [supportingDocuments, setSupportingDocuments] = useState<DocumentVersion[]>([]);

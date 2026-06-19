@@ -3,7 +3,7 @@
  * Consolidates signature loading, template management, and preferences
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { logError } from '@/lib/client-logger';
 import {
   fetchUserSignature,
@@ -26,7 +26,6 @@ interface UseSignatureReturn {
   error: Error | null;
   templates: SignatureTemplate[];
   preferences: UserSignaturePreferences;
-  relevantTemplates: SignatureTemplate[];
   loadSignature: () => Promise<void>;
   refreshSignature: () => Promise<void>;
 }
@@ -44,39 +43,50 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
   const [templates, setTemplates] = useState<SignatureTemplate[]>([]);
   const [preferences, setPreferences] = useState<UserSignaturePreferences>(defaultPreferences);
 
+  const abortRef = useRef<AbortController | null>(null);
+
   // Initialize templates
   useEffect(() => {
+    const controller = new AbortController();
+    abortRef.current = controller;
     const loadTemplates = async () => {
       try {
-        const defaults = await ensureDefaultSignatureTemplates();
-        setTemplates(defaults);
+        const defaults = await ensureDefaultSignatureTemplates(controller.signal);
+        if (!controller.signal.aborted) setTemplates(defaults);
       } catch (error: unknown) {
-        logError('Failed to load signature templates', error);
-        setTemplates([]);
+        if (!controller.signal.aborted) {
+          logError('Failed to load signature templates', error);
+          setTemplates([]);
+        }
       }
     };
     loadTemplates();
+    return () => controller.abort();
   }, []);
 
   // Load preferences
   useEffect(() => {
+    const controller = new AbortController();
     const loadPreferences = async () => {
       if (userId) {
         try {
-          const prefs = await loadUserSignaturePreferences(userId);
-          setPreferences(prefs ?? defaultPreferences);
+          const prefs = await loadUserSignaturePreferences(userId, controller.signal);
+          if (!controller.signal.aborted) setPreferences(prefs ?? defaultPreferences);
         } catch (error: unknown) {
-          logError('Failed to load signature preferences', error);
-          setPreferences(defaultPreferences);
+          if (!controller.signal.aborted) {
+            logError('Failed to load signature preferences', error);
+            setPreferences(defaultPreferences);
+          }
         }
       } else {
         setPreferences(defaultPreferences);
       }
     };
     loadPreferences();
+    return () => controller.abort();
   }, [userId]);
 
-  const loadSignature = useCallback(async () => {
+  const loadSignature = useCallback(async (signal?: AbortSignal) => {
     if (!userId) {
       setSignature(null);
       return;
@@ -86,17 +96,18 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
     setError(null);
 
     try {
-      const sig = await fetchUserSignature();
-      if (sig) {
+      const sig = await fetchUserSignature(signal);
+      if (sig && !signal?.aborted) {
         saveUserSignature(userId, sig);
       }
-      setSignature(sig);
+      if (!signal?.aborted) setSignature(sig);
     } catch (err) {
+      if (signal?.aborted) return;
       const error = err instanceof Error ? err : new Error(String(err));
       setError(error);
       logError('Failed to load signature', err);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
   }, [userId]);
 
@@ -107,7 +118,7 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
     setError(null);
 
     try {
-      const sig = await fetchUserSignature();
+      const sig = await fetchUserSignature(abortRef.current?.signal);
       if (sig) {
         saveUserSignature(userId, sig);
         setSignature(sig);
@@ -125,17 +136,14 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
 
   // Auto-load signature when userId changes
   useEffect(() => {
+    const controller = new AbortController();
     if (autoLoad && userId) {
-      void loadSignature();
+      void loadSignature(controller.signal);
     } else if (!userId) {
       setSignature(null);
     }
+    return () => controller.abort();
   }, [userId, autoLoad, loadSignature]);
-
-  // Get relevant templates based on template type
-  const relevantTemplates = useMemo(() => {
-    return templates; // Can be filtered by templateType if needed
-  }, [templates]);
 
   return {
     signature,
@@ -143,7 +151,6 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
     error,
     templates,
     preferences,
-    relevantTemplates,
     loadSignature,
     refreshSignature,
   };

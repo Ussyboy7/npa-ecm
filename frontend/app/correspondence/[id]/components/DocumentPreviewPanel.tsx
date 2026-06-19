@@ -1,5 +1,6 @@
 "use client";
 
+import Image from 'next/image';
 import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,8 +8,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import {
   FileText,
-  Info,
-  Users,
   Download,
   Maximize2,
   X,
@@ -17,8 +16,6 @@ import {
   Search,
   Loader2,
   AlertCircle,
-  RefreshCw,
-  Eye,
   FileImage,
   FileSpreadsheet,
   FileVideo,
@@ -100,12 +97,12 @@ export const DocumentPreviewPanel = ({
   attachmentSearchQuery,
   isPreviewFullscreen,
   isCompleted,
-  division,
-  department,
+  _division,
+  _department,
   directorates,
   divisions,
   departments,
-  onSetSelectedLinkedDocVersion,
+  _onSetSelectedLinkedDocVersion,
   onSetAttachmentSearchQuery,
   onSetIsPreviewFullscreen,
   onSetSelectedAttachmentIndex,
@@ -115,7 +112,7 @@ export const DocumentPreviewPanel = ({
 }: DocumentPreviewPanelProps) => {
   const router = useRouter();
   const { currentUser } = useCurrentUser();
-  const [dragActive, setDragActive] = useState(false);
+  const [_dragActive, setDragActive] = useState(false);
   
   const firstAttachment = correspondence?.attachments?.[0];
   const { pdfBlobUrl, wordHtml, isLoading: documentPreviewLoading, error: documentPreviewError } = useDocumentPreview(firstAttachment);
@@ -158,7 +155,7 @@ export const DocumentPreviewPanel = ({
     }
   }, [currentUser?.id, resolveDmsAccessTarget]);
 
-  const resolveDistributionName = (recipient: DistributionRecipient) => {
+  const _resolveDistributionName = (recipient: DistributionRecipient) => {
     if (recipient.type === 'office') {
       return recipient.name ?? 'Office';
     }
@@ -483,9 +480,11 @@ export const DocumentPreviewPanel = ({
                   const imageUrl = buildDownloadUrl(firstAttachment.fileUrl);
                   return (
                     <div className="h-full flex items-center justify-center p-4 bg-muted/30" aria-label={`Image preview: ${firstAttachment.fileName}`}>
-                      <img
+                      <Image
                         src={imageUrl || firstAttachment.fileUrl}
                         alt={firstAttachment.fileName || 'Document image'}
+                        width={800}
+                        height={600}
                         className="max-w-full max-h-full object-contain"
                       />
                     </div>

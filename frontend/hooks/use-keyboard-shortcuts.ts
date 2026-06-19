@@ -63,26 +63,3 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[] = []) {
   }, [handleKeyDown]);
 }
 
-/**
- * Common keyboard shortcuts for modals
- */
-export const MODAL_SHORTCUTS = {
-  CLOSE: {
-    key: 'Escape',
-    action: () => {},
-    description: 'Close modal',
-  },
-  SAVE: {
-    key: 's',
-    ctrl: true,
-    action: () => {},
-    description: 'Save (Ctrl+S)',
-  },
-  SUBMIT: {
-    key: 'Enter',
-    ctrl: true,
-    action: () => {},
-    description: 'Submit (Ctrl+Enter)',
-  },
-} as const;
-

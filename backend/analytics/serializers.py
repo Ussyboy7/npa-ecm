@@ -135,15 +135,6 @@ class SLAConfigurationCreateUpdateSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class SLATargetsSerializer(serializers.Serializer):
-    """Serializer for bulk SLA target response."""
-
-    urgent = serializers.IntegerField()
-    high = serializers.IntegerField()
-    medium = serializers.IntegerField()
-    low = serializers.IntegerField()
-
-
 # =============================================================================
 # Escalation Rule Serializers
 # =============================================================================
@@ -354,47 +345,4 @@ class StaffPerformanceSnapshotSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 
-class SLASummarySerializer(serializers.Serializer):
-    """Summary of current SLA status across the system."""
 
-    total = serializers.IntegerField()
-    compliant = serializers.IntegerField()
-    breached = serializers.IntegerField()
-    at_risk = serializers.IntegerField()
-    compliance_rate = serializers.FloatField()
-    avg_days_to_breach = serializers.FloatField()
-
-
-class DivisionPerformanceSummarySerializer(serializers.Serializer):
-    """Summary of division performance for dashboards."""
-
-    division_id = serializers.UUIDField()
-    division_name = serializers.CharField()
-    division_code = serializers.CharField()
-    workload = serializers.IntegerField()
-    completed = serializers.IntegerField()
-    pending = serializers.IntegerField()
-    completion_rate = serializers.FloatField()
-    avg_turnaround = serializers.FloatField()
-    sla_compliance_rate = serializers.FloatField()
-    efficiency_score = serializers.FloatField()
-    trend = serializers.CharField()  # "up", "down", "stable"
-    trend_percent = serializers.FloatField()
-
-
-class EfficiencyAnalysisSerializer(serializers.Serializer):
-    """Efficiency analysis data for dashboards."""
-
-    # Process efficiency
-    avg_handoffs = serializers.FloatField()
-    first_touch_resolution_rate = serializers.FloatField()
-    bottleneck_divisions = serializers.ListField(child=serializers.DictField())
-    
-    # Time analysis
-    avg_processing_time_hours = serializers.FloatField()
-    peak_activity_hours = serializers.ListField(child=serializers.IntegerField())
-    weekend_activity_percent = serializers.FloatField()
-    
-    # Staff metrics summary
-    top_performers = serializers.ListField(child=serializers.DictField())
-    staff_utilization_rate = serializers.FloatField()

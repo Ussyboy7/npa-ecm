@@ -27,7 +27,7 @@ import type { Case } from "@/lib/npa-structure";
 import type { DocumentRecord } from "@/lib/dms-storage";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
-import { Search, Plus, FolderTree, Loader2, Info, ChevronRight, Calendar, User as UserIcon } from "lucide-react";
+import { Search, Plus, FolderTree, Loader2, Info, ChevronRight, Calendar } from "lucide-react";
 import { useMemo, useCallback } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatDateShort } from "@/lib/correspondence-helpers";
@@ -55,7 +55,7 @@ export function LinkCaseDialog({
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
-  const [previewCase, setPreviewCase] = useState<Case | null>(null);
+  const [_previewCase, setPreviewCase] = useState<Case | null>(null);
   const [notes, setNotes] = useState("");
   const [creatingNew, setCreatingNew] = useState(false);
   const [newCaseTitle, setNewCaseTitle] = useState("");

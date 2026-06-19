@@ -1,5 +1,6 @@
 import { logError, logWarn } from '@/lib/client-logger';
 import { apiFetch } from '@/lib/api-client';
+import type { SignatureTemplate, UserSignaturePreferences } from '@/lib/api/signature-templates';
 
 // ==========================================
 // Types
@@ -19,15 +20,7 @@ export type StoredSignature = {
   timesUsed?: number;
 };
 
-export type SignatureTemplate = {
-  id: string;
-  name: string;
-  description: string;
-  templateType: 'approval' | 'minute' | 'forward' | 'treatment';
-  format: string; // e.g. "APPROVED BY {name} {title}\n{date}"
-  style: 'stamp' | 'formal' | 'minimal';
-  defaultApply: boolean;
-};
+export type { SignatureTemplate };
 
 export const DEFAULT_SIGNATURE_TEMPLATES: SignatureTemplate[] = [
   {
@@ -68,11 +61,7 @@ export const DEFAULT_SIGNATURE_TEMPLATES: SignatureTemplate[] = [
   },
 ];
 
-export type UserSignaturePreferences = {
-  defaultTemplateId?: string;
-  templateOverrides?: Record<string, string>; // templateType -> templateId
-  autoApplyForMinutes?: boolean;
-};
+export type { UserSignaturePreferences };
 
 // ==========================================
 // Backend API Response Types
@@ -102,10 +91,10 @@ interface BackendSignatureResponse {
 // Local Storage Keys (for templates/preferences only)
 // ==========================================
 
-const TEMPLATE_KEY = 'npa_signature_templates';
+const _TEMPLATE_KEY = 'npa_signature_templates';
 const USER_PREF_KEY_PREFIX = 'npa_signature_pref_';
 
-const getUserPrefKey = (userId: string) => `${USER_PREF_KEY_PREFIX}${userId}`;
+const _getUserPrefKey = (userId: string) => `${USER_PREF_KEY_PREFIX}${userId}`;
 
 // ==========================================
 // Backend API Functions (for signature image)
@@ -114,9 +103,9 @@ const getUserPrefKey = (userId: string) => `${USER_PREF_KEY_PREFIX}${userId}`;
 /**
  * Fetch the current user's signature from the backend
  */
-export const fetchUserSignature = async (): Promise<StoredSignature | null> => {
+export const fetchUserSignature = async (signal?: AbortSignal): Promise<StoredSignature | null> => {
   try {
-    const response = await apiFetch<BackendSignatureResponse>('/accounts/signature/');
+    const response = await apiFetch<BackendSignatureResponse>('/accounts/signature/', { signal });
     
     if (!response.has_signature) {
       return null;
@@ -307,9 +296,9 @@ export const deleteUserSignature = (userId: string) => {
 
 import * as signatureTemplateApi from '@/lib/api/signature-templates';
 
-export const loadSignatureTemplates = async (): Promise<SignatureTemplate[]> => {
+export const loadSignatureTemplates = async (signal?: AbortSignal): Promise<SignatureTemplate[]> => {
   try {
-    const templates = await signatureTemplateApi.getSignatureTemplates();
+    const templates = await signatureTemplateApi.getSignatureTemplates({}, signal);
     // If no templates exist, return defaults (they'll be created in backend on first use)
     if (templates.length === 0) {
       return DEFAULT_SIGNATURE_TEMPLATES;
@@ -322,14 +311,14 @@ export const loadSignatureTemplates = async (): Promise<SignatureTemplate[]> => 
   }
 };
 
-export const saveSignatureTemplates = async (templates: SignatureTemplate[]): Promise<void> => {
+export const saveSignatureTemplates = async (_templates: SignatureTemplate[]): Promise<void> => {
   // Templates are managed in backend - this function is kept for compatibility
   // but doesn't actually save to localStorage anymore
   logWarn('saveSignatureTemplates is deprecated - templates are managed in backend');
 };
 
-export const ensureDefaultSignatureTemplates = async (): Promise<SignatureTemplate[]> => {
-  const existing = await loadSignatureTemplates();
+export const ensureDefaultSignatureTemplates = async (signal?: AbortSignal): Promise<SignatureTemplate[]> => {
+  const existing = await loadSignatureTemplates(signal);
   if (existing.length === 0) {
     return [...DEFAULT_SIGNATURE_TEMPLATES];
   }
@@ -340,9 +329,9 @@ export const ensureDefaultSignatureTemplates = async (): Promise<SignatureTempla
 // User Preferences (now using backend)
 // ==========================================
 
-export const loadUserSignaturePreferences = async (userId: string): Promise<UserSignaturePreferences | null> => {
+export const loadUserSignaturePreferences = async (userId: string, signal?: AbortSignal): Promise<UserSignaturePreferences | null> => {
   try {
-    return await signatureTemplateApi.getUserSignaturePreferences();
+    return await signatureTemplateApi.getUserSignaturePreferences(signal);
   } catch (error: unknown) {
     logError('Failed to load signature preferences from backend:', error);
     return null;

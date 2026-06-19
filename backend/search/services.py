@@ -9,6 +9,10 @@ from typing import Any, Dict, List, Optional
 from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db.models import Q, QuerySet
 
+from common.constants import (
+    SENSITIVITY_HIGH_CONFIDENTIAL_GRADES,
+    SENSITIVITY_HIGH_RESTRICTED_GRADES,
+)
 from correspondence.models import Correspondence, Case
 from dms.models import Document
 
@@ -44,12 +48,9 @@ class SearchService:
 
         visibility_filter |= Q(sensitivity__in=[Document.Sensitivity.PUBLIC, Document.Sensitivity.INTERNAL])
 
-        high_confidential_grades = {"MSS5", "MSS4", "MSS3", "MSS2", "MSS1", "EDCS", "MDCS"}
-        high_restricted_grades = {"MSS1", "EDCS", "MDCS"}
-
-        if user.grade_level in high_confidential_grades:
+        if user.grade_level in SENSITIVITY_HIGH_CONFIDENTIAL_GRADES:
             visibility_filter |= Q(sensitivity=Document.Sensitivity.CONFIDENTIAL)
-        if user.grade_level in high_restricted_grades:
+        if user.grade_level in SENSITIVITY_HIGH_RESTRICTED_GRADES:
             visibility_filter |= Q(sensitivity=Document.Sensitivity.RESTRICTED)
 
         # Published documents with public/internal sensitivity are generally accessible

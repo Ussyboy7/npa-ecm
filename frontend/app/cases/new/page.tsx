@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { createCase } from "@/lib/api/cases";
+import { PRIORITY_OPTIONS } from "@/lib/constants";
 import type { Case } from "@/lib/npa-structure";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
@@ -19,8 +20,6 @@ import { ArrowLeft, Save, Loader2, FileText } from "lucide-react";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { Separator } from "@/components/ui/separator";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,16 +41,11 @@ const caseTypeOptions = [
   { value: "general", label: "General" },
 ] as const;
 
-const priorityOptions = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "urgent", label: "Urgent" },
-] as const;
+const priorityOptions = PRIORITY_OPTIONS;
 
 const NewCasePage = () => {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, departments, offices } = useOrganization();
   const abortControllerRef = useRef<AbortController | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -202,7 +196,7 @@ const NewCasePage = () => {
         setFormData(draft);
         toast.success("Draft loaded");
       }
-    } catch (err) {
+    } catch (_err) {
       toast.error("Failed to load draft");
     }
   };

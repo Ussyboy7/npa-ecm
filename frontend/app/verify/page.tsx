@@ -8,7 +8,6 @@ import { Shield, Home, Search, Info, CheckCircle2, AlertTriangle, QrCode, FileTe
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { NPA_LOGO_URL, NPA_BRAND_NAME } from "@/lib/branding";
 
 export default function VerifyPage() {

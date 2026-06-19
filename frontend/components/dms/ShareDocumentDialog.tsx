@@ -1,7 +1,8 @@
 "use client";
+import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import {
   Dialog,
   DialogContent,
@@ -24,18 +25,16 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useCurrentUser } from "@/hooks/use-current-user";
 import type { DocumentRecord, DocumentPermission, PermissionAccess } from "@/lib/dms-storage";
 import type { User } from "@/lib/npa-structure";
 import { shareDocument, apiFetch, hasTokens } from "@/lib/dms-storage";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Search, Users, Building2, Users2, Globe, AlertTriangle, Loader2, X, FileText, Trash2, Edit2, History, FolderKanban, CheckCircle2, ArrowLeft, Shield, Mail, Send, MessageSquare, CheckCircle } from "lucide-react";
+import { Search, Users, Building2, Users2, AlertTriangle, Loader2, X, FileText, Trash2, History, FolderKanban, CheckCircle2, ArrowLeft, Shield, Mail, Send, MessageSquare, CheckCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
@@ -74,7 +73,6 @@ export const ShareDocumentDialog = ({
   initialView = 'share',
 }: ShareDocumentDialogProps) => {
   const { users, directorates, divisions, departments, offices, officeMemberships } = useOrganization();
-  const { currentUser } = useCurrentUser();
   const [note, setNote] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
@@ -99,14 +97,14 @@ export const ShareDocumentDialog = ({
   const [pendingShareAction, setPendingShareAction] = useState<(() => Promise<void>) | null>(null);
   const [showPermissionsView, setShowPermissionsView] = useState(false);
   const [showHistoryView, setShowHistoryView] = useState(false);
-  const [shareSection, setShareSection] = useState<'users' | 'org' | 'workspaces'>('users');
+  const [, setShareSection] = useState<'users' | 'org' | 'workspaces'>('users');
   
   // Share history and workspaces
   const [shareHistory, setShareHistory] = useState<ActivityLog[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
-  const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(false);
-  const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<Set<string>>(new Set());
+  const [, setIsLoadingWorkspaces] = useState(false);
+  const [, setSelectedWorkspaceIds] = useState<Set<string>>(new Set());
   const [searchWorkspaceQuery, setSearchWorkspaceQuery] = useState("");
   
   // Correspondence routing state
@@ -258,7 +256,7 @@ export const ShareDocumentDialog = ({
       if (saved) {
         setRecentRecipients(JSON.parse(saved));
       }
-    } catch (err) {
+    } catch {
       // Ignore
     }
   }, [open]);
@@ -274,7 +272,7 @@ export const ShareDocumentDialog = ({
       });
       localStorage.setItem(RECENT_RECIPIENTS_KEY, JSON.stringify(updated));
       setRecentRecipients(updated);
-    } catch (err) {
+    } catch {
       // Ignore
     }
   }, [recentRecipients]);
@@ -368,17 +366,6 @@ export const ShareDocumentDialog = ({
     return filtered;
   }, [shareableUsers, searchQuery, selectedSystemRoles]);
 
-  // Get unique system roles from users
-  const availableSystemRoles = useMemo(() => {
-    const roles = new Set<string>();
-    shareableUsers.forEach((user) => {
-      if (user.systemRole) {
-        roles.add(user.systemRole);
-      }
-    });
-    return Array.from(roles).sort();
-  }, [shareableUsers]);
-
   const filteredDirectorates = useMemo(() => {
     if (!searchDirectorateQuery.trim()) return directorates;
     const query = searchDirectorateQuery.toLowerCase();
@@ -405,7 +392,7 @@ export const ShareDocumentDialog = ({
     );
   }, [departments, searchDepartmentQuery, divisions]);
 
-  const filteredWorkspaces = useMemo(() => {
+  const _filteredWorkspaces = useMemo(() => {
     if (!searchWorkspaceQuery.trim()) return workspaces;
     const query = searchWorkspaceQuery.toLowerCase();
     return workspaces.filter((ws) =>
@@ -642,7 +629,7 @@ export const ShareDocumentDialog = ({
   }, [hasExistingAccess]);
 
   // Group divisions by directorate
-  const divisionsByDirectorate = useMemo(() => {
+  const _divisionsByDirectorate = useMemo(() => {
     const map = new Map<string, typeof divisions>();
     directorates.forEach((dir) => {
       const dirDivisions = divisions.filter((div) => div.directorateId === dir.id);
@@ -652,37 +639,6 @@ export const ShareDocumentDialog = ({
     });
     return map;
   }, [directorates, divisions]);
-
-  // Group departments by division
-  const departmentsByDivision = useMemo(() => {
-    const map = new Map<string, typeof departments>();
-    divisions.forEach((div) => {
-      const divDepartments = departments.filter((dept) => dept.divisionId === div.id);
-      if (divDepartments.length > 0) {
-        map.set(div.id, divDepartments);
-      }
-    });
-    return map;
-  }, [divisions, departments]);
-
-  // Get all division IDs for selected directorates
-  const selectedDivisionIdsFromDirectorates = useMemo(() => {
-    const ids = new Set<string>();
-    selectedDirectorateIds.forEach((dirId) => {
-      const dirDivisions = divisionsByDirectorate.get(dirId) || [];
-      dirDivisions.forEach((div) => ids.add(div.id));
-    });
-    return ids;
-  }, [selectedDirectorateIds, divisionsByDirectorate]);
-
-  const handleShareToAllClick = () => {
-    if (shareToAll) {
-      setShareToAll(false);
-      return;
-    }
-    // Show confirmation dialog
-    setShowShareAllConfirm(true);
-  };
 
   const handleConfirmShareToAll = async () => {
     if (!document) return;
@@ -736,11 +692,11 @@ export const ShareDocumentDialog = ({
           }
         }
       } else if (error instanceof Error) {
-        if ((error instanceof Error ? error.message : "Unknown error").includes('Network') || (error instanceof Error ? error.message : "Unknown error").includes('fetch')) {
+        if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('Network') || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('fetch')) {
           errorMessage = 'Network Error';
           errorDescription = 'Unable to connect to the server. Please check your internet connection.';
         } else {
-          errorDescription = (error instanceof Error ? error.message : "Unknown error");
+          errorDescription = (error instanceof Error ? error.message : ERROR_UNKNOWN);
         }
       }
       
@@ -821,21 +777,6 @@ export const ShareDocumentDialog = ({
 
     // Show review step before final submission
     setShowReviewStep(true);
-  };
-
-  // Final confirmation from review step
-  const handleConfirmShare = async () => {
-    setShowReviewStep(false);
-    const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
-    const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
-    const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
-    const dupCount = countDuplicatesForTargets(userIds, divisionIds, departmentIds);
-    if (dupCount > 0) {
-      setDuplicateCount(dupCount);
-      setShowDuplicateWarning(true);
-      return;
-    }
-    await performShare(userIds, divisionIds, departmentIds);
   };
 
   const performShare = async (
@@ -957,11 +898,11 @@ export const ShareDocumentDialog = ({
           }
         }
       } else if (error instanceof Error) {
-        if ((error instanceof Error ? error.message : "Unknown error").includes('Network') || (error instanceof Error ? error.message : "Unknown error").includes('fetch')) {
+        if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('Network') || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('fetch')) {
           errorMessage = 'Network Error';
           errorDescription = 'Unable to connect to the server. Please check your internet connection.';
         } else {
-          errorDescription = (error instanceof Error ? error.message : "Unknown error");
+          errorDescription = (error instanceof Error ? error.message : ERROR_UNKNOWN);
         }
       }
       
@@ -975,32 +916,12 @@ export const ShareDocumentDialog = ({
     }
   };
 
-  const toggleUser = (userId: string) => {
-    const newSet = new Set(selectedUserIds);
-    if (newSet.has(userId)) {
-      newSet.delete(userId);
-    } else {
-      newSet.add(userId);
-    }
-    setSelectedUserIds(newSet);
-  };
-
   const toggleAllUsers = () => {
     if (selectedUserIds.size === filteredUsers.length) {
       setSelectedUserIds(new Set());
     } else {
       setSelectedUserIds(new Set(filteredUsers.map((u) => u.id)));
     }
-  };
-
-  const toggleDirectorate = (dirId: string) => {
-    const newSet = new Set(selectedDirectorateIds);
-    if (newSet.has(dirId)) {
-      newSet.delete(dirId);
-    } else {
-      newSet.add(dirId);
-    }
-    setSelectedDirectorateIds(newSet);
   };
 
   const toggleAllDirectorates = () => {
@@ -1011,16 +932,6 @@ export const ShareDocumentDialog = ({
     }
   };
 
-  const toggleDivision = (divId: string) => {
-    const newSet = new Set(selectedDivisionIds);
-    if (newSet.has(divId)) {
-      newSet.delete(divId);
-    } else {
-      newSet.add(divId);
-    }
-    setSelectedDivisionIds(newSet);
-  };
-
   const toggleAllDivisions = () => {
     if (selectedDivisionIds.size === filteredDivisions.length) {
       setSelectedDivisionIds(new Set());
@@ -1029,39 +940,11 @@ export const ShareDocumentDialog = ({
     }
   };
 
-  const toggleDepartment = (deptId: string) => {
-    const newSet = new Set(selectedDepartmentIds);
-    if (newSet.has(deptId)) {
-      newSet.delete(deptId);
-    } else {
-      newSet.add(deptId);
-    }
-    setSelectedDepartmentIds(newSet);
-  };
-
   const toggleAllDepartments = () => {
     if (selectedDepartmentIds.size === filteredDepartments.length) {
       setSelectedDepartmentIds(new Set());
     } else {
       setSelectedDepartmentIds(new Set(filteredDepartments.map((d) => d.id)));
-    }
-  };
-
-  const toggleWorkspace = (workspaceId: string) => {
-    const newSet = new Set(selectedWorkspaceIds);
-    if (newSet.has(workspaceId)) {
-      newSet.delete(workspaceId);
-    } else {
-      newSet.add(workspaceId);
-    }
-    setSelectedWorkspaceIds(newSet);
-  };
-
-  const toggleAllWorkspaces = () => {
-    if (selectedWorkspaceIds.size === filteredWorkspaces.length) {
-      setSelectedWorkspaceIds(new Set());
-    } else {
-      setSelectedWorkspaceIds(new Set(filteredWorkspaces.map((ws) => ws.id)));
     }
   };
 

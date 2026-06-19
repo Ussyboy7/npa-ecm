@@ -1,7 +1,7 @@
 "use client";
 
 import { Component, ReactNode } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle, RefreshCw } from "lucide-react";

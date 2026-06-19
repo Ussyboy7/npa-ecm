@@ -147,6 +147,42 @@ function ApprovalsForm() {
 
   // Reset page when filters change - will be added after pagination is defined
 
+  const getFilterParams = useCallback(() => {
+    const params = new URLSearchParams({
+      action_type: 'approve',
+      has_seal: 'true',
+      ordering: '-timestamp',
+    });
+    if (debouncedSearch) {
+      params.append('search', debouncedSearch);
+    }
+    if (filterStatus !== 'all') {
+      const isValid = filterStatus === 'valid' ? 'true' : 'false';
+      params.append('is_valid', isValid);
+    }
+    if (dateRangeFilter === 'last30') {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 30);
+      params.append('date_from', fromDate.toISOString().split('T')[0]);
+    } else if (dateRangeFilter === 'last90') {
+      const fromDate = new Date();
+      fromDate.setDate(fromDate.getDate() - 90);
+      params.append('date_from', fromDate.toISOString().split('T')[0]);
+    } else if (dateRangeFilter === 'thisYear') {
+      const fromDate = new Date();
+      fromDate.setMonth(0, 1);
+      params.append('date_from', fromDate.toISOString().split('T')[0]);
+    } else if (dateRangeFilter === 'custom') {
+      if (customDateFrom) {
+        params.append('date_from', customDateFrom);
+      }
+      if (customDateTo) {
+        params.append('date_to', customDateTo);
+      }
+    }
+    return params;
+  }, [debouncedSearch, filterStatus, dateRangeFilter, customDateFrom, customDateTo]);
+
   const loadApprovals = useCallback(async (page: number = 1, pageSize: number = 25, soft = false) => {
     try {
       if (!soft) {
@@ -154,46 +190,9 @@ function ApprovalsForm() {
       }
       setError(null);
       // Use backend filtering for executive approvals with seals
-      const params = new URLSearchParams({
-        action_type: 'approve',
-        has_seal: 'true', // Backend filter for minutes with valid seals
-        page: String(page),
-        page_size: String(pageSize),
-        ordering: '-timestamp', // Most recent first
-      });
-      
-      // Add server-side search filter
-      if (debouncedSearch) {
-        params.append('search', debouncedSearch);
-      }
-      
-      // Add server-side status filter (is_valid)
-      if (filterStatus !== 'all') {
-        const isValid = filterStatus === 'valid' ? 'true' : 'false';
-        params.append('is_valid', isValid);
-      }
-      
-      // Add server-side date range filter
-      if (dateRangeFilter === 'last30') {
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 30);
-        params.append('date_from', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'last90') {
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 90);
-        params.append('date_from', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'thisYear') {
-        const fromDate = new Date();
-        fromDate.setMonth(0, 1);
-        params.append('date_from', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'custom') {
-        if (customDateFrom) {
-          params.append('date_from', customDateFrom);
-        }
-        if (customDateTo) {
-          params.append('date_to', customDateTo);
-        }
-      }
+      const params = getFilterParams();
+      params.append('page', String(page));
+      params.append('page_size', String(pageSize));
       
       const response = await apiFetch<Record<string, unknown> | Record<string, unknown>[] | { results: Record<string, unknown>[] }>(`/correspondence/minutes/?${params.toString()}`);
       const minutes: Record<string, unknown>[] = Array.isArray(response) ? response : (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) ? response.results : [];
@@ -265,7 +264,7 @@ function ApprovalsForm() {
       }
       setRefreshing(false);
     }
-  }, [debouncedSearch, filterStatus, dateRangeFilter, customDateFrom, customDateTo]);
+  }, [getFilterParams]);
 
   // Store loadApprovals ref
   useEffect(() => {
@@ -285,45 +284,8 @@ function ApprovalsForm() {
     setExporting(true);
     try {
       // Fetch all approvals for export using backend filter with server-side filtering
-      const params = new URLSearchParams({
-        action_type: 'approve',
-        has_seal: 'true', // Use backend filter
-        page_size: '1000', // Reasonable limit for export
-        ordering: '-timestamp',
-      });
-      
-      // Add server-side search filter
-      if (debouncedSearch) {
-        params.append('search', debouncedSearch);
-      }
-      
-      // Add server-side status filter
-      if (filterStatus !== 'all') {
-        const isValid = filterStatus === 'valid' ? 'true' : 'false';
-        params.append('is_valid', isValid);
-      }
-      
-      // Add server-side date range filter
-      if (dateRangeFilter === 'last30') {
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 30);
-        params.append('date_from', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'last90') {
-        const fromDate = new Date();
-        fromDate.setDate(fromDate.getDate() - 90);
-        params.append('date_from', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'thisYear') {
-        const fromDate = new Date();
-        fromDate.setMonth(0, 1);
-        params.append('date_from', fromDate.toISOString().split('T')[0]);
-      } else if (dateRangeFilter === 'custom') {
-        if (customDateFrom) {
-          params.append('date_from', customDateFrom);
-        }
-        if (customDateTo) {
-          params.append('date_to', customDateTo);
-        }
-      }
+      const params = getFilterParams();
+      params.append('page_size', '1000'); // Reasonable limit for export
       
       const response = await apiFetch<Record<string, unknown> | Record<string, unknown>[] | { results: Record<string, unknown>[] }>(`/correspondence/minutes/?${params.toString()}`);
       const minutes: Record<string, unknown>[] = Array.isArray(response) ? response : (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) ? response.results : [];
@@ -432,7 +394,7 @@ function ApprovalsForm() {
 
   // With server-side pagination, filteredApprovals already contains the current page
   // Client-side filtering is applied to the current page's data only
-  const paginatedApprovals = useMemo(() => {
+  const _paginatedApprovals = useMemo(() => {
     return filteredApprovals;
   }, [filteredApprovals]);
 

@@ -1,7 +1,6 @@
 import { apiFetch } from '../api-client';
 import { logError } from '@/lib/client-logger';
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+import { isRecord } from '@/lib/type-utils';
 
 export interface ApiSignatureTemplate {
   id: string;
@@ -66,7 +65,7 @@ export async function getSignatureTemplates(params?: {
   template_type?: 'approval' | 'minute' | 'forward' | 'treatment';
   style?: 'stamp' | 'formal' | 'minimal';
   default_apply?: boolean;
-}): Promise<SignatureTemplate[]> {
+}, signal?: AbortSignal): Promise<SignatureTemplate[]> {
   try {
     const queryParams = new URLSearchParams();
     if (params?.template_type) queryParams.append('template_type', params.template_type);
@@ -74,7 +73,8 @@ export async function getSignatureTemplates(params?: {
     if (params?.default_apply !== undefined) queryParams.append('default_apply', String(params.default_apply));
 
     const response = await apiFetch<unknown>(
-      `/accounts/signature-templates/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`
+      `/accounts/signature-templates/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
+      { signal }
     );
     
     const templates = Array.isArray(response)
@@ -92,10 +92,11 @@ export async function getSignatureTemplates(params?: {
 /**
  * Get user signature preferences
  */
-export async function getUserSignaturePreferences(): Promise<UserSignaturePreferences | null> {
+export async function getUserSignaturePreferences(signal?: AbortSignal): Promise<UserSignaturePreferences | null> {
   try {
     const response = await apiFetch<ApiUserSignaturePreferences>(
-      '/accounts/signature-preferences/my_preferences/'
+      '/accounts/signature-preferences/my_preferences/',
+      { signal }
     );
     return mapApiPreferencesToFrontend(response);
   } catch (error: unknown) {

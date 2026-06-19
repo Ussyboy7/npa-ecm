@@ -266,19 +266,13 @@ function MyDocumentsForm() {
     router.push(`/documents?tab=${value}`, { scroll: false });
   };
 
-  if (!currentUser?.id) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
-          <LoadingState message="Loading documents…" />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
     <DashboardLayout>
       <div className="container mx-auto p-6 space-y-6">
+        {!currentUser?.id ? (
+          <LoadingState message="Loading documents…" />
+        ) : (
+          <>
         {/* Header */}
         <div className="flex justify-between items-start">
           <div>
@@ -507,6 +501,8 @@ function MyDocumentsForm() {
             />
           </>
         )}
+        </>
+      )}
       </div>
     </DashboardLayout>
   );

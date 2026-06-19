@@ -19,7 +19,6 @@ import {
   DocumentRecord,
   queryDocuments,
 } from '@/lib/dms-storage';
-import { type User } from '@/lib/npa-structure';
 import { formatDate } from '@/lib/correspondence-helpers';
 import { FileText, Hash, Layers, Filter, Calendar } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';

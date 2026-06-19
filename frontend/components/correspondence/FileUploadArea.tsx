@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Upload, File, X, Eye, FileText, Image as ImageIcon, FileType } from 'lucide-react';
 import { useFileUpload, type UploadedFile } from '@/hooks/use-file-upload';
+import Image from 'next/image';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 
 interface FileUploadAreaProps {
@@ -165,10 +166,12 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
                     className="relative h-16 w-16 rounded border border-border overflow-hidden flex-shrink-0 hover:opacity-80 transition-opacity group"
                     disabled={disabled || !canPreview}
                   >
-                    <img 
+                    <Image 
                       src={file.preview} 
                       alt={file.name} 
-                      className="h-full w-full object-cover" 
+                      fill
+                      className="object-cover" 
+                      unoptimized
                     />
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                       <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -272,10 +275,13 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
                 </div>
               ) : previewFile && isImage(previewFile) && previewFile.preview ? (
                 <div className="flex items-center justify-center p-4">
-                  <img 
+                  <Image 
                     src={previewFile.preview} 
                     alt={previewFile.name}
+                    width={1200}
+                    height={900}
                     className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                    unoptimized
                   />
                 </div>
               ) : previewFile && isPDF(previewFile) && pdfBlobUrl ? (

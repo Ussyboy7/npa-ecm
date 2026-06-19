@@ -21,9 +21,7 @@ const logToConsole = (level: LogLevel, args: unknown[]) => {
       ? console.error
       : level === 'warn'
         ? console.warn
-        : level === 'debug'
-          ? console.debug
-          : console.info;
+        : undefined;
   target?.(...args);
 };
 
@@ -66,7 +64,7 @@ const flushLogs = async () => {
         loggingDisabled = true;
       }
     }
-  } catch (error: unknown) {
+  } catch (_error: unknown) {
     consecutiveFailures++;
     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       loggingDisabled = true;

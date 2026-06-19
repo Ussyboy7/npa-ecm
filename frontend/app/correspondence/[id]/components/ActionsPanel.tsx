@@ -24,7 +24,7 @@ import type { Correspondence, Minute } from "@/lib/npa-structure";
 interface ActionsPanelProps {
   correspondence?: Correspondence;
   minutes?: Minute[];
-  activeUser?: any;
+  activeUser?: unknown;
   onOpenParallelRouteModal?: () => void;
   onOpenLinkCaseModal?: () => void;
   isCompleted?: boolean;
@@ -34,18 +34,18 @@ interface ActionsPanelProps {
   turnRestrictedDisabled?: boolean;
   completionPackageUrl?: string | null;
   completionGeneratedAt?: string | null;
-  activeDelegation?: any;
-  organizationUsers?: any[];
-  offices?: any[];
-  officeMemberships?: any[];
-  lookupUser?: (id: string) => any;
+  activeDelegation?: unknown;
+  organizationUsers?: unknown[];
+  offices?: unknown[];
+  officeMemberships?: unknown[];
+  lookupUser?: (id: string) => unknown;
   onOpenMinuteModal?: () => void;
   onOpenTreatmentModal?: () => void;
   onOpenCompletionModal?: () => void;
   onOpenDelegateModal?: () => void;
   onDownloadCompletionPackage?: (url: string, filename: string) => Promise<void>;
-  onSyncFromApi?: () => Promise<any>;
-  [key: string]: any;
+  onSyncFromApi?: () => Promise<unknown>;
+  [key: string]: unknown;
 }
 
 export function ActionsPanel({
@@ -70,7 +70,7 @@ export function ActionsPanel({
   onOpenCompletionModal,
   onOpenDelegateModal,
   onDownloadCompletionPackage,
-  onSyncFromApi,
+  _onSyncFromApi,
 }: ActionsPanelProps) {
   if (!correspondence) {
     return (

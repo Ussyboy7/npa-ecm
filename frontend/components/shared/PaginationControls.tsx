@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
-import { usePagination, type UsePaginationReturn } from '@/hooks/use-pagination';
+import { type UsePaginationReturn } from '@/hooks/use-pagination';
 import { cn } from '@/lib/utils';
 
 export interface PaginationControlsProps {

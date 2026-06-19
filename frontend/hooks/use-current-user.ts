@@ -1,14 +1,13 @@
 "use client";
 
 import { logWarn } from '@/lib/client-logger';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { isRecord } from "@/lib/type-utils";
 import type { User } from "@/lib/npa-structure";
 import { OrganizationContext } from "@/contexts/OrganizationContext";
 import { apiFetch, clearTokens, hasOriginalTokens, hasTokens } from "@/lib/api-client";
 
 const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
 const toOptionalString = (value: unknown): string | undefined => {
   if (value === null || value === undefined) return undefined;
@@ -46,15 +45,19 @@ const mapApiUserToUser = (data: Record<string, unknown>): User => {
     division: toOptionalString(data.division ?? data.division_id),
     department: toOptionalString(data.department ?? data.department_id),
     systemRole: roleName, // Use role name for display
-    avatar: undefined,
+    avatar: typeof data.avatar === "string" ? data.avatar : undefined,
     active: typeof data.is_active === "boolean" ? data.is_active : true,
     isSuperuser: typeof data.is_superuser === "boolean" ? data.is_superuser : false,
+    phone: toOptionalString(data.phone),
+    bio: toOptionalString(data.bio),
+    jobTitle: toOptionalString(data.job_title),
+    profilePhoto: typeof data.profile_photo === "string" ? data.profile_photo : undefined,
     rolePermissions,
   };
 };
 
 // Singleton state for current user - only one fetch should happen regardless of how many components use the hook
-let globalUserState: {
+const globalUserState: {
   user: User | null;
   hydrated: boolean;
   loading: boolean;
@@ -65,34 +68,7 @@ let globalUserState: {
 };
 
 let globalFetchPromise: Promise<User | null> | null = null;
-let globalSubscribers = new Set<(user: User | null, hydrated: boolean) => void>();
-
-/**
- * Seed current user from server bootstrap to avoid extra /auth/me/ call on first load.
- * Call early (e.g. useLayoutEffect in AuthScopedProviders) when bootstrap user is available.
- */
-export const seedFromBootstrapUser = (raw: Record<string, unknown> | null | undefined): void => {
-  if (!raw || typeof raw !== "object") return;
-  if (!hasTokens()) return;
-  const user = mapApiUserToUser(raw);
-  globalUserState.user = user;
-  globalUserState.hydrated = true;
-  globalUserState.loading = false;
-  globalFetchPromise = null;
-  globalSubscribers.forEach((sub) => sub(user, true));
-};
-
-// Allow external modules to subscribe to current user changes without using the hook
-export const subscribeToCurrentUser = (cb: (user: User | null, hydrated: boolean) => void) => {
-  // Call back immediately with current snapshot
-  try {
-    cb(globalUserState.user, globalUserState.hydrated);
-  } catch (e) {
-    // swallow subscriber exceptions to avoid breaking registration
-  }
-  globalSubscribers.add(cb);
-  return () => globalSubscribers.delete(cb);
-};
+const globalSubscribers = new Set<(user: User | null, hydrated: boolean) => void>();
 
 export const useCurrentUser = () => {
   const organization = useContext(OrganizationContext);
@@ -235,10 +211,10 @@ export const useCurrentUser = () => {
     await loadCurrentUser();
   }, [loadCurrentUser]);
 
-  return {
+  return useMemo(() => ({
     currentUser: resolvedUser,
     hydrated,
     refresh,
     isImpersonating: hasOriginalTokens(),
-  };
+  }), [resolvedUser, hydrated, refresh]);
 };

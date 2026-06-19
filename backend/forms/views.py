@@ -1,6 +1,6 @@
 """Views for forms app."""
 
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -8,6 +8,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.http import HttpResponse
 
+from common.permissions import IsSystemAdminRole
 from forms.models import FormTemplate, FormSubmission
 from forms.serializers import (
     FormTemplateSerializer,
@@ -24,33 +25,12 @@ from forms.signature_serializers import (
 )
 
 
-class IsAdminOrReadOnly(permissions.BasePermission):
-    """Allow read access to all authenticated users, but write access only to admins (MD/ED/GM)."""
-
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        
-        # Superusers always have access
-        if request.user.is_superuser:
-            return True
-        
-        # Read operations are allowed for all authenticated users
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        
-        # Write operations require admin role (MD, ED, GM)
-        admin_roles = ["MD", "ED", "GM"]
-        user_role = getattr(request.user, "system_role", None)
-        return user_role in admin_roles
-
-
 class FormTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for managing form templates."""
 
     queryset = FormTemplate.objects.all()
     serializer_class = FormTemplateSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
+    permission_classes = [IsAuthenticated, IsSystemAdminRole]
     pagination_class = None  # Disable pagination for form templates
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["category", "is_active"]

@@ -23,6 +23,7 @@ import { FileText, CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
+import { SENSITIVITY_DETAILS, SENSITIVITY_VALUES } from '@/lib/constants';
 import { updateDocumentMetadata, queryDocuments, type DocumentRecord, type DocumentType } from '@/lib/dms-storage';
 import type { Division, Department } from '@/lib/npa-structure';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -106,7 +107,7 @@ export const DocumentMetadataEditDialog = ({
           doc.tags.forEach((tag) => allTags.add(tag.toLowerCase()));
         });
         setTagSuggestions(Array.from(allTags).slice(0, 20).sort());
-      } catch (error: unknown) {
+      } catch (_error: unknown) {
         // Silently fail - tag suggestions are optional
       }
     };
@@ -170,7 +171,7 @@ export const DocumentMetadataEditDialog = ({
             return next;
           });
         }
-      } catch (error: unknown) {
+      } catch (_error: unknown) {
         // Silently fail - duplicate check is optional
       } finally {
         setCheckingReferenceNumber(false);
@@ -477,30 +478,17 @@ export const DocumentMetadataEditDialog = ({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="public">
-                        <div className="flex flex-col">
-                          <span>Public</span>
-                          <span className="text-xs text-muted-foreground">All authenticated users • May be shareable externally</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="internal">
-                        <div className="flex flex-col">
-                          <span>Internal</span>
-                          <span className="text-xs text-muted-foreground">Shared with specific departments/divisions/units</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="confidential">
-                        <div className="flex flex-col">
-                          <span>Confidential</span>
-                          <span className="text-xs text-muted-foreground">MSS2+ (MSS2, MSS3, MSS4, MSS5, MSS1, EDCS, MDCS)</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="restricted">
-                        <div className="flex flex-col">
-                          <span>Restricted</span>
-                          <span className="text-xs text-muted-foreground">MSS1, EDCS, MDCS only</span>
-                        </div>
-                      </SelectItem>
+                      {SENSITIVITY_VALUES.map((value) => {
+                        const details = SENSITIVITY_DETAILS[value];
+                        return (
+                          <SelectItem key={value} value={value}>
+                            <div className="flex flex-col">
+                              <span>{details.label}</span>
+                              <span className="text-xs text-muted-foreground">{details.description}</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   {metadataDraft.sensitivity === 'public' && (
@@ -716,7 +704,7 @@ export const DocumentMetadataEditDialog = ({
                                   key={tag}
                                   onSelect={() => {
                                     const currentTags = metadataDraft.tags.split(',').map(t => t.trim()).filter(Boolean);
-                                    const lastTag = currentTags.pop() || '';
+                                    const _lastTag = currentTags.pop() || '';
                                     const newTags = [...currentTags, tag].join(', ');
                                     setMetadataDraft((prev) => ({ ...prev, tags: newTags }));
                                     setHasUnsavedChanges(true);

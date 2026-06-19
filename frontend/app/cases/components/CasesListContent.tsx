@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { getCases, type CaseQueryParams } from "@/lib/api/cases";
+import { PRIORITY_OPTIONS } from "@/lib/constants";
 import type { Case } from "@/lib/npa-structure";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { toast } from "sonner";
@@ -29,7 +30,6 @@ import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 import { useScopeChecks } from "@/hooks/use-scope-checks";
 import { useRoleChecks } from "@/hooks/use-role-checks";
-import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { ListRowCard } from "@/components/shared/ListRowCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingState } from "@/components/shared/LoadingState";
@@ -79,10 +79,7 @@ const caseTypeOptions = [
 
 const priorityOptions = [
   { value: "all", label: "All Priorities" },
-  { value: "urgent", label: "Urgent" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
+  ...PRIORITY_OPTIONS,
 ] as const;
 
 const getPriorityBadgeVariant = (priority: Case["priority"]) => {
@@ -129,8 +126,8 @@ interface CasesListContentProps {
 
 export function CasesListContent({ scope, title, description }: CasesListContentProps) {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
-  const { divisions, departments, offices, officeMemberships } = useOrganization();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
+  const {divisions, departments: _departments, offices, officeMemberships } = useOrganization();
   const abortControllerRef = useRef<AbortController | null>(null);
   
   // Get user's office IDs for scope filtering

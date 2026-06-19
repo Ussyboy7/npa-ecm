@@ -1,16 +1,16 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logInfo } from '@/lib/client-logger';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Link, ExternalLink, Calendar, User as UserIcon, Building2, ArrowUp, ArrowDown, RefreshCw, MessageSquare, ChevronDown, ChevronUp, Clock, Send, Users } from 'lucide-react';
+import { Link, ExternalLink, Calendar, User as UserIcon, Building2, ArrowUp, ArrowDown, RefreshCw, ChevronDown, ChevronUp, Clock, Send, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
-import type { User, Division, Department } from '@/lib/npa-structure';
+import type { User } from '@/lib/npa-structure';
 
 interface RelatedCorrespondenceCardProps {
   relatedCorrespondence: Array<{
@@ -83,7 +83,7 @@ export const RelatedCorrespondenceCard = ({
     try {
       await onRefresh();
       toast.success('Related correspondence refreshed');
-    } catch (error: unknown) {
+    } catch {
       toast.error('Failed to refresh related correspondence');
     } finally {
       setIsRefreshing(false);
@@ -158,7 +158,7 @@ export const RelatedCorrespondenceCard = ({
               });
               
               const createdBy = userLookup.get(correspondence.createdById ?? '');
-              const currentApprover = userLookup.get(correspondence.currentApproverId ?? '');
+              const _currentApprover = userLookup.get(correspondence.currentApproverId ?? '');
               const divisionName = correspondence.divisionId
                 ? divisionLookup.get(correspondence.divisionId)
                 : undefined;

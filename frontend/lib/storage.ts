@@ -2,6 +2,7 @@ import { logError } from '@/lib/client-logger';
 // localStorage utilities for data persistence
 
 import { Correspondence, Minute } from './npa-structure';
+import type { DraftFileMetadata, Draft } from './api/drafts';
 
 export const STORAGE_KEYS = {
   CORRESPONDENCE: 'npa_correspondence',
@@ -26,25 +27,7 @@ export const saveToStorage = (key: string, value: unknown) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
-export interface DraftFileMetadata {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-}
-
-export interface Draft {
-  id: string;
-  correspondenceId: string;
-  type: 'minute' | 'treatment';
-  content: string;
-  subject?: string;
-  forwardTo?: string;
-  onBehalfOf?: string;
-  actionType?: 'minute' | 'approve';
-  timestamp: string;
-  files?: DraftFileMetadata[]; // File metadata for uploaded files
-}
+export type { DraftFileMetadata, Draft };
 
 // Correspondence operations
 export const saveCorrespondence = (correspondence: Correspondence[]) => {

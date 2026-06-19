@@ -51,11 +51,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+
+
 import { cn } from "@/lib/utils";
 
 type EntityType = "directorate" | "division" | "department";

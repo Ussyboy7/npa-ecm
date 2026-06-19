@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import {
   DndContext,
   closestCenter,
@@ -82,7 +82,7 @@ export function WorkflowStepsBuilder({
   const [formOpen, setFormOpen] = useState(false);
   const [editingStep, setEditingStep] = useState<WorkflowStep | null>(null);
   const [deletingStepId, setDeletingStepId] = useState<string | null>(null);
-  const [isReordering, setIsReordering] = useState(false);
+  const [_isReordering, setIsReordering] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),

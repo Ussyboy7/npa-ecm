@@ -9,10 +9,16 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { Scan, Upload, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { createDocument, createDocumentVersion } from '@/lib/dms-storage';
+import { createDocument } from '@/lib/dms-storage';
 import { processOCR } from '@/lib/capture-storage';
 import { logError } from '@/lib/client-logger';
 import { useRouter } from 'next/navigation';
+import {
+  MIME_TYPE_PDF,
+  MIME_TYPE_PNG,
+  MIME_TYPE_JPEG,
+  MIME_TYPE_TIFF,
+} from '@/lib/file-types';
 
 interface ScanDialogProps {
   open: boolean;
@@ -21,11 +27,10 @@ interface ScanDialogProps {
 
 const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30MB
 const SCAN_ALLOWED_TYPES = [
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/tiff',
+  MIME_TYPE_PDF,
+  MIME_TYPE_PNG,
+  MIME_TYPE_JPEG,
+  MIME_TYPE_TIFF,
 ];
 
 export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
@@ -33,7 +38,7 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scannedFile, setScannedFile] = useState<File | null>(null);
-  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [_documentId, setDocumentId] = useState<string | null>(null);
   const [scanMode, setScanMode] = useState<'manual' | 'scanner'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);

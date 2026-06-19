@@ -9,7 +9,6 @@ export interface ScopeChecks {
   userDepartmentIds: string[];
   userDivisionIds: string[];
   userDirectorateIds: string[];
-  hasOfficeMembership: boolean;
 }
 
 /**
@@ -27,7 +26,6 @@ export function useScopeChecks(): ScopeChecks {
         userDepartmentIds: [],
         userDivisionIds: [],
         userDirectorateIds: [],
-        hasOfficeMembership: false,
       };
     }
 
@@ -60,15 +58,11 @@ export function useScopeChecks(): ScopeChecks {
       userDirectorateIds.push(currentUser.directorate);
     }
 
-    // Check if user has office membership (will be checked separately in sidebar)
-    const hasOfficeMembership = false; // This will be checked in sidebar with officeMemberships
-
     return {
       caseScope,
       userDepartmentIds,
       userDivisionIds,
       userDirectorateIds,
-      hasOfficeMembership,
     };
   }, [currentUser, isMD, isED, isGM, isAGM]);
 }

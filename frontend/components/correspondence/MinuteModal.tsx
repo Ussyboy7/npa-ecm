@@ -1,8 +1,8 @@
 "use client";
+import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import Link from 'next/link';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,13 +17,8 @@ import {
   deleteDraft,
 } from '@/lib/storage';
 import type { Minute } from '@/lib/npa-structure';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+
+
 import { Input } from '@/components/ui/input';
 
 import { Badge } from '@/components/ui/badge';
@@ -40,19 +35,14 @@ import {
   MessageSquare,
   Send,
   Save,
-  User as UserIcon,
   ArrowDown,
   ArrowUp,
   CheckCircle,
   FileText,
   Image as ImageIcon,
   AlertCircle,
-  Search,
-  Building2,
   Loader2,
-  X,
   ChevronDown,
-  ChevronUp,
   Shield,
   Clock,
 } from 'lucide-react';
@@ -60,7 +50,6 @@ import {
   getDivisionById,
   getDepartmentById,
   getDirectorateById,
-  GRADE_LEVELS,
   type Correspondence,
   type DistributionRecipient,
   type User,
@@ -70,17 +59,14 @@ import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
 import { DistributionSelector } from './DistributionSelector';
 import { RoutingSection } from './RoutingSection';
-import { ensureDefaultSignatureTemplates, type SignatureTemplate, type UserSignaturePreferences } from '@/lib/signature-storage';
+import { type SignatureTemplate, type UserSignaturePreferences } from '@/lib/signature-storage';
 import { useSignature } from '@/hooks/use-signature';
-import { SignatureSection } from './SignatureSection';
 import {
   getTemplatesForUser,
   createTemplate as createDocumentTemplate,
   deleteTemplate,
   type DocumentTemplate,
 } from '@/lib/template-storage';
-import { TemplateManager } from './TemplateManager';
-import { MinuteTextSection } from './MinuteTextSection';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
@@ -100,7 +86,7 @@ interface MinuteModalProps {
 }
 
 const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: initialDirection }: MinuteModalProps) => {
-  const { addMinute, updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
+  const {addMinute: _addMinute, updateCorrespondence: _updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [minuteText, setMinuteText] = useState('');
   const [minuteTextError, setMinuteTextError] = useState('');
@@ -108,7 +94,7 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [purpose, setPurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
   const [forwardTo, setForwardTo] = useState('');
   const [forwardToError, setForwardToError] = useState('');
-  const [characterCount, setCharacterCount] = useState(0);
+  const [_characterCount, setCharacterCount] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -132,9 +118,9 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
 const [minuteTemplates, setMinuteTemplates] = useState<DocumentTemplate[]>([]);
 const [selectedMinuteTemplateId, setSelectedMinuteTemplateId] = useState<string | null>(null);
 const [newTemplateName, setNewTemplateName] = useState('');
-const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
+const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
-  const defaultUserSignaturePreferences: UserSignaturePreferences = {
+  const _defaultUserSignaturePreferences: UserSignaturePreferences = {
     templateOverrides: {},
     autoApplyForMinutes: false,
   };
@@ -147,7 +133,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     autoLoad: true,
   });
 
-  const allDirectoryUsers = organizationUsers;
+  const _allDirectoryUsers = organizationUsers;
   const activeDirectoryUsers = useMemo(
     () => organizationUsers.filter((user) => user.active !== false),
     [organizationUsers],
@@ -232,13 +218,13 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   );
 
   // Filtered divisions for office filter (based on selected directorate)
-  const filteredOfficeDivisions = useMemo(() => {
+  const _filteredOfficeDivisions = useMemo(() => {
     if (officeFilterDirectorate === 'all') return divisions;
     return divisions.filter(d => d.directorateId === officeFilterDirectorate);
   }, [divisions, officeFilterDirectorate]);
 
   // Filtered offices based on directorate, division, and search
-  const filteredOfficeOptions = useMemo(() => {
+  const _filteredOfficeOptions = useMemo(() => {
     let result = [...officeOptions];
 
     if (officeFilterDirectorate !== 'all') {
@@ -637,7 +623,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     setCharacterCount(text.length);
   };
 
-  const handleApplyMinuteTemplate = () => {
+  const _handleApplyMinuteTemplate = () => {
     if (!selectedMinuteTemplate) {
       toast.error('Select a template to insert.');
       return;
@@ -700,7 +686,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
     }
   };
 
-  const handleDeleteSelectedMinuteTemplate = async () => {
+  const _handleDeleteSelectedMinuteTemplate = async () => {
     if (!selectedMinuteTemplate || !canDeleteSelectedTemplate) {
       toast.error('Only custom templates can be removed.');
       return;
@@ -1189,7 +1175,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
 
           // Create distribution entries (for all recipients, including action users)
           const distributionResults = await Promise.all(
-            newDistributionEntries.map(async (recipient, index) => {
+            newDistributionEntries.map(async (recipient, _index) => {
               // For action users, link to their parallel minute using the map
               let linkedMinuteId = createdMinuteId;
               if (recipient.type === 'user' && recipient.purpose === 'action' && recipient.userId) {
@@ -1239,7 +1225,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           logInfo('[MinuteModal] Distribution created successfully', distributionResults);
           if (distributionResults.length > 0) {
             const actionCount = actionUsers.length;
-            const infoCount = otherDistribution.length;
+            const _infoCount = otherDistribution.length;
             let message = `Distribution added: ${distributionResults.length} recipient(s) notified.`;
             if (actionCount > 0) {
               message += ` ${actionCount} parallel routing branch(es) created.`;
@@ -1250,7 +1236,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
           logError('[MinuteModal] Failed to create distribution/parallel routing', error);
           const errorMessage = (error instanceof Error ? error.message : null) || 
                                (typeof error === 'object' && error !== null && 'detail' in error ? String(error.detail) : null) || 
-                               'Unknown error';
+                               ERROR_UNKNOWN;
           const errorResponse = typeof error === 'object' && error !== null && 'response' in error ? error.response : undefined;
           logError('[MinuteModal] Distribution error details', {
             error,
@@ -1307,7 +1293,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
       });
     } catch (error: unknown) {
       // Don't show error if request was cancelled
-      if (error instanceof Error && (error.name === 'AbortError' || (error instanceof Error ? error.message : "Unknown error").includes('aborted'))) {
+      if (error instanceof Error && (error.name === 'AbortError' || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('aborted'))) {
         return;
       }
       logError('Failed to record minute', error);
@@ -1380,7 +1366,7 @@ const [templateSectionOpen, setTemplateSectionOpen] = useState(false);
   const templateTypeForAction: SignatureTemplate['templateType'] = actionType === 'approve' ? 'approval' : 'minute';
   const relevantTemplates = signatureTemplates.filter(template => template.templateType === templateTypeForAction);
   const selectedTemplate = selectedTemplateId ? signatureTemplates.find(template => template.id === selectedTemplateId) ?? null : null;
-  const templatePreview = selectedTemplate && applySignature
+  const _templatePreview = selectedTemplate && applySignature
     ? renderTemplateText(selectedTemplate, getTemplateContext())
     : '';
 

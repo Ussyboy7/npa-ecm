@@ -47,10 +47,22 @@ jobs:
       - name: Install Node.js dependencies (workspace root)
         run: npm ci
 
+      - name: Cache Next.js build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('frontend/package-lock.json', 'frontend/**/package.json', 'frontend/*.config.*', 'frontend/**/*.config.*') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-
+
       - name: Run Frontend Linting
         run: cd frontend && npm run lint
 
       - name: Run Frontend Type Checking
+        run: cd frontend && npm run type-check
+
+      - name: Run Frontend Build
         run: cd frontend && npm run build
 
       - name: Run Backend Linting
@@ -104,7 +116,7 @@ jobs:
   # Build and Test Docker Images
   build-and-test:
     runs-on: ubuntu-latest
-    needs: [quality-assurance, security-scan]
+    needs: quality-assurance
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -150,8 +162,8 @@ jobs:
           push: false
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
       - name: Build Frontend Docker image
         uses: docker/build-push-action@v5
@@ -161,18 +173,55 @@ jobs:
           push: false
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
       - name: Test Docker Compose Staging
         run: |
           docker compose -f docker-compose.stag.yml config --quiet
           echo "Docker Compose staging configuration is valid"
 
+  # Bundle size analysis
+  bundle-analysis:
+    runs-on: ubuntu-latest
+    needs: quality-assurance
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('frontend/package-lock.json', 'frontend/**/package.json', 'frontend/*.config.*', 'frontend/**/*.config.*') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-
+
+      - name: Analyze frontend bundle
+        run: cd frontend && npm run analyze
+
+      - name: Upload bundle analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-analysis
+          path: |
+            frontend/.next/analyze/
+
   # Deploy to Staging
   deploy-staging:
     runs-on: self-hosted
-    needs: build-and-test
+    needs: [build-and-test, security-scan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging
     env:

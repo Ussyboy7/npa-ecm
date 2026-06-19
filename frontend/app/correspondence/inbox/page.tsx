@@ -28,9 +28,6 @@ import {
   Building2,
   Inbox,
   Filter,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
   Copy,
 } from 'lucide-react';
 import { formatDateShort } from '@/lib/correspondence-helpers';
@@ -112,7 +109,7 @@ const DEFAULT_SUMMARY: InboxSummary = {
 
 const CorrespondenceInbox = () => {
   const router = useRouter();
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, users: organizationUsers, offices, officeMemberships } = useOrganization();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -331,7 +328,7 @@ const CorrespondenceInbox = () => {
           assigned_to_user: (summaryObj && typeof summaryObj.assigned_to_user === 'number') ? summaryObj.assigned_to_user : 0,
         });
         setCount((responseObj && typeof responseObj.count === 'number') ? responseObj.count : results.length);
-      } catch (err) {
+      } catch (_err) {
         setError('Failed to load office inbox. Please try again.');
         setInboxItems([]);
         setSummary(DEFAULT_SUMMARY);
@@ -494,29 +491,15 @@ const CorrespondenceInbox = () => {
     );
   };
 
-  if (!currentUser) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
-          <LoadingState message="Loading office inbox…" />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!hasCorrespondenceAccess) {
-    return (
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
-          <Card><CardContent className="py-12 text-center"><p className="text-lg font-semibold">No office inbox available</p><p className="text-sm text-muted-foreground mt-2">This persona does not have registry or routing permissions. Redirecting you to your personal inbox…</p></CardContent></Card>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
     <DashboardLayout>
       <div className="container mx-auto p-6 space-y-6">
+        {!currentUser ? (
+          <LoadingState message="Loading office inbox…" />
+        ) : !hasCorrespondenceAccess ? (
+          <Card><CardContent className="py-12 text-center"><p className="text-lg font-semibold">No office inbox available</p><p className="text-sm text-muted-foreground mt-2">This persona does not have registry or routing permissions. Redirecting you to your personal inbox…</p></CardContent></Card>
+        ) : (
+          <>
         {/* Header */}
         <div className="flex justify-between items-start">
           <div>
@@ -700,6 +683,8 @@ const CorrespondenceInbox = () => {
             className="border-t border-border/60 pt-4"
           />
         )}
+        </>
+      )}
       </div>
     </DashboardLayout>
   );

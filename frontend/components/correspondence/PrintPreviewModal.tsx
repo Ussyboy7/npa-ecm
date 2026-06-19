@@ -4,7 +4,7 @@ import { logError } from '@/lib/client-logger';
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Printer, Download } from 'lucide-react';
+import { Printer } from 'lucide-react';
 import { generateDocumentHTML, downloadAsPDF } from '@/lib/document-generator';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
 import mammoth from 'mammoth';

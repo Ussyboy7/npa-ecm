@@ -38,17 +38,9 @@ export interface SealVerification {
   signature_image_url?: string;
 }
 
-export async function verifySeal(serialNumber: string): Promise<SealVerification> {
+export async function verifySeal(serialNumber: string, signal?: AbortSignal): Promise<SealVerification> {
   const baseUrl = getApiBaseUrl();
   const verifyUrl = `${baseUrl}/accounts/seal/verify/${encodeURIComponent(serialNumber)}/`;
-  
-  // Debug logging
-  logInfo('[Seal Verification] Attempting to verify:', {
-    serialNumber,
-    baseUrl,
-    verifyUrl,
-    envApiUrl: process.env.NEXT_PUBLIC_API_URL,
-  });
   
   try {
     const response = await fetch(verifyUrl, {
@@ -58,7 +50,8 @@ export async function verifySeal(serialNumber: string): Promise<SealVerification
         'Content-Type': 'application/json',
       },
       mode: 'cors',
-      credentials: 'include', // Include cookies for authentication
+      credentials: 'include',
+      signal,
     });
     
     // Debug logging

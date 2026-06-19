@@ -1,22 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
-import { useCorrespondence, mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
+import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { apiFetch } from "@/lib/api-client";
 import { formatDateShort } from "@/lib/correspondence-helpers";
+import { PRIORITY_VALUES } from "@/lib/constants";
 import type { Correspondence } from "@/lib/npa-structure";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
@@ -24,7 +24,7 @@ import { PaginationControls } from "@/components/shared/PaginationControls";
 const DEFAULT_PAGE_SIZE = 25;
 
 const statusFilters = ["all", "pending", "in-progress", "completed", "archived"] as const;
-const priorityFilters = ["all", "urgent", "high", "medium", "low"] as const;
+const priorityFilters = ["all", ...PRIORITY_VALUES] as const;
 
 type StatusFilter = (typeof statusFilters)[number];
 type PriorityFilter = (typeof priorityFilters)[number];
@@ -60,11 +60,11 @@ const getStatusBadgeClass = (status: Correspondence["status"]) => {
 };
 
 const RegisteredCorrespondencePage = () => {
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
-  const { users, divisions, departments } = useOrganization();
+  const {users, divisions, departments: _departments } = useOrganization();
   const [items, setItems] = useState<Correspondence[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [count, setCount] = useState(0);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -111,7 +111,7 @@ const RegisteredCorrespondencePage = () => {
       const results = Array.isArray(response.results) ? response.results : [];
       setItems(results.map(mapApiCorrespondence));
       setCount(typeof response.count === 'number' ? response.count : results.length);
-    } catch (error) {
+    } catch (_error) {
       setItems([]);
       setCount(0);
     } finally {
@@ -139,9 +139,9 @@ const RegisteredCorrespondencePage = () => {
     return null;
   }
 
-  if (!canViewRegistry) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!canViewRegistry ? (
         <div className="p-6">
           <Card>
             <CardHeader>
@@ -156,13 +156,8 @@ const RegisteredCorrespondencePage = () => {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <DashboardLayout>
-      <div className="p-6 space-y-6">
+      ) : (
+        <div className="p-6 space-y-6">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
@@ -314,6 +309,7 @@ const RegisteredCorrespondencePage = () => {
           />
         )}
       </div>
+      )}
     </DashboardLayout>
   );
 };

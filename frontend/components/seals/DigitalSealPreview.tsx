@@ -1,4 +1,5 @@
 "use client";
+import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 
 import { useEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from "react";
 import { logError, logWarn } from '@/lib/client-logger';
@@ -23,7 +24,7 @@ export interface DigitalSealPreviewHandle {
 }
 
 export const DigitalSealPreview = forwardRef<DigitalSealPreviewHandle, DigitalSealPreviewProps>(({
-  officeName = "NIGERIAN PORTS AUTHORITY",
+  officeName = DEFAULT_SEAL_OFFICE_NAME,
   officeTitle = "OFFICE OF THE MANAGING DIRECTOR",
   serialPrefix = "NPA-MD",
   signatureText = "Signature",

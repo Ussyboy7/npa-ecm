@@ -1,4 +1,5 @@
 "use client";
+import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
@@ -35,14 +36,12 @@ import {
   getFavoriteUsers,
   addFavoriteUser,
   removeFavoriteUser,
-  isFavoriteUser,
   getCollapsedGroups,
   saveCollapsedGroups,
   getSearchHistory,
   addSearchHistory,
   clearSearchHistory,
   getGroupOrder,
-  saveGroupOrder,
 } from "@/lib/role-switcher-storage";
 import { fetchUsers } from "@/lib/admin-api";
 
@@ -56,8 +55,8 @@ const DEBOUNCE_DELAY = 300;
 const DEFAULT_PAGE_SIZE = 50; // Default page size for pagination
 
 const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProps) => {
-  const { directorates, divisions, departments, users, refreshOrganizationData } = useOrganization();
-  const { currentUser, hydrated, refresh: refreshCurrentUser, isImpersonating } = useCurrentUser();
+  const { directorates, divisions, departments, users, refreshOrganizationData: _refreshOrganizationData } = useOrganization();
+  const { currentUser, hydrated: _hydrated, refresh: _refreshCurrentUser, isImpersonating } = useCurrentUser();
   
   const [searchQuery, setSearchQuery] = useState<string>("");
   const debouncedSearchQuery = useDebounce(searchQuery, DEBOUNCE_DELAY);
@@ -402,7 +401,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
       } else if (["MSS2", "MSS3", "MSS4", "MSS5"].includes(grade) || 
                  ["Assistant General Manager", "Manager", "Senior Manager", "Principal Manager"].includes(role)) {
         groups.manager.push(user);
-      } else if (role === "Super Admin") {
+      } else if (role === SYSTEM_ROLE_SUPER_ADMIN) {
         groups.admin.push(user);
       } else if (["Secretary", "Assistant", "Personal Assistant", "Secretariat"].includes(role)) {
         groups.assistant.push(user);
@@ -431,7 +430,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     );
   }
 
-  const impersonationEnabled = hasTokens() && (currentUser.systemRole === "Super Admin" || isImpersonating);
+  const impersonationEnabled = hasTokens() && (currentUser.systemRole === SYSTEM_ROLE_SUPER_ADMIN || isImpersonating);
 
   if (!impersonationEnabled) {
     return (
@@ -450,7 +449,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   const handleImpersonateConfirm = async () => {
     if (!selectedUser || isSwitching) return;
     
-    if (!impersonationEnabled || currentUser.systemRole !== "Super Admin") {
+    if (!impersonationEnabled || currentUser.systemRole !== SYSTEM_ROLE_SUPER_ADMIN) {
       toast.error("Impersonation is only available to Super Admins");
       return;
     }

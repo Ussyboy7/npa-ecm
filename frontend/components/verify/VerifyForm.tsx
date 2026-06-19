@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Shield, QrCode, AlertCircle } from "lucide-react";
+import { Search, Shield, AlertCircle } from "lucide-react";
 import { validateSerialNumber } from "@/lib/api/seal-verification";
 import { toast } from "sonner";
 

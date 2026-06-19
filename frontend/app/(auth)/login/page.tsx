@@ -1,4 +1,5 @@
 "use client";
+import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
 import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, Suspense } from "react";
@@ -60,7 +61,7 @@ type PersonaOption = {
 const DEMO_PERSONAS: PersonaOption[] = [
   {
     id: "superadmin",
-    label: "Super Admin",
+    label: SYSTEM_ROLE_SUPER_ADMIN,
     username: "superadmin",
     password: "ChangeMe123!",
     summary: "Full tenancy access for system administration.",

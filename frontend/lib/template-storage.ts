@@ -1,13 +1,11 @@
 import { nanoid } from 'nanoid';
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { getFromStorage, saveToStorage } from './storage';
 import type { User } from './npa-structure';
 import * as templateApi from './api/templates';
 import { hasTokens } from './api-client';
-
-export type TemplateScope = 'organization' | 'directorate' | 'division' | 'department' | 'user';
-
-export type TemplateType = 'document' | 'minute' | 'treatment';
+import type { TemplateScope, TemplateType } from './api/templates';
+export type { TemplateScope, TemplateType };
 
 export type DocumentTemplate = {
   id: string;
@@ -299,7 +297,7 @@ export const saveTemplate = async (template: DocumentTemplate): Promise<Document
           isDefault: template.isDefault,
         });
         return updated;
-      } catch (error: unknown) {
+      } catch (_error: unknown) {
         // If update fails (template might not exist in backend), create it
         const created = await templateApi.createTemplate({
           scope: template.scope,

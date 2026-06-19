@@ -6,7 +6,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { logError, logWarn } from '@/lib/client-logger';
 import { getStoredAccessToken } from '@/lib/api-client';
-import { buildDownloadUrl, fixMediaUrl, ensureAbsoluteUrl } from '@/lib/correspondence-url-utils';
+import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import {
   FILE_LOAD_TIMEOUT,
   PDF_IFRAME_FALLBACK_TIMEOUT,

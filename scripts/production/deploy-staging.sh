@@ -66,6 +66,15 @@ warning() {
 pre_deployment_checks() {
     log "🔍 Running pre-deployment checks..."
 
+    # Check Docker DNS resolution (required for self-hosted runners)
+    if ! docker run --rm alpine ping -c 1 registry.npmjs.org >/dev/null 2>&1; then
+        warning "Docker DNS resolution failed. If on a self-hosted runner,"
+        warning "ensure /etc/docker/daemon.json contains:"
+        warning '  { "dns": ["8.8.8.8", "1.1.1.1"] }'
+        warning "Then restart Docker: sudo systemctl restart docker"
+        warning "See: https://docs.docker.com/config/daemon/#dns-settings"
+    fi
+
     # Check if required files exist
     local required_files=("$DOCKER_COMPOSE_FILE" "backend/Dockerfile.prod" "frontend/Dockerfile.stag")
     for file in "${required_files[@]}"; do

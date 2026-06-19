@@ -3,7 +3,7 @@
  * Handles file validation, preview generation, and state management
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { generateId } from '@/lib/correspondence-helpers';
@@ -77,7 +77,7 @@ export const useFileUpload = (options: UseFileUploadOptions = {}): UseFileUpload
     [maxSize, allowedTypes, formatFileSize]
   );
 
-  const generatePreview = useCallback((file: File, fileId: string): Promise<string | undefined> => {
+  const generatePreview = useCallback((file: File, _fileId: string): Promise<string | undefined> => {
     return new Promise((resolve) => {
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();

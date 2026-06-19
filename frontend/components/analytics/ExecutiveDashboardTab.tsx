@@ -104,7 +104,7 @@ export const ExecutiveDashboardTab = () => {
     };
   }, [selectedPeriod]);
 
-  const divisionMetrics = data?.divisionMetrics ?? [];
+  const _divisionMetrics = data?.divisionMetrics ?? [];
   const departmentActivity = data?.departmentActivity ?? [];
   const delayedApprovals = data?.delayedApprovals ?? [];
   const pendingTopLevel = data?.pendingLeadership ?? [];

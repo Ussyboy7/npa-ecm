@@ -3,7 +3,8 @@
  */
 
 import { apiFetch, hasTokens } from './api-client';
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
+import { logWarn } from '@/lib/client-logger';
+import { isRecord, asString, unwrapResults } from '@/lib/type-utils';
 
 export interface ActivityLog {
   id: string;
@@ -27,12 +28,6 @@ export interface ActivityLog {
   timestamp: string;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
-const asString = (value: unknown, fallback = ''): string => {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return fallback;
-  return String(value);
-};
 const asStringOptional = (value: unknown): string | undefined => {
   if (value === null || value === undefined) return undefined;
   return asString(value);
@@ -66,12 +61,7 @@ const mapApiLog = (log: Record<string, unknown>): ActivityLog => ({
   timestamp: asStringOptional(log.timestamp) ?? new Date().toISOString(),
 });
 
-// Unwrap paginated results
-const unwrapResults = (data: unknown): unknown[] => {
-  if (Array.isArray(data)) return data;
-  if (isRecord(data) && Array.isArray(data.results)) return data.results;
-  return [];
-};
+
 
 export interface PaginatedActivityLogs {
   results: ActivityLog[];

@@ -1,4 +1,5 @@
 "use client";
+import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { logError } from '@/lib/client-logger';
 import { useMemo, useRef, useReducer, useEffect, useCallback, useState, Suspense } from 'react';
@@ -41,7 +42,7 @@ import {
   createDistributionEntries,
   generateReferenceNumber,
 } from './register-utils';
-import { registerReducer, createInitialState, RegisterState, RegisterAction } from './register-state-reducer';
+import { registerReducer, createInitialState } from './register-state-reducer';
 import { useDraftAutoSave } from './use-draft-auto-save';
 import { OfficeSelectionCard } from './components/OfficeSelectionCard';
 import { BasicInfoStep } from './components/BasicInfoStep';
@@ -66,7 +67,7 @@ const CorrespondenceRegisterForm = () => {
     officeMemberships,
   } = useOrganization();
   const { syncFromApi } = useCorrespondence();
-  const { currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser);
   const { fetchWithRetry } = useApiRetry();
   const roleChecks = useRoleChecks();
@@ -75,7 +76,7 @@ const CorrespondenceRegisterForm = () => {
   const [loadingCorrespondence, setLoadingCorrespondence] = useState(!!editId);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [validateOnStepChange, setValidateOnStepChange] = useState(true);
+  const [validateOnStepChange, _setValidateOnStepChange] = useState(true);
 
   const isSuperAdmin = roleChecks.isSuperAdmin || roleChecks.isSystemAdmin;
 
@@ -180,7 +181,7 @@ const CorrespondenceRegisterForm = () => {
       }
       logError('Failed to load correspondence for editing', error);
       logError('Error loading correspondence:', error);
-      let errorMessage = 'Unknown error';
+      let errorMessage = ERROR_UNKNOWN;
       if (error && typeof error === 'object') {
         const errorObj = error as Record<string, unknown>;
         if (errorObj.message && typeof errorObj.message === 'string') {
@@ -268,7 +269,7 @@ const CorrespondenceRegisterForm = () => {
     );
   }, [organizationUsers]);
 
-  const filteredExecutives = useMemo(() => {
+  const _filteredExecutives = useMemo(() => {
     if (!assignSearch.trim()) return executives;
     const query = assignSearch.toLowerCase();
     return executives.filter((user) =>
@@ -592,7 +593,7 @@ const CorrespondenceRegisterForm = () => {
           return;
         }
 
-        const description = (error && typeof error === 'object' && 'message' in error && typeof (error instanceof Error ? error.message : "Unknown error") === 'string') ? (error instanceof Error ? error.message : "Unknown error") : (editId ? 'Unable to update correspondence' : 'Unable to register correspondence');
+        const description = (error && typeof error === 'object' && 'message' in error && typeof (error instanceof Error ? error.message : ERROR_UNKNOWN) === 'string') ? (error instanceof Error ? error.message : ERROR_UNKNOWN) : (editId ? 'Unable to update correspondence' : 'Unable to register correspondence');
         toast.error(description);
         logError(editId ? 'Failed to update correspondence' : 'Failed to register correspondence', error);
       } finally {
@@ -611,10 +612,9 @@ const CorrespondenceRegisterForm = () => {
     permissions.canRegisterCorrespondence ||
     (process.env.NODE_ENV === 'development' && currentUser);
 
-  // Loading state - only check mounted to avoid hydration mismatch
-  if (!mounted) {
-    return (
-      <DashboardLayout>
+  return (
+    <DashboardLayout>
+      {!mounted ? (
         <div className="container mx-auto p-6">
           <div className="space-y-6">
             <div className="h-8 w-64 bg-muted animate-pulse rounded" />
@@ -628,13 +628,7 @@ const CorrespondenceRegisterForm = () => {
             </div>
           </div>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!mounted || !currentUser) {
-    return (
-      <DashboardLayout>
+      ) : !mounted || !currentUser ? (
         <div className="container mx-auto p-6">
           <div className="flex items-center justify-center py-20">
             <div className="text-center space-y-4">
@@ -643,13 +637,7 @@ const CorrespondenceRegisterForm = () => {
             </div>
           </div>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!shouldAllowAccess) {
-    return (
-      <DashboardLayout>
+      ) : !shouldAllowAccess ? (
         <div className="container mx-auto p-6">
           <Card className="max-w-xl mx-auto">
             <CardHeader className="text-center">
@@ -670,14 +658,9 @@ const CorrespondenceRegisterForm = () => {
             </CardContent>
           </Card>
         </div>
-      </DashboardLayout>
-    );
-  }
-
-  return (
-    <ErrorBoundary>
-      <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
+      ) : (
+        <ErrorBoundary>
+          <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold">
@@ -883,26 +866,25 @@ const CorrespondenceRegisterForm = () => {
           </div>
           </div>
         </div>
-      </DashboardLayout>
-
-      {/* Reset Confirmation Dialog */}
-      <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Clear Draft?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will clear all form data and remove the saved draft. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmClearDraft} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Clear Draft
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </ErrorBoundary>
+        <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear Draft?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will clear all form data and remove the saved draft. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmClearDraft} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Clear Draft
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </ErrorBoundary>
+    )}
+  </DashboardLayout>
   );
 };
 

@@ -1,7 +1,6 @@
 import { apiFetch } from '../api-client';
 import { logError } from '@/lib/client-logger';
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+import { isRecord } from '@/lib/type-utils';
 
 export interface DraftFileMetadata {
   id: string;
