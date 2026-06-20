@@ -117,8 +117,8 @@ const getPriorityColor = (priority: string) => {
 const OfficeOutboxPage = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const systemRoleObj = currentUser?.systemRole as Record<string, unknown> | undefined;
-  const isAdmin = currentUser?.isSuperuser || (systemRoleObj && typeof systemRoleObj.name === 'string' && systemRoleObj.name.toLowerCase() === 'admin');
+  const systemRole = typeof currentUser?.systemRole === 'string' ? currentUser.systemRole.toLowerCase() : '';
+  const isAdmin = currentUser?.isSuperuser === true || systemRole === 'admin' || systemRole === 'super admin';
   const { officeMemberships, offices, divisions, users: organizationUsers } = useOrganization();
 
   const [query, setQuery] = useState('');
@@ -150,7 +150,7 @@ const OfficeOutboxPage = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const isSuperAdmin = currentUser?.isSuperuser ?? false;
+  const isSuperAdmin = currentUser?.isSuperuser === true || systemRole === 'super admin' || systemRole === 'admin';
 
   const userOfficeIds = useMemo(() => {
     if (!currentUser) return [];
