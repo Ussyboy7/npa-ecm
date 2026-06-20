@@ -1615,3 +1615,120 @@ class CorrespondenceDraft(UUIDModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"Draft for {self.correspondence.reference_number} by {self.user.username}"
+
+
+class Location(UUIDModel, TimeStampedModel):
+    """Physical location within NPA buildings for storing physical documents."""
+
+    building = models.CharField(max_length=255)
+    floor = models.CharField(max_length=255, blank=True)
+    room = models.CharField(max_length=255, blank=True)
+    shelf = models.CharField(max_length=255, blank=True)
+    cabinet = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ["building", "floor", "room", "shelf", "cabinet"]
+        ordering = ["building", "floor", "room"]
+
+    def __str__(self) -> str:
+        parts = [self.building, self.floor, self.room]
+        if self.shelf:
+            parts.append(f"Shelf {self.shelf}")
+        if self.cabinet:
+            parts.append(f"Cabinet {self.cabinet}")
+        return " / ".join(p for p in parts if p)
+
+    def display_name(self) -> str:
+        return str(self)
+
+
+class PhysicalDocument(UUIDModel, TimeStampedModel, SoftDeleteModel):
+    """Tracks physical (paper) documents alongside their digital records."""
+
+    class Status(models.TextChoices):
+        IN_STORAGE = "in_storage", "In Storage"
+        CHECKED_OUT = "checked_out", "Checked Out"
+        IN_TRANSIT = "in_transit", "In Transit"
+        DESTROYED = "destroyed", "Destroyed"
+        MISSING = "missing", "Missing"
+
+    tracking_number = models.CharField(max_length=100, unique=True)
+    barcode = models.CharField(max_length=255, blank=True)
+    correspondence = models.ForeignKey(
+        Correspondence,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="physical_documents",
+    )
+    document = models.ForeignKey(
+        "dms.Document",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="physical_documents",
+    )
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="physical_documents",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.IN_STORAGE,
+    )
+    description = models.CharField(max_length=500, blank=True)
+    checked_out_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="checked_out_documents",
+    )
+    checked_out_at = models.DateTimeField(null=True, blank=True)
+    expected_return_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tracking_number"]),
+            models.Index(fields=["correspondence"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["location"]),
+        ]
+
+    def __str__(self) -> str:
+        name = self.description or f"Physical Doc #{self.tracking_number}"
+        return f"{name} ({self.get_status_display()})"
+
+
+class CheckOutEvent(UUIDModel, TimeStampedModel):
+    """Audit trail for physical document check-in/check-out."""
+
+    class Action(models.TextChoices):
+        CHECKED_OUT = "checked_out", "Checked Out"
+        RETURNED = "returned", "Returned"
+
+    physical_document = models.ForeignKey(
+        PhysicalDocument,
+        on_delete=models.CASCADE,
+        related_name="checkout_events",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="physical_checkout_events",
+    )
+    action = models.CharField(max_length=20, choices=Action.choices)
+    purpose = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]

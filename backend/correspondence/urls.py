@@ -21,6 +21,11 @@ from .views import (
     MinuteViewSet,
     ParallelRoutingGroupViewSet,
 )
+from .physical_views import (
+    LocationViewSet,
+    PhysicalDocumentViewSet,
+    CheckOutEventViewSet,
+)
 
 
 router = DefaultRouter()
@@ -41,6 +46,9 @@ router.register(r"case-correspondence-links", CaseCorrespondenceLinkViewSet, bas
 router.register(r"case-workflow-rules", CaseWorkflowRuleViewSet, basename="case-workflow-rule")
 router.register(r"case-slas", CaseSLAViewSet, basename="case-sla")
 router.register(r"dispatch-records", DispatchRecordViewSet, basename="dispatch-record")
+router.register(r"locations", LocationViewSet, basename="location")
+router.register(r"physical-documents", PhysicalDocumentViewSet, basename="physical-document")
+router.register(r"checkout-events", CheckOutEventViewSet, basename="checkout-event")
 
 
 urlpatterns = router.urls
