@@ -26,6 +26,11 @@ from .physical_views import (
     PhysicalDocumentViewSet,
     CheckOutEventViewSet,
 )
+from .foia_views import (
+    FOIARequestViewSet,
+    FOIARequestDocumentViewSet,
+    FOIANoteViewSet,
+)
 
 
 router = DefaultRouter()
@@ -49,6 +54,9 @@ router.register(r"dispatch-records", DispatchRecordViewSet, basename="dispatch-r
 router.register(r"locations", LocationViewSet, basename="location")
 router.register(r"physical-documents", PhysicalDocumentViewSet, basename="physical-document")
 router.register(r"checkout-events", CheckOutEventViewSet, basename="checkout-event")
+router.register(r"foia-requests", FOIARequestViewSet, basename="foia-request")
+router.register(r"foia-documents", FOIARequestDocumentViewSet, basename="foia-document")
+router.register(r"foia-notes", FOIANoteViewSet, basename="foia-note")
 
 
 urlpatterns = router.urls
