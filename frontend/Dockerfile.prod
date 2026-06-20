@@ -25,9 +25,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Copy standalone server and required files (no runtime npm install)
-COPY --from=builder --chown=node:node /app/frontend/.next/standalone ./
-COPY --from=builder --chown=node:node /app/frontend/.next/static ./.next/static
-COPY --from=builder --chown=node:node /app/frontend/public ./public
+# npm workspace creates a "frontend" subdirectory in the standalone output
+COPY --from=builder --chown=node:node /app/frontend/.next/standalone/ ./
+COPY --from=builder --chown=node:node /app/frontend/.next/static ./frontend/.next/static
+COPY --from=builder --chown=node:node /app/frontend/public ./frontend/public
+
+WORKDIR /app/frontend
 
 USER node
 EXPOSE 3000

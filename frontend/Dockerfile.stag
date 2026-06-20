@@ -24,9 +24,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_PUBLIC_NODE_ENV=staging
 
-COPY --from=builder --chown=node:node /app/frontend/.next/standalone ./
-COPY --from=builder --chown=node:node /app/frontend/.next/static ./.next/static
-COPY --from=builder --chown=node:node /app/frontend/public ./public
+# Copy standalone output (npm workspace creates a "frontend" subdirectory)
+COPY --from=builder --chown=node:node /app/frontend/.next/standalone/ ./
+COPY --from=builder --chown=node:node /app/frontend/.next/static ./frontend/.next/static
+COPY --from=builder --chown=node:node /app/frontend/public ./frontend/public
+
+WORKDIR /app/frontend
 
 USER node
 EXPOSE 3000
