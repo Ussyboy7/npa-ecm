@@ -150,6 +150,8 @@ const OfficeOutboxPage = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const isSuperAdmin = currentUser?.isSuperuser ?? false;
+
   const userOfficeIds = useMemo(() => {
     if (!currentUser) return [];
     return officeMemberships
@@ -157,11 +159,14 @@ const OfficeOutboxPage = () => {
       .map((membership) => membership.officeId);
   }, [currentUser, officeMemberships]);
 
+  const hasOfficeAccess = isSuperAdmin || userOfficeIds.length > 0;
+
   const selectableOffices = useMemo(() => {
+    if (isSuperAdmin) return offices;
     if (!userOfficeIds.length) return [];
     const idSet = new Set(userOfficeIds);
     return offices.filter((office) => idSet.has(office.id));
-  }, [offices, userOfficeIds]);
+  }, [offices, userOfficeIds, isSuperAdmin]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -220,7 +225,7 @@ const OfficeOutboxPage = () => {
     if (debouncedQuery) params.append('search', debouncedQuery);
     if (selectedOfficeId !== 'all') {
       params.append('office', selectedOfficeId);
-    } else {
+    } else if (userOfficeIds.length > 0) {
       userOfficeIds.forEach((officeId) => {
         params.append('office', officeId);
       });
@@ -291,8 +296,8 @@ const OfficeOutboxPage = () => {
   }, [debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {
-    // Fetch data immediately if user has offices (don't wait for currentUser hydration)
-    if (!userOfficeIds.length) {
+    // Fetch data immediately if user has offices or is super admin (don't wait for currentUser hydration)
+    if (!hasOfficeAccess) {
       setLoading(false);
       return;
     }
@@ -353,7 +358,7 @@ const OfficeOutboxPage = () => {
     return () => {
       controller.abort();
     };
-  }, [userOfficeIds, pagination.page, pagination.pageSize, debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, dateFrom, dateTo, sortBy, sortOrder, dateError, getFilterParams]);
+  }, [hasOfficeAccess, userOfficeIds, pagination.page, pagination.pageSize, debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, dateFrom, dateTo, sortBy, sortOrder, dateError, getFilterParams]);
 
   const handleWithdrawClick = (item: Correspondence) => {
     if (item.status as string !== 'pending' && item.status as string !== 'in-progress') {
@@ -465,7 +470,7 @@ const OfficeOutboxPage = () => {
             </CardContent>
           </Card>
         </div>
-      ) : !userOfficeIds.length ? (
+      ) : !hasOfficeAccess ? (
         <div className="container mx-auto p-6 space-y-6">
           <div>
             <h1 className="text-3xl font-bold">Office Outbox</h1>
