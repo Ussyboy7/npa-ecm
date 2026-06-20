@@ -53,6 +53,7 @@ from .models import (
     CorrespondenceDocumentLink,
     CorrespondenceTemplate,
     Delegation,
+    DispatchRecord,
     Minute,
     ParallelRoutingGroup,
 )
@@ -75,6 +76,7 @@ from .serializers import (
     CorrespondenceSerializer,
     CorrespondenceTemplateSerializer,
     DelegationSerializer,
+    DispatchRecordSerializer,
     MinuteSerializer,
     ParallelRoutingGroupSerializer,
 )
@@ -796,6 +798,67 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(correspondence)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["post"], url_path="dispatch")
+    def dispatch(self, request, pk=None):
+        """Mark correspondence as dispatched with tracking details."""
+        correspondence = self.get_object()
+        if correspondence.status != Correspondence.Status.COMPLETED:
+            raise ValidationError({"detail": "Only completed correspondence can be dispatched."})
+
+        serializer = DispatchRecordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save(
+            correspondence=correspondence,
+            dispatched_by=request.user,
+        )
+        correspondence.status = Correspondence.Status.DISPATCHED
+        correspondence.dispatch_date = serializer.validated_data.get("dispatched_date")
+        correspondence.save(update_fields=["status", "dispatch_date", "updated_at"])
+
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Dispatched correspondence: {correspondence.reference_number}",
+            metadata={"dispatch_mode": serializer.validated_data.get("dispatch_mode")},
+        )
+        output = self.get_serializer(correspondence)
+        return Response(output.data)
+
+    @action(detail=True, methods=["post"], url_path="acknowledge")
+    def acknowledge(self, request, pk=None):
+        """Mark correspondence as acknowledged by recipient."""
+        correspondence = self.get_object()
+        if correspondence.status not in (Correspondence.Status.DISPATCHED, Correspondence.Status.COMPLETED):
+            raise ValidationError({"detail": "Correspondence must be dispatched or completed to acknowledge."})
+
+        dispatch_record_id = request.data.get("dispatch_record_id")
+        acknowledged_date = request.data.get("acknowledged_date", timezone.now().date())
+
+        if dispatch_record_id:
+            try:
+                record = DispatchRecord.objects.get(id=dispatch_record_id, correspondence=correspondence)
+                record.acknowledged_date = acknowledged_date
+                record.acknowledged_by = request.user
+                record.save(update_fields=["acknowledged_date", "acknowledged_by"])
+            except DispatchRecord.DoesNotExist:
+                raise ValidationError({"detail": "Dispatch record not found."})
+
+        correspondence.status = Correspondence.Status.ACKNOWLEDGED
+        correspondence.acknowledged_date = acknowledged_date
+        correspondence.save(update_fields=["status", "acknowledged_date", "updated_at"])
+
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Acknowledged correspondence: {correspondence.reference_number}",
+        )
+        output = self.get_serializer(correspondence)
+        return Response(output.data)
+
     @action(detail=False, methods=["post"], url_path="bulk-archive")
     def bulk_archive(self, request):
         """Archive multiple correspondence items at once."""
@@ -828,7 +891,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         
         for corr in accessible_items:
             corr.status = Correspondence.Status.ARCHIVED
-            corr.save(update_fields=["status", "updated_at"])
+            corr.archived_at = timezone.now()
+            corr.save(update_fields=["status", "archived_at", "updated_at"])
             archived_count += 1
             
             AuditService.log_correspondence_activity(
@@ -4634,6 +4698,25 @@ class CorrespondenceTemplateViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         """Set the updater when updating a template."""
         serializer.save(updated_by=self.request.user)
+
+
+class DispatchRecordViewSet(viewsets.ModelViewSet):
+    queryset = DispatchRecord.objects.select_related("dispatched_by", "acknowledged_by")
+    serializer_class = DispatchRecordSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["correspondence", "dispatch_mode"]
+
+    def perform_create(self, serializer):
+        serializer.save(dispatched_by=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="mark-acknowledged")
+    def mark_acknowledged(self, request, pk=None):
+        record = self.get_object()
+        record.acknowledged_date = request.data.get("acknowledged_date", timezone.now().date())
+        record.acknowledged_by = request.user
+        record.save(update_fields=["acknowledged_date", "acknowledged_by"])
+        return Response(DispatchRecordSerializer(record, context={"request": request}).data)
 
 
 class CaseCorrespondenceLinkViewSet(viewsets.ModelViewSet):

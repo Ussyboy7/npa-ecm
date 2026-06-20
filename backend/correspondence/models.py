@@ -52,6 +52,8 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         PENDING = "pending", "Pending"
         IN_PROGRESS = "in-progress", "In Progress"
         COMPLETED = "completed", "Completed"
+        DISPATCHED = "dispatched", "Dispatched"
+        ACKNOWLEDGED = "acknowledged", "Acknowledged"
         ARCHIVED = "archived", "Archived"
         WITHDRAWN = "withdrawn", "Withdrawn"
 
@@ -109,6 +111,7 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     sender_reference = models.CharField(max_length=255, blank=True)
     letter_date = models.DateField(null=True, blank=True)
     dispatch_date = models.DateField(null=True, blank=True)
+    acknowledged_date = models.DateField(null=True, blank=True)
     recipient_name = models.CharField(max_length=255, blank=True)
     remarks = models.TextField(blank=True)
     document_type = models.CharField(
@@ -159,6 +162,7 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     )
     completion_summary_generated_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
     # Withdrawal tracking (similar to recall in minutes)
     withdrawn_at = models.DateTimeField(null=True, blank=True)
     withdraw_reason = models.TextField(null=True, blank=True)
@@ -291,6 +295,85 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
             True if outward (direction=DOWNWARD), False otherwise
         """
         return self.is_outward()
+
+    def get_lifecycle_stage(self) -> int:
+        """Return the lifecycle progress stage (0-6) for the progress bar."""
+        stage_map = {
+            self.Status.PENDING: 0,
+            self.Status.IN_PROGRESS: 1,
+            self.Status.COMPLETED: 2,
+            self.Status.DISPATCHED: 3,
+            self.Status.ACKNOWLEDGED: 4,
+            self.Status.ARCHIVED: 5,
+            self.Status.WITHDRAWN: -1,
+        }
+        return stage_map.get(self.status, 0)
+
+    @property
+    def lifecycle_stages(self) -> list[dict]:
+        """Return the full lifecycle with timestamps for the progress bar UI."""
+        stages = [
+            {"key": "pending", "label": "Pending", "index": 0},
+            {"key": "in_progress", "label": "In Progress", "index": 1},
+            {"key": "completed", "label": "Completed", "index": 2},
+            {"key": "dispatched", "label": "Dispatched", "index": 3},
+            {"key": "acknowledged", "label": "Acknowledged", "index": 4},
+            {"key": "archived", "label": "Archived", "index": 5},
+        ]
+        timestamps = {
+            "pending": self.created_at,
+            "in_progress": self.created_at,
+            "completed": self.completed_at or (self.created_at if self.status in ("completed", "dispatched", "acknowledged", "archived") else None),
+            "dispatched": self.dispatch_date,
+            "acknowledged": self.acknowledged_date,
+            "archived": self.archived_at,
+        }
+        current = self.get_lifecycle_stage()
+        for stage in stages:
+            stage["completed"] = stage["index"] <= current if current >= 0 else False
+            stage["timestamp"] = timestamps[stage["key"]]
+        return stages
+
+
+class DispatchRecord(UUIDModel, TimeStampedModel):
+    """Tracks dispatch and acknowledgment of correspondence."""
+
+    class DispatchMode(models.TextChoices):
+        EMAIL = "email", "Email"
+        COURIER = "courier", "Courier"
+        HAND_DELIVERY = "hand_delivery", "Hand Delivery"
+        POSTAL = "postal", "Postal Service"
+        INTERNAL = "internal", "Internal Routing"
+
+    correspondence = models.ForeignKey(
+        Correspondence,
+        on_delete=models.CASCADE,
+        related_name="dispatch_records",
+    )
+    dispatch_mode = models.CharField(max_length=20, choices=DispatchMode.choices)
+    dispatched_date = models.DateField()
+    dispatched_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="dispatch_records",
+    )
+    tracking_number = models.CharField(max_length=255, blank=True)
+    courier_name = models.CharField(max_length=255, blank=True)
+    recipient_name = models.CharField(max_length=255, blank=True)
+    recipient_address = models.TextField(blank=True)
+    acknowledged_date = models.DateField(null=True, blank=True)
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acknowledged_records",
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-dispatched_date"]
 
 
 class CorrespondenceDocumentLink(UUIDModel, TimeStampedModel):

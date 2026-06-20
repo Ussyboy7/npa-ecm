@@ -17,6 +17,7 @@ from .views import (
     CorrespondenceTemplateViewSet,
     CorrespondenceViewSet,
     DelegationViewSet,
+    DispatchRecordViewSet,
     MinuteViewSet,
     ParallelRoutingGroupViewSet,
 )
@@ -39,6 +40,7 @@ router.register(r"case-comments", CaseCommentViewSet, basename="case-comment")
 router.register(r"case-correspondence-links", CaseCorrespondenceLinkViewSet, basename="case-correspondence-link")
 router.register(r"case-workflow-rules", CaseWorkflowRuleViewSet, basename="case-workflow-rule")
 router.register(r"case-slas", CaseSLAViewSet, basename="case-sla")
+router.register(r"dispatch-records", DispatchRecordViewSet, basename="dispatch-record")
 
 
 urlpatterns = router.urls

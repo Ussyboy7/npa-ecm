@@ -27,6 +27,7 @@ from .models import (
     CorrespondenceDocumentLink,
     CorrespondenceTemplate,
     Delegation,
+    DispatchRecord,
     Minute,
     ParallelRoutingGroup,
 )
@@ -422,6 +423,45 @@ class MinuteSerializer(serializers.ModelSerializer):
         }
 
 
+class DispatchRecordSerializer(serializers.ModelSerializer):
+    dispatched_by = UserSerializer(read_only=True)
+    dispatched_by_id = serializers.PrimaryKeyRelatedField(
+        source="dispatched_by",
+        queryset=User.objects.all(),
+        write_only=True,
+        required=False,
+    )
+    acknowledged_by = UserSerializer(read_only=True)
+    acknowledged_by_id = serializers.PrimaryKeyRelatedField(
+        source="acknowledged_by",
+        queryset=User.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = DispatchRecord
+        fields = [
+            "id",
+            "correspondence",
+            "dispatch_mode",
+            "dispatched_date",
+            "dispatched_by",
+            "dispatched_by_id",
+            "tracking_number",
+            "courier_name",
+            "recipient_name",
+            "recipient_address",
+            "acknowledged_date",
+            "acknowledged_by",
+            "acknowledged_by_id",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["id", "dispatched_by", "acknowledged_by", "created_at"]
+
+
 class CorrespondenceSerializer(serializers.ModelSerializer):
     created_by = UserSerializer(read_only=True)
     created_by_id = serializers.PrimaryKeyRelatedField(
@@ -471,6 +511,8 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     )
     completion_package = serializers.SerializerMethodField()
     auto_created_document_id = serializers.SerializerMethodField()
+    lifecycle_stages = serializers.SerializerMethodField()
+    dispatch_records = DispatchRecordSerializer(many=True, read_only=True)
     # Routing concept metadata
     flow_type = serializers.SerializerMethodField()
     is_inward = serializers.SerializerMethodField()
@@ -526,8 +568,11 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "distribution",
             "minutes",
             "completed_at",
+            "acknowledged_date",
             "completion_package",
             "completion_summary_generated_at",
+            "lifecycle_stages",
+            "dispatch_records",
             # Parallel routing fields
             "workflow_state",
             "active_parallel_branches",
@@ -561,6 +606,10 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "completion_package",
             "completion_summary_generated_at",
         ]
+
+    def get_lifecycle_stages(self, obj):
+        """Return lifecycle progress stages for the frontend progress bar."""
+        return obj.lifecycle_stages
 
     def get_auto_created_document_id(self, obj):
         """Get the ID of the auto-created DMS document for this correspondence."""

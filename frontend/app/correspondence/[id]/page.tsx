@@ -54,6 +54,7 @@ import { correspondenceDetailReducer, initialState } from './correspondence-stat
 import { CorrespondenceHeader } from './components/CorrespondenceHeader';
 import { MinuteThreadPanel } from './components/MinuteThreadPanel';
 import { ActionsPanel } from './components/ActionsPanel';
+import { LifecycleProgressBar } from '@/components/correspondence/LifecycleProgressBar';
 
 // Download handler that forces download instead of opening in new tab
 const _handleDownload = async (url: string, filename: string) => {
@@ -951,6 +952,15 @@ const CorrespondenceDetailContent = () => {
             </div>
           </div>
         </div>
+
+        {/* Lifecycle Progress Bar */}
+        <LifecycleProgressBar
+          stages={correspondence.lifecycleStages ?? []}
+          currentStage={
+            correspondence.status === "withdrawn" ? -1 :
+            correspondence.lifecycleStages?.find(s => s.key === correspondence.status.replace("-", "_"))?.index ?? 0
+          }
+        />
 
         {/* Desktop 2-Column Layout */}
         <div className="hidden md:flex flex-1 min-h-0 overflow-hidden">

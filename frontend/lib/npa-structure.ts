@@ -117,6 +117,26 @@ export type Correspondence = {
   senderReference?: string;
   letterDate?: string;
   dispatchDate?: string;
+  acknowledgedDate?: string;
+  lifecycleStages?: Array<{
+    key: string;
+    label: string;
+    index: number;
+    completed: boolean;
+    timestamp?: string | null;
+  }>;
+  dispatchRecords?: Array<{
+    id: string;
+    dispatchMode: string;
+    dispatchedDate: string;
+    dispatchedByName?: string;
+    trackingNumber?: string;
+    courierName?: string;
+    recipientName?: string;
+    acknowledgedDate?: string | null;
+    acknowledgedByName?: string | null;
+    notes?: string;
+  }>;
   source: 'internal' | 'external';
   receivedDate: string;
   completedAt?: string;
@@ -124,7 +144,7 @@ export type Correspondence = {
   senderOrganization: string;
   senderEmail?: string;
   senderPhone?: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'archived';
+  status: 'pending' | 'in-progress' | 'completed' | 'dispatched' | 'acknowledged' | 'archived' | 'withdrawn';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   divisionId?: string;
   divisionName?: string;
