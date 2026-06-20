@@ -51,7 +51,7 @@ class FOIARequest(UUIDModel, TimeStampedModel, SoftDeleteModel):
         choices=Status.choices,
         default=Status.SUBMITTED,
     )
-    received_date = models.DateField(default=timezone.now)
+    received_date = models.DateField(default=timezone.localdate)
     deadline_date = models.DateField(null=True, blank=True)
     acknowledged_date = models.DateField(null=True, blank=True)
     response_date = models.DateField(null=True, blank=True)

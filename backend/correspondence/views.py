@@ -19,6 +19,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.exceptions import ValidationError, PermissionDenied
 
+from audit.models import ActivityLog
 from audit.services import AuditService
 from common.grade_utils import (
     DEPARTMENT_GRADES,
@@ -798,8 +799,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(correspondence)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["post"], url_path="dispatch")
-    def dispatch(self, request, pk=None):
+    @action(detail=True, methods=["post"], url_path="dispatch", url_name="dispatch")
+    def create_dispatch(self, request, pk=None):
         """Mark correspondence as dispatched with tracking details."""
         correspondence = self.get_object()
         if correspondence.status != Correspondence.Status.COMPLETED:

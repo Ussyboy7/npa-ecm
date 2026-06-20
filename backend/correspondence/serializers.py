@@ -459,7 +459,7 @@ class DispatchRecordSerializer(serializers.ModelSerializer):
             "notes",
             "created_at",
         ]
-        read_only_fields = ["id", "dispatched_by", "acknowledged_by", "created_at"]
+        read_only_fields = ["id", "correspondence", "dispatched_by", "acknowledged_by", "created_at"]
 
 
 class CorrespondenceSerializer(serializers.ModelSerializer):

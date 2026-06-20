@@ -15,10 +15,13 @@ import {
   ArrowUp,
   ArrowRight,
   Info,
+  Send,
+  FileCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { WorkflowProgressIndicator } from "@/components/correspondence/WorkflowProgressIndicator";
+import { DispatchModal, AcknowledgeButton } from "@/components/correspondence/DispatchModal";
 import type { Correspondence, Minute, User, Office, OfficeMembership } from "@/lib/npa-structure";
 
 interface ActionsPanelProps {
@@ -70,7 +73,7 @@ export function ActionsPanel({
   onOpenCompletionModal,
   onOpenDelegateModal,
   onDownloadCompletionPackage,
-  _onSyncFromApi,
+  onSyncFromApi: _onSyncFromApi,
 }: ActionsPanelProps) {
   if (!correspondence) {
     return (
@@ -178,6 +181,20 @@ export function ActionsPanel({
               <Download className="h-4 w-4 mr-2" />
               Download completion package
             </Button>
+          )}
+
+          {correspondence.status !== "dispatched" && correspondence.status !== "acknowledged" && correspondence.status !== "archived" && (
+            <DispatchModal
+              correspondenceId={correspondence.id}
+              onSuccess={() => _onSyncFromApi?.()}
+            />
+          )}
+
+          {correspondence.status === "dispatched" && (
+            <AcknowledgeButton
+              correspondenceId={correspondence.id}
+              onSuccess={() => _onSyncFromApi?.()}
+            />
           )}
         </div>
       ) : (

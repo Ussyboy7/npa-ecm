@@ -23,8 +23,13 @@ from correspondence.models import (
     CorrespondenceDistribution,
     CorrespondenceDocumentLink,
     Delegation,
+    DispatchRecord,
+    Location,
     Minute,
+    PhysicalDocument,
+    CheckOutEvent,
 )
+from correspondence.foia_models import FOIARequest, FOIANote, FOIARequestDocument
 from dms.models import (
     Document,
     DocumentAccessLog,
@@ -84,6 +89,7 @@ class Command(BaseCommand):
                 self._ensure_workflows(users, correspondence_items)
                 self._ensure_support_content(users)
                 self._ensure_analytics(users)
+                self._ensure_physical_tracking(users, correspondence_items, documents)
                 self._ensure_project_cases(users, divisions, departments, offices)
             else:
                 self.stdout.write(self.style.WARNING("Skipping demo data creation (no users available)"))
@@ -705,12 +711,17 @@ class Command(BaseCommand):
             defaults={},
         )
 
-        DocumentAccessLog.objects.update_or_create(
+        if not DocumentAccessLog.objects.filter(
             document=document,
             user=users.get("md") or users.get("user-md"),
             action=DocumentAccessLog.AccessAction.VIEW,
-            sensitivity=document.sensitivity,
-        )
+        ).exists():
+            DocumentAccessLog.objects.create(
+                document=document,
+                user=users.get("md") or users.get("user-md"),
+                action=DocumentAccessLog.AccessAction.VIEW,
+                sensitivity=document.sensitivity,
+            )
 
         self.stdout.write(self.style.SUCCESS("Documents and related records ensured."))
         return {"primary": document, "workspace": workspace}
@@ -2115,13 +2126,220 @@ class Command(BaseCommand):
             self.style.SUCCESS(f'Project cases ensured. Total cases: {total_cases}')
         )
 
+    def _ensure_physical_tracking(
+        self,
+        users: dict[str, User],
+        correspondence_items: dict,
+        documents: dict,
+    ):
+        md_user = users.get("md") or users.get("user-md")
+        gmict_user = users.get("gmict") or users.get("user-gm-ict")
+        pamd_user = users.get("pamd") or users.get("user-pa-md")
+        superadmin_user = users.get("superadmin")
+
+        loc1, _ = Location.objects.update_or_create(
+            building="NPA Headquarters",
+            floor="Ground Floor",
+            room="Registry",
+            defaults={
+                "shelf": "A1-A10",
+                "cabinet": "R01",
+                "description": "Main registry for active correspondence files",
+                "is_active": True,
+            },
+        )
+        loc2, _ = Location.objects.update_or_create(
+            building="NPA Headquarters",
+            floor="2nd Floor",
+            room="Archive Room 201",
+            defaults={
+                "shelf": "B1-B20",
+                "cabinet": "A01-A05",
+                "description": "Archived correspondence and completed case files",
+                "is_active": True,
+            },
+        )
+        loc3, _ = Location.objects.update_or_create(
+            building="NPA Annex",
+            floor="1st Floor",
+            room="Executive Office 104",
+            defaults={
+                "shelf": "C1-C5",
+                "cabinet": "E01",
+                "description": "Active documents for executive review",
+                "is_active": True,
+            },
+        )
+        self.stdout.write(self.style.SUCCESS("3 Location records ensured."))
+
+        phys1, _ = PhysicalDocument.objects.update_or_create(
+            tracking_number="NPA/PHYS/2025/001",
+            defaults={
+                "barcode": "NPA-BAR-0001",
+                "correspondence": correspondence_items.get("primary"),
+                "location": loc1,
+                "status": PhysicalDocument.Status.IN_STORAGE,
+                "description": "ECM Implementation Contract - Signed Original",
+                "notes": "Original signed copy of ECM rollout contract",
+            },
+        )
+        phys2, _ = PhysicalDocument.objects.update_or_create(
+            tracking_number="NPA/PHYS/2025/002",
+            defaults={
+                "barcode": "NPA-BAR-0002",
+                "correspondence": correspondence_items.get("primary"),
+                "location": loc2,
+                "status": PhysicalDocument.Status.IN_STORAGE,
+                "description": "Rollout Status Report - ECM Q1 2025",
+                "notes": "Hard copy of quarterly progress report",
+            },
+        )
+        phys3, _ = PhysicalDocument.objects.update_or_create(
+            tracking_number="NPA/PHYS/2025/003",
+            defaults={
+                "barcode": "NPA-BAR-0003",
+                "location": loc1,
+                "status": PhysicalDocument.Status.CHECKED_OUT,
+                "description": "ICT Infrastructure Audit Report 2024",
+                "checked_out_to": md_user,
+                "checked_out_at": timezone.now() - timezone.timedelta(days=2),
+                "expected_return_at": timezone.now() + timezone.timedelta(days=5),
+                "notes": "Checked out for MD review",
+            },
+        )
+        phys4, _ = PhysicalDocument.objects.update_or_create(
+            tracking_number="NPA/PHYS/2025/004",
+            defaults={
+                "barcode": "NPA-BAR-0004",
+                "location": loc3,
+                "status": PhysicalDocument.Status.IN_STORAGE,
+                "description": "Digital Transformation Taskforce Charter",
+                "notes": "Original charter signed by MD",
+            },
+        )
+        phys5, _ = PhysicalDocument.objects.update_or_create(
+            tracking_number="NPA/PHYS/2025/005",
+            defaults={
+                "barcode": "NPA-BAR-0005",
+                "location": loc3,
+                "status": PhysicalDocument.Status.CHECKED_OUT,
+                "description": "Procurement Approval - ICT Equipment",
+                "checked_out_to": gmict_user,
+                "checked_out_at": timezone.now() - timezone.timedelta(days=1),
+                "notes": "Taken for procurement review meeting",
+            },
+        )
+        self.stdout.write(self.style.SUCCESS("5 PhysicalDocument records ensured."))
+
+        primary_corr = correspondence_items.get("primary")
+        if primary_corr:
+            dispatch, _ = DispatchRecord.objects.update_or_create(
+                correspondence=primary_corr,
+                tracking_number="TRACK-001",
+                defaults={
+                    "dispatch_mode": DispatchRecord.DispatchMode.EMAIL,
+                    "dispatched_date": timezone.now().date(),
+                    "dispatched_by": gmict_user,
+                    "recipient_name": "Managing Director",
+                    "notes": "Dispatched via email for ECM update request",
+                },
+            )
+            self.stdout.write(self.style.SUCCESS(f"DispatchRecord ensured: {dispatch.tracking_number}"))
+
+            dispatch.acknowledged_date = timezone.now().date()
+            dispatch.acknowledged_by = md_user or superadmin_user
+            dispatch.save(update_fields=["acknowledged_date", "acknowledged_by"])
+            self.stdout.write(self.style.SUCCESS(f"DispatchRecord acknowledged: {dispatch.tracking_number}"))
+
+        foia1, _ = FOIARequest.objects.update_or_create(
+            request_number="FOIA/2025/001",
+            defaults={
+                "requester_name": "Chinedu Okeke",
+                "requester_email": "chinedu.okeke@example.com",
+                "requester_phone": "+234-802-555-0101",
+                "organization": "Transparency International Nigeria",
+                "description_of_documents": "Request for port concession agreements for Lagos Port Complex (2015-2025)",
+                "request_details": "Seeking copies of all concession agreements, amendments, and related correspondence.",
+                "format_preference": FOIARequest.FormatPreference.ELECTRONIC,
+                "status": FOIARequest.Status.SUBMITTED,
+                "received_date": timezone.now().date() - timezone.timedelta(days=5),
+                "assigned_to": gmict_user,
+            },
+        )
+
+        foia2, _ = FOIARequest.objects.update_or_create(
+            request_number="FOIA/2025/002",
+            defaults={
+                "requester_name": "Fatima Usman",
+                "requester_email": "fusman@legal-aid.ng",
+                "organization": "Legal Aid Council of Nigeria",
+                "description_of_documents": "Request for environmental impact assessments for port expansion projects (2020-2024)",
+                "request_details": "Requesting EIA reports for Tin Can Island and Onne port expansion projects.",
+                "format_preference": FOIARequest.FormatPreference.ELECTRONIC,
+                "status": FOIARequest.Status.IN_PROCESSING,
+                "received_date": timezone.now().date() - timezone.timedelta(days=3),
+                "assigned_to": superadmin_user or gmict_user,
+                "acknowledged_date": timezone.now().date() - timezone.timedelta(days=2),
+            },
+        )
+
+        foia3, _ = FOIARequest.objects.update_or_create(
+            request_number="FOIA/2025/003",
+            defaults={
+                "requester_name": "Daily Trust Newspaper",
+                "requester_email": "editorial@dailytrust.ng",
+                "requester_phone": "+234-803-200-3000",
+                "organization": "Daily Trust Newspapers",
+                "description_of_documents": "Request for NPA annual budget performance reports (2023 and 2024)",
+                "request_details": "Requesting approved budget performance reports for FY2023 and FY2024.",
+                "format_preference": FOIARequest.FormatPreference.ELECTRONIC,
+                "status": FOIARequest.Status.RESPONDED,
+                "received_date": timezone.now().date() - timezone.timedelta(days=14),
+                "assigned_to": pamd_user,
+                "acknowledged_date": timezone.now().date() - timezone.timedelta(days=12),
+                "response_date": timezone.now().date() - timezone.timedelta(days=1),
+            },
+        )
+        self.stdout.write(self.style.SUCCESS("3 FOIARequest records ensured."))
+
+        FOIANote.objects.update_or_create(
+            foia_request=foia1,
+            user=gmict_user,
+            defaults={
+                "note": "This request appears to cover a wide scope. Recommend seeking legal guidance on potential exemptions before releasing documents.",
+                "is_internal": True,
+            },
+        )
+        FOIANote.objects.update_or_create(
+            foia_request=foia2,
+            user=pamd_user,
+            defaults={
+                "note": "Acknowledged and assigned to environmental compliance unit. Gather EIA reports from Engineering Division.",
+                "is_internal": True,
+            },
+        )
+        self.stdout.write(self.style.SUCCESS("2 FOIANote records ensured."))
+
+        dms_doc = documents.get("primary")
+        if dms_doc:
+            FOIARequestDocument.objects.update_or_create(
+                foia_request=foia3,
+                document=dms_doc,
+                defaults={
+                    "is_response": True,
+                    "added_by": pamd_user,
+                },
+            )
+            self.stdout.write(self.style.SUCCESS("1 FOIARequestDocument record ensured."))
+
     def _setup_role_permissions(self):
         """Set up default permissions for all system roles."""
         self.stdout.write(self.style.MIGRATE_HEADING("Setting up role permissions"))
 
-        # Import the setup_role_permissions command and call it
-        from organization.management.commands.setup_role_permissions import Command as SetupCommand
-        setup_cmd = SetupCommand()
-        # Run it with the same stdout
-        setup_cmd.stdout = self.stdout
-        setup_cmd.handle()
+        try:
+            from organization.management.commands.setup_role_permissions import Command as SetupCommand
+            setup_cmd = SetupCommand()
+            setup_cmd.stdout = self.stdout
+            setup_cmd.handle()
+        except ImportError:
+            self.stdout.write(self.style.WARNING("setup_role_permissions command not available; skipping."))
