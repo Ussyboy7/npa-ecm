@@ -99,11 +99,10 @@ interface DelegateModalProps {
 export const DelegateModal = ({
   open,
   onOpenChange,
-  _correspondenceId,
   executiveId,
   onDelegate,
 }: DelegateModalProps) => {
-  const {assistantAssignments, users, addAssignment, directorates: _directorates, divisions, departments, refreshOrganizationData } = useOrganization();
+  const {assistantAssignments, users, addAssignment, divisions, departments, refreshOrganizationData } = useOrganization();
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');

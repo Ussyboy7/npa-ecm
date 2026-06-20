@@ -133,9 +133,9 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
       }
 
       const err = new Error(apiMessage || `HTTP ${response.status}`);
-      (err as Record<string, unknown>).status = response.status;
-      (err as Record<string, unknown>).apiMessage = apiMessage;
-      (err as Record<string, unknown>).body = responseBody;
+      (err as unknown as Record<string, unknown>).status = response.status;
+      (err as unknown as Record<string, unknown>).apiMessage = apiMessage;
+      (err as unknown as Record<string, unknown>).body = responseBody;
       throw err;
     }
 

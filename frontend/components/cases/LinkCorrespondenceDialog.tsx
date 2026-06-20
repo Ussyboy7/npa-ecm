@@ -96,8 +96,8 @@ export function LinkCorrespondenceDialog({
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/cases/${caseId}/`, {
         signal: abortControllerRef.current.signal,
       });
-      const linked = ((response.correspondence as unknown[]) || []).map((link: Record<string, unknown>) =>
-        link.correspondence_id || (link.correspondence as unknown)?.id
+      const linked = ((response.correspondence as Record<string, unknown>[]) || []).map((link: Record<string, unknown>) =>
+        (link.correspondence_id || (link.correspondence as Record<string, unknown>)?.id) as string
       ).filter(Boolean);
       setLinkedIds(new Set(linked));
     } catch (err: unknown) {
@@ -136,7 +136,7 @@ export function LinkCorrespondenceDialog({
       
       if (signal.aborted) return;
       
-      const items = ((response.results as unknown[]) || []).map((item: Record<string, unknown>) => ({
+      const items = ((response.results as Record<string, unknown>[]) || []).map((item: Record<string, unknown>) => ({
         id: item.id as string as string,
         referenceNumber: (item.reference_number as string) || '',
         subject: (item.subject as string) || '',

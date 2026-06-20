@@ -82,7 +82,6 @@ export const RoutingSection = ({
   offices,
   directorates,
   divisions,
-  _users,
   assistantList,
   approverList,
   suggestedNext,

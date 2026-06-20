@@ -477,11 +477,6 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   const [delegations, setDelegations] = useState<Delegation[]>([]);
   const {currentUser: _currentUser, hydrated: _hydrated } = useCurrentUser();
 
-  // Initialize data on mount
-  useEffect(() => {
-    refreshData();
-  }, [refreshData]);
-
   const syncFromApi = useCallback(async () => {
     // Only requirement: authenticated (has token)
     // Don't wait for useCurrentUser to hydrate - data fetching is independent
@@ -547,6 +542,11 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     setMinutes(loadedMinutes);
     setDelegations([]);
   }, []);
+
+  // Initialize data on mount
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
 
   const getCorrespondenceById = useCallback((id: string) => {
     return correspondence.find(c => c.id === id);

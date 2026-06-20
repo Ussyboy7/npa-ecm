@@ -42,8 +42,6 @@ const recipientKey = (recipient: DistributionRecipient): string => {
 export const DistributionSelector = ({
   selectedDistribution,
   onDistributionChange,
-  _currentDivisionId,
-  _currentDepartmentId,
 }: DistributionSelectorProps) => {
   const { currentUser } = useCurrentUser();
   const {users, offices, divisions, departments: _departments, directorates } = useOrganization();

@@ -98,7 +98,6 @@ export const CaseHeader = ({
   onImport,
   owningOffice,
   assignedTo,
-  _createdBy,
 }: CaseHeaderProps) => {
   const router = useRouter();
 

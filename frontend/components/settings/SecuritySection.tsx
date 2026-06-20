@@ -76,7 +76,6 @@ export function SecuritySection({
   isLoading2FAStatus,
   otpSent,
   otpCountdown,
-  _showPasswordDialog,
   email,
   onSetup2FA,
   onSendEmailOTP,

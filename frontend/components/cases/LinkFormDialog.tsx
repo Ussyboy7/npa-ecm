@@ -93,7 +93,7 @@ export function LinkFormDialog({
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/cases/${caseId}/`, {
         signal: abortControllerRef.current.signal,
       });
-      const linked = ((response.forms as unknown[]) || []).map((link: Record<string, unknown>) =>
+      const linked = ((response.forms as Record<string, unknown>[]) || []).map((link: Record<string, unknown>) =>
         link.form_document_id || link.formDocumentId
       ).filter(Boolean);
       setLinkedIds(new Set(linked as string[]));
@@ -134,12 +134,12 @@ export function LinkFormDialog({
       
       if (signal.aborted) return;
       
-      const items = ((response.results as unknown[]) || []).map((item: Record<string, unknown>) => ({
+      const items = ((response.results as Record<string, unknown>[]) || []).map((item: Record<string, unknown>) => ({
         id: item.id as string as string,
-        title: (item.title as string as string) || ((item.document as unknown)?.title as string) || '',
-        templateName: ((item.template as unknown)?.name as string) || (item.template_name as string),
-        status: (item.status as string as string) || ((item.document as unknown)?.status as string),
-        createdAt: (item.created_at as string) || ((item.document as unknown)?.created_at as string),
+        title: (item.title as string) || ((item.document as Record<string, unknown>)?.title as string) || '',
+        templateName: ((item.template as Record<string, unknown>)?.name as string) || (item.template_name as string),
+        status: (item.status as string) || ((item.document as Record<string, unknown>)?.status as string),
+        createdAt: (item.created_at as string) || ((item.document as Record<string, unknown>)?.created_at as string),
       }));
       setForms(items);
       setTotalCount(response.count as number || 0);

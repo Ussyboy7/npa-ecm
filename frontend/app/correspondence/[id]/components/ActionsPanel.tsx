@@ -19,12 +19,12 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { WorkflowProgressIndicator } from "@/components/correspondence/WorkflowProgressIndicator";
-import type { Correspondence, Minute } from "@/lib/npa-structure";
+import type { Correspondence, Minute, User, Office, OfficeMembership } from "@/lib/npa-structure";
 
 interface ActionsPanelProps {
   correspondence?: Correspondence;
   minutes?: Minute[];
-  activeUser?: unknown;
+  activeUser?: User | null;
   onOpenParallelRouteModal?: () => void;
   onOpenLinkCaseModal?: () => void;
   isCompleted?: boolean;
@@ -34,11 +34,11 @@ interface ActionsPanelProps {
   turnRestrictedDisabled?: boolean;
   completionPackageUrl?: string | null;
   completionGeneratedAt?: string | null;
-  activeDelegation?: unknown;
-  organizationUsers?: unknown[];
-  offices?: unknown[];
-  officeMemberships?: unknown[];
-  lookupUser?: (id: string) => unknown;
+  activeDelegation?: Record<string, unknown> | null;
+  organizationUsers?: User[];
+  offices?: Office[];
+  officeMemberships?: OfficeMembership[];
+  lookupUser?: (id: string) => User | undefined;
   onOpenMinuteModal?: () => void;
   onOpenTreatmentModal?: () => void;
   onOpenCompletionModal?: () => void;
@@ -317,7 +317,7 @@ export function ActionsPanel({
                       <>
                         Delegated to {organizationUsers.find((u) => String(u.id) === String(activeDelegation.assistantId))?.name || "Assistant"}
                         {activeDelegation.delegatedAt && (
-                          <> on {new Date(activeDelegation.delegatedAt).toLocaleDateString()}</>
+                          <> on {new Date(activeDelegation.delegatedAt as string).toLocaleDateString()}</>
                         )}
                       </>
                     ) : (

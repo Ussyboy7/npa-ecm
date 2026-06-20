@@ -93,7 +93,7 @@ export function LinkDocumentDialog({
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/cases/${caseId}/`, {
         signal: abortControllerRef.current.signal,
       });
-      const linked = ((response.documents as unknown[]) || []).map((link: Record<string, unknown>) =>
+      const linked = ((response.documents as Record<string, unknown>[]) || []).map((link: Record<string, unknown>) =>
         link.document_id || link.documentId
       ).filter(Boolean);
       setLinkedIds(new Set(linked as string[]));
@@ -133,7 +133,7 @@ export function LinkDocumentDialog({
       
       if (signal.aborted) return;
       
-      const items = ((response.results as unknown[]) || []).map((item: Record<string, unknown>) => ({
+      const items = ((response.results as Record<string, unknown>[]) || []).map((item: Record<string, unknown>) => ({
         id: item.id as string as string,
         title: (item.title as string as string) || '',
         documentType: item.document_type as string,

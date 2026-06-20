@@ -246,7 +246,7 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
               timestamp: caseData.completionPackageGeneratedAt || caseData.closedAt || '',
               user: {
                 id: caseData.createdById || '',
-                  name: (caseData as unknown).createdByName || 'System',
+                  name: (caseData as Record<string, unknown>).createdByName as string || 'System',
               },
               description: `Completion package generated`,
               metadata: {

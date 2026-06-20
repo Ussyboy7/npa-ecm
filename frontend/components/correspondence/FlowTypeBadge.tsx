@@ -31,7 +31,6 @@ export function FlowTypeBadge({
   isInward,
   isOutward,
   isInternal,
-  _isExternal,
   variant = 'outline',
   showIcon = true,
   className,

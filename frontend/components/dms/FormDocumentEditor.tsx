@@ -986,7 +986,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                                 "bg-yellow-500"
                               }`}>
                                 {isSigned ? (
-                                  <CheckCircle className="w-4 h-4 text-white" />
+                                  <CheckCircle2 className="w-4 h-4 text-white" />
                                 ) : isRejected ? (
                                   <AlertCircle className="w-4 h-4 text-white" />
                                 ) : (
