@@ -43,12 +43,14 @@ export const sanitizeRichText = (html: string): string => {
     ALLOWED_TAGS: [
       'p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'a', 'img', 'table', 'thead',
-      'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col', 'div', 'span', 'hr', 'sub', 'sup', 'strike',
-      'b', 'i', 'small', 'mark', 'del', 'ins'
+      'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col', 'div', 'span', 'hr',
+      'sub', 'sup', 'strike', 'b', 'i', 'small', 'mark', 'del', 'ins',
+      'section', 'header', 'footer', 'main', 'nav', 'font',
     ],
     ALLOWED_ATTR: [
       'href', 'src', 'alt', 'title', 'class', 'id', 'style', 'width', 'height',
-      'colspan', 'rowspan', 'align', 'valign', 'target', 'rel', 'data-indent', 'data-color'
+      'colspan', 'rowspan', 'align', 'valign', 'target', 'rel', 'data-indent', 'data-color',
+      'face', 'size', 'color',
     ],
   });
 };

@@ -719,6 +719,15 @@ export const ShareDocumentDialog = ({
       return;
     }
 
+    // If already in review step, confirm and perform the share
+    if (showReviewStep) {
+      const userIds = correspondenceRouteType === 'person' ? Array.from(selectedUserIds) : [];
+      const divisionIds = correspondenceRouteType === 'office' ? directShareDerivedDivisionIds : [];
+      const departmentIds = correspondenceRouteType === 'office' ? directShareDerivedDepartmentIds : [];
+      await performShare(userIds, divisionIds, departmentIds);
+      return;
+    }
+
     // Check for sensitive document warning
     if ((document.sensitivity === 'restricted' || document.sensitivity === 'confidential') && !showSensitivityWarning) {
       setPendingShareAction(async () => {
@@ -1157,8 +1166,10 @@ export const ShareDocumentDialog = ({
               </CardContent>
             </Card>
 
-            {/* Review Step */}
+            {/* Share Form (always rendered so footer submit button works on review step) */}
+            <form id="share-form" onSubmit={handleSubmit}>
             {showReviewStep ? (
+              /* Review Step Confirmation */
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Button
@@ -1231,8 +1242,8 @@ export const ShareDocumentDialog = ({
                 </Card>
               </div>
             ) : (
-              /* Main Form */
-              <form id="share-form" onSubmit={handleSubmit} className="space-y-6">
+              /* Main Form Fields */
+              <div className="space-y-6">
               {/* Access Level Section */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -2184,8 +2195,9 @@ export const ShareDocumentDialog = ({
                   </div>
                 </div>
               )}
-            </form>
+            </div>
             )}
+            </form>
           </div>
         )}
         </div>

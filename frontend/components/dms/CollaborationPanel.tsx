@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -105,9 +105,6 @@ export const CollaborationPanel = ({
           <FolderKanban className="h-4 w-4 text-primary" />
           Workspaces
         </CardTitle>
-        <CardDescription className="mt-1">
-          Organize documents into project workspaces. Workspaces are for grouping related documents by project or theme. For workflow-based grouping (complaints, requests, legal matters), use Cases instead.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         {/* Workspaces */}
@@ -293,10 +290,16 @@ export const CollaborationPanel = ({
             </Dialog>
           </div>
           {documentWorkspaces.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-6 text-center border border-dashed rounded-lg">
-              <FolderKanban className="h-6 w-6 text-muted-foreground mb-2 opacity-50" />
-              <p className="text-xs text-muted-foreground">No workspaces assigned</p>
-            </div>
+            <p className="text-xs text-muted-foreground text-center py-3">
+              No workspaces assigned.{' '}
+              <button
+                type="button"
+                className="text-primary underline underline-offset-2 hover:no-underline"
+                onClick={() => onWorkspaceManageOpenChange(true)}
+              >
+                Manage to assign
+              </button>
+            </p>
           ) : (
             <div className="flex flex-wrap gap-1.5 max-h-[300px] overflow-y-auto pr-2">
               {documentWorkspaces.map((workspace) => (

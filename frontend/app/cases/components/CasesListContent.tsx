@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,10 +17,10 @@ import { toast } from "sonner";
 import { logError, logWarn } from "@/lib/client-logger";
 import { exportToCSV } from "@/lib/admin-export";
 import { apiFetch } from "@/lib/api-client";
-import { Search, Filter, Plus, FileText, Loader2, AlertCircle, Briefcase, Clock, Building2, Inbox, Download, ChevronRight } from "lucide-react";
+import { Search, Plus, FileText, Loader2, Briefcase, Building2, Download, ChevronRight } from "lucide-react";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
-import { Label } from "@/components/ui/label";
+import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import {
   Tooltip,
   TooltipContent,
@@ -46,13 +46,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueSearchStatsShellContentClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-  registryQueueSearchInputWrapClass,
 } from "@/components/shared/registry-queue-styles";
 
 const DEFAULT_PAGE_SIZE = 25;
@@ -144,9 +137,9 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const scopeChecks = useScopeChecks();
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedType, setSelectedType] = useState("");
+  const [selectedPriority, setSelectedPriority] = useState("");
   const [divisionFilter, setDivisionFilter] = useState<string>("all");
   const [executiveFilter, setExecutiveFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>('');
@@ -154,7 +147,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   const [sortBy, setSortBy] = useState<string>('opened_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [count, setCount] = useState(0);
-  const [showFilters, setShowFilters] = useState(false);
   const [executives, setExecutives] = useState<Array<{id: string; name: string; email?: string}>>([]);
   const [exporting, setExporting] = useState(false);
   
@@ -169,7 +161,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   });
   
   // Calculate summary stats - fetch separately from API
-  const [summary, setSummary] = useState({
+  const [, setSummary] = useState({
     total: 0,
     open: 0,
     inProgress: 0,
@@ -223,7 +215,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, scope, selectedStatuses, selectedTypes, selectedPriorities, divisionFilter, executiveFilter, dateFrom, dateTo, sortBy, sortOrder, pagination.pageSize]);
+  }, [debouncedSearch, scope, selectedStatus, selectedType, selectedPriority, divisionFilter, executiveFilter, dateFrom, dateTo, sortBy, sortOrder, pagination.pageSize]);
 
   // Fetch cases with request cancellation
   useEffect(() => {
@@ -246,9 +238,9 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           page: pagination.page,
           pageSize: pagination.pageSize,
           search: debouncedSearch.trim() || undefined,
-          status: selectedStatuses.length > 0 ? selectedStatuses : undefined,
-          caseType: selectedTypes.length > 0 ? selectedTypes : undefined,
-          priority: selectedPriorities.length > 0 ? selectedPriorities : undefined,
+          status: selectedStatus || undefined,
+          caseType: selectedType || undefined,
+          priority: selectedPriority || undefined,
           division: divisionFilter !== "all" ? divisionFilter : undefined,
           executive: (isSecretary || isSuperAdmin) && executiveFilter !== "all" ? executiveFilter : undefined,
           ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
@@ -258,7 +250,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         if (scope === "my" && currentUser) {
           params.scope = "my";
           params.assignedTo = currentUser.id;
-        } else if (scope === "office" && userOfficeIds.length > 0) {
+        } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
           params.scope = "office";
         } else if (scope === "all") {
           // Use the scope from scopeChecks (department/division/directorate/organization)
@@ -332,9 +324,9 @@ export function CasesListContent({ scope, title, description }: CasesListContent
     pagination.page,
     pagination.pageSize,
     debouncedSearch,
-    selectedStatuses,
-    selectedTypes,
-    selectedPriorities,
+    selectedStatus,
+    selectedType,
+    selectedPriority,
     divisionFilter,
     executiveFilter,
     isSecretary,
@@ -348,47 +340,22 @@ export function CasesListContent({ scope, title, description }: CasesListContent
     sortOrder,
   ]);
 
-  const PRIORITY_COLORS: Record<string, string> = {
-    urgent: '#ef4444',
-    high: '#f97316',
-    medium: '#eab308',
-    low: '#22c55e',
-  };
-
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedStatuses.length > 0) count++;
-    if (selectedTypes.length > 0) count++;
-    if (selectedPriorities.length > 0) count++;
+    if (selectedStatus) count++;
+    if (selectedType) count++;
+    if (selectedPriority) count++;
     if (divisionFilter !== "all") count++;
     if (executiveFilter !== "all") count++;
     if (dateFrom) count++;
     if (dateTo) count++;
     return count;
-  }, [selectedStatuses, selectedTypes, selectedPriorities, divisionFilter, executiveFilter, dateFrom, dateTo]);
+  }, [selectedStatus, selectedType, selectedPriority, divisionFilter, executiveFilter, dateFrom, dateTo]);
 
-  const toggleStatus = (status: string) => {
-    setSelectedStatuses((prev) =>
-      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
-    );
-  };
-
-  const toggleType = (type: string) => {
-    setSelectedTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
-  };
-
-  const togglePriority = (priority: string) => {
-    setSelectedPriorities((prev) =>
-      prev.includes(priority) ? prev.filter((p) => p !== priority) : [...prev, priority]
-    );
-  };
-
-  const clearAllFilters = () => {
-    setSelectedStatuses([]);
-    setSelectedTypes([]);
-    setSelectedPriorities([]);
+  const clearFilters = () => {
+    setSelectedStatus("");
+    setSelectedType("");
+    setSelectedPriority("");
     setDivisionFilter("all");
     setExecutiveFilter("all");
     setDateFrom('');
@@ -407,9 +374,9 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         page: 1,
         pageSize: 1000,
         search: debouncedSearch.trim() || undefined,
-        status: selectedStatuses.length > 0 ? selectedStatuses : undefined,
-        caseType: selectedTypes.length > 0 ? selectedTypes : undefined,
-        priority: selectedPriorities.length > 0 ? selectedPriorities : undefined,
+        status: selectedStatus || undefined,
+        caseType: selectedType || undefined,
+        priority: selectedPriority || undefined,
         division: divisionFilter !== "all" ? divisionFilter : undefined,
         executive: (isSecretary || isSuperAdmin) && executiveFilter !== "all" ? executiveFilter : undefined,
         ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
@@ -417,7 +384,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
       if (scope === "my" && currentUser) {
         params.scope = "my";
         params.assignedTo = currentUser.id;
-      } else if (scope === "office" && userOfficeIds.length > 0) {
+      } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
         params.scope = "office";
       } else if (scope === "all") {
         params.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
@@ -475,16 +442,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => setShowFilters(!showFilters)}
-            aria-label={`${showFilters ? 'Hide' : 'Show'} filters`}
-            aria-expanded={showFilters}
-          >
-            <Filter className="h-4 w-4 mr-2" /> Filters
-            {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2" aria-label={`${activeFilterCount} active filters`}>{activeFilterCount}</Badge>}
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
             onClick={handleExport}
             disabled={exporting || cases.length === 0}
             aria-label="Export to CSV"
@@ -523,187 +480,75 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         ]}
       />
 
-      {/* Filters Panel */}
-      {showFilters && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">
-                {scope === "my"
-                  ? "My Case Filters"
-                  : scope === "office"
-                    ? "Office Case Filters"
-                    : "All Case Filters"}
-              </CardTitle>
-              {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearAllFilters}>
-                  Clear All
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Status</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {statusOptions.map((status) => (
-                      <Badge
-                        key={status.value}
-                        variant={selectedStatuses.includes(status.value) ? "default" : "outline"}
-                        className="cursor-pointer text-xs"
-                        onClick={() => toggleStatus(status.value)}
-                      >
-                        {status.label}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Case Type</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {caseTypeOptions.map((type) => (
-                      <Badge
-                        key={type.value}
-                        variant={selectedTypes.includes(type.value) ? "default" : "outline"}
-                        className="cursor-pointer text-xs"
-                        onClick={() => toggleType(type.value)}
-                      >
-                        {type.label}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Priority</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {priorityOptions.map((priority) => (
-                      <Badge
-                        key={priority.value}
-                        variant={selectedPriorities.includes(priority.value) ? "default" : "outline"}
-                        className="cursor-pointer text-xs"
-                        onClick={() => togglePriority(priority.value)}
-                        style={selectedPriorities.includes(priority.value) ? { backgroundColor: PRIORITY_COLORS[priority.value] } : {}}
-                      >
-                        {priority.label}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Division</Label>
-                  <Select value={divisionFilter} onValueChange={setDivisionFilter}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Divisions</SelectItem>
-                      {divisions.map((div) => (
-                        <SelectItem key={div.id} value={div.id}>
-                          {div.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {(isSecretary || isSuperAdmin) && executives.length > 0 && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Executive</Label>
-                    <Select value={executiveFilter} onValueChange={setExecutiveFilter}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Executives</SelectItem>
-                        {executives.map((exec) => (
-                          <SelectItem key={exec.id} value={exec.id}>
-                            {exec.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date From</Label>
-                  <Input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date To</Label>
-                  <Input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Sort By</Label>
-                  <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
-                    const [by, order] = value.split('-');
-                    setSortBy(by);
-                    setSortOrder(order as 'asc' | 'desc');
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="opened_at-desc">Opened Date (Newest)</SelectItem>
-                      <SelectItem value="opened_at-asc">Opened Date (Oldest)</SelectItem>
-                      <SelectItem value="updated_at-desc">Last Updated (Newest)</SelectItem>
-                      <SelectItem value="updated_at-asc">Last Updated (Oldest)</SelectItem>
-                      <SelectItem value="case_number-asc">Case Number (A-Z)</SelectItem>
-                      <SelectItem value="case_number-desc">Case Number (Z-A)</SelectItem>
-                      <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-      {/* Search + Stats */}
+      {/* Inline Filter Bar */}
       <Card>
-        <CardContent className={registryQueueSearchStatsShellContentClass}>
-          <div className={registryQueueSearchInputWrapClass}>
-            <Search
-              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              placeholder="Search cases by number, title, description…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-              aria-label="Search cases"
-            />
+        <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          <div className="relative min-w-[200px] flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Search cases..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {[
-              { label: 'Total cases', value: summary.total, icon: Inbox, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-              { label: 'Open cases', value: summary.open, icon: FileText, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-              { label: 'In progress', value: summary.inProgress, icon: Clock, bgClass: 'bg-yellow-500/10', iconClass: 'text-yellow-600 dark:text-yellow-400' },
-              { label: 'Urgent items', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-            ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-              <Card key={label}>
-                <CardContent className={registryQueueStatCardContentClass}>
-                  <div className="flex items-center gap-4">
-                    <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                      <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                    </div>
-                    <div>
-                      <p className={registryQueueStatLabelClass}>{label}</p>
-                      <p className={registryQueueStatValueClass}>{value}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Select value={selectedStatus || 'all'} onValueChange={(v) => { setSelectedStatus(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedType || 'all'} onValueChange={(v) => { setSelectedType(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Types" /></SelectTrigger>
+            <SelectContent>
+              {caseTypeOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={divisionFilter} onValueChange={(v) => { setDivisionFilter(v); pagination.goToFirstPage(); }}>
+            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Divisions" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Divisions</SelectItem>
+              {divisions.map((div) => (
+                <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+            <SelectContent>
+              {priorityOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(isSecretary || isSuperAdmin) && executives.length > 0 && (
+            <Select value={executiveFilter} onValueChange={(v) => { setExecutiveFilter(v); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Executives" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Executives</SelectItem>
+                {executives.map((exec) => (
+                  <SelectItem key={exec.id} value={exec.id}>{exec.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+          <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => {
+            const [by, order] = value.split('-');
+            setSortBy(by);
+            setSortOrder(order as 'asc' | 'desc');
+          }}>
+            <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="opened_at-desc">Opened Date (Newest)</SelectItem>
+              <SelectItem value="opened_at-asc">Opened Date (Oldest)</SelectItem>
+              <SelectItem value="updated_at-desc">Last Updated (Newest)</SelectItem>
+              <SelectItem value="updated_at-asc">Last Updated (Oldest)</SelectItem>
+              <SelectItem value="case_number-asc">Case Number (A-Z)</SelectItem>
+              <SelectItem value="case_number-desc">Case Number (Z-A)</SelectItem>
+              <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+            </SelectContent>
+          </Select>
+          {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
         </CardContent>
       </Card>
 
@@ -729,7 +574,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
               : "When cases are created in your scope, they will appear here."
           }
           actionLabel={debouncedSearch || activeFilterCount > 0 ? "Clear Filters" : undefined}
-          onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+          onAction={debouncedSearch || activeFilterCount > 0 ? clearFilters : undefined}
         />
       ) : (
         <>

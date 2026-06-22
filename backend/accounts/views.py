@@ -41,6 +41,43 @@ try:
 except ImportError:
     QRCODE_AVAILABLE = False
 
+from PIL import Image
+
+
+def process_signature_background(image_bytes, threshold=200, fade_width=30):
+    """Remove white/light background from a signature image.
+
+    Uses brightness-based alpha mapping with smooth transition for anti-aliasing.
+    Dark pixels (ink) stay opaque; white/light pixels become transparent.
+    Returns PNG bytes with transparency.
+    """
+    img = Image.open(io.BytesIO(image_bytes))
+
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+
+    pixels = img.load()
+    width, height = img.size
+
+    for y in range(height):
+        for x in range(width):
+            r, g, b, a = pixels[x, y]
+            # Perceptual brightness
+            brightness = 0.299 * r + 0.587 * g + 0.114 * b
+
+            if brightness <= (threshold - fade_width):
+                new_alpha = 255
+            elif brightness >= threshold:
+                new_alpha = 0
+            else:
+                new_alpha = int(255 * (threshold - brightness) / fade_width)
+
+            pixels[x, y] = (r, g, b, min(a, new_alpha))
+
+    output = io.BytesIO()
+    img.save(output, format='PNG')
+    return output.getvalue()
+
 
 class UserPagination(PageNumberPagination):
     """Pagination for user list."""
@@ -738,12 +775,14 @@ class ExecutiveSignatureView(APIView):
         
         validated_data = upload_serializer.validated_data
         signature_file = validated_data['signature_image']
-        
-        # Compute file hash for integrity
-        file_content = signature_file.read()
-        file_hash = ExecutiveSignature.compute_file_hash(file_content)
-        signature_file.seek(0)  # Reset file pointer
-        
+
+        # Read, process (remove white background), then recreate file
+        raw_bytes = signature_file.read()
+        processed_bytes = process_signature_background(raw_bytes)
+        file_hash = ExecutiveSignature.compute_file_hash(processed_bytes)
+        original_name = signature_file.name
+        signature_file = ContentFile(processed_bytes, name=original_name or 'signature.png')
+
         # Get or create signature record
         signature, created = ExecutiveSignature.objects.get_or_create(
             user=request.user,

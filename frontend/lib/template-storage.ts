@@ -246,14 +246,12 @@ export const initializeTemplates = () => {
 };
 
 export const loadTemplates = async (): Promise<DocumentTemplate[]> => {
-  // Use backend only - no localStorage fallback
   if (!hasTokens()) {
     throw new Error('Authentication required to load templates');
   }
 
   try {
-    const backendTemplates = await templateApi.getTemplates({ isActive: true });
-    return backendTemplates;
+    return await templateApi.getTemplates({ isActive: true });
   } catch (error: unknown) {
     logError('Failed to load templates from backend:', error);
     throw error;

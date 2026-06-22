@@ -90,6 +90,7 @@ const buildExtendedDocumentQueryString = (params: ExtendedDocumentQueryParams) =
   if (typeof params.recentDays === 'number' && params.recentDays > 0) searchParams.set('recent_days', String(params.recentDays));
   if (params.statusIn && params.statusIn.length > 0) searchParams.set('status_in', params.statusIn.join(','));
   if (params.documentTypeIn && params.documentTypeIn.length > 0) searchParams.set('document_type_in', params.documentTypeIn.join(','));
+  if (params.workspaceId) searchParams.set('workspace', params.workspaceId);
   return searchParams.toString();
 };
 

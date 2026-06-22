@@ -23,10 +23,10 @@ import {
   type DocumentComment,
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
-import { type DistributionRecipient } from '@/lib/npa-structure';
+import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { formatFileSize } from '@/lib/file-utils';
-import { ArrowLeft, FileText, Download, Layers, User as UserIcon, Pencil, FilePlus, Clock, Eye, Activity, Shield, Loader2, AlertCircle, PenTool, Scan, Download as DownloadIcon } from 'lucide-react';
+import { ArrowLeft, FileText, Download, Layers, User as UserIcon, Pencil, FilePlus, Clock, Eye, Activity, Shield, Loader2, AlertCircle, PenTool, Scan, Download as DownloadIcon, Link2, Info } from 'lucide-react';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -77,7 +77,7 @@ const _statusVariant = (status: DocumentRecord['status']): 'outline' | 'default'
   }
 };
 
-const DocumentDetailPage = () => {
+const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   // Dialog state
@@ -93,6 +93,7 @@ const DocumentDetailPage = () => {
   const [replaceVersionId, setReplaceVersionId] = useState<string | null>(null);
   const [minuteDocumentCorrespondence, setMinuteDocumentCorrespondence] = useState<Correspondence | null>(null);
   const [selectedAccessLog, setSelectedAccessLog] = useState<DocumentAccessLog | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'versions' | 'related'>('overview');
 
   // Helper function to normalize IDs
   const normalizeId = (value: unknown): string | undefined => {
@@ -791,158 +792,6 @@ const DocumentDetailPage = () => {
       .filter((ws): ws is DocumentWorkspace => ws !== undefined);
   }, [document, workspaceLookup]);
 
-  // Memoize refresh handlers to prevent infinite loops
-  const handleRefreshRelatedCorrespondence = useCallback(async () => {
-    if (!document?.id) return;
-    try {
-      const linksResponse = await apiFetch<Array<{ id: string; correspondence: Correspondence; notes?: string }>>(
-        `/correspondence/document-links/?document=${document.id}`
-      );
-      const links = Array.isArray(linksResponse) ? linksResponse : [];
-      
-      if (links.length > 0) {
-        const correspondenceData = await Promise.all(
-          links.map(async (link) => {
-            try {
-              const corrId = typeof link.correspondence === 'string' ? link.correspondence : link.correspondence?.id;
-              if (!corrId) return null;
-
-              const [corrResponse, minutesResponse] = await Promise.all([
-                apiFetch<Record<string, unknown>>(`/correspondence/items/${corrId}/`),
-                apiFetch<unknown[] | { results?: unknown[]; data?: unknown[] }>(`/correspondence/minutes/?correspondence=${corrId}`),
-              ]);
-
-              logInfo(`[DMS Detail] Minutes API response (refresh) for correspondence ${corrId}:`, minutesResponse);
-              
-              // Handle paginated response
-              const minutesArray = Array.isArray(minutesResponse)
-                ? minutesResponse
-                : (minutesResponse?.results || minutesResponse?.data || []);
-
-              const minutes: Minute[] = (minutesArray as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
-
-                    return {
-                      id: String(item.id as string),
-                      correspondenceId: String(corrId),
-                      userId: normalizeId(item.user ?? item.user_id) ?? '',
-                      userName:
-                        typeof item.user === 'object' && item.user
-                          ? (() => {
-                              const userObj = item.user as Record<string, unknown>;
-                              const fullName = `${userObj.first_name ?? ''} ${userObj.last_name ?? ''}`.trim();
-                              if (fullName.length > 0) return fullName;
-                              return userObj.username as string ?? undefined;
-                            })()
-                          : undefined,
-                      userEmail: typeof item.user === 'object' ? (item.user as Record<string, unknown>).email as string ?? undefined : undefined,
-                      userSystemRole: undefined,
-                      gradeLevel: item.grade_level as string ?? '',
-                      actionType: item.action_type as Minute['actionType'] ?? 'minute',
-                      minuteText: item.minute_text as string ?? '',
-                      direction: item.direction as Minute['direction'] ?? 'downward',
-                      stepNumber: item.step_number as number ?? 1,
-                      timestamp: item.timestamp ?? new Date().toISOString(),
-                      actedBySecretary: item.acted_by_secretary ?? false,
-                      actedByAssistant: item.acted_by_assistant ?? false,
-                      assistantType: item.assistant_type ?? undefined,
-                      readAt: item.read_at ?? undefined,
-                      mentions: Array.isArray(item.mentions) ? item.mentions : [],
-                      signature: item.signature_payload ?? undefined,
-                      toOfficeId: item.to_office ? (typeof item.to_office === 'string' ? item.to_office : (item.to_office as Record<string, unknown>).id) : undefined,
-                      toOfficeName: item.to_office_name ?? (typeof item.to_office === 'object' && item.to_office ? (item.to_office as Record<string, unknown>).name : undefined),
-                      toUserId: item.to_user ? (typeof item.to_user === 'string' ? item.to_user : (item.to_user as Record<string, unknown>).id) : undefined,
-                      toUserName: item.to_user_name ?? (typeof item.to_user === 'object' && item.to_user ? `${(item.to_user as Record<string, unknown>).first_name ?? ''} ${(item.to_user as Record<string, unknown>).last_name ?? ''}`.trim() : undefined),
-                      isRecalled: item.is_recalled ?? false,
-                      recalledAt: item.recalled_at ?? undefined,
-                      recallReason: item.recall_reason as string ?? undefined,
-                    } as Minute;
-                  });
-              
-              // Map distribution (reuse normalizeId function defined above)
-                  const distribution = Array.isArray(corrResponse.distribution)
-                ? corrResponse.distribution.map((recipient: Record<string, unknown>) => {
-                    const recipientType = recipient.recipient_type ?? 'division';
-                    return {
-                      id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
-                      type:
-                        recipientType === 'office'
-                          ? 'office'
-                          :
-                        recipientType === 'directorate'
-                          ? 'directorate'
-                          : recipientType === 'department'
-                          ? 'department'
-                          : 'division',
-                      officeId: normalizeId(recipient.office),
-                      directorateId: normalizeId(recipient.directorate),
-                      divisionId: normalizeId(recipient.division),
-                      departmentId: normalizeId(recipient.department),
-                      name:
-                        recipient.office_name as string ??
-                        recipient.directorate_name as string ??
-                        recipient.division_name as string ??
-                        recipient.department_name as string ??
-                        undefined,
-                      addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
-                      addedByName:
-                        typeof recipient.added_by === 'object' && recipient.added_by
-                          ? (() => {
-                              const addedByObj = recipient.added_by as Record<string, unknown>;
-                              const fullName = `${addedByObj.first_name ?? ''} ${addedByObj.last_name ?? ''}`.trim();
-                              if (fullName.length > 0) return fullName;
-                              return (recipient.added_by as Record<string, unknown>).username as string ?? undefined;
-                            })()
-                          : undefined,
-                      addedAt: recipient.created_at as string ?? undefined,
-                      purpose: recipient.purpose as DistributionRecipient['purpose'] ?? undefined,
-                    } as DistributionRecipient;
-                  })
-                : [];
-              
-              const correspondence: Correspondence = {
-                id: String(corrResponse.id),
-                referenceNumber: corrResponse.reference_number as string ?? '',
-                subject: corrResponse.subject as string ?? '',
-                source: (corrResponse.source as 'internal' | 'external') ?? 'internal',
-                receivedDate: corrResponse.received_date as string ?? '',
-                senderName: corrResponse.sender_name as string ?? '',
-                senderOrganization: corrResponse.sender_organization as string ?? '',
-                status: (corrResponse.status as Correspondence['status']) ?? 'pending',
-                priority: corrResponse.priority as Correspondence['priority'] ?? 'medium',
-                divisionId: corrResponse.division ? (typeof corrResponse.division === 'string' ? corrResponse.division : (corrResponse.division as Record<string, unknown>).id as string) : undefined,
-                departmentId: corrResponse.department ? (typeof corrResponse.department === 'string' ? corrResponse.department : (corrResponse.department as Record<string, unknown>).id as string) : undefined,
-                currentApproverId: corrResponse.current_approver ? (typeof corrResponse.current_approver === 'string' ? corrResponse.current_approver : String((corrResponse.current_approver as Record<string, unknown>).id)) : undefined,
-                createdById: corrResponse.created_by ? (typeof corrResponse.created_by === 'string' ? corrResponse.created_by : (corrResponse.created_by as Record<string, unknown>).id as string) : undefined,
-                direction: (corrResponse.direction as Correspondence['direction']) ?? 'upward',
-                distribution,
-                createdAt: corrResponse.created_at as string,
-                updatedAt: corrResponse.updated_at as string,
-              };
-
-              return {
-                correspondence,
-                minutes,
-                linkNotes: link.notes,
-              };
-            } catch (error: unknown) {
-              logError('Failed to load related correspondence', error);
-              return null;
-            }
-          })
-        );
-
-        const validData = correspondenceData.filter((item) => item !== null) as Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>;
-        dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: validData });
-      } else {
-        dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
-      }
-    } catch (error: unknown) {
-      logError('Failed to refresh related correspondence', error);
-      throw error;
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- normalizeId is stable (pure utility)
-  }, [document?.id]);
-
   // Memoize access logs refresh handler
   const handleRefreshAccessLogs = useCallback(async () => {
     if (!document?.id) return;
@@ -1097,245 +946,420 @@ const DocumentDetailPage = () => {
           <div className="container mx-auto px-6 py-6">
             {/* Main Content Grid */}
             <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
-              {/* Left Column - Main Details */}
-              <div className="lg:col-span-2 flex flex-col gap-6">
-                {/* Versions Section - Full width */}
-                <Card className="border-border/50 flex flex-col flex-1 min-h-0">
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center justify-between">
-                      <div>
+              {/* Left Column - Tabbed Content */}
+              <div className="lg:col-span-2 flex flex-col">
+                {/* Tab Navigation */}
+                <div className="flex items-center border-b mb-6 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('overview')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Info className="h-4 w-4" />
+                    Overview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('versions')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'versions' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Layers className="h-4 w-4" />
+                    Versions
+                    {versions.length > 0 && (
+                      <span className="text-xs text-muted-foreground ml-1">({versions.length})</span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('related')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'related' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Link2 className="h-4 w-4" />
+                    Related
+                    {collaborationState.relatedCorrespondence.length > 0 && (
+                      <span className="text-xs text-muted-foreground ml-1">({collaborationState.relatedCorrespondence.length})</span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Overview Tab */}
+                {activeTab === 'overview' && (
+                  <div className="space-y-6">
+                    <Card className="border-border/50">
+                      <CardHeader className="pb-4">
                         <CardTitle className="text-base font-semibold flex items-center gap-2">
-                          <Layers className="h-4 w-4 text-primary" />
-                          Versions
+                          <FileText className="h-4 w-4 text-primary" />
+                          Document Details
                         </CardTitle>
-                        <CardDescription className="mt-1">
-                          All uploaded versions of this document
-                        </CardDescription>
-                      </div>
-                      {handleCreateVersion ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={!uploadUser}
-                              aria-label="Add new version"
-                            >
-                              <FilePlus className="h-4 w-4 mr-2" />
-                              Add Version
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={handleCreateVersion} disabled={!uploadUser}>
-                              <PenTool className="h-4 w-4 mr-2" />
-                              Create Version
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={handleQuickVersionUpload} disabled={!uploadUser}>
-                              <FilePlus className="h-4 w-4 mr-2" />
-                              Upload Version
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleQuickVersionUpload}
-                          disabled={!uploadUser}
-                          aria-label="Upload new version"
-                        >
-                        <FilePlus className="h-4 w-4 mr-2" />
-                        Upload Version
-                      </Button>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-1 min-h-0 flex flex-col">
-                    <div className="space-y-3 flex-1 overflow-y-auto pr-2">
-                      {versions.length === 0 ? (
-                        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
-                          <Layers className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                          <p className="text-sm font-medium mb-1">No versions uploaded</p>
-                          <p className="text-xs">Upload the first version to get started.</p>
+                      </CardHeader>
+                      <CardContent>
+                        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Title</dt>
+                            <dd className="font-medium">{document.title}</dd>
+                          </div>
+                          {document.referenceNumber && (
+                            <div>
+                              <dt className="text-xs text-muted-foreground">Reference Number</dt>
+                              <dd className="font-medium">{document.referenceNumber}</dd>
+                            </div>
+                          )}
+                          {document.description && (
+                            <div className="sm:col-span-2">
+                              <dt className="text-xs text-muted-foreground">Description</dt>
+                              <dd className="text-muted-foreground">{document.description}</dd>
+                            </div>
+                          )}
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Status</dt>
+                            <dd><Badge variant="outline" className="text-xs capitalize">{document.status}</Badge></dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Sensitivity</dt>
+                            <dd><Badge variant="outline" className="text-xs capitalize">{document.sensitivity}</Badge></dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Author</dt>
+                            <dd className="font-medium">{author?.name || document.authorId || 'Unknown'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Division</dt>
+                            <dd className="font-medium">{divisionLookup.get(document.divisionId ?? '') || document.divisionId || '—'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Department</dt>
+                            <dd className="font-medium">{departmentLookup.get(document.departmentId ?? '') || document.departmentId || '—'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Document Type</dt>
+                            <dd className="font-medium capitalize">{document.documentType || '—'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Created</dt>
+                            <dd className="font-medium">{document.createdAt ? formatDateTime(document.createdAt) : '—'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Last Updated</dt>
+                            <dd className="font-medium">{document.updatedAt ? formatDateTime(document.updatedAt) : '—'}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Versions</dt>
+                            <dd className="font-medium">{versions.length}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Workspaces</dt>
+                            <dd className="font-medium">{document.workspaceIds.length}</dd>
+                          </div>
+                          {document.tags && document.tags.length > 0 && (
+                            <div className="sm:col-span-2">
+                              <dt className="text-xs text-muted-foreground mb-1">Tags</dt>
+                              <dd className="flex flex-wrap gap-1">
+                                {document.tags.map((tag) => (
+                                  <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
+                                ))}
+                              </dd>
+                            </div>
+                          )}
+                          {document.documentType === 'form' && formDocumentId && (
+                            <div className="sm:col-span-2">
+                              <dt className="text-xs text-muted-foreground">Form</dt>
+                              <dd className="font-medium">{formDocumentId}</dd>
+                            </div>
+                          )}
+                        </dl>
+                      </CardContent>
+                    </Card>
+
+                    {document.workspaceIds.length > 0 && (
+                      <Card className="border-border/50">
+                        <CardHeader className="pb-4">
+                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                            <Layers className="h-3.5 w-3.5 text-primary" />
+                            Assigned Workspaces
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-1.5">
+                            {documentWorkspaces.map((ws) => (
+                              <Badge
+                                key={ws.id}
+                                variant="outline"
+                                className="gap-1.5 text-xs py-1 px-2"
+                                style={{ borderColor: ws.color }}
+                              >
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: ws.color }} />
+                                {ws.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Form Document Editor - Show for form documents */}
+                    {document.documentType === 'form' && formDocumentId ? (
+                      <FormDocumentEditor documentId={params.id} formDocumentId={formDocumentId} />
+                    ) : document.documentType === 'form' ? (
+                      <Card>
+                        <CardContent className="p-6">
+                          <div className="text-center py-8 text-muted-foreground">
+                            <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">Loading form document...</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Versions Tab */}
+                {activeTab === 'versions' && (
+                  <Card className="border-border/50 flex flex-col flex-1 min-h-0">
+                    <CardHeader className="pb-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-base font-semibold flex items-center gap-2">
+                            <Layers className="h-4 w-4 text-primary" />
+                            Versions
+                          </CardTitle>
+                          <CardDescription className="mt-1">
+                            All uploaded versions of this document
+                          </CardDescription>
                         </div>
-                      ) : (
-                        versions.map((version, index) => {
-                          const uploader = userLookup.get(version.uploadedBy);
-                          const isLatest = index === 0;
-                          const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
-                          const versionOCR = ocrState?.[version.id];
-                          const isProcessing = versionOCR?.isProcessing || false;
-                          const hasOCRText = version.ocrText && version.ocrText.trim() !== '';
-                          const canShowOCR = (version.fileUrl && version.fileUrl.trim() !== '' &&
-                            (version.fileType?.startsWith('image/') ||
-                              version.fileType === 'application/pdf' ||
-                              version.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                              version.fileType === 'application/msword' ||
-                              version.fileName?.toLowerCase().endsWith('.docx') ||
-                              version.fileName?.toLowerCase().endsWith('.doc')) ||
-                            (version.contentHtml && version.contentHtml.trim() !== ''));
-                          
-                          return (
-                            <div
-                              key={version.id}
-                              className={`p-3 border rounded-lg transition-colors hover:bg-muted/50 ${
-                                isLatest ? 'border-primary/40 bg-primary/5' : 'border-border'
-                              }`}
-                            >
-                              <div className="flex flex-col gap-2">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                    <Badge variant={isLatest ? 'default' : 'outline'} className="flex-shrink-0 text-xs">
-                                  v{version.versionNumber}
-                                </Badge>
-                                {isLatest && (
-                                      <Badge variant="secondary" className="text-xs flex-shrink-0">
-                                        Latest
+                        {handleCreateVersion ? (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!uploadUser}
+                                aria-label="Add new version"
+                              >
+                                <FilePlus className="h-4 w-4 mr-2" />
+                                Add Version
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={handleCreateVersion} disabled={!uploadUser}>
+                                <PenTool className="h-4 w-4 mr-2" />
+                                Create Version
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={handleQuickVersionUpload} disabled={!uploadUser}>
+                                <FilePlus className="h-4 w-4 mr-2" />
+                                Upload Version
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleQuickVersionUpload}
+                            disabled={!uploadUser}
+                            aria-label="Upload new version"
+                          >
+                          <FilePlus className="h-4 w-4 mr-2" />
+                          Upload Version
+                        </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex-1 min-h-0 flex flex-col">
+                      <div className="space-y-3 flex-1 overflow-y-auto pr-2">
+                        {versions.length === 0 ? (
+                          <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
+                            <Layers className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                            <p className="text-sm font-medium mb-1">No versions uploaded</p>
+                            <p className="text-xs">Upload the first version to get started.</p>
+                          </div>
+                        ) : (
+                          versions.map((version, index) => {
+                            const uploader = userLookup.get(version.uploadedBy);
+                            const isLatest = index === 0;
+                            const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
+                            const versionOCR = ocrState?.[version.id];
+                            const isProcessing = versionOCR?.isProcessing || false;
+                            const hasOCRText = version.ocrText && version.ocrText.trim() !== '';
+                            const canShowOCR = (version.fileUrl && version.fileUrl.trim() !== '' &&
+                              (version.fileType?.startsWith('image/') ||
+                                version.fileType === 'application/pdf' ||
+                                version.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                                version.fileType === 'application/msword' ||
+                                version.fileName?.toLowerCase().endsWith('.docx') ||
+                                version.fileName?.toLowerCase().endsWith('.doc')) ||
+                              (version.contentHtml && version.contentHtml.trim() !== ''));
+                            
+                            return (
+                              <div
+                                key={version.id}
+                                className={`p-3 border rounded-lg transition-colors hover:bg-muted/50 ${
+                                  isLatest ? 'border-primary/40 bg-primary/5' : 'border-border'
+                                }`}
+                              >
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                                      <Badge variant={isLatest ? 'default' : 'outline'} className="flex-shrink-0 text-xs">
+                                        v{version.versionNumber}
                                       </Badge>
-                                )}
-                                <span className="text-sm font-medium text-foreground truncate min-w-0" title={version.fileName}>
-                                  {version.fileName}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1 flex-shrink-0">
-                                {(version.fileName || (version.contentHtml && version.contentHtml.trim() !== '')) && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                        className="h-7 w-7"
-                                    onClick={() => setPreviewVersion(version)}
-                                    title="Preview version"
-                                        aria-label="Preview version"
-                                  >
-                                        <Eye className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-                                {version.fileUrl && version.fileUrl.trim() !== '' && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                        className="h-7 w-7"
-                                    onClick={() => {
-                                      const link = window.document.createElement('a');
-                                      link.href = version.fileUrl as string;
-                                      link.download = version.fileName;
-                                      window.document.body.appendChild(link);
-                                      link.click();
-                                      window.document.body.removeChild(link);
-                                    }}
-                                    title="Download version"
-                                        aria-label="Download version"
-                                  >
-                                        <Download className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
-                                    {canShowOCR && (
+                                      {isLatest && (
+                                        <Badge variant="secondary" className="text-xs flex-shrink-0">
+                                          Latest
+                                        </Badge>
+                                      )}
+                                      <span className="text-sm font-medium text-foreground truncate min-w-0" title={version.fileName}>
+                                        {version.fileName}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                      {(version.fileName || (version.contentHtml && version.contentHtml.trim() !== '')) && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() => setPreviewVersion(version)}
+                                          title="Preview version"
+                                          aria-label="Preview version"
+                                        >
+                                          <Eye className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
+                                      {version.fileUrl && version.fileUrl.trim() !== '' && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() => {
+                                            const link = window.document.createElement('a');
+                                            link.href = version.fileUrl as string;
+                                            link.download = version.fileName;
+                                            window.document.body.appendChild(link);
+                                            link.click();
+                                            window.document.body.removeChild(link);
+                                          }}
+                                          title="Download version"
+                                          aria-label="Download version"
+                                        >
+                                          <Download className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
+                                      {canShowOCR && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() => {
+                                            if (isProcessing) {
+                                              handleCancelOCR(version.id);
+                                            } else {
+                                              handleVersionOCR(version.id);
+                                            }
+                                          }}
+                                          title={isProcessing ? 'Cancel OCR processing' : hasOCRText ? 'Re-process OCR' : 'Process OCR'}
+                                          disabled={isProcessing && versionOCR?.currentJob?.status === 'processing'}
+                                          aria-label={isProcessing ? 'Cancel OCR' : 'Process OCR'}
+                                        >
+                                          {isProcessing ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          ) : (
+                                            <Scan className="h-3.5 w-3.5" />
+                                          )}
+                                        </Button>
+                                      )}
+                                      {uploadUser &&
+                                        (uploadUser.id === version.uploadedBy || uploadUser.id === document.authorId) && (
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={() => setReplaceVersionId(version.id)}
+                                          title="Replace this version"
+                                          aria-label="Replace version"
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="capitalize">
+                                      {version.fileType?.split('/').pop() || version.fileType || 'Unknown'}
+                                    </span>
+                                    {fileSize && (
+                                      <>
+                                        <span>•</span>
+                                        <span>{fileSize}</span>
+                                      </>
+                                    )}
+                                    <span>•</span>
+                                    <Clock className="h-3 w-3" />
+                                    <span>{formatDateTime(version.uploadedAt)}</span>
+                                    {uploader && (
+                                      <>
+                                        <span>•</span>
+                                        <UserIcon className="h-3 w-3" />
+                                        <span>{uploader.name}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {version.notes && (
+                                    <p className="text-xs text-muted-foreground">{version.notes}</p>
+                                  )}
+                                  {hasOCRText && (
+                                    <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded border border-primary/20">
+                                      <FileText className="h-3.5 w-3.5 text-primary" />
+                                      <span className="text-xs text-muted-foreground">
+                                        OCR text available ({version.ocrText?.length || 0} characters)
+                                      </span>
                                       <Button
                                         variant="ghost"
-                                        size="icon"
-                                        className="h-7 w-7"
-                                        onClick={() => {
-                                          if (isProcessing) {
-                                            handleCancelOCR(version.id);
-                                          } else {
-                                            handleVersionOCR(version.id);
-                                          }
+                                        size="sm"
+                                        className="h-6 text-xs ml-auto"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setPreviewVersion(version);
                                         }}
-                                        title={isProcessing ? 'Cancel OCR processing' : hasOCRText ? 'Re-process OCR' : 'Process OCR'}
-                                        disabled={isProcessing && versionOCR?.currentJob?.status === 'processing'}
-                                        aria-label={isProcessing ? 'Cancel OCR' : 'Process OCR'}
                                       >
-                                        {isProcessing ? (
-                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                          <Scan className="h-3.5 w-3.5" />
-                                        )}
+                                        View Text
                                       </Button>
-                                )}
-                                    {uploadUser &&
-                                      (uploadUser.id === version.uploadedBy || uploadUser.id === document.authorId) && (
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                          className="h-7 w-7"
-                                    onClick={() => setReplaceVersionId(version.id)}
-                                    title="Replace this version"
-                                          aria-label="Replace version"
-                                  >
-                                          <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                  <span className="capitalize">
-                                    {version.fileType?.split('/').pop() || version.fileType || 'Unknown'}
-                                  </span>
-                              {fileSize && (
-                                    <>
-                                  <span>•</span>
-                                  <span>{fileSize}</span>
-                                    </>
-                              )}
-                                <span>•</span>
-                                <Clock className="h-3 w-3" />
-                                <span>{formatDateTime(version.uploadedAt)}</span>
-                              {uploader && (
-                                    <>
-                                  <span>•</span>
-                                  <UserIcon className="h-3 w-3" />
-                                  <span>{uploader.name}</span>
-                                    </>
-                              )}
-                            </div>
-                            {version.notes && (
-                                  <p className="text-xs text-muted-foreground">{version.notes}</p>
-                                )}
-                                {hasOCRText && (
-                                  <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded border border-primary/20">
-                                    <FileText className="h-3.5 w-3.5 text-primary" />
-                                    <span className="text-xs text-muted-foreground">
-                                      OCR text available ({version.ocrText?.length || 0} characters)
-                                  </span>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                      className="h-6 text-xs ml-auto"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setPreviewVersion(version);
-                                      }}
-                                    >
-                                      View Text
-                                            </Button>
-                                  </div>
-                                )}
-                              </div>
-                                        </div>
-                                      );
-                                    })
+                            );
+                          })
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Related Tab */}
+                {activeTab === 'related' && (
+                  <div className="space-y-6">
+                    <RelatedCorrespondenceCard
+                      relatedCorrespondence={collaborationState.relatedCorrespondence}
+                      userLookup={userLookup}
+                      divisionLookup={divisionLookup}
+                      departmentLookup={departmentLookup}
+                    />
+                    
+                    {document && (
+                      <DocumentThreadCard
+                        documentId={document.id}
+                        parentDocumentId={(document as DocumentRecord & { parent_document?: { id: string }; parent_document_id?: string }).parent_document?.id || (document as DocumentRecord & { parent_document_id?: string }).parent_document_id}
+                      />
                     )}
                   </div>
-                </CardContent>
-              </Card>
-
-                {/* Related Correspondence - Full width */}
-                <RelatedCorrespondenceCard
-                  relatedCorrespondence={collaborationState.relatedCorrespondence}
-                  onRefresh={handleRefreshRelatedCorrespondence}
-                  userLookup={userLookup}
-                  divisionLookup={divisionLookup}
-                  departmentLookup={departmentLookup}
-                />
-                
-                {document && (
-                  <DocumentThreadCard
-                    documentId={document.id}
-                    parentDocumentId={(document as DocumentRecord & { parent_document?: { id: string }; parent_document_id?: string }).parent_document?.id || (document as DocumentRecord & { parent_document_id?: string }).parent_document_id}
-                  />
                 )}
-                    </div>
+              </div>
 
               {/* Right Column - Collaboration & Activity */}
               <div className="space-y-6">
@@ -1384,19 +1408,6 @@ const DocumentDetailPage = () => {
             }}
           />
 
-          {/* Form Document Editor - Show for form documents */}
-          {document?.documentType === 'form' && formDocumentId ? (
-            <FormDocumentEditor documentId={params.id} formDocumentId={formDocumentId} />
-          ) : document?.documentType === 'form' ? (
-            <Card>
-              <CardContent className="p-6">
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Loading form document...</p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
                 </div>
 
       {hydrated && uploadUser && document && (
@@ -1607,5 +1618,11 @@ const DocumentDetailPage = () => {
   </DashboardLayout>
   );
 };
+
+const DocumentDetailPage = () => (
+  <CorrespondenceProvider>
+    <DocumentDetailContent />
+  </CorrespondenceProvider>
+);
 
 export default DocumentDetailPage;

@@ -90,7 +90,7 @@ const CorrespondenceRegisterForm = () => {
     documentFiles,
     flowType,
     distributions,
-    ui: { assignSearch, officeSearch, submitting, errors, hasDraft, mounted },
+    ui: { assignSearch, officeSearch: _officeSearch, submitting, errors, hasDraft, mounted },
   } = state;
 
   // Load correspondence data if in edit mode - extracted as useCallback so it can be called from retry button
@@ -317,26 +317,12 @@ const CorrespondenceRegisterForm = () => {
   );
 
   const membershipOffices = useMemo(() => {
+    if (isSuperAdmin) return activeOffices;
     const membershipOfficeIds = new Set(userOfficeMemberships.map((membership) => membership.officeId));
     return activeOffices.filter((office) => membershipOfficeIds.has(office.id));
-  }, [activeOffices, userOfficeMemberships]);
+  }, [activeOffices, userOfficeMemberships, isSuperAdmin]);
 
-  const filteredOffices = useMemo(() => {
-    if (!officeSearch.trim()) return membershipOffices;
-    const query = officeSearch.toLowerCase();
-    return membershipOffices.filter((office) => {
-      const candidates = [
-        office.name,
-        office.code,
-        office.directorateName,
-        office.divisionName,
-        office.departmentName,
-      ]
-        .filter(Boolean)
-        .map((value) => value!.toLowerCase());
-      return candidates.some((candidate) => candidate.includes(query));
-    });
-  }, [membershipOffices, officeSearch]);
+  const filteredOffices = useMemo(() => membershipOffices, [membershipOffices]);
 
   const completionPercentage = useMemo(
     () => calculateCompletionPercentage(formData, flowType, documentFiles),
@@ -660,7 +646,7 @@ const CorrespondenceRegisterForm = () => {
         </div>
       ) : (
         <ErrorBoundary>
-          <div className="container mx-auto p-6 space-y-6">
+          <div className="container mx-auto p-6 space-y-6 flex-1">
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold">
@@ -683,9 +669,9 @@ const CorrespondenceRegisterForm = () => {
           ]}
         />
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-3 min-w-0">
           {/* Main Form */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 min-w-0">
             {/* Office & Flow Selection */}
             <OfficeSelectionCard
               offices={filteredOffices}
@@ -849,7 +835,7 @@ const CorrespondenceRegisterForm = () => {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             <RegistrationSummary
               formData={formData}
               flowType={flowType}

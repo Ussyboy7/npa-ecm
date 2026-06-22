@@ -4,11 +4,10 @@ import { useEffect, useMemo, useState, useCallback, useRef, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DropdownMenu,
@@ -17,7 +16,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Archive,
   Search,
@@ -27,7 +25,6 @@ import {
   ArrowUp,
   CheckCircle2,
   FileArchive,
-  Filter,
   Building2,
   ChevronRight,
   FileText,
@@ -55,6 +52,7 @@ import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueDateClass,
@@ -72,7 +70,6 @@ import {
   registryQueueStatLabelClass,
   registryQueueStatValueClass,
   registryQueueSearchStatsShellContentClass,
-  registryQueueSearchInputWrapClass,
 } from '@/components/shared/registry-queue-styles';
 import {
   Tooltip,
@@ -80,13 +77,6 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: '#ef4444',
-  high: '#f97316',
-  medium: '#eab308',
-  low: '#22c55e',
-};
 
 // Grade levels that can see directorate-wide records
 const DIRECTORATE_GRADES = new Set(['MDCS', 'EDCS', 'MD', 'ED']);
@@ -149,25 +139,14 @@ const RecordsArchiveForm = () => {
   const [selectedDirectorate, setSelectedDirectorate] = useState<string>(() => getInitialFilter('directorate', 'all') as string);
   const [selectedDivision, setSelectedDivision] = useState<string>(() => getInitialFilter('division', 'all') as string);
   const [selectedDepartment, setSelectedDepartment] = useState<string>(() => getInitialFilter('department', 'all') as string);
-  const [yearFilter, setYearFilter] = useState<string>(() => getInitialFilter('year', 'all') as string);
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>(() => getInitialFilter('priorities', []) as string[]);
-  const [selectedDirections, setSelectedDirections] = useState<string[]>(() => getInitialFilter('directions', []) as string[]);
-  const [selectedArchiveLevel, setSelectedArchiveLevel] = useState<string>(() => getInitialFilter('archiveLevel', 'all') as string);
-  const [hasCompletionPackage, setHasCompletionPackage] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const saved = localStorage.getItem('records_filter_hasCompletionPackage');
-    return saved === 'true';
-  });
+  const [selectedPriority, setSelectedPriority] = useState<string>(() => getInitialFilter('priority', '') as string);
   const [sortBy, setSortBy] = useState<string>(() => getInitialFilter('sortBy', 'completed') as string);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (getInitialFilter('sortOrder', 'desc') as 'asc' | 'desc'));
-  const [showFilters, setShowFilters] = useState(false);
-  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'last30' | 'last90' | 'thisYear' | 'custom'>(() => getInitialFilter('dateRange', 'all') as 'all' | 'last30' | 'last90' | 'thisYear' | 'custom');
-  const [customDateFrom, setCustomDateFrom] = useState<string>('');
-  const [customDateTo, setCustomDateTo] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
 
   // Data
   const [records, setRecords] = useState<Correspondence[]>([]);
-  const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [summary, setSummary] = useState({
     total: 0,
     byDirectorate: 0,
@@ -312,48 +291,22 @@ const RecordsArchiveForm = () => {
   }, [selectedDivision]);
 
   // Count active filters
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (selectedDirectorate !== 'all') count++;
-    if (selectedDivision !== 'all') count++;
-    if (selectedDepartment !== 'all') count++;
-    if (yearFilter !== 'all' || dateRangeFilter !== 'all') count++;
-    if (selectedPriorities.length > 0) count++;
-    if (selectedDirections.length > 0) count++;
-    if (selectedArchiveLevel !== 'all') count++;
-    if (hasCompletionPackage) count++;
-    return count;
-  }, [selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage]);
+  const hasActiveFilters = useMemo(() => {
+    return !!(searchQuery || selectedDirectorate !== 'all' || selectedDivision !== 'all' || selectedDepartment !== 'all' || selectedPriority || dateFrom || dateTo);
+  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, selectedPriority, dateFrom, dateTo]);
 
-  const togglePriority = (priority: string) => {
-    setSelectedPriorities((prev) =>
-      prev.includes(priority) ? prev.filter((p) => p !== priority) : [...prev, priority]
-    );
-  };
-
-  const toggleDirection = (direction: string) => {
-    setSelectedDirections((prev) =>
-      prev.includes(direction) ? prev.filter((d) => d !== direction) : [...prev, direction]
-    );
-  };
-
-  const clearAllFilters = () => {
+  const clearFilters = () => {
     setSearchQuery('');
     setSelectedDirectorate('all');
     setSelectedDivision('all');
     setSelectedDepartment('all');
-    setYearFilter('all');
-    setDateRangeFilter('all');
-    setCustomDateFrom('');
-    setCustomDateTo('');
-    setSelectedPriorities([]);
-    setSelectedDirections([]);
-    setSelectedArchiveLevel('all');
-    setHasCompletionPackage(false);
+    setSelectedPriority('');
+    setDateFrom('');
+    setDateTo('');
     
     // Clear localStorage
     if (typeof window !== 'undefined') {
-      const keys = ['search', 'directorate', 'division', 'department', 'year', 'dateRange', 'priorities', 'directions', 'archiveLevel', 'hasCompletionPackage'];
+      const keys = ['search', 'directorate', 'division', 'department', 'priority'];
       keys.forEach(key => localStorage.removeItem(`records_filter_${key}`));
     }
   };
@@ -365,15 +318,10 @@ const RecordsArchiveForm = () => {
     localStorage.setItem('records_filter_directorate', JSON.stringify(selectedDirectorate));
     localStorage.setItem('records_filter_division', JSON.stringify(selectedDivision));
     localStorage.setItem('records_filter_department', JSON.stringify(selectedDepartment));
-    localStorage.setItem('records_filter_year', JSON.stringify(yearFilter));
-    localStorage.setItem('records_filter_dateRange', JSON.stringify(dateRangeFilter));
-    localStorage.setItem('records_filter_priorities', JSON.stringify(selectedPriorities));
-    localStorage.setItem('records_filter_directions', JSON.stringify(selectedDirections));
-    localStorage.setItem('records_filter_archiveLevel', JSON.stringify(selectedArchiveLevel));
-    localStorage.setItem('records_filter_hasCompletionPackage', JSON.stringify(hasCompletionPackage));
+    localStorage.setItem('records_filter_priority', JSON.stringify(selectedPriority));
     localStorage.setItem('records_filter_sortBy', JSON.stringify(sortBy));
     localStorage.setItem('records_filter_sortOrder', JSON.stringify(sortOrder));
-  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder]);
+  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, selectedPriority, sortBy, sortOrder]);
 
   // Sync filters with URL
   useEffect(() => {
@@ -382,12 +330,7 @@ const RecordsArchiveForm = () => {
     if (selectedDirectorate !== 'all') params.set('directorate', selectedDirectorate);
     if (selectedDivision !== 'all') params.set('division', selectedDivision);
     if (selectedDepartment !== 'all') params.set('department', selectedDepartment);
-    if (yearFilter !== 'all') params.set('year', yearFilter);
-    if (dateRangeFilter !== 'all') params.set('dateRange', dateRangeFilter);
-    if (selectedPriorities.length > 0) params.set('priorities', selectedPriorities.join(','));
-    if (selectedDirections.length > 0) params.set('directions', selectedDirections.join(','));
-    if (selectedArchiveLevel !== 'all') params.set('archiveLevel', selectedArchiveLevel);
-    if (hasCompletionPackage) params.set('hasCompletionPackage', 'true');
+    if (selectedPriority) params.set('priority', selectedPriority);
     if (sortBy !== 'completed') params.set('sortBy', sortBy);
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
     if (pagination.page > 1) params.set('page', String(pagination.page));
@@ -395,7 +338,7 @@ const RecordsArchiveForm = () => {
 
     const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder, pagination.page, pagination.pageSize]);
+  }, [searchQuery, selectedDirectorate, selectedDivision, selectedDepartment, selectedPriority, sortBy, sortOrder, pagination.page, pagination.pageSize]);
 
   // Debounced search
   useEffect(() => {
@@ -407,7 +350,7 @@ const RecordsArchiveForm = () => {
   useEffect(() => {
     pagination.setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, yearFilter, dateRangeFilter, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage, sortBy, sortOrder]);
+  }, [debouncedSearch, selectedDirectorate, selectedDivision, selectedDepartment, selectedPriority, dateFrom, dateTo, sortBy, sortOrder]);
   
   // Sync pagination with URL
   useEffect(() => {
@@ -436,39 +379,13 @@ const RecordsArchiveForm = () => {
   const getFilterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.append('search', debouncedSearch);
-    if (yearFilter !== 'all') params.append('year', yearFilter);
-    if (dateRangeFilter === 'last30') {
-      const fromDate = new Date();
-      fromDate.setDate(fromDate.getDate() - 30);
-      params.append('from_date', fromDate.toISOString().split('T')[0]);
-    } else if (dateRangeFilter === 'last90') {
-      const fromDate = new Date();
-      fromDate.setDate(fromDate.getDate() - 90);
-      params.append('from_date', fromDate.toISOString().split('T')[0]);
-    } else if (dateRangeFilter === 'thisYear') {
-      const fromDate = new Date();
-      fromDate.setMonth(0, 1);
-      params.append('from_date', fromDate.toISOString().split('T')[0]);
-    } else if (dateRangeFilter === 'custom') {
-      if (customDateFrom) params.append('from_date', customDateFrom);
-      if (customDateTo) params.append('to_date', customDateTo);
-    }
-    if (selectedPriorities.length > 0) {
-      selectedPriorities.forEach((p) => params.append('priority', p));
-    }
-    if (selectedDirections.length > 0) {
-      selectedDirections.forEach((d) => params.append('direction', d));
-    }
-    if (selectedArchiveLevel !== 'all') {
-      params.append('archive_level', selectedArchiveLevel);
-    }
-    if (hasCompletionPackage) {
-      params.append('has_completion_package', 'true');
-    }
+    if (selectedPriority) params.append('priority', selectedPriority);
+    if (dateFrom) params.append('from_date', dateFrom);
+    if (dateTo) params.append('to_date', dateTo);
     params.append('status', 'completed');
     params.append('status', 'archived');
     return params;
-  }, [debouncedSearch, yearFilter, dateRangeFilter, customDateFrom, customDateTo, selectedPriorities, selectedDirections, selectedArchiveLevel, hasCompletionPackage]);
+  }, [debouncedSearch, selectedPriority, dateFrom, dateTo]);
 
   const fetchRecords = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -516,8 +433,6 @@ const RecordsArchiveForm = () => {
         byPriority: (summaryObj && typeof summaryObj.by_priority === 'object' && summaryObj.by_priority !== null) ? summaryObj.by_priority as Record<string, number> : {},
         byDirection: (summaryObj && typeof summaryObj.by_direction === 'object' && summaryObj.by_direction !== null) ? summaryObj.by_direction as Record<string, number> : {},
       });
-      const availableYearsArray = (summaryObj && Array.isArray(summaryObj.available_years)) ? summaryObj.available_years : [];
-      setAvailableYears(availableYearsArray.map(y => typeof y === 'number' ? y : parseInt(String(y), 10)).filter(y => !isNaN(y)));
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
         return;
@@ -826,10 +741,6 @@ const RecordsArchiveForm = () => {
               </p>
             </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="h-4 w-4 mr-2" /> Filters
-              {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -862,208 +773,90 @@ const RecordsArchiveForm = () => {
           links={[{ label: 'Help & Guides', href: '/help' }]}
         />
 
-        {/* Filters Panel */}
-        {showFilters && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Records & Archives Filters</CardTitle>
-                {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                {/* Directorate Filter - Only show for directorate-level users */}
-                {userScope.level === 'directorate' && visibleDirectorates.length > 1 && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Directorate</Label>
-                    <Select value={selectedDirectorate} onValueChange={setSelectedDirectorate}>
-                      <SelectTrigger><SelectValue placeholder="All Directorates" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Directorates</SelectItem>
-                        {visibleDirectorates.map((dir) => (
-                          <SelectItem key={dir.id} value={dir.id}>{dir.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Division Filter - Show for directorate and division-level users */}
-                {(userScope.level === 'directorate' || userScope.level === 'division') && visibleDivisions.length > 0 && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Division</Label>
-                    <Select value={selectedDivision} onValueChange={setSelectedDivision}>
-                      <SelectTrigger><SelectValue placeholder="All Divisions" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Divisions</SelectItem>
-                        {visibleDivisions.map((div) => (
-                          <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Department Filter - Show for all except office-level */}
-                {userScope.level !== 'office' && visibleDepartments.length > 0 && (
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Department</Label>
-                    <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                      <SelectTrigger><SelectValue placeholder="All Departments" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Departments</SelectItem>
-                        {visibleDepartments.map((dept) => (
-                          <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date Range</Label>
-                  <Select value={dateRangeFilter} onValueChange={(value) => setDateRangeFilter(value as typeof dateRangeFilter)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Time</SelectItem>
-                      <SelectItem value="last30">Last 30 Days</SelectItem>
-                      <SelectItem value="last90">Last 90 Days</SelectItem>
-                      <SelectItem value="thisYear">This Year</SelectItem>
-                      <SelectItem value="custom">Custom Range</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {dateRangeFilter === 'custom' && (
-                    <div className="mt-2 space-y-2">
-                      <Input
-                        type="date"
-                        placeholder="From"
-                        value={customDateFrom}
-                        onChange={(e) => setCustomDateFrom(e.target.value)}
-                        className="w-full"
-                      />
-                      <Input
-                        type="date"
-                        placeholder="To"
-                        value={customDateTo}
-                        onChange={(e) => setCustomDateTo(e.target.value)}
-                        className="w-full"
-                      />
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Year</Label>
-                  <Select value={yearFilter} onValueChange={setYearFilter}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Years</SelectItem>
-                      {Array.from(new Set(availableYears)).sort((a, b) => b - a).map((year) => (
-                        <SelectItem key={`year-${year}`} value={year.toString()}>{year}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Archive Level</Label>
-                  <Select value={selectedArchiveLevel} onValueChange={setSelectedArchiveLevel}>
-                    <SelectTrigger><SelectValue placeholder="All Levels" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Levels</SelectItem>
-                      <SelectItem value="department">Department</SelectItem>
-                      <SelectItem value="division">Division</SelectItem>
-                      <SelectItem value="directorate">Directorate</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Completion Package</Label>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="hasCompletionPackage"
-                      checked={hasCompletionPackage}
-                      onCheckedChange={(checked) => setHasCompletionPackage(checked === true)}
-                    />
-                    <label
-                      htmlFor="hasCompletionPackage"
-                      className="text-sm text-muted-foreground cursor-pointer"
-                    >
-                      Has Completion Package
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Priority</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['urgent', 'high', 'medium', 'low'].map((priority) => (
-                      <Badge
-                        key={priority}
-                        variant={selectedPriorities.includes(priority) ? 'default' : 'outline'}
-                        className="cursor-pointer capitalize text-xs"
-                        onClick={() => togglePriority(priority)}
-                        style={selectedPriorities.includes(priority) ? { backgroundColor: PRIORITY_COLORS[priority] } : {}}
-                      >
-                        {priority}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Direction</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['downward', 'upward'].map((direction) => (
-                      <Badge
-                        key={direction}
-                        variant={selectedDirections.includes(direction) ? 'default' : 'outline'}
-                        className="cursor-pointer capitalize text-xs"
-                        onClick={() => toggleDirection(direction)}
-                      >
-                        {direction === 'downward' ? '↓' : '↑'} {direction}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Sort By</Label>
-                    <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-                      <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="completed-desc">Completed (Newest)</SelectItem>
-                        <SelectItem value="completed-asc">Completed (Oldest)</SelectItem>
-                        <SelectItem value="received-desc">Received (Newest)</SelectItem>
-                        <SelectItem value="received-asc">Received (Oldest)</SelectItem>
-                        <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                        <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
-                        <SelectItem value="subject-desc">Subject (Z-A)</SelectItem>
-                        <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
-                        <SelectItem value="reference-desc">Reference (Z-A)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Search + summary stats (shared shell) */}
+        {/* Inline filter bar */}
         <Card>
-          <CardContent className={registryQueueSearchStatsShellContentClass}>
-            <div className={registryQueueSearchInputWrapClass}>
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by subject, reference, sender..."
+                placeholder="Search records..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="h-8 pl-8 text-xs"
               />
             </div>
+
+            {userScope.level === 'directorate' && visibleDirectorates.length > 1 && (
+              <Select value={selectedDirectorate} onValueChange={(v) => { setSelectedDirectorate(v); pagination.goToFirstPage(); }}>
+                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Directorate" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Directorates</SelectItem>
+                  {visibleDirectorates.map((dir) => (
+                    <SelectItem key={dir.id} value={dir.id}>{dir.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {(userScope.level === 'directorate' || userScope.level === 'division') && visibleDivisions.length > 0 && (
+              <Select value={selectedDivision} onValueChange={(v) => { setSelectedDivision(v); pagination.goToFirstPage(); }}>
+                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Division" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Divisions</SelectItem>
+                  {visibleDivisions.map((div) => (
+                    <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {userScope.level !== 'office' && visibleDepartments.length > 0 && (
+              <Select value={selectedDepartment} onValueChange={(v) => { setSelectedDepartment(v); pagination.goToFirstPage(); }}>
+                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Department" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {visibleDepartments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="completed-desc">Completed (Newest)</SelectItem>
+                <SelectItem value="completed-asc">Completed (Oldest)</SelectItem>
+                <SelectItem value="received-desc">Received (Newest)</SelectItem>
+                <SelectItem value="received-asc">Received (Oldest)</SelectItem>
+                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+                <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
+                <SelectItem value="subject-desc">Subject (Z-A)</SelectItem>
+                <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
+                <SelectItem value="reference-desc">Reference (Z-A)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+          </CardContent>
+        </Card>
+
+        {/* Summary stats */}
+        <Card>
+          <CardContent className={registryQueueSearchStatsShellContentClass}>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {[
                 { label: 'Total Records', value: summary.total, icon: Archive, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
@@ -1102,14 +895,14 @@ const RecordsArchiveForm = () => {
         ) : records.length === 0 ? (
           <EmptyState
             icon={<Archive className={registryQueueEmptyIconClass} />}
-            title={debouncedSearch || activeFilterCount > 0 ? 'No records match your filters' : 'No records in your scope'}
+            title={hasActiveFilters ? 'No records match your filters' : 'No records in your scope'}
             message={
-              debouncedSearch || activeFilterCount > 0
+              hasActiveFilters
                 ? 'Try adjusting your search or filters.'
                 : 'Completed and archived correspondence in your access scope will appear here.'
             }
-            actionLabel={debouncedSearch || activeFilterCount > 0 ? 'Clear Filters' : undefined}
-            onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+            actionLabel={hasActiveFilters ? 'Clear Filters' : undefined}
+            onAction={hasActiveFilters ? clearFilters : undefined}
           />
         ) : (
           <div className={correspondenceQueueListStackClass}>

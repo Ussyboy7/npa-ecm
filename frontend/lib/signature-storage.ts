@@ -125,7 +125,9 @@ export const fetchUserSignature = async (signal?: AbortSignal): Promise<StoredSi
       timesUsed: response.times_used,
     };
   } catch (error: unknown) {
-    logError('Failed to fetch signature from backend:', error);
+    if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      logError('Failed to fetch signature from backend:', error);
+    }
     return null;
   }
 };

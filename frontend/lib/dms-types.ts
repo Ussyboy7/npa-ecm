@@ -133,6 +133,7 @@ export interface DocumentWorkspace {
   description?: string;
   color: string;
   memberIds: string[];
+  documentCount?: number;
 }
 
 export interface DocumentQueryParams {
@@ -237,6 +238,7 @@ export interface ExtendedDocumentQueryParams extends DocumentQueryParams {
   recentDays?: number;
   statusIn?: string[];
   documentTypeIn?: string[];
+  workspaceId?: string;
 }
 
 export interface DocumentStats {
@@ -498,4 +500,5 @@ export const mapWorkspace = (item: Record<string, unknown>): DocumentWorkspace =
     : Array.isArray(item.members)
       ? item.members.map((member: Record<string, unknown>) => String(member.id ?? member))
       : [],
+  documentCount: typeof item.document_count === 'number' ? item.document_count : undefined,
 });

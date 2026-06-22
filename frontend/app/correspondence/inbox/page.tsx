@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import {
@@ -27,7 +26,6 @@ import {
   AlertCircle,
   Building2,
   Inbox,
-  Filter,
   Copy,
 } from 'lucide-react';
 import { formatDateShort } from '@/lib/correspondence-helpers';
@@ -60,15 +58,9 @@ import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorState } from '@/components/shared/ErrorState';
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 
 const STORAGE_KEY = 'office-inbox-selection';
-
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: '#ef4444',
-  high: '#f97316',
-  medium: '#eab308',
-  low: '#22c55e',
-};
 
 const SLA_THRESHOLDS: Record<string, number> = {
   urgent: 2,
@@ -123,14 +115,13 @@ const CorrespondenceInbox = () => {
     initialPageSize: 25,
     totalCount: count,
   });
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedPriority, setSelectedPriority] = useState<string>('all');
   const [assignedOnly, setAssignedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<string>('priority');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
-  const [showFilters, setShowFilters] = useState(false);
 
   const [inboxItems, setInboxItems] = useState<Correspondence[]>([]);
   const [summary, setSummary] = useState<InboxSummary>(DEFAULT_SUMMARY);
@@ -210,30 +201,19 @@ const CorrespondenceInbox = () => {
   // Count active filters for badge
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedStatuses.length > 0) count++;
-    if (selectedPriorities.length > 0) count++;
+    if (selectedStatus !== 'all') count++;
+    if (selectedPriority !== 'all') count++;
     if (assignedOnly) count++;
     if (dateFrom) count++;
     if (dateTo) count++;
     if (selectedOfficeId !== 'all') count++;
     return count;
-  }, [selectedStatuses, selectedPriorities, assignedOnly, dateFrom, dateTo, selectedOfficeId]);
+  }, [selectedStatus, selectedPriority, assignedOnly, dateFrom, dateTo, selectedOfficeId]);
 
-  const toggleStatus = (status: string) => {
-    setSelectedStatuses((prev) =>
-      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
-    );
-  };
 
-  const togglePriority = (priority: string) => {
-    setSelectedPriorities((prev) =>
-      prev.includes(priority) ? prev.filter((p) => p !== priority) : [...prev, priority]
-    );
-  };
-
-  const clearAllFilters = () => {
-    setSelectedStatuses([]);
-    setSelectedPriorities([]);
+  const clearFilters = () => {
+    setSelectedStatus('');
+    setSelectedPriority('');
     setAssignedOnly(false);
     setDateFrom('');
     setDateTo('');
@@ -271,7 +251,7 @@ const CorrespondenceInbox = () => {
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOfficeId, debouncedSearch, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
+  }, [selectedOfficeId, debouncedSearch, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {
     // Redirect if access is denied (don't wait for hydration)
@@ -302,11 +282,11 @@ const CorrespondenceInbox = () => {
           params.append('include_all_offices', 'true');
         }
         if (debouncedSearch) params.append('search', debouncedSearch);
-        if (selectedStatuses.length > 0) {
-          selectedStatuses.forEach((status) => params.append('status', status));
+        if (selectedStatus !== 'all') {
+          params.append('status', selectedStatus);
         }
-        if (selectedPriorities.length > 0) {
-          selectedPriorities.forEach((priority) => params.append('priority', priority));
+        if (selectedPriority !== 'all') {
+          params.append('priority', selectedPriority);
         }
         if (assignedOnly) params.append('assigned_only', 'true');
         if (dateFrom) params.append('date_from', dateFrom);
@@ -339,7 +319,7 @@ const CorrespondenceInbox = () => {
     };
 
     void fetchInbox();
-  }, [hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatuses, selectedPriorities, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
+  }, [hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -507,10 +487,6 @@ const CorrespondenceInbox = () => {
             <p className="text-muted-foreground mt-1">Monitor work queued in your offices and prioritize urgent escalations</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="h-4 w-4 mr-2" /> Filters
-              {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
-            </Button>
             <Button size="sm" onClick={() => router.push('/correspondence/register')}>
               <Mail className="h-4 w-4 mr-2" /> Register New
             </Button>
@@ -528,107 +504,62 @@ const CorrespondenceInbox = () => {
           links={[{ label: 'Department Files', href: '/correspondence/department-files' }, { label: 'Outbox', href: '/correspondence/outbox' }]}
         />
 
-        {/* Filters Panel */}
-        {showFilters && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Office Inbox Filters</CardTitle>
-                {activeFilterCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Office</Label>
-                  <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{isSuperuser ? 'All Offices' : 'All My Offices'}</SelectItem>
-                      {selectableOffices.map((office) => (
-                        <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Status</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['pending', 'in-progress', 'completed', 'archived'].map((status) => (
-                      <Badge
-                        key={status}
-                        variant={selectedStatuses.includes(status) ? 'default' : 'outline'}
-                        className="cursor-pointer capitalize text-xs"
-                        onClick={() => toggleStatus(status)}
-                      >
-                        {status.replace('-', ' ')}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Priority</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['urgent', 'high', 'medium', 'low'].map((priority) => (
-                      <Badge
-                        key={priority}
-                        variant={selectedPriorities.includes(priority) ? 'default' : 'outline'}
-                        className="cursor-pointer capitalize text-xs"
-                        onClick={() => togglePriority(priority)}
-                        style={selectedPriorities.includes(priority) ? { backgroundColor: PRIORITY_COLORS[priority] } : {}}
-                      >
-                        {priority}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Assignment</Label>
-                  <Badge
-                    variant={assignedOnly ? 'default' : 'outline'}
-                    className="cursor-pointer"
-                    onClick={() => setAssignedOnly(!assignedOnly)}
-                  >
-                    <UserIcon className="h-3 w-3 mr-1" /> Assigned to me
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date From</Label>
-                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date To</Label>
-                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Sort By</Label>
-                    <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-                      <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                        <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>
-                        <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
-                        <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
-                        <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Search */}
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search by subject, reference, sender, office, division..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
-        </div>
+        {/* Search + filters bar */}
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by subject, reference, sender..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in-progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={selectedPriority} onValueChange={setSelectedPriority}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder={isSuperuser ? 'All Offices' : 'All My Offices'} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{isSuperuser ? 'All Offices' : 'All My Offices'}</SelectItem>
+                {selectableOffices.map((office) => (
+                  <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            <Button variant={assignedOnly?'default':'outline'} size="sm" onClick={()=>setAssignedOnly(!assignedOnly)} className="h-8 text-xs"><UserIcon className="h-3.5 w-3.5 mr-1" /> Assigned</Button>
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+                <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>
+                <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
+                <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
+                <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
+              </SelectContent>
+            </Select>
+            {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+          </CardContent>
+        </Card>
 
         {/* Summary Cards */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -664,7 +595,7 @@ const CorrespondenceInbox = () => {
             title={debouncedSearch || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence routed to your office yet'}
             message={debouncedSearch || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'When correspondence is routed to your office, it will appear here.'}
             actionLabel={debouncedSearch || activeFilterCount > 0 ? 'Clear Filters' : undefined}
-            onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+            onAction={debouncedSearch || activeFilterCount > 0 ? clearFilters : undefined}
           />
         ) : (
           <div className={correspondenceQueueListStackClass}>

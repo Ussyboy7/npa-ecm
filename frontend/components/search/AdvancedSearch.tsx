@@ -7,9 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Search, Filter, Save, History, X, FileText, Mail, Loader2, Calendar, User, Shield, FolderTree } from 'lucide-react';
+import { Search, Save, History, FileText, Mail, Loader2, Calendar, User, Shield, FolderTree } from 'lucide-react';
 import {
   search,
   getSearchSuggestions,
@@ -43,7 +42,7 @@ const isUnifiedSearchResult = (value: unknown): value is UnifiedSearchResult =>
   isRecord(value) && ('documents' in value || 'correspondence' in value || 'cases' in value);
 
 export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps) => {
-  const { divisions, departments, users, offices } = useOrganization();
+  const { divisions, departments, users } = useOrganization();
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState<NonNullable<SearchRequest['filters']>>({});
   const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'cases' | 'all'>(
@@ -52,7 +51,6 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
   const [results, setResults] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
   const [page, setPage] = useState(0);
@@ -74,14 +72,6 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
         searchInput?.focus();
       },
       description: 'Focus search (Cmd/Ctrl+K)',
-    },
-    {
-      key: 'Escape',
-      action: () => {
-        if (showFilters) setShowFilters(false);
-      },
-      preventDefault: false,
-      description: 'Close filters (Esc)',
     },
   ]);
 
@@ -371,402 +361,277 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Search Type Selector */}
-          <div className="space-y-2">
-            <Label>Search In</Label>
-            <Select value={searchType} onValueChange={(v) => setSearchType(v as 'documents' | 'correspondence' | 'cases' | 'all')}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All (Documents, Correspondence & Cases)</SelectItem>
-                <SelectItem value="documents">Documents Only</SelectItem>
-                <SelectItem value="correspondence">Correspondence Only</SelectItem>
-                <SelectItem value="cases">Cases Only</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Search Input */}
-          <div className="relative">
-            <Input
-              placeholder="Search by title, reference number, content... (Press Cmd/Ctrl+K to focus)"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleSearch();
-                }
-              }}
-              className="pr-10"
-              aria-label="Search input"
-              aria-describedby="search-description"
-            />
-            <span id="search-description" className="sr-only">
-              Search across documents, correspondence, and cases. Press Enter to search or Cmd/Ctrl+K to focus.
-            </span>
-            <Button
-              size="sm"
-              className="absolute right-2 top-1/2 -translate-y-1/2"
-              onClick={() => handleSearch()}
-              disabled={loading}
-            >
-              <Search className="h-4 w-4" />
-            </Button>
-
-            {/* Suggestions Dropdown */}
-            {suggestions.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-lg">
-                {suggestions.map((suggestion, idx) => (
-                  <button
-                    key={idx}
-                    className="w-full text-left px-4 py-2 hover:bg-accent text-sm"
-                    onClick={() => handleSuggestionClick(suggestion)}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
+          {/* Inline Filter Bar */}
+          <Card>
+            <CardContent className="flex flex-wrap items-center gap-2 p-2">
+              <div className="relative min-w-[200px] flex-1 max-w-sm">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by title, reference number, content..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSearch();
+                    }
+                  }}
+                  className="h-8 pl-8 text-xs"
+                  aria-label="Search input"
+                  aria-describedby="search-description"
+                />
+                <span id="search-description" className="sr-only">
+                  Search across documents, correspondence, and cases. Press Enter to search.
+                </span>
+                {suggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-popover border rounded-md shadow-lg">
+                    {suggestions.map((suggestion, idx) => (
+                      <button
+                        key={idx}
+                        className="w-full text-left px-4 py-2 hover:bg-accent text-sm"
+                        onClick={() => handleSuggestionClick(suggestion)}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Filters Toggle */}
-          <div className="flex items-center justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              {showFilters ? 'Hide' : 'Show'} Filters
-            </Button>
+              <Select value={searchType} onValueChange={(v) => setSearchType(v as 'documents' | 'correspondence' | 'cases' | 'all')}>
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="documents">Documents</SelectItem>
+                  <SelectItem value="correspondence">Correspondence</SelectItem>
+                  <SelectItem value="cases">Cases</SelectItem>
+                </SelectContent>
+              </Select>
 
-            <div className="flex gap-2">
-              {query && (
-                <Button variant="outline" size="sm" onClick={handleSaveSearch}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Search
+              <Select
+                value={filters?.document_type || 'all'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, document_type: value === 'all' ? undefined : value })
+                }
+              >
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="All types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All types</SelectItem>
+                  <SelectItem value="memo">Memo</SelectItem>
+                  <SelectItem value="letter">Letter</SelectItem>
+                  <SelectItem value="circular">Circular</SelectItem>
+                  <SelectItem value="policy">Policy</SelectItem>
+                  <SelectItem value="report">Report</SelectItem>
+                  <SelectItem value="form">Form</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters?.status || 'all'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, status: value === 'all' ? undefined : value })
+                }
+              >
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="published">Published</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters?.sensitivity || 'all'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, sensitivity: value === 'all' ? undefined : value })
+                }
+              >
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="Sensitivity" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All levels</SelectItem>
+                  {SENSITIVITY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters?.author_id || 'all'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, author_id: value === 'all' ? undefined : value })
+                }
+              >
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="Author" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All authors</SelectItem>
+                  {users.filter(u => u.active).map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters?.division_id || 'all'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, division_id: value === 'all' ? undefined : value })
+                }
+              >
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="Division" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All divisions</SelectItem>
+                  {divisions.filter(d => d.isActive).map((division) => (
+                    <SelectItem key={division.id} value={division.id}>
+                      {division.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={filters?.department_id || 'all'}
+                onValueChange={(value) =>
+                  setFilters({ ...filters, department_id: value === 'all' ? undefined : value })
+                }
+              >
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="Department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All departments</SelectItem>
+                  {departments
+                    .filter(d => d.isActive && (!filters?.division_id || d.divisionId === filters.division_id))
+                    .map((department) => (
+                      <SelectItem key={department.id} value={department.id}>
+                        {department.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+
+              {(searchType === 'correspondence' || searchType === 'all') && (
+                <>
+                  <Select
+                    value={filters?.source || 'all'}
+                    onValueChange={(value) =>
+                      setFilters({ ...filters, source: value === 'all' ? undefined : value })
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[130px] text-xs">
+                      <SelectValue placeholder="Source" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All sources</SelectItem>
+                      <SelectItem value="internal">Internal</SelectItem>
+                      <SelectItem value="external">External</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={filters?.direction || 'all'}
+                    onValueChange={(value) =>
+                      setFilters({ ...filters, direction: value === 'all' ? undefined : value })
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[130px] text-xs">
+                      <SelectValue placeholder="Direction" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All directions</SelectItem>
+                      <SelectItem value="upward">Upward</SelectItem>
+                      <SelectItem value="downward">Downward</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
+
+              <Select
+                value=""
+                onValueChange={(value) => {
+                  const today = new Date();
+                  const dates: { [key: string]: { from: string; to: string } } = {
+                    today: {
+                      from: today.toISOString().split('T')[0],
+                      to: today.toISOString().split('T')[0],
+                    },
+                    this_week: {
+                      from: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                      to: today.toISOString().split('T')[0],
+                    },
+                    this_month: {
+                      from: new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0],
+                      to: today.toISOString().split('T')[0],
+                    },
+                    last_month: {
+                      from: new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0],
+                      to: new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0],
+                    },
+                    this_year: {
+                      from: new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0],
+                      to: today.toISOString().split('T')[0],
+                    },
+                    last_year: {
+                      from: new Date(today.getFullYear() - 1, 0, 1).toISOString().split('T')[0],
+                      to: new Date(today.getFullYear() - 1, 11, 31).toISOString().split('T')[0],
+                    },
+                  };
+                  if (value && dates[value]) {
+                    setFilters({ ...filters, date_from: dates[value].from, date_to: dates[value].to });
+                  }
+                }}
+              >
+                <SelectTrigger className="h-8 w-[130px] text-xs">
+                  <SelectValue placeholder="Date range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="this_week">This Week</SelectItem>
+                  <SelectItem value="this_month">This Month</SelectItem>
+                  <SelectItem value="last_month">Last Month</SelectItem>
+                  <SelectItem value="this_year">This Year</SelectItem>
+                  <SelectItem value="last_year">Last Year</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {Object.keys(filters).length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setFilters({}); setPage(0); }}
+                  className="h-8 text-xs"
+                >
+                  Clear
                 </Button>
               )}
-            </div>
-          </div>
 
-          {/* Filters Panel */}
-          {showFilters && (
-            <Card className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Document Type</Label>
-                  <Select
-                    value={filters?.document_type || ''}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, document_type: value || undefined })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All types</SelectItem>
-                      <SelectItem value="memo">Memo</SelectItem>
-                      <SelectItem value="letter">Letter</SelectItem>
-                      <SelectItem value="circular">Circular</SelectItem>
-                      <SelectItem value="policy">Policy</SelectItem>
-                      <SelectItem value="report">Report</SelectItem>
-                      <SelectItem value="form">Form</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select
-                    value={filters?.status || ''}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, status: value || undefined })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All statuses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All statuses</SelectItem>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="published">Published</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="in-progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Sensitivity</Label>
-                  <Select
-                    value={filters?.sensitivity || ''}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, sensitivity: value || undefined })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All levels" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All levels</SelectItem>
-                      {SENSITIVITY_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Author</Label>
-                  <Select
-                    value={filters?.author_id || ''}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, author_id: value || undefined })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All authors" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All authors</SelectItem>
-                      {users.filter(u => u.active).map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Division</Label>
-                  <Select
-                    value={filters?.division_id || ''}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, division_id: value || undefined })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All divisions" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All divisions</SelectItem>
-                      {divisions.filter(d => d.isActive).map((division) => (
-                        <SelectItem key={division.id} value={division.id}>
-                          {division.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Department</Label>
-                  <Select
-                    value={filters?.department_id || ''}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, department_id: value || undefined })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All departments" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All departments</SelectItem>
-                      {departments
-                        .filter(d => d.isActive && (!filters?.division_id || d.divisionId === filters.division_id))
-                        .map((department) => (
-                          <SelectItem key={department.id} value={department.id}>
-                            {department.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {searchType === 'correspondence' || searchType === 'all' ? (
-                  <>
-                    <div className="space-y-2">
-                      <Label>Source</Label>
-                      <Select
-                        value={filters?.source || ''}
-                        onValueChange={(value) =>
-                          setFilters({ ...filters, source: value || undefined })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="All sources" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">All sources</SelectItem>
-                          <SelectItem value="internal">Internal</SelectItem>
-                          <SelectItem value="external">External</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Direction</Label>
-                      <Select
-                        value={filters?.direction || ''}
-                        onValueChange={(value) =>
-                          setFilters({ ...filters, direction: value || undefined })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="All directions" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">All directions</SelectItem>
-                          <SelectItem value="upward">Upward</SelectItem>
-                          <SelectItem value="downward">Downward</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </>
-                ) : null}
-
-                <div className="space-y-2">
-                  <Label>Date Range</Label>
-                  <Select
-                    value=""
-                    onValueChange={(value) => {
-                      const today = new Date();
-                      const dates: { [key: string]: { from: string; to: string } } = {
-                        today: {
-                          from: today.toISOString().split('T')[0],
-                          to: today.toISOString().split('T')[0],
-                        },
-                        this_week: {
-                          from: new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                          to: today.toISOString().split('T')[0],
-                        },
-                        this_month: {
-                          from: new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0],
-                          to: today.toISOString().split('T')[0],
-                        },
-                        last_month: {
-                          from: new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().split('T')[0],
-                          to: new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0],
-                        },
-                        this_year: {
-                          from: new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0],
-                          to: today.toISOString().split('T')[0],
-                        },
-                        last_year: {
-                          from: new Date(today.getFullYear() - 1, 0, 1).toISOString().split('T')[0],
-                          to: new Date(today.getFullYear() - 1, 11, 31).toISOString().split('T')[0],
-                        },
-                      };
-                      if (value && dates[value]) {
-                        setFilters({ ...filters, date_from: dates[value].from, date_to: dates[value].to });
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Preset ranges..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="today">Today</SelectItem>
-                      <SelectItem value="this_week">This Week</SelectItem>
-                      <SelectItem value="this_month">This Month</SelectItem>
-                      <SelectItem value="last_month">Last Month</SelectItem>
-                      <SelectItem value="this_year">This Year</SelectItem>
-                      <SelectItem value="last_year">Last Year</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Date From</Label>
-                  <Input
-                    type="date"
-                    value={filters?.date_from || ''}
-                    onChange={(e) =>
-                      setFilters({ ...filters, date_from: e.target.value || undefined })
-                    }
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Date To</Label>
-                  <Input
-                    type="date"
-                    value={filters?.date_to || ''}
-                    onChange={(e) =>
-                      setFilters({ ...filters, date_to: e.target.value || undefined })
-                    }
-                  />
-                </div>
-
-                {searchType === 'correspondence' || searchType === 'all' ? (
-                  <div className="space-y-2">
-                    <Label>Priority</Label>
-                    <Select
-                      value={filters?.priority || ''}
-                      onValueChange={(value) =>
-                        setFilters({ ...filters, priority: value || undefined })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="All priorities" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">All priorities</SelectItem>
-                        <SelectItem value="urgent">Urgent</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="low">Low</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-
-                {searchType === 'correspondence' || searchType === 'all' ? (
-                  <div className="space-y-2">
-                    <Label>Office</Label>
-                    <Select
-                      value={filters?.office_id || ''}
-                      onValueChange={(value) =>
-                        setFilters({ ...filters, office_id: value || undefined })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="All offices" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">All offices</SelectItem>
-                        {offices.filter(o => o.isActive).map((office) => (
-                          <SelectItem key={office.id} value={office.id}>
-                            {office.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="flex gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setFilters({});
-                    setPage(0);
-                  }}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Clear Filters
-                </Button>
-              </div>
-            </Card>
-          )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveSearch}
+                disabled={!query && Object.keys(filters).length === 0}
+                className="h-8 text-xs"
+              >
+                <Save className="h-3 w-3 mr-1" />
+                Save
+              </Button>
+            </CardContent>
+          </Card>
 
           {/* Search History & Saved Searches */}
           {!results && (searchHistory.length > 0 || savedSearches.length > 0) && (

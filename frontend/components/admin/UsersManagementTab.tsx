@@ -20,13 +20,11 @@ import {
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import {
   Users,
   Search,
   Building2,
   Shield,
-  Filter,
   X,
   ArrowUpDown,
   ArrowUp,
@@ -162,7 +160,6 @@ export const UsersManagementTab = () => {
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
   const [showBulkRoleAssign, setShowBulkRoleAssign] = useState(false);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const roleIdByName = useMemo(() => {
     const map = new Map<string, string>();
     roles.forEach((role) => {
@@ -374,7 +371,6 @@ export const UsersManagementTab = () => {
       return [...withoutKey, { key, value, display }];
     });
   }, []);
-  const activeFilterCount = useMemo(() => filters.length, [filters]);
   const clearAllFilters = useCallback(() => setFilters([]), []);
 
   // Bulk operation handlers
@@ -651,20 +647,7 @@ export const UsersManagementTab = () => {
             </div>
           )}
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters((prev) => !prev)}
-              aria-label="Toggle filters"
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="ml-2">
-                  {activeFilterCount}
-                </Badge>
-              )}
-            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -748,217 +731,196 @@ export const UsersManagementTab = () => {
           ))}
         </div>
 
-      <div className="relative max-w-xl">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <Input
-          placeholder="Search users by name, email, role, or employee ID..."
-          value={searchQuery}
-          onChange={(event) => {
-            setSearchQuery(event.target.value);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('admin_users_search', event.target.value);
-            }
-          }}
-          onFocus={() => {
-            if (searchQuery.trim().length > 1 || recentSearches.length > 0) {
-              setShowSearchSuggestions(true);
-            }
-          }}
-          onBlur={() => {
-            // Delay to allow clicking on suggestions
-            setTimeout(() => setShowSearchSuggestions(false), 200);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && searchQuery.trim()) {
-              addRecentSearch('users', searchQuery);
-              setShowSearchSuggestions(false);
-            }
-          }}
-          className="pl-10"
-          aria-label="Search users"
-          aria-autocomplete="list"
-          aria-expanded={showSearchSuggestions}
-        />
-        {showSearchSuggestions && (searchSuggestions.length > 0 || recentSearches.length > 0) && (
-          <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto">
-            {searchSuggestions.length > 0 && (
-              <div className="p-2">
-                <p className="text-xs text-muted-foreground px-2 py-1">Suggestions</p>
-                {searchSuggestions.map((suggestion, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 hover:bg-muted rounded text-sm"
-                    onClick={() => {
-                      setSearchQuery(suggestion);
-                      addRecentSearch('users', suggestion);
-                      setShowSearchSuggestions(false);
-                    }}
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            )}
-            {recentSearches.length > 0 && searchQuery.trim().length === 0 && (
-              <div className="p-2 border-t">
-                <div className="flex items-center justify-between px-2 py-1">
-                  <p className="text-xs text-muted-foreground">Recent searches</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearRecentSearches('users');
-                      setShowSearchSuggestions(false);
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Clear
-                  </button>
-                </div>
-                {recentSearches.map((search, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 hover:bg-muted rounded text-sm flex items-center gap-2"
-                    onClick={() => {
-                      setSearchQuery(search);
-                      setShowSearchSuggestions(false);
-                    }}
-                  >
-                    <Search className="h-3 w-3 text-muted-foreground" />
-                    {search}
-                  </button>
-                ))}
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          <div className="relative min-w-[200px] flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              placeholder="Search users..."
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('admin_users_search', event.target.value);
+                }
+              }}
+              onFocus={() => {
+                if (searchQuery.trim().length > 1 || recentSearches.length > 0) {
+                  setShowSearchSuggestions(true);
+                }
+              }}
+              onBlur={() => {
+                setTimeout(() => setShowSearchSuggestions(false), 200);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchQuery.trim()) {
+                  addRecentSearch('users', searchQuery);
+                  setShowSearchSuggestions(false);
+                }
+              }}
+              className="h-8 pl-8 text-xs"
+              aria-label="Search users"
+              aria-autocomplete="list"
+              aria-expanded={showSearchSuggestions}
+            />
+            {showSearchSuggestions && (searchSuggestions.length > 0 || recentSearches.length > 0) && (
+              <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto">
+                {searchSuggestions.length > 0 && (
+                  <div className="p-2">
+                    <p className="text-xs text-muted-foreground px-2 py-1">Suggestions</p>
+                    {searchSuggestions.map((suggestion, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className="w-full text-left px-2 py-1.5 hover:bg-muted rounded text-sm"
+                        onClick={() => {
+                          setSearchQuery(suggestion);
+                          addRecentSearch('users', suggestion);
+                          setShowSearchSuggestions(false);
+                        }}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {recentSearches.length > 0 && searchQuery.trim().length === 0 && (
+                  <div className="p-2 border-t">
+                    <div className="flex items-center justify-between px-2 py-1">
+                      <p className="text-xs text-muted-foreground">Recent searches</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearRecentSearches('users');
+                          setShowSearchSuggestions(false);
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    {recentSearches.map((search, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className="w-full text-left px-2 py-1.5 hover:bg-muted rounded text-sm flex items-center gap-2"
+                        onClick={() => {
+                          setSearchQuery(search);
+                          setShowSearchSuggestions(false);
+                        }}
+                      >
+                        <Search className="h-3 w-3 text-muted-foreground" />
+                        {search}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      {showFilters && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">User Filters</CardTitle>
-              {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearAllFilters}>
-                  Clear All
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Role</Label>
-                <Select
-                  value={getFilterValue("role")}
-                  onValueChange={(value) => {
-                    if (value === "all") {
-                      setFilterValue("role", "all", "");
-                      return;
-                    }
-                    const role = roles.find((item) => item.id === value);
-                    if (!role) return;
-                    setFilterValue("role", role.id, `Role: ${role.name}`);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Roles" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Roles</SelectItem>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <Select
+            value={getFilterValue("role")}
+            onValueChange={(value) => {
+              if (value === "all") {
+                setFilterValue("role", "all", "");
+                return;
+              }
+              const role = roles.find((item) => item.id === value);
+              if (!role) return;
+              setFilterValue("role", role.id, `Role: ${role.name}`);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <SelectValue placeholder="Role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              {roles.map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {role.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Division</Label>
-                <Select
-                  value={getFilterValue("division")}
-                  onValueChange={(value) => {
-                    if (value === "all") {
-                      setFilterValue("division", "all", "");
-                      return;
-                    }
-                    const division = divisions.find((item) => item.id === value);
-                    if (!division) return;
-                    setFilterValue("division", division.id, `Division: ${division.name}`);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Divisions" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Divisions</SelectItem>
-                    {divisions.map((division) => (
-                      <SelectItem key={division.id} value={division.id}>
-                        {division.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <Select
+            value={getFilterValue("division")}
+            onValueChange={(value) => {
+              if (value === "all") {
+                setFilterValue("division", "all", "");
+                return;
+              }
+              const division = divisions.find((item) => item.id === value);
+              if (!division) return;
+              setFilterValue("division", division.id, `Division: ${division.name}`);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <SelectValue placeholder="Division" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Divisions</SelectItem>
+              {divisions.map((division) => (
+                <SelectItem key={division.id} value={division.id}>
+                  {division.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Department</Label>
-                <Select
-                  value={getFilterValue("department")}
-                  onValueChange={(value) => {
-                    if (value === "all") {
-                      setFilterValue("department", "all", "");
-                      return;
-                    }
-                    const department = departments.find((item) => item.id === value);
-                    if (!department) return;
-                    setFilterValue("department", department.id, `Department: ${department.name}`);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Departments" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Departments</SelectItem>
-                    {departments.map((department) => (
-                      <SelectItem key={department.id} value={department.id}>
-                        {department.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          <Select
+            value={getFilterValue("department")}
+            onValueChange={(value) => {
+              if (value === "all") {
+                setFilterValue("department", "all", "");
+                return;
+              }
+              const department = departments.find((item) => item.id === value);
+              if (!department) return;
+              setFilterValue("department", department.id, `Department: ${department.name}`);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {departments.map((department) => (
+                <SelectItem key={department.id} value={department.id}>
+                  {department.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <div>
-                <Label className="text-sm font-medium mb-2 block">Status</Label>
-                <Select
-                  value={getFilterValue("status")}
-                  onValueChange={(value) => {
-                    if (value === "all") {
-                      setFilterValue("status", "all", "");
-                      return;
-                    }
-                    setFilterValue("status", value, `Status: ${value === "active" ? "Active" : "Inactive"}`);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Statuses" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          <Select
+            value={getFilterValue("status")}
+            onValueChange={(value) => {
+              if (value === "all") {
+                setFilterValue("status", "all", "");
+                return;
+              }
+              setFilterValue("status", value, `Status: ${value === "active" ? "Active" : "Inactive"}`);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {filters.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-8 text-xs">
+              Clear
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
 
       <Card>

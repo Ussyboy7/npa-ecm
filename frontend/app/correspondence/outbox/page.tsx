@@ -3,11 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import {
   Select,
@@ -26,7 +25,6 @@ import {
   AlertCircle,
   Clock,
   User as UserIcon,
-  Filter,
   Building2,
   FileText,
 } from 'lucide-react';
@@ -44,8 +42,6 @@ import {
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
   correspondenceQueueListStackClass,
-  registryQueueSearchStatsShellContentClass,
-  registryQueueSearchInputWrapClass,
   registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
   registryQueueStatIconClass,
@@ -71,16 +67,10 @@ import { cn } from '@/lib/utils';
 import { getDocumentsSharedByUser, type DocumentRecord } from '@/lib/dms-storage';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorState } from '@/components/shared/ErrorState';
-
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: '#ef4444',
-  high: '#f97316',
-  medium: '#eab308',
-  low: '#22c55e',
-};
 
 const calculateDaysPending = (item: Correspondence): number => {
   if (!item.receivedDate) return 0;
@@ -95,13 +85,12 @@ const OutboxPage = () => {
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedPriority, setSelectedPriority] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
-  const [showFilters, setShowFilters] = useState(false);
 
   // Use pagination hook
   const [count, setCount] = useState(0);
@@ -126,24 +115,16 @@ const OutboxPage = () => {
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedStatuses.length > 0) count++;
-    if (selectedPriorities.length > 0) count++;
+    if (selectedStatus !== '') count++;
+    if (selectedPriority !== '') count++;
     if (dateFrom) count++;
     if (dateTo) count++;
     return count;
-  }, [selectedStatuses, selectedPriorities, dateFrom, dateTo]);
+  }, [selectedStatus, selectedPriority, dateFrom, dateTo]);
 
-  const toggleStatus = (status: string) => {
-    setSelectedStatuses((prev) => prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]);
-  };
-
-  const togglePriority = (priority: string) => {
-    setSelectedPriorities((prev) => prev.includes(priority) ? prev.filter((p) => p !== priority) : [...prev, priority]);
-  };
-
-  const clearAllFilters = () => {
-    setSelectedStatuses([]);
-    setSelectedPriorities([]);
+  const clearFilters = () => {
+    setSelectedStatus('');
+    setSelectedPriority('');
     setDateFrom('');
     setDateTo('');
     setQuery('');
@@ -157,7 +138,7 @@ const OutboxPage = () => {
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo, pagination.pageSize]);
+  }, [debouncedQuery, selectedStatus, selectedPriority, sortBy, sortOrder, dateFrom, dateTo, pagination.pageSize]);
 
   useEffect(() => {
     // Fetch data immediately after login (don't wait for currentUser hydration)
@@ -169,11 +150,9 @@ const OutboxPage = () => {
       try {
         const params = new URLSearchParams();
         if (debouncedQuery) params.append('search', debouncedQuery);
-        if (selectedStatuses.length > 0) {
-          selectedStatuses.forEach((status) => params.append('status', status));
-        }
-        if (selectedPriorities.length > 0) {
-          selectedPriorities.forEach((priority) => params.append('priority', priority));
+        if (selectedStatus) params.append('status', selectedStatus);
+        if (selectedPriority !== '') {
+          params.append('priority', selectedPriority);
         }
         // Date range filters - backend should support these params
         if (dateFrom) {
@@ -229,7 +208,7 @@ const OutboxPage = () => {
     };
 
     void fetchOutbox();
-  }, [currentUser?.id, debouncedQuery, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey]);
+  }, [currentUser?.id, debouncedQuery, selectedStatus, selectedPriority, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey]);
 
   const handleWithdrawClick = (item: Correspondence) => {
     const status = item.status as string;
@@ -385,10 +364,6 @@ const OutboxPage = () => {
             <p className="text-muted-foreground mt-1">Correspondence you created and documents you've shared</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="h-4 w-4 mr-2" /> Filters
-              {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
-          </Button>
             <Button size="sm" asChild><Link href="/correspondence/register"><Mail className="h-4 w-4 mr-2" />Register New</Link></Button>
           </div>
         </div>
@@ -399,99 +374,60 @@ const OutboxPage = () => {
           links={[{ label: 'My Documents', href: '/documents' }, { label: 'Help & Guides', href: '/help' }]}
         />
 
-        {/* Filters Panel */}
-        {showFilters && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">My Outbox Filters</CardTitle>
-                {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Status</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['pending', 'in-progress'].map((status) => (
-                      <Badge key={status} variant={selectedStatuses.includes(status) ? 'default' : 'outline'} className="cursor-pointer capitalize text-xs" onClick={() => toggleStatus(status)}>
-                        {status.replace('-', ' ')}
-                      </Badge>
-                    ))}
-                  </div>
-          </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Priority</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['urgent', 'high', 'medium', 'low'].map((priority) => (
-                      <Badge key={priority} variant={selectedPriorities.includes(priority) ? 'default' : 'outline'} className="cursor-pointer capitalize text-xs" onClick={() => togglePriority(priority)} style={selectedPriorities.includes(priority) ? { backgroundColor: PRIORITY_COLORS[priority] } : {}}>
-                        {priority}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date From</Label>
-                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date To</Label>
-                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-            </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Sort By</Label>
-                  <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                  <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
-                  <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
-                  <SelectItem value="created-desc">Created (Newest)</SelectItem>
-                  <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Search + Stats */}
+        {/* Inline Filter Bar */}
         <Card>
-          <CardContent className={registryQueueSearchStatsShellContentClass}>
-            <div className={registryQueueSearchInputWrapClass}>
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search by subject, reference, sender…"
-                className="pl-10"
-                aria-label="Search outbox"
-              />
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search by subject, reference, sender..." value={query} onChange={(e) => setQuery(e.target.value)} className="h-8 pl-8 text-xs" />
             </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {[
-                { label: 'Total items', value: summary.total + documentCount, icon: Mail, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-                { label: 'Pending action', value: summary.pending, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-                { label: 'In progress', value: summary.inProgress, icon: Send, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-                <Card key={label}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className="flex items-center gap-4">
-                      <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                      </div>
-                      <div>
-                        <p className={registryQueueStatLabelClass}>{label}</p>
-                        <p className={registryQueueStatValueClass}>{value}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <Select value={selectedStatus || 'all'} onValueChange={(v) => setSelectedStatus(v === 'all' ? '' : v)}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in-progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+                <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
+                <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
+                <SelectItem value="created-desc">Created (Newest)</SelectItem>
+                <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
+              </SelectContent>
+            </Select>
+            {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
           </CardContent>
         </Card>
+
+        {/* Stats Cards */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[
+            { label: 'Total items', value: summary.total + documentCount, icon: Mail, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+            { label: 'Pending action', value: summary.pending, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
+            { label: 'In progress', value: summary.inProgress, icon: Send, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
         {error && <ErrorState message={error} variant="inline" />}
 
@@ -504,7 +440,7 @@ const OutboxPage = () => {
             title={debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'No correspondence or documents'}
             message={debouncedQuery || activeFilterCount > 0 ? 'Try adjusting your search or filters' : 'You have no correspondence or shared documents at the moment.'}
             actionLabel={debouncedQuery || activeFilterCount > 0 ? 'Clear Filters' : undefined}
-            onAction={debouncedQuery || activeFilterCount > 0 ? clearAllFilters : undefined}
+            onAction={debouncedQuery || activeFilterCount > 0 ? clearFilters : undefined}
           />
             ) : (
           <div className={correspondenceQueueListStackClass}>

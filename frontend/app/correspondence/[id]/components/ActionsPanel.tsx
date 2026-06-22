@@ -15,8 +15,6 @@ import {
   ArrowUp,
   ArrowRight,
   Info,
-  Send,
-  FileCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDateShort } from "@/lib/correspondence-helpers";

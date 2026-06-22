@@ -9,7 +9,7 @@ from datetime import datetime
 
 from django.conf import settings
 from django.db import connection
-from django.db.models import Max, Q
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 from django.utils.text import slugify
 from django_filters.rest_framework import DjangoFilterBackend
@@ -99,7 +99,9 @@ def _apply_document_tag_search_postgresql(queryset, terms: list[str]):
 
 
 class DocumentWorkspaceViewSet(viewsets.ModelViewSet):
-    queryset = DocumentWorkspace.objects.prefetch_related("members")
+    queryset = DocumentWorkspace.objects.prefetch_related("members").annotate(
+        document_count=Count("documents", distinct=True),
+    )
     serializer_class = DocumentWorkspaceSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -158,6 +160,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         date_to = self.request.query_params.get("date_to")
         status_in = self.request.query_params.get("status_in", "").strip()
         document_type_in = self.request.query_params.get("document_type_in", "").strip()
+        workspace = self.request.query_params.get("workspace", "").strip()
         
         # Apply date range filter first (before search to reduce queryset size)
         if date_from:
@@ -183,6 +186,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
             document_types = [value.strip() for value in document_type_in.split(",") if value.strip()]
             if document_types:
                 queryset = queryset.filter(document_type__in=document_types)
+
+        if workspace:
+            queryset = queryset.filter(workspaces__id=workspace)
         
         # If there's a search query, search across fields, version content, and tags (PostgreSQL)
         if search_query:

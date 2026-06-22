@@ -1,5 +1,4 @@
 "use client";
-import Image from 'next/image';
 import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
 
 import { ALLOWED_SIGNATURE_MIME_TYPES, ACCEPT_IMAGE_SIGNATURE } from '@/lib/file-types';
@@ -601,16 +600,15 @@ export const SignatureSettingsCard = () => {
                     {signature ? (
                       <div className="space-y-3">
                         <div className="p-4 border rounded-lg bg-white dark:bg-background flex items-center justify-center min-h-[100px]">
-                          <Image
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
                             src={
                               signature.imageData.startsWith('data:')
                                 ? signature.imageData
                                 : (buildDownloadUrl(signature.imageData) ?? signature.imageData)
                             }
                             alt="Your signature"
-                            width={300}
-                            height={80}
-                            className="max-h-20 object-contain"
+                            className="max-h-20 w-auto object-contain"
                           />
                         </div>
                         <div className="flex items-center justify-between text-xs text-muted-foreground">

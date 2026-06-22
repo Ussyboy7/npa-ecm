@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -23,7 +23,6 @@ import {
   correspondenceQueueMetaItemClass,
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
-  registryQueueSearchInputWrapClass,
   registryQueueSearchStatsShellContentClass,
   registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
@@ -55,7 +54,6 @@ import {
   XCircle,
   Shield,
   FileText,
-  Filter,
   Download,
   RefreshCw,
   ChevronLeft,
@@ -245,10 +243,9 @@ const AuditTrailPage = () => {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [successFilter, setSuccessFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'last7' | 'last30' | 'last90' | 'custom'>('all');
-  const [customDateFrom, setCustomDateFrom] = useState<string>('');
-  const [customDateTo, setCustomDateTo] = useState<string>('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortBy, setSortBy] = useState('timestamp');
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -260,17 +257,15 @@ const AuditTrailPage = () => {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Calculate active filter count
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (debouncedSearch) count++;
-    if (actionFilter !== 'all') count++;
-    if (moduleFilter !== 'all') count++;
-    if (severityFilter !== 'all') count++;
-    if (successFilter !== 'all') count++;
-    if (dateRangeFilter !== 'all') count++;
-    return count;
-  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, dateRangeFilter]);
+  const hasActiveFilters = useMemo(() => !!(
+    debouncedSearch ||
+    actionFilter !== 'all' ||
+    moduleFilter !== 'all' ||
+    severityFilter !== 'all' ||
+    successFilter !== 'all' ||
+    dateFrom ||
+    dateTo
+  ), [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, dateFrom, dateTo]);
 
   // Debounce search
   useEffect(() => {
@@ -281,29 +276,13 @@ const AuditTrailPage = () => {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, pageSize, dateRangeFilter, customDateFrom, customDateTo]);
+  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, pageSize, dateFrom, dateTo]);
 
   // Build date range params
   const getDateRangeParams = () => {
     const params: Record<string, unknown> = {};
-    
-    if (dateRangeFilter === 'last7') {
-      const fromDate = new Date();
-      fromDate.setDate(fromDate.getDate() - 7);
-      params.from_date = fromDate.toISOString().split('T')[0];
-    } else if (dateRangeFilter === 'last30') {
-      const fromDate = new Date();
-      fromDate.setDate(fromDate.getDate() - 30);
-      params.from_date = fromDate.toISOString().split('T')[0];
-    } else if (dateRangeFilter === 'last90') {
-      const fromDate = new Date();
-      fromDate.setDate(fromDate.getDate() - 90);
-      params.from_date = fromDate.toISOString().split('T')[0];
-    } else if (dateRangeFilter === 'custom') {
-      if (customDateFrom) params.from_date = customDateFrom;
-      if (customDateTo) params.to_date = customDateTo;
-    }
-    
+    if (dateFrom) params.from_date = dateFrom;
+    if (dateTo) params.to_date = dateTo;
     return params;
   };
 
@@ -439,7 +418,7 @@ const AuditTrailPage = () => {
     void fetchLogs();
     void fetchSummaryStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, currentUser, page, pageSize, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateRangeFilter, customDateFrom, customDateTo]);
+  }, [hydrated, currentUser, page, pageSize, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -460,24 +439,15 @@ const AuditTrailPage = () => {
     return user?.name || userId;
   };
 
-  const clearAllFilters = () => {
+  const clearFilters = () => {
     setSearchQuery('');
     setActionFilter('all');
     setModuleFilter('all');
     setSeverityFilter('all');
     setSuccessFilter('all');
-    setDateRangeFilter('all');
-    setCustomDateFrom('');
-    setCustomDateTo('');
+    setDateFrom('');
+    setDateTo('');
   };
-
-  const hasListFilters =
-    debouncedSearch ||
-    actionFilter !== 'all' ||
-    moduleFilter !== 'all' ||
-    severityFilter !== 'all' ||
-    successFilter !== 'all' ||
-    dateRangeFilter !== 'all';
 
   return (
     <DashboardLayout>
@@ -502,18 +472,10 @@ const AuditTrailPage = () => {
                 description="Search and filter events across modules. Export filtered results as CSV from More for audits and compliance."
                 steps={[
                   'Use the search box for user names, actions, descriptions, or object text.',
-                  'Open Filters to narrow by action type, module, severity, status, or date.',
-                  'Clear filters from the filter card or empty state when no rows match.',
+                  'Use the filter bar to narrow by action type, module, severity, status, or date.',
+                  'Clear filters from the filter bar or empty state when no rows match.',
                 ]}
               />
-              <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-                <Filter className="mr-2 h-4 w-4" /> Filters
-                {activeFilterCount > 0 && (
-                  <Badge variant="secondary" className="ml-2">
-                    {activeFilterCount}
-                  </Badge>
-                )}
-              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm">
@@ -547,15 +509,6 @@ const AuditTrailPage = () => {
 
         <Card>
           <CardContent className={registryQueueSearchStatsShellContentClass}>
-            <div className={registryQueueSearchInputWrapClass}>
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by user, action, description, object…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {
@@ -605,130 +558,58 @@ const AuditTrailPage = () => {
           </CardContent>
         </Card>
 
-        {showFilters && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-lg">Audit trail filters</CardTitle>
-                {activeFilterCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearAllFilters}>
-                    Clear all
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-4">
-              <div className="w-full md:w-48 space-y-1">
-                <Label className="text-xs text-muted-foreground">Action Type</Label>
-                <Select value={actionFilter} onValueChange={setActionFilter}>
-                <SelectTrigger>
-                    <SelectValue placeholder="All Actions" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Actions</SelectItem>
-                    {ACTION_TYPES.map((action) => (
-                      <SelectItem key={action.value} value={action.value}>
-                        {action.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              </div>
-              <div className="w-full md:w-48 space-y-1">
-                <Label className="text-xs text-muted-foreground">Module</Label>
-                <Select value={moduleFilter} onValueChange={setModuleFilter}>
-                <SelectTrigger>
-                    <SelectValue placeholder="All Modules" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Modules</SelectItem>
-                    {MODULES.map((module) => (
-                      <SelectItem key={module.value} value={module.value}>
-                        {module.label}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              </div>
-              <div className="w-full md:w-40 space-y-1">
-                <Label className="text-xs text-muted-foreground">Severity</Label>
-                <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                <SelectTrigger>
-                    <SelectValue placeholder="All Severities" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All Severities</SelectItem>
-                    {SEVERITIES.map((severity) => (
-                      <SelectItem key={severity.value} value={severity.value}>
-                        {severity.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              </div>
-              <div className="w-full md:w-36 space-y-1">
-                <Label className="text-xs text-muted-foreground">Status</Label>
-                <Select value={successFilter} onValueChange={setSuccessFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="true">Success</SelectItem>
-                    <SelectItem value="false">Failed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="w-full md:w-48 space-y-1">
-                <Label className="text-xs text-muted-foreground">Date Range</Label>
-                <Select value={dateRangeFilter} onValueChange={(v) => setDateRangeFilter(v as typeof dateRangeFilter)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Time</SelectItem>
-                    <SelectItem value="last7">Last 7 Days</SelectItem>
-                    <SelectItem value="last30">Last 30 Days</SelectItem>
-                    <SelectItem value="last90">Last 90 Days</SelectItem>
-                    <SelectItem value="custom">Custom Range</SelectItem>
-                  </SelectContent>
-                </Select>
-                {dateRangeFilter === 'custom' && (
-                  <div className="mt-2 space-y-2">
-                    <Input
-                      type="date"
-                      placeholder="From"
-                      value={customDateFrom}
-                      onChange={(e) => setCustomDateFrom(e.target.value)}
-                      className="w-full"
-                    />
-                    <Input
-                      type="date"
-                      placeholder="To"
-                      value={customDateTo}
-                      onChange={(e) => setCustomDateTo(e.target.value)}
-                      className="w-full"
-                    />
-                  </div>
-                )}
-              </div>
-              <div className="w-full md:w-48 space-y-1">
-                <Label className="text-xs text-muted-foreground">Sort Order</Label>
-                <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as 'asc' | 'desc')}>
-                <SelectTrigger>
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="desc">Newest First</SelectItem>
-                    <SelectItem value="asc">Oldest First</SelectItem>
-                </SelectContent>
-              </Select>
-              </div>
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search by user, action, description, object…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
             </div>
-            </CardContent>
-          </Card>
-        )}
+            <Select value={actionFilter} onValueChange={setActionFilter}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="All Actions" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Actions</SelectItem>
+                {ACTION_TYPES.map((action) => (
+                  <SelectItem key={action.value} value={action.value}>{action.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={moduleFilter} onValueChange={setModuleFilter}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Modules" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Modules</SelectItem>
+                {MODULES.map((module) => (
+                  <SelectItem key={module.value} value={module.value}>{module.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={severityFilter} onValueChange={setSeverityFilter}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Severities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Severities</SelectItem>
+                {SEVERITIES.map((severity) => (
+                  <SelectItem key={severity.value} value={severity.value}>{severity.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={successFilter} onValueChange={setSuccessFilter}>
+              <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="true">Success</SelectItem>
+                <SelectItem value="false">Failed</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="timestamp-desc">Newest First</SelectItem>
+                <SelectItem value="timestamp-asc">Oldest First</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+          </CardContent>
+        </Card>
 
         {error ? (
           <ErrorState
@@ -741,15 +622,15 @@ const AuditTrailPage = () => {
           <LoadingState message="Loading audit logs…" />
         ) : logs.length === 0 ? (
           <EmptyState
-            icon={hasListFilters ? 'search' : 'file'}
-            title={hasListFilters ? 'No matching events' : 'No audit logs yet'}
+            icon={hasActiveFilters ? 'search' : 'file'}
+            title={hasActiveFilters ? 'No matching events' : 'No audit logs yet'}
             message={
-              hasListFilters
+              hasActiveFilters
                 ? 'No audit logs match your search or filters. Try clearing filters or broadening the date range.'
                 : 'Activity will appear here as users interact with the system.'
             }
-            actionLabel={hasListFilters ? 'Clear filters' : undefined}
-            onAction={hasListFilters ? clearAllFilters : undefined}
+            actionLabel={hasActiveFilters ? 'Clear filters' : undefined}
+            onAction={hasActiveFilters ? clearFilters : undefined}
             variant="dashed"
           />
         ) : (

@@ -357,8 +357,6 @@ const NewCasePage = () => {
             { label: 'Case Management', href: '/cases/my' },
             { label: 'Help & Guides', href: '/help' },
           ]}
-          dismissible
-          dismissKey="new-case-guide"
         />
 
         {/* Form */}

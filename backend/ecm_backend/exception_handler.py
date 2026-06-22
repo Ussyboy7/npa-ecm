@@ -26,6 +26,17 @@ def custom_exception_handler(exc: Exception, context: dict[str, Any]) -> Respons
 
     if isinstance(detail, dict):
         message = detail.get("detail") or detail.get("message") or message
+        # Fallback: use the first field-level error message
+        if message == "An unexpected error occurred":
+            for _field, errors in detail.items():
+                if isinstance(errors, list) and errors:
+                    candidate = errors[0]
+                    if isinstance(candidate, str):
+                        message = candidate
+                        break
+                elif isinstance(errors, str):
+                    message = errors
+                    break
     elif isinstance(detail, list) and detail:
         message = detail[0]
     elif isinstance(detail, str):

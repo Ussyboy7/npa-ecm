@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,7 +27,6 @@ import {
   Search,
   Send,
   Building2,
-  Filter,
   Loader2,
   AlertCircle,
   Download,
@@ -37,13 +36,13 @@ import {
   Trash2,
   User as UserIcon,
 } from 'lucide-react';
-import { Label } from '@/components/ui/label';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
@@ -83,13 +82,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-const PRIORITY_COLORS: Record<string, string> = {
-  urgent: '#ef4444',
-  high: '#f97316',
-  medium: '#eab308',
-  low: '#22c55e',
-};
-
 const calculateDaysPending = (item: Correspondence): number => {
   if (!item.receivedDate) return 0;
   const received = new Date(item.receivedDate).getTime();
@@ -124,13 +116,12 @@ const OfficeOutboxPage = () => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('all');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedPriority, setSelectedPriority] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('updated');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
-  const [showFilters, setShowFilters] = useState(false);
   const [outboxItems, setOutboxItems] = useState<Correspondence[]>([]);
   const [summary, setSummary] = useState({ total: 0, urgent: 0, pending: 0, inProgress: 0 });
   const [count, setCount] = useState(0);
@@ -142,7 +133,6 @@ const OfficeOutboxPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [dateError, setDateError] = useState<string | null>(null);
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<Correspondence | null>(null);
@@ -171,53 +161,22 @@ const OfficeOutboxPage = () => {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedOfficeId !== 'all') count++;
-    if (selectedStatuses.length > 0) count++;
-    if (selectedPriorities.length > 0) count++;
+    if (selectedStatus) count++;
+    if (selectedPriority) count++;
     if (dateFrom) count++;
     if (dateTo) count++;
     return count;
-  }, [selectedOfficeId, selectedStatuses, selectedPriorities, dateFrom, dateTo]);
+  }, [selectedOfficeId, selectedStatus, selectedPriority, dateFrom, dateTo]);
 
-  const toggleStatus = (status: string) => {
-    setSelectedStatuses((prev) => prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]);
-  };
+  const hasActiveFilters = activeFilterCount > 0 || !!query;
 
-  const togglePriority = (priority: string) => {
-    setSelectedPriorities((prev) => prev.includes(priority) ? prev.filter((p) => p !== priority) : [...prev, priority]);
-  };
-
-  const clearAllFilters = () => {
+  const clearFilters = () => {
     setSelectedOfficeId('all');
-    setSelectedStatuses([]);
-    setSelectedPriorities([]);
+    setSelectedStatus('');
+    setSelectedPriority('');
     setDateFrom('');
     setDateTo('');
     setQuery('');
-    setDateError(null);
-  };
-
-  // Validate date range
-  const validateDateRange = (from: string, to: string) => {
-    if (from && to && new Date(from) > new Date(to)) {
-      setDateError('Date From must be before Date To');
-      return false;
-    }
-    setDateError(null);
-    return true;
-  };
-
-  const handleDateFromChange = (value: string) => {
-    setDateFrom(value);
-    if (value && dateTo) {
-      validateDateRange(value, dateTo);
-    }
-  };
-
-  const handleDateToChange = (value: string) => {
-    setDateTo(value);
-    if (dateFrom && value) {
-      validateDateRange(dateFrom, value);
-    }
   };
 
   const getFilterParams = useCallback((): URLSearchParams => {
@@ -230,16 +189,16 @@ const OfficeOutboxPage = () => {
         params.append('office', officeId);
       });
     }
-    if (selectedStatuses.length > 0) {
-      selectedStatuses.forEach((status) => params.append('status', status));
+    if (selectedStatus) {
+      params.append('status', selectedStatus);
     }
-    if (selectedPriorities.length > 0) {
-      selectedPriorities.forEach((priority) => params.append('priority', priority));
+    if (selectedPriority) {
+      params.append('priority', selectedPriority);
     }
     if (dateFrom) params.append('date_from', dateFrom);
     if (dateTo) params.append('date_to', dateTo);
     return params;
-  }, [debouncedQuery, selectedOfficeId, userOfficeIds, selectedStatuses, selectedPriorities, dateFrom, dateTo]);
+  }, [debouncedQuery, selectedOfficeId, userOfficeIds, selectedStatus, selectedPriority, dateFrom, dateTo]);
 
   const handleExport = async () => {
     if (outboxItems.length === 0) {
@@ -293,7 +252,7 @@ const OfficeOutboxPage = () => {
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, sortBy, sortOrder, dateFrom, dateTo]);
+  }, [debouncedQuery, selectedOfficeId, selectedStatus, selectedPriority, sortBy, sortOrder, dateFrom, dateTo]);
 
   useEffect(() => {
     // Fetch data immediately if user has offices or is super admin (don't wait for currentUser hydration)
@@ -358,7 +317,7 @@ const OfficeOutboxPage = () => {
     return () => {
       controller.abort();
     };
-  }, [hasOfficeAccess, userOfficeIds, pagination.page, pagination.pageSize, debouncedQuery, selectedOfficeId, selectedStatuses, selectedPriorities, dateFrom, dateTo, sortBy, sortOrder, dateError, getFilterParams]);
+  }, [hasOfficeAccess, userOfficeIds, pagination.page, pagination.pageSize, debouncedQuery, selectedOfficeId, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, getFilterParams]);
 
   const handleWithdrawClick = (item: Correspondence) => {
     if (item.status as string !== 'pending' && item.status as string !== 'in-progress') {
@@ -502,16 +461,6 @@ const OfficeOutboxPage = () => {
             <Button 
               variant="outline" 
               size="sm" 
-              onClick={() => setShowFilters(!showFilters)}
-              aria-label={`${showFilters ? 'Hide' : 'Show'} filters`}
-              aria-expanded={showFilters}
-            >
-              <Filter className="h-4 w-4 mr-2" /> Filters
-              {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2" aria-label={`${activeFilterCount} active filters`}>{activeFilterCount}</Badge>}
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
               onClick={handleExport}
               disabled={exporting || outboxItems.length === 0 || loading}
               aria-label="Export to CSV"
@@ -542,115 +491,59 @@ const OfficeOutboxPage = () => {
           ]}
         />
 
-        {/* Filters Panel */}
-        {showFilters && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Office Outbox Filters</CardTitle>
-                {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters}>Clear All</Button>}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                {selectableOffices.length > 0 && (
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Office</label>
-                    <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Offices</SelectItem>
-                        {selectableOffices.map((office) => (
-                          <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Status</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['pending', 'in-progress'].map((status) => (
-                      <Badge
-                        key={status}
-                        variant={selectedStatuses.includes(status) ? 'default' : 'outline'}
-                        className="cursor-pointer capitalize text-xs"
-                        onClick={() => toggleStatus(status)}
-                      >
-                        {status.replace('-', ' ')}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Priority</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['urgent', 'high', 'medium', 'low'].map((priority) => (
-                      <Badge
-                        key={priority}
-                        variant={selectedPriorities.includes(priority) ? 'default' : 'outline'}
-                        className="cursor-pointer capitalize text-xs"
-                        onClick={() => togglePriority(priority)}
-                        style={selectedPriorities.includes(priority) ? { backgroundColor: PRIORITY_COLORS[priority] } : {}}
-                      >
-                        {priority}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date From</Label>
-                  <Input 
-                    type="date" 
-                    value={dateFrom} 
-                    onChange={(e) => handleDateFromChange(e.target.value)}
-                    aria-invalid={dateError ? 'true' : 'false'}
-                    aria-describedby={dateError ? 'date-error' : undefined}
-                  />
-                  {dateError && (
-                    <p id="date-error" className="text-xs text-destructive mt-1">{dateError}</p>
-                  )}
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date To</Label>
-                  <Input 
-                    type="date" 
-                    value={dateTo} 
-                    onChange={(e) => handleDateToChange(e.target.value)}
-                    aria-invalid={dateError ? 'true' : 'false'}
-                    aria-describedby={dateError ? 'date-error' : undefined}
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Sort By</Label>
-                  <Select 
-                    value={`${sortBy}-${sortOrder}`} 
-                    onValueChange={(value) => {
-                      const [by, order] = value.split('-');
-                      setSortBy(by);
-                      setSortOrder(order as 'asc' | 'desc');
-                    }}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                      <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
-                      <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
-                      <SelectItem value="created-desc">Created (Newest)</SelectItem>
-                      <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Search */}
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by subject, reference, sender..." className="pl-10" />
-        </div>
+        {/* Inline Filter Bar */}
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search by subject, reference..." value={query} onChange={(e) => setQuery(e.target.value)} className="h-8 pl-8 text-xs" />
+            </div>
+            {/* Office select */}
+            <Select value={selectedOfficeId} onValueChange={(v) => { setSelectedOfficeId(v); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="All Offices" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Offices</SelectItem>
+                {selectableOffices.map((office) => (
+                  <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Status select */}
+            <Select value={selectedStatus || 'all'} onValueChange={(v) => { setSelectedStatus(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in-progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Priority select */}
+            <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            {/* Sort select */}
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="updated-desc">Last Updated</SelectItem>
+                <SelectItem value="created-desc">Newest First</SelectItem>
+                <SelectItem value="created-asc">Oldest First</SelectItem>
+                <SelectItem value="priority-desc">Priority (High-Low)</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+          </CardContent>
+        </Card>
 
         {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -694,7 +587,7 @@ const OfficeOutboxPage = () => {
                 : 'When your office sends or drafts outgoing correspondence, it will appear here.'
             }
             actionLabel={debouncedQuery || activeFilterCount > 0 ? 'Clear Filters' : undefined}
-            onAction={debouncedQuery || activeFilterCount > 0 ? clearAllFilters : undefined}
+            onAction={debouncedQuery || activeFilterCount > 0 ? clearFilters : undefined}
           />
         ) : (
           <div className={correspondenceQueueListStackClass}>

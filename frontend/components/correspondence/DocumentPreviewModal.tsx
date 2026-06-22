@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { logError, logInfo } from '@/lib/client-logger';
 import { getStoredAccessToken } from '@/lib/api-client';
 import { useState, useEffect } from "react";
@@ -8,12 +9,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Printer, Download } from "lucide-react";
-import { downloadAsPDF } from "@/lib/document-generator";
 import type { Correspondence, Minute } from "@/lib/npa-structure";
 import Image from "next/image";
 import mammoth from "mammoth";
@@ -31,7 +27,7 @@ interface DocumentPreviewModalProps {
 
 export const DocumentPreviewModal = ({ 
   correspondence, 
-  minutes, 
+  minutes: _minutes, 
   isOpen, 
   onClose,
   documentContentHtml,
@@ -39,7 +35,6 @@ export const DocumentPreviewModal = ({
   attachmentFileName,
   attachmentSource = 'attachment',
 }: DocumentPreviewModalProps) => {
-  const normalizedMinutes = Array.isArray(minutes) ? minutes : [];
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
@@ -57,7 +52,6 @@ export const DocumentPreviewModal = ({
   const treatmentResponse = correspondence?.treatmentResponse;
   const hasTreatmentSummary = Boolean(treatmentResponse && treatmentResponse.trim().length > 0);
   const sourceLabel = attachmentSource === 'completion-package' ? 'Completion Package' : 'Attached Document';
-  const footerPreviewLabel = attachmentSource === 'completion-package' ? 'Previewing completion package' : 'Previewing uploaded document';
   
   // Fetch PDF or Word document as blob when modal opens
   useEffect(() => {
@@ -166,27 +160,6 @@ export const DocumentPreviewModal = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isPDF, isWordDocx, isHtml, attachmentUrl]);
   
-  const handlePrint = () => {
-    downloadAsPDF({ 
-      correspondence, 
-      minutes: normalizedMinutes,
-      documentContentHtml,
-      attachmentUrl,
-      attachmentFileName
-    });
-    onClose();
-  };
-
-  const handleDownloadPdf = () => {
-    downloadAsPDF({ 
-      correspondence, 
-      minutes: normalizedMinutes,
-      documentContentHtml,
-      attachmentUrl,
-      attachmentFileName
-    });
-  };
-
   const renderAttachmentPreview = () => {
     if (!attachmentUrl) return null;
 
@@ -361,14 +334,13 @@ export const DocumentPreviewModal = ({
       if (!open) onClose();
     }}>
       <DialogContent className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="space-y-1 px-6 pt-6 flex-shrink-0">
-          <DialogTitle className="text-lg font-semibold">Document Preview</DialogTitle>
-          <DialogDescription>
-            {attachmentFileName || correspondence.referenceNumber} · {correspondence.subject}
-          </DialogDescription>
+        <DialogHeader className="px-4 pt-3 pb-1 flex-shrink-0">
+          <DialogTitle className="text-sm font-medium truncate">
+            {attachmentFileName || correspondence.referenceNumber}
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 border-t border-b overflow-y-auto">
+        <div className="flex-1 border-t overflow-y-auto">
           {/* Show treatment response summary first if it exists */}
           {hasTreatmentSummary ? (
             <div className="flex flex-col">
@@ -423,21 +395,7 @@ export const DocumentPreviewModal = ({
           </>)}
         </div>
 
-        <DialogFooter className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 pb-6">
-          <div className="text-xs text-muted-foreground">
-            {attachmentUrl ? footerPreviewLabel : 'Preview reflects the latest document details and minute thread.'}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="gap-2" onClick={handlePrint}>
-              <Printer className="h-4 w-4" />
-              Print
-            </Button>
-            <Button className="gap-2" onClick={handleDownloadPdf}>
-              <Download className="h-4 w-4" />
-              Download PDF
-            </Button>
-          </div>
-        </DialogFooter>
+        <div className="h-2" />
       </DialogContent>
     </Dialog>
   );

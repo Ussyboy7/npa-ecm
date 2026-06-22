@@ -8,11 +8,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Printer, Download, FileText, Edit2, Save, X } from "lucide-react";
+import { Download, FileText, Edit2, Save, X } from "lucide-react";
 import type { DocumentVersion, DocumentRecord } from "@/lib/dms-storage";
 import { createDocumentVersion } from "@/lib/dms-storage";
 import mammoth from "mammoth";
@@ -197,116 +195,21 @@ export const DocumentVersionPreviewModal = ({
     }
   };
   
-  const handlePrint = () => {
-    if (isPDF && pdfBlobUrl) {
-      // For PDFs, print directly from blob URL
-      const printWindow = window.open(pdfBlobUrl, '_blank');
-      if (printWindow) {
-        printWindow.onload = () => {
-          printWindow.print();
-        };
-      }
-    } else if (isWordDocx && wordHtml) {
-      // For Word documents, create a print-friendly HTML page
-      const printHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${version.fileName || 'Document'}</title>
-          <style>
-            @media print {
-              body { margin: 0; }
-            }
-            body {
-              font-family: 'Times New Roman', serif;
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 40px;
-              line-height: 1.6;
-            }
-            .prose {
-              max-width: none;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="prose">
-            ${wordHtml}
-          </div>
-        </body>
-        </html>
-      `;
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(printHtml);
-        printWindow.document.close();
-        printWindow.onload = () => {
-          printWindow.print();
-        };
-      }
-    } else if (version.contentHtml) {
-      // For HTML content, print it
-      const printHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${version.fileName || 'Document'}</title>
-          <style>
-            @media print {
-              body { margin: 0; }
-            }
-            body {
-              font-family: 'Times New Roman', serif;
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 40px;
-              line-height: 1.6;
-            }
-          </style>
-        </head>
-        <body>
-          ${version.contentHtml}
-        </body>
-        </html>
-      `;
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(printHtml);
-        printWindow.document.close();
-        printWindow.onload = () => {
-          printWindow.print();
-        };
-      }
-    }
-    onClose();
-  };
-
-  const handleDownload = () => {
-    if (version.fileUrl) {
-      const link = document.createElement('a');
-      link.href = version.fileUrl;
-      link.download = version.fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) onClose();
     }}>
       <DialogContent className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="space-y-1 px-6 pt-6 flex-shrink-0">
-          <DialogTitle className="text-lg font-semibold">Document Preview</DialogTitle>
-          <DialogDescription>
-            {version.fileName || 'Document'} · Version {version.versionNumber}
-          </DialogDescription>
+
+
+
+        <DialogHeader className="px-4 pt-3 pb-1 flex-shrink-0 dialog-header">
+          <DialogTitle className="text-sm font-medium truncate">
+            {version.fileName || 'Document'} · v{version.versionNumber}
+          </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 border-t border-b overflow-y-auto" style={{ height: 'calc(90vh - 200px)', maxHeight: 'calc(90vh - 200px)' }}>
+        <div className="flex-1 border-t overflow-y-auto">
           {/* Show tabs if OCR text is available */}
           {version.ocrText && version.ocrText.trim() !== '' ? (
             <Tabs defaultValue="preview" className="h-full flex flex-col">
@@ -320,8 +223,27 @@ export const DocumentVersionPreviewModal = ({
               <TabsContent value="preview" className="flex-1 overflow-y-auto mt-0">
                 {version.contentHtml && version.contentHtml.trim() !== '' ? (
                   // Priority 1: Show HTML content from editor (sanitized)
-                  <div className="prose prose-base dark:prose-invert max-w-none p-6">
-                    <div 
+                  <div
+                    className="document-print-area"
+                    style={{
+                      fontFamily: "Verdana, Geneva, sans-serif",
+                      fontSize: "12px",
+                      lineHeight: "1.5",
+                      color: "#000",
+                      padding: "40px",
+                      maxWidth: "800px",
+                      margin: "0 auto",
+                      background: "#fff",
+                      textAlign: "left",
+                    }}
+                  >
+                    <style>{`
+                      font[size="6"] { font-size: 20px; }
+                      span[style*="font-size: large"] { font-size: 12px !important; }
+                      h1, h2, h3, h4, h5, h6 { margin: 0; }
+                      header { text-align: center; }
+                    `}</style>
+                    <div
                       dangerouslySetInnerHTML={{ __html: sanitizeRichText(version.contentHtml) }}
                       aria-label="Document content"
                     />
@@ -523,8 +445,27 @@ export const DocumentVersionPreviewModal = ({
             </Tabs>
           ) : version.contentHtml && version.contentHtml.trim() !== '' ? (
             // Priority 1: Show HTML content from editor (sanitized)
-            <div className="prose prose-base dark:prose-invert max-w-none p-6">
-              <div 
+            <div
+              className="document-print-area"
+              style={{
+                fontFamily: "Verdana, Geneva, sans-serif",
+                fontSize: "12px",
+                lineHeight: "1.5",
+                color: "#000",
+                padding: "40px",
+                maxWidth: "800px",
+                margin: "0 auto",
+                background: "#fff",
+                textAlign: "left",
+              }}
+            >
+              <style>{`
+                font[size="6"] { font-size: 20px; }
+                span[style*="font-size: large"] { font-size: 12px !important; }
+                h1, h2, h3, h4, h5, h6 { margin: 0; }
+                header { text-align: center; }
+              `}</style>
+              <div
                 dangerouslySetInnerHTML={{ __html: sanitizeRichText(version.contentHtml) }}
                 aria-label="Document content"
               />
@@ -663,23 +604,7 @@ export const DocumentVersionPreviewModal = ({
           )}
         </div>
 
-        <DialogFooter className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-6 pb-6">
-          <div className="text-xs text-muted-foreground">
-            {version.fileUrl ? 'Previewing uploaded document' : version.contentHtml ? 'Previewing editor content' : 'No preview available'}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" className="gap-2" onClick={handlePrint}>
-              <Printer className="h-4 w-4" />
-              Print
-            </Button>
-            {version.fileUrl && (
-              <Button className="gap-2" onClick={handleDownload}>
-                <Download className="h-4 w-4" />
-                Download
-              </Button>
-            )}
-          </div>
-        </DialogFooter>
+        <div className="h-2" />
       </DialogContent>
     </Dialog>
   );

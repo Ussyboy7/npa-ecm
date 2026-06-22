@@ -889,7 +889,7 @@ const CorrespondenceDetailContent = () => {
         </div>
       ) : !activeUser ? null : (
         <>
-      <div className="flex flex-col min-w-0">
+      <div className="flex flex-col min-w-0 flex-1">
         {/* Header - Full Width */}
         <div className="flex-shrink-0">
           <CorrespondenceHeader
@@ -909,19 +909,13 @@ const CorrespondenceDetailContent = () => {
             }}
           />
 
-          {/* Help guide - hidden on mobile */}
-          <div className="border-b border-border bg-background/70 px-4 md:px-6 py-2 hidden md:block">
-            <HelpGuideCard
-              title="Correspondence Workspace"
-              description="Review the routing history and use the Actions panel to route, respond, or complete this item."
-              links={[
-                { label: 'Help & Guides', href: '/help' },
-              ]}
-              className="bg-background"
-              dismissible
-              dismissKey="correspondence-detail"
-            />
-          </div>
+          <HelpGuideCard
+            title="Correspondence Workspace"
+            description="Review the routing history and use the Actions panel to route, respond, or complete this item."
+            links={[
+              { label: 'Help & Guides', href: '/help' },
+            ]}
+          />
 
           {/* Mobile Tab Navigation */}
           <div className="md:hidden border-b border-border bg-background px-2 py-1">

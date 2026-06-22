@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Search } from "lucide-react";
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
@@ -71,6 +74,10 @@ const RegisteredCorrespondencePage = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sortBy, setSortBy] = useState("received_date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // Use pagination hook
   const pagination = usePagination({
@@ -78,6 +85,19 @@ const RegisteredCorrespondencePage = () => {
     initialPageSize: DEFAULT_PAGE_SIZE,
     totalCount: count,
   });
+
+  const hasActiveFilters = useMemo(
+    () => dateFrom || dateTo || statusFilter !== 'all' || priorityFilter !== 'all',
+    [dateFrom, dateTo, statusFilter, priorityFilter]
+  );
+
+  const clearFilters = useCallback(() => {
+    setDateFrom("");
+    setDateTo("");
+    setStatusFilter("all");
+    setPriorityFilter("all");
+    setSearchQuery("");
+  }, []);
 
   // Debounce search
   useEffect(() => {
@@ -89,10 +109,11 @@ const RegisteredCorrespondencePage = () => {
   const loadItems = useCallback(async () => {
     setLoading(true);
     try {
+      const sortPrefix = sortOrder === 'desc' ? '-' : '';
       const params = new URLSearchParams({
         page: String(pagination.page),
         page_size: String(pagination.pageSize),
-        ordering: '-received_date',
+        ordering: `${sortPrefix}${sortBy}`,
       });
       
       if (debouncedSearch) {
@@ -103,6 +124,12 @@ const RegisteredCorrespondencePage = () => {
       }
       if (priorityFilter !== 'all') {
         params.append('priority', priorityFilter);
+      }
+      if (dateFrom) {
+        params.append('date_from', dateFrom);
+      }
+      if (dateTo) {
+        params.append('date_to', dateTo);
       }
       
       const response = await apiFetch<Record<string, unknown>>(
@@ -117,7 +144,7 @@ const RegisteredCorrespondencePage = () => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.pageSize, debouncedSearch, statusFilter, priorityFilter]);
+  }, [pagination.page, pagination.pageSize, debouncedSearch, statusFilter, priorityFilter, dateFrom, dateTo, sortBy, sortOrder]);
 
   // Load data when filters or pagination change
   useEffect(() => {
@@ -128,7 +155,7 @@ const RegisteredCorrespondencePage = () => {
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, statusFilter, priorityFilter]);
+  }, [debouncedSearch, statusFilter, priorityFilter, dateFrom, dateTo, sortBy, sortOrder]);
 
   const canViewRegistry = permissions.canViewCorrespondenceRegistry;
 
@@ -180,48 +207,48 @@ const RegisteredCorrespondencePage = () => {
           />
         </div>
 
+        {/* Filter bar */}
         <Card>
-          <CardHeader className="gap-4 md:flex md:items-center md:justify-between">
-            <CardTitle className="text-lg font-semibold">Filters</CardTitle>
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-3 w-full md:w-auto">
-              <div className="relative w-full md:w-64">
-                <Input
-                  placeholder="Search by subject, reference, division, or registrar"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  className="pr-8"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusFilters.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status === "all" ? "All statuses" : status.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={priorityFilter}
-                onValueChange={(value) => setPriorityFilter(value as PriorityFilter)}
-              >
-                <SelectTrigger className="w-full md:w-48">
-                  <SelectValue placeholder="Priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  {priorityFilters.map((priority) => (
-                    <SelectItem key={priority} value={priority}>
-                      {priority === "all" ? "All priorities" : priority.charAt(0).toUpperCase() + priority.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search by subject, reference..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
             </div>
-          </CardHeader>
+            <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value as StatusFilter); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                {statusFilters.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status === "all" ? "All statuses" : status.replace("-", " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={priorityFilter} onValueChange={(value) => { setPriorityFilter(value as PriorityFilter); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
+              <SelectContent>
+                {priorityFilters.map((priority) => (
+                  <SelectItem key={priority} value={priority}>
+                    {priority === "all" ? "All priorities" : priority.charAt(0).toUpperCase() + priority.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="received_date-desc">Newest First</SelectItem>
+                <SelectItem value="received_date-asc">Oldest First</SelectItem>
+                <SelectItem value="updated_at-desc">Last Updated</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+          </CardContent>
+        </Card>
 
+        {/* Table card */}
+        <Card>
           <CardContent className="p-0">
             <ScrollArea className="max-h-[70vh]">
               <Table>

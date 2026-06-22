@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   AlignCenter,
   AlignJustify,
@@ -27,6 +27,7 @@ import {
   Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PageSetupDialog, type PageSettings, getPageDimensions } from "./PageSetupDialog";
 
 interface QuillEditorProps {
   value?: string;
@@ -36,7 +37,19 @@ interface QuillEditorProps {
   tokens?: { label: string; value: string }[];
   showCharacterCount?: boolean;
   showHeader?: boolean;
+  signatureImageUrl?: string;
+  showPageSetup?: boolean;
+  showPageNumbers?: boolean;
 }
+
+const DEFAULT_PAGE_SETTINGS: PageSettings = {
+  paperSize: "a4",
+  orientation: "portrait",
+  marginTop: 15,
+  marginBottom: 15,
+  marginLeft: 15,
+  marginRight: 15,
+};
 
 export function QuillEditor({
   value = "",
@@ -46,6 +59,9 @@ export function QuillEditor({
   tokens = [],
   showCharacterCount = true,
   showHeader = true,
+  signatureImageUrl,
+  showPageSetup = true,
+  showPageNumbers = true,
 }: QuillEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -54,6 +70,16 @@ export function QuillEditor({
   const [showAdvancedTools, setShowAdvancedTools] = useState(false);
   const [showTableTools, setShowTableTools] = useState(false);
   const [showTokenTools, setShowTokenTools] = useState(false);
+  const [showPageSetupDialog, setShowPageSetupDialog] = useState(false);
+  const [pageSettings, setPageSettings] = useState<PageSettings>(DEFAULT_PAGE_SETTINGS);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  const [selectedImage, setSelectedImage] = useState<HTMLImageElement | null>(null);
+  const [imageWidth, setImageWidth] = useState<number>(0);
+  const [imageHeight, setImageHeight] = useState<number>(0);
+  const [lockAspectRatio, setLockAspectRatio] = useState(true);
+  const aspectRatioRef = useRef(1);
 
   useEffect(() => {
     setMounted(true);
@@ -67,6 +93,43 @@ export function QuillEditor({
     }
   }, [value, mounted, htmlValue]);
 
+  const pageDims = useMemo(() => getPageDimensions(pageSettings), [pageSettings]);
+
+  useEffect(() => {
+    if (!mounted || !editorRef.current || !showPageSetup) return;
+    const container = editorRef.current;
+    const totalHeight = container.scrollHeight;
+    const pageHeight = pageDims.contentHeightPx;
+    const pages = Math.max(1, Math.ceil(totalHeight / pageHeight));
+    setTotalPages(pages);
+  }, [htmlValue, mounted, pageDims, showPageSetup]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const handleImageClick = (e: Event) => {
+      e.stopPropagation();
+      const img = e.target as HTMLImageElement;
+      setSelectedImage(img);
+      setImageWidth(img.offsetWidth);
+      setImageHeight(img.offsetHeight);
+      aspectRatioRef.current = img.offsetWidth / img.offsetHeight;
+    };
+
+    const imgs = editor.querySelectorAll('img');
+    imgs.forEach(img => {
+      (img as HTMLElement).style.cursor = 'pointer';
+      img.addEventListener('click', handleImageClick);
+    });
+
+    return () => {
+      imgs.forEach(img => {
+        img.removeEventListener('click', handleImageClick);
+      });
+    };
+  }, [htmlValue]);
+
   const characterCount = useMemo(() => {
     if (typeof window === "undefined") return 0;
     const temp = window.document.createElement("div");
@@ -74,10 +137,10 @@ export function QuillEditor({
     return (temp.textContent || "").trim().length;
   }, [htmlValue]);
 
-  const emitChange = (nextHtml: string) => {
+  const emitChange = useCallback((nextHtml: string) => {
     setHtmlValue(nextHtml);
     onChange?.(nextHtml, { html: nextHtml, editor: "fallback-contenteditable" });
-  };
+  }, [onChange]);
 
   const ensureSelectionInEditor = () => {
     if (!editorRef.current) return;
@@ -127,7 +190,24 @@ export function QuillEditor({
   const applyCommandWithValue = (command: string, value: string) => {
     if (!editorRef.current) return;
     ensureSelectionInEditor();
-    document.execCommand(command, false, value);
+    if (command === "fontSize") {
+      const sizeMap: Record<string, string> = {
+        "1": "8px", "2": "10px", "3": "12px", "4": "14px",
+        "5": "18px", "6": "24px", "7": "32px",
+        "8": "20px", "9": "28px", "10": "36px", "11": "48px",
+      };
+      const px = sizeMap[value] || `${value}px`;
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        if (range.collapsed) return;
+        const span = document.createElement("span");
+        span.style.fontSize = px;
+        range.surroundContents(span);
+      }
+    } else {
+      document.execCommand(command, false, value);
+    }
     emitChange(editorRef.current.innerHTML);
     refreshActiveStates();
   };
@@ -162,6 +242,14 @@ export function QuillEditor({
     const url = window.prompt("Enter image URL (https://...)");
     if (!url) return;
     applyCommandWithValue("insertImage", url);
+  };
+
+  const insertSignature = () => {
+    if (!editorRef.current || !signatureImageUrl) return;
+    ensureSelectionInEditor();
+    document.execCommand("insertHTML", false, `<img src="${signatureImageUrl}" style="max-height:80px;" alt="Signature" />`);
+    emitChange(editorRef.current.innerHTML);
+    refreshActiveStates();
   };
 
   const insertTable = () => {
@@ -262,6 +350,104 @@ export function QuillEditor({
     emitChange(editorRef.current?.innerHTML ?? "");
   };
 
+  const startResize = useCallback((e: React.MouseEvent, position: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selectedImage) return;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = selectedImage.offsetWidth;
+    const startH = selectedImage.offsetHeight;
+    const ratio = aspectRatioRef.current;
+
+    const handleMouseMove = (me: MouseEvent) => {
+      const dx = me.clientX - startX;
+      const dy = me.clientY - startY;
+      let newW = startW;
+      let newH = startH;
+
+      if (position === 'se') {
+        newW = startW + dx;
+        newH = lockAspectRatio ? newW / ratio : startH + dy;
+      } else if (position === 'sw') {
+        newW = startW - dx;
+        newH = lockAspectRatio ? newW / ratio : startH + dy;
+      } else if (position === 'ne') {
+        newW = startW + dx;
+        newH = lockAspectRatio ? newW / ratio : startH - dy;
+      } else if (position === 'nw') {
+        newW = startW - dx;
+        newH = lockAspectRatio ? newW / ratio : startH - dy;
+      }
+
+      newW = Math.max(50, newW);
+      newH = Math.max(50, newH);
+
+      selectedImage.style.width = `${newW}px`;
+      selectedImage.style.height = `${newH}px`;
+      setImageWidth(Math.round(newW));
+      setImageHeight(Math.round(newH));
+      emitChange(editorRef.current?.innerHTML || '');
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [selectedImage, lockAspectRatio, emitChange]);
+
+  const setAlignment = useCallback((align: 'left' | 'center' | 'right') => {
+    if (!selectedImage) return;
+    const wrapper = selectedImage.parentElement;
+    if (wrapper && wrapper.tagName === 'DIV' && wrapper.getAttribute('data-image-wrapper')) {
+      wrapper.style.textAlign = align;
+    } else {
+      const div = document.createElement('div');
+      div.setAttribute('data-image-wrapper', 'true');
+      div.style.textAlign = align;
+      selectedImage.parentNode?.insertBefore(div, selectedImage);
+      div.appendChild(selectedImage);
+    }
+    emitChange(editorRef.current?.innerHTML || '');
+  }, [selectedImage, emitChange]);
+
+  const handleWidthChange = (val: string) => {
+    const w = parseInt(val) || 0;
+    if (!selectedImage || w < 10) return;
+    setImageWidth(w);
+    selectedImage.style.width = `${w}px`;
+    if (lockAspectRatio) {
+      const h = Math.round(w / aspectRatioRef.current);
+      selectedImage.style.height = `${h}px`;
+      setImageHeight(h);
+    }
+    emitChange(editorRef.current?.innerHTML || '');
+  };
+
+  const handleHeightChange = (val: string) => {
+    const h = parseInt(val) || 0;
+    if (!selectedImage || h < 10) return;
+    setImageHeight(h);
+    selectedImage.style.height = `${h}px`;
+    if (lockAspectRatio) {
+      const w = Math.round(h * aspectRatioRef.current);
+      selectedImage.style.width = `${w}px`;
+      setImageWidth(w);
+    }
+    emitChange(editorRef.current?.innerHTML || '');
+  };
+
+  const removeSelectedImage = () => {
+    if (!selectedImage) return;
+    selectedImage.remove();
+    setSelectedImage(null);
+    emitChange(editorRef.current?.innerHTML || '');
+  };
+
   const resizeCurrentTable = (deltaPercent: number) => {
     const table = getCurrentTable();
     if (!table) return;
@@ -337,6 +523,12 @@ export function QuillEditor({
     cn(toolbarBtnClass, active && "bg-primary/15 border-primary text-primary");
   const iconSize = 14;
 
+  const pageSetupLabel = useMemo(() => {
+    const paper = pageSettings.paperSize.toUpperCase();
+    const orient = pageSettings.orientation === "portrait" ? "Portrait" : "Landscape";
+    return `${paper} ${orient}`;
+  }, [pageSettings]);
+
   if (!mounted) {
     return (
       <div className={cn("border border-border rounded-lg overflow-hidden", className)}>
@@ -359,16 +551,23 @@ export function QuillEditor({
       {showHeader && (
         <div className="bg-muted/30 px-4 py-2 border-b border-border flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Quill Editor</span>
-          {showCharacterCount && (
-            <span className="text-xs text-muted-foreground">
-              {characterCount} characters
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {showPageSetup && (
+              <span className="text-xs text-muted-foreground">
+                {pageSetupLabel} · Page {currentPage} of {totalPages}
+              </span>
+            )}
+            {showCharacterCount && (
+              <span className="text-xs text-muted-foreground">
+                {characterCount} characters
+              </span>
+            )}
+          </div>
         </div>
       )}
       <div className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="px-3 py-2 overflow-x-auto">
-          <div className="flex items-center gap-2 min-w-max">
+        <div className="px-3 py-2">
+          <div className="flex flex-wrap items-center gap-1.5">
           <div className={groupClass}>
             <button type="button" onClick={() => applyCommand("undo")} className={toolbarBtnClass} title="Undo">
               <Undo2 size={iconSize} />
@@ -390,11 +589,11 @@ export function QuillEditor({
               <option value="blockquote">Quote</option>
               <option value="pre">Code Block</option>
             </select>
-            <select aria-label="Font family" defaultValue="Arial" onChange={(e) => applyCommandWithValue("fontName", e.target.value)} className={toolbarSelectClass}>
+            <select aria-label="Font family" defaultValue="Verdana" onChange={(e) => applyCommandWithValue("fontName", e.target.value)} className={toolbarSelectClass}>
+              <option value="Verdana">Verdana</option>
               <option value="Arial">Arial</option>
               <option value="Times New Roman">Times</option>
               <option value="Georgia">Georgia</option>
-              <option value="Verdana">Verdana</option>
               <option value="Courier New">Courier</option>
             </select>
             <select aria-label="Font size" defaultValue="3" onChange={(e) => applyCommandWithValue("fontSize", e.target.value)} className={toolbarSelectClass}>
@@ -402,15 +601,24 @@ export function QuillEditor({
               <option value="2">10</option>
               <option value="3">12</option>
               <option value="4">14</option>
+              <option value="8">20</option>
               <option value="5">18</option>
               <option value="6">24</option>
+              <option value="9">28</option>
               <option value="7">32</option>
+              <option value="10">36</option>
+              <option value="11">48</option>
             </select>
             <select aria-label="Line spacing" defaultValue="1.5" onChange={(e) => applyLineHeight(e.target.value)} className={toolbarSelectClass}>
+              <option value="0">0</option>
+              <option value="0.5">0.5</option>
+              <option value="0.75">0.75</option>
               <option value="1">1.0</option>
               <option value="1.15">1.15</option>
               <option value="1.5">1.5</option>
               <option value="2">2.0</option>
+              <option value="2.5">2.5</option>
+              <option value="3">3.0</option>
             </select>
           </div>
 
@@ -464,6 +672,19 @@ export function QuillEditor({
             </button>
           </div>
 
+          {showPageSetup && (
+            <div className={groupClass}>
+              <button
+                type="button"
+                onClick={() => setShowPageSetupDialog(true)}
+                className={cn("px-2 py-1 text-xs border rounded-md hover:bg-muted")}
+                title="Page setup"
+              >
+                Page Setup
+              </button>
+            </div>
+          )}
+
           <div className={groupClass}>
             <label className={cn(toolbarBtnClass, "relative cursor-pointer")} title="Text color">
               <Type size={iconSize} />
@@ -496,6 +717,11 @@ export function QuillEditor({
             <button type="button" onClick={() => applyCommand("unlink")} className={toolbarBtnClass} title="Remove link">
               <Unlink2 size={iconSize} />
             </button>
+            {signatureImageUrl && (
+              <button type="button" onClick={insertSignature} className="h-8 px-2 inline-flex items-center justify-center text-xs border rounded-md hover:bg-muted whitespace-nowrap" title="Insert signature">
+                Signature
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowAdvancedTools((prev) => !prev)}
@@ -591,19 +817,150 @@ export function QuillEditor({
           </div>
         )}
       </div>
-      <div
-        ref={editorRef}
-        className={cn(
-          "min-h-[260px] p-4 outline-none",
-          "[&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6",
-          "[&_li]:my-1 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:p-2 [&_th]:border [&_th]:border-border [&_th]:p-2",
+      <div className="bg-muted/20 p-4 relative">
+        <div
+          ref={editorRef}
+          className={cn(
+            "bg-white outline-none shadow-sm border border-border/50 mx-auto",
+            "[&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6",
+            "[&_li]:my-1 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:p-2 [&_th]:border [&_th]:border-border [&_th]:p-2",
+          )}
+          style={{
+            maxWidth: `${pageDims.contentWidthPx}px`,
+            minHeight: `${pageDims.contentHeightPx}px`,
+            padding: `${(pageSettings.marginTop / 25.4) * 96}px ${(pageSettings.marginRight / 25.4) * 96}px ${(pageSettings.marginBottom / 25.4) * 96}px ${(pageSettings.marginLeft / 25.4) * 96}px`,
+            fontFamily: "Verdana, Geneva, sans-serif",
+            fontSize: "12px",
+            lineHeight: "1.5",
+          }}
+          contentEditable
+          suppressContentEditableWarning
+          data-placeholder={placeholder}
+          onInput={handleInput}
+          onKeyDown={onEditorKeyDown}
+          onBlur={() => setTimeout(() => setSelectedImage(null), 150)}
+          onClick={() => {
+            if (!editorRef.current) return;
+            const selection = window.getSelection();
+            if (!selection?.rangeCount) return;
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            const editorRect = editorRef.current.getBoundingClientRect();
+            const relativeY = rect.top - editorRect.top;
+            const page = Math.floor(relativeY / pageDims.contentHeightPx) + 1;
+            setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+          }}
+        />
+        {selectedImage && (
+          <div
+            style={{
+              position: 'absolute',
+              left: selectedImage.offsetLeft - 2,
+              top: selectedImage.offsetTop - 2,
+              width: selectedImage.offsetWidth + 4,
+              height: selectedImage.offsetHeight + 4,
+              border: '2px solid #3b82f6',
+              pointerEvents: 'none',
+              zIndex: 10,
+            }}
+          >
+            {(['nw', 'ne', 'sw', 'se'] as const).map(pos => (
+              <div
+                key={pos}
+                className="absolute w-3 h-3 bg-white border-2 border-blue-500 pointer-events-auto"
+                style={{
+                  ...(pos.includes('n') ? { top: -6 } : { bottom: -6 }),
+                  ...(pos.includes('w') ? { left: -6 } : { right: -6 }),
+                  cursor: pos === 'nw' || pos === 'se' ? 'nwse-resize' : 'nesw-resize',
+                }}
+                onMouseDown={(e) => startResize(e, pos)}
+              />
+            ))}
+          </div>
         )}
-        contentEditable
-        suppressContentEditableWarning
-        data-placeholder={placeholder}
-        onInput={handleInput}
-        onKeyDown={onEditorKeyDown}
-      />
+      </div>
+
+      {selectedImage && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 border-t border-border text-xs flex-wrap">
+          <span className="text-muted-foreground font-medium mr-1">Image:</span>
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground">W:</span>
+            <input
+              type="number"
+              value={imageWidth}
+              onChange={(e) => handleWidthChange(e.target.value)}
+              className="w-16 h-6 px-1 text-xs border rounded bg-background"
+            />
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground">H:</span>
+            <input
+              type="number"
+              value={imageHeight}
+              onChange={(e) => handleHeightChange(e.target.value)}
+              className="w-16 h-6 px-1 text-xs border rounded bg-background"
+            />
+          </div>
+          <div className="flex items-center gap-0.5 ml-1">
+            <button
+              type="button"
+              onClick={() => setAlignment('left')}
+              className={toolbarBtnClass}
+              title="Align left"
+            >
+              <AlignLeft size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setAlignment('center')}
+              className={toolbarBtnClass}
+              title="Align center"
+            >
+              <AlignCenter size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setAlignment('right')}
+              className={toolbarBtnClass}
+              title="Align right"
+            >
+              <AlignRight size={12} />
+            </button>
+          </div>
+          <label className="flex items-center gap-1 ml-1 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={lockAspectRatio}
+              onChange={(e) => setLockAspectRatio(e.target.checked)}
+              className="h-3 w-3"
+            />
+            <span className="text-muted-foreground">Lock ratio</span>
+          </label>
+          <button
+            type="button"
+            onClick={removeSelectedImage}
+            className="ml-1 px-2 py-0.5 text-xs text-destructive border border-destructive/30 rounded hover:bg-destructive/10"
+          >
+            Remove
+          </button>
+        </div>
+      )}
+
+      {showPageSetup && (
+        <div className="flex items-center justify-between px-4 py-1 border-t border-border bg-muted/20 text-[10px] text-muted-foreground">
+          <span>{pageSettings.paperSize.toUpperCase()} · {pageSettings.orientation} · Margins: T{pageSettings.marginTop} B{pageSettings.marginBottom} L{pageSettings.marginLeft} R{pageSettings.marginRight} mm</span>
+          {showPageNumbers && <span>Page {currentPage} of {totalPages}</span>}
+        </div>
+      )}
+
+      {showPageSetupDialog && (
+        <PageSetupDialog
+          open={showPageSetupDialog}
+          onOpenChange={setShowPageSetupDialog}
+          settings={pageSettings}
+          onApply={setPageSettings}
+        />
+      )}
     </div>
   );
 }

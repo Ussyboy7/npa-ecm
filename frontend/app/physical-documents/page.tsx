@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from 'react';
+import { useCallback, useEffect, useState, useMemo, Suspense } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -98,7 +98,7 @@ function PhysicalDocumentsForm() {
     }
   };
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -117,7 +117,7 @@ function PhysicalDocumentsForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedLocation, searchQuery]);
 
   const fetchUsers = async () => {
     try {
@@ -136,7 +136,7 @@ function PhysicalDocumentsForm() {
 
   useEffect(() => {
     fetchDocuments();
-  }, [selectedLocation]);
+  }, [selectedLocation, fetchDocuments]);
 
   const handleSearch = () => {
     fetchDocuments();

@@ -4,15 +4,21 @@ import { useMemo, useState, useEffect } from 'react';
 import { fetchSLATargets } from '@/lib/sla-client';
 import { logError } from '@/lib/client-logger';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import {
   Inbox,
   Search,
   AlertCircle,
-  Filter,
   Shield,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -27,7 +33,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { correspondenceQueueListStackClass } from '@/components/shared/registry-queue-styles';
 import { InboxSummaryCards } from './components/InboxSummaryCards';
-import { InboxFiltersPanel } from './components/InboxFiltersPanel';
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { InboxItemCard } from './components/InboxItemCard';
 import { InboxApprovalCard } from './components/InboxApprovalCard';
 import { InboxDocumentCard } from './components/InboxDocumentCard';
@@ -91,11 +97,12 @@ const ExecutiveInbox = () => {
   const { currentUser } = useCurrentUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedPriority, setSelectedPriority] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('priority');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [showFilters, setShowFilters] = useState(false);
 
   const [count, setCount] = useState(0);
   const pagination = usePagination({
@@ -113,24 +120,15 @@ const ExecutiveInbox = () => {
   const [slaTargets, setSlaTargets] = useState<{ urgent: number; high: number; medium: number; low: number } | null>(null);
   const [focusOnTasks, setFocusOnTasks] = useState(false);
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (selectedStatuses.length > 0) count++;
-    if (selectedPriorities.length > 0) count++;
-    return count;
-  }, [selectedStatuses, selectedPriorities]);
+  const hasActiveFilters = useMemo(() => {
+    return !!(selectedStatus || selectedPriority || dateFrom || dateTo);
+  }, [selectedStatus, selectedPriority, dateFrom, dateTo]);
 
-  const toggleStatus = (status: string) => {
-    setSelectedStatuses((prev) => prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]);
-  };
-
-  const togglePriority = (priority: string) => {
-    setSelectedPriorities((prev) => prev.includes(priority) ? prev.filter((p) => p !== priority) : [...prev, priority]);
-  };
-
-  const clearAllFilters = () => {
-    setSelectedStatuses([]);
-    setSelectedPriorities([]);
+  const clearFilters = () => {
+    setSelectedStatus('');
+    setSelectedPriority('');
+    setDateFrom('');
+    setDateTo('');
     setSearchQuery('');
   };
 
@@ -148,7 +146,7 @@ const ExecutiveInbox = () => {
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, selectedStatuses, selectedPriorities, sortBy, sortOrder, pagination.pageSize]);
+  }, [debouncedSearch, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, pagination.pageSize]);
 
   useEffect(() => {
     const loadSLATargets = async () => {
@@ -172,12 +170,10 @@ const ExecutiveInbox = () => {
       try {
         const params = new URLSearchParams();
         if (debouncedSearch) params.append('search', debouncedSearch);
-        if (selectedStatuses.length > 0) {
-          selectedStatuses.forEach((status) => params.append('status', status));
-        }
-        if (selectedPriorities.length > 0) {
-          selectedPriorities.forEach((priority) => params.append('priority', priority));
-        }
+        if (selectedStatus) params.append('status', selectedStatus);
+        if (selectedPriority) params.append('priority', selectedPriority);
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
         params.append('sort_by', sortBy);
         params.append('sort_order', sortOrder);
         params.append('page', String(pagination.page));
@@ -231,7 +227,7 @@ const ExecutiveInbox = () => {
     };
 
     void fetchInbox();
-  }, [currentUser?.id, debouncedSearch, selectedStatuses, selectedPriorities, sortBy, sortOrder, pagination.page, pagination.pageSize, slaTargets]);
+  }, [currentUser?.id, debouncedSearch, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, pagination.page, pagination.pageSize, slaTargets]);
 
   const slaPriority = (s: 'overdue' | 'due-soon' | 'pending') =>
     s === 'overdue' ? 0 : s === 'due-soon' ? 1 : 2;
@@ -277,10 +273,6 @@ const ExecutiveInbox = () => {
                 <><AlertCircle className="h-4 w-4 mr-2" /> Focus on Tasks</>
               )}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="h-4 w-4 mr-2" /> Filters
-              {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
-            </Button>
           </div>
         </div>
 
@@ -290,29 +282,45 @@ const ExecutiveInbox = () => {
           links={[{ label: 'My Documents', href: '/documents' }, { label: 'Help & Guides', href: '/help' }]}
         />
 
-        {showFilters && (
-          <InboxFiltersPanel
-            selectedStatuses={selectedStatuses}
-            selectedPriorities={selectedPriorities}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            activeFilterCount={activeFilterCount}
-            onToggleStatus={toggleStatus}
-            onTogglePriority={togglePriority}
-            onSortChange={handleSortChange}
-            onClearAll={clearAllFilters}
-          />
-        )}
-
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by subject, reference, sender, office..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
+            </div>
+            <Select value={selectedStatus || 'all'} onValueChange={(v) => { setSelectedStatus(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in-progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={handleSortChange}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+                <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>
+                <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
+                <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
+                <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+          </CardContent>
+        </Card>
 
         <InboxSummaryCards summary={summary} />
 
@@ -324,11 +332,11 @@ const ExecutiveInbox = () => {
           <EmptyState
             icon="inbox"
             title="No items in your inbox"
-            message={debouncedSearch || activeFilterCount > 0
+            message={debouncedSearch || hasActiveFilters
               ? 'No items match your current filters. Try adjusting your search or filter criteria.'
               : 'All caught up! No correspondence or documents require your attention.'}
-            actionLabel={debouncedSearch || activeFilterCount > 0 ? 'Clear Filters' : undefined}
-            onAction={debouncedSearch || activeFilterCount > 0 ? clearAllFilters : undefined}
+            actionLabel={debouncedSearch || hasActiveFilters ? 'Clear Filters' : undefined}
+            onAction={debouncedSearch || hasActiveFilters ? clearFilters : undefined}
           />
         ) : (
           <div className="space-y-6">

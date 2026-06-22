@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -36,8 +36,7 @@ import {
   registryQueueStatIconClass,
   registryQueueStatLabelClass,
   registryQueueStatValueClass,
-  registryQueueSearchStatsShellContentClass,
-  registryQueueSearchInputWrapClass,
+
 } from '@/components/shared/registry-queue-styles';
 import {
   Tooltip,
@@ -45,8 +44,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { Shield, Search, FileText, QrCode, Filter, ExternalLink, CheckCircle2, XCircle, TrendingUp, RefreshCw, Download, AlertCircle, MoreVertical } from "lucide-react";
-import { Label } from "@/components/ui/label";
+import { Shield, Search, FileText, QrCode, ExternalLink, CheckCircle2, XCircle, TrendingUp, RefreshCw, Download, AlertCircle, MoreVertical } from "lucide-react";
+
 import { apiFetch } from "@/lib/api-client";
 import { ensureSealImageCached } from "@/lib/seal-cache";
 import { logError } from "@/lib/client-logger";
@@ -54,6 +53,7 @@ import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
 import { exportToCSV } from "@/lib/admin-export";
 import { toast } from "sonner";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 
 interface ExecutiveApproval {
   id: string;
@@ -100,58 +100,67 @@ function ApprovalsForm() {
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState(() => getInitialFilter('search', ''));
+  const [searchQuery, setSearchQuery] = useState(() => getInitialFilter('search', ''));
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterRole, setFilterRole] = useState<string>(() => getInitialFilter('role', 'all'));
   const [filterStatus, setFilterStatus] = useState<string>(() => getInitialFilter('status', 'all'));
-  const [dateRangeFilter, setDateRangeFilter] = useState<'all' | 'last30' | 'last90' | 'thisYear' | 'custom'>(() => getInitialFilter('dateRange', 'all') as 'all' | 'last30' | 'last90' | 'thisYear' | 'custom');
-  const [customDateFrom, setCustomDateFrom] = useState<string>('');
-  const [customDateTo, setCustomDateTo] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<string>(() => getInitialFilter('dateFrom', ''));
+  const [dateTo, setDateTo] = useState<string>(() => getInitialFilter('dateTo', ''));
   const [sortBy, setSortBy] = useState<string>(() => getInitialFilter('sortBy', 'sealedAt'));
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (getInitialFilter('sortOrder', 'desc') as 'asc' | 'desc'));
-  const [showFilters, setShowFilters] = useState(false);
   const [count, setCount] = useState(0);
   const fetchApprovalsRef = useRef<(() => Promise<void>) | null>(null);
 
   // Debounced search
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 350);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [searchQuery]);
 
   // Persist filters to localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('approvals_filter_search', JSON.stringify(searchTerm));
+    localStorage.setItem('approvals_filter_search', JSON.stringify(searchQuery));
     localStorage.setItem('approvals_filter_role', JSON.stringify(filterRole));
     localStorage.setItem('approvals_filter_status', JSON.stringify(filterStatus));
-    localStorage.setItem('approvals_filter_dateRange', JSON.stringify(dateRangeFilter));
+    localStorage.setItem('approvals_filter_dateFrom', JSON.stringify(dateFrom));
+    localStorage.setItem('approvals_filter_dateTo', JSON.stringify(dateTo));
     localStorage.setItem('approvals_filter_sortBy', JSON.stringify(sortBy));
     localStorage.setItem('approvals_filter_sortOrder', JSON.stringify(sortOrder));
-  }, [searchTerm, filterRole, filterStatus, dateRangeFilter, sortBy, sortOrder]);
+  }, [searchQuery, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
 
   // Sync filters with URL
   useEffect(() => {
     const params = new URLSearchParams();
-    if (searchTerm) params.set('search', searchTerm);
+    if (searchQuery) params.set('search', searchQuery);
     if (filterRole !== 'all') params.set('role', filterRole);
     if (filterStatus !== 'all') params.set('status', filterStatus);
-    if (dateRangeFilter !== 'all') params.set('dateRange', dateRangeFilter);
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
     if (sortBy !== 'sealedAt') params.set('sortBy', sortBy);
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
-    // Note: pagination.page and pagination.pageSize will be added after pagination hook is defined
 
     const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [searchTerm, filterRole, filterStatus, dateRangeFilter, sortBy, sortOrder]);
+  }, [searchQuery, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
 
   // Reset page when filters change - will be added after pagination is defined
 
   const getFilterParams = useCallback(() => {
+    const orderingMap: Record<string, string> = {
+      'sealedAt-desc': '-sealed_at',
+      'sealedAt-asc': 'sealed_at',
+      'reference-asc': 'correspondence_details__reference_number',
+      'reference-desc': '-correspondence_details__reference_number',
+      'status-desc': '-seal_data__is_valid',
+    };
+    const orderingKey = `${sortBy}-${sortOrder}`;
+    const ordering = orderingMap[orderingKey] || '-sealed_at';
+
     const params = new URLSearchParams({
       action_type: 'approve',
       has_seal: 'true',
-      ordering: '-timestamp',
+      ordering,
     });
     if (debouncedSearch) {
       params.append('search', debouncedSearch);
@@ -160,28 +169,14 @@ function ApprovalsForm() {
       const isValid = filterStatus === 'valid' ? 'true' : 'false';
       params.append('is_valid', isValid);
     }
-    if (dateRangeFilter === 'last30') {
-      const fromDate = new Date();
-      fromDate.setDate(fromDate.getDate() - 30);
-      params.append('date_from', fromDate.toISOString().split('T')[0]);
-    } else if (dateRangeFilter === 'last90') {
-      const fromDate = new Date();
-      fromDate.setDate(fromDate.getDate() - 90);
-      params.append('date_from', fromDate.toISOString().split('T')[0]);
-    } else if (dateRangeFilter === 'thisYear') {
-      const fromDate = new Date();
-      fromDate.setMonth(0, 1);
-      params.append('date_from', fromDate.toISOString().split('T')[0]);
-    } else if (dateRangeFilter === 'custom') {
-      if (customDateFrom) {
-        params.append('date_from', customDateFrom);
-      }
-      if (customDateTo) {
-        params.append('date_to', customDateTo);
-      }
+    if (dateFrom) {
+      params.append('date_from', dateFrom);
+    }
+    if (dateTo) {
+      params.append('date_to', dateTo);
     }
     return params;
-  }, [debouncedSearch, filterStatus, dateRangeFilter, customDateFrom, customDateTo]);
+  }, [debouncedSearch, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
 
   const loadApprovals = useCallback(async (page: number = 1, pageSize: number = 25, soft = false) => {
     try {
@@ -349,21 +344,22 @@ function ApprovalsForm() {
   // Load data when pagination or filters change
   useEffect(() => {
     void loadApprovals(pagination.page, pagination.pageSize);
-  }, [pagination.page, pagination.pageSize, debouncedSearch, filterRole, filterStatus, dateRangeFilter, customDateFrom, customDateTo, sortBy, sortOrder, loadApprovals]);
+  }, [pagination.page, pagination.pageSize, debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder, loadApprovals]);
 
   // Reset page when filters change
   useEffect(() => {
     pagination.goToFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, filterRole, filterStatus, dateRangeFilter, sortBy, sortOrder]);
+  }, [debouncedSearch, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder]);
 
   // Sync pagination with URL
   useEffect(() => {
     const params = new URLSearchParams();
-    if (searchTerm) params.set('search', searchTerm);
+    if (searchQuery) params.set('search', searchQuery);
     if (filterRole !== 'all') params.set('role', filterRole);
     if (filterStatus !== 'all') params.set('status', filterStatus);
-    if (dateRangeFilter !== 'all') params.set('dateRange', dateRangeFilter);
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
     if (sortBy !== 'sealedAt') params.set('sortBy', sortBy);
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
     if (pagination.page > 1) params.set('page', String(pagination.page));
@@ -371,24 +367,18 @@ function ApprovalsForm() {
 
     const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
-  }, [searchTerm, filterRole, filterStatus, dateRangeFilter, sortBy, sortOrder, pagination.page, pagination.pageSize]);
+  }, [searchQuery, filterRole, filterStatus, dateFrom, dateTo, sortBy, sortOrder, pagination.page, pagination.pageSize]);
 
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (debouncedSearch) count++;
-    if (filterRole !== "all") count++;
-    if (filterStatus !== "all") count++;
-    if (dateRangeFilter !== "all") count++;
-    return count;
-  }, [debouncedSearch, filterRole, filterStatus, dateRangeFilter]);
+  const hasActiveFilters = useMemo(() => {
+    return !!(debouncedSearch || filterRole !== "all" || filterStatus !== "all" || dateFrom || dateTo);
+  }, [debouncedSearch, filterRole, filterStatus, dateFrom, dateTo]);
 
-  const clearAllFilters = () => {
-    setSearchTerm("");
+  const clearFilters = () => {
+    setSearchQuery("");
     setFilterRole("all");
     setFilterStatus("all");
-    setDateRangeFilter("all");
-    setCustomDateFrom("");
-    setCustomDateTo("");
+    setDateFrom("");
+    setDateTo("");
   };
 
 
@@ -574,10 +564,6 @@ function ApprovalsForm() {
             <p className="text-muted-foreground mt-1">Track and verify approvals with digital executive seals</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}>
-              <Filter className="h-4 w-4 mr-2" /> Filters
-              {activeFilterCount > 0 && <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>}
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -605,135 +591,67 @@ function ApprovalsForm() {
           links={[{ label: 'Verify Seal', href: '/verify' }, { label: 'Help & Guides', href: '/help' }]}
         />
 
-        {/* Search + summary stats (shared shell) */}
+        {/* Inline filter bar */}
         <Card>
-          <CardContent className={registryQueueSearchStatsShellContentClass}>
-            <div className={registryQueueSearchInputWrapClass}>
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by subject, reference, or serial…"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search approvals..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
             </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {[
-                { label: 'Total Approvals', value: statistics.total, icon: Shield, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-                { label: 'Valid (this page)', value: statistics.valid, icon: CheckCircle2, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
-                { label: 'Invalid (this page)', value: statistics.invalid, icon: XCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-                { label: 'This month (this page)', value: statistics.thisMonth, icon: TrendingUp, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-                <Card key={label}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className="flex items-center gap-4">
-                      <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                      </div>
-                      <div>
-                        <p className={registryQueueStatLabelClass}>{label}</p>
-                        <p className={registryQueueStatValueClass}>{value}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <Select value={filterRole} onValueChange={setFilterRole}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Role" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="managing director">MD</SelectItem>
+                <SelectItem value="executive director">ED</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="valid">Valid</SelectItem>
+                <SelectItem value="invalid">Invalid</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sealedAt-desc">Newest first</SelectItem>
+                <SelectItem value="sealedAt-asc">Oldest first</SelectItem>
+                <SelectItem value="reference-asc">Reference A–Z</SelectItem>
+                <SelectItem value="reference-desc">Reference Z–A</SelectItem>
+                <SelectItem value="status-desc">Valid first</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
           </CardContent>
         </Card>
 
-        {showFilters && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Executive Approvals Filters</CardTitle>
-                {activeFilterCount > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearAllFilters}>
-                    Clear All
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Role</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['all', 'managing director', 'executive director'].map((r) => (
-                      <Badge 
-                        key={r} 
-                        variant={filterRole === r ? 'default' : 'outline'} 
-                        className="cursor-pointer capitalize text-xs" 
-                        onClick={() => setFilterRole(r === 'all' ? 'all' : r)}
-                      >
-                        {r === 'all' ? 'All' : r === 'managing director' ? 'MD' : 'ED'}
-                      </Badge>
-                    ))}
+        {/* Summary stats */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Total Approvals', value: statistics.total, icon: Shield, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+            { label: 'Valid (this page)', value: statistics.valid, icon: CheckCircle2, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Invalid (this page)', value: statistics.invalid, icon: XCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
+            { label: 'This month (this page)', value: statistics.thisMonth, icon: TrendingUp, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
                   </div>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Status</Label>
-                  <div className="flex flex-wrap gap-1">
-                    {['all', 'valid', 'invalid'].map((s) => (
-                      <Badge 
-                        key={s} 
-                        variant={filterStatus === s ? 'default' : 'outline'} 
-                        className="cursor-pointer capitalize text-xs" 
-                        onClick={() => setFilterStatus(s)}
-                      >
-                        {s === 'all' ? 'All' : s}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Sort By</Label>
-                  <Select value={`${sortBy}-${sortOrder}`} onValueChange={(v) => { const [by, order] = v.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sealedAt-desc">Newest first</SelectItem>
-                      <SelectItem value="sealedAt-asc">Oldest first</SelectItem>
-                      <SelectItem value="reference-asc">Reference A–Z</SelectItem>
-                      <SelectItem value="reference-desc">Reference Z–A</SelectItem>
-                      <SelectItem value="status-desc">Valid first</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium mb-2 block">Date Range</Label>
-                  <Select value={dateRangeFilter} onValueChange={(v) => setDateRangeFilter(v as typeof dateRangeFilter)}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All time</SelectItem>
-                      <SelectItem value="last30">Last 30 days</SelectItem>
-                      <SelectItem value="last90">Last 90 days</SelectItem>
-                      <SelectItem value="thisYear">This year</SelectItem>
-                      <SelectItem value="custom">Custom range</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {dateRangeFilter === 'custom' && (
-                    <div className="flex gap-2 mt-2">
-                      <Input 
-                        type="date" 
-                        value={customDateFrom} 
-                        onChange={(e) => setCustomDateFrom(e.target.value)} 
-                      />
-                      <Input 
-                        type="date" 
-                        value={customDateTo} 
-                        onChange={(e) => setCustomDateTo(e.target.value)} 
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
         {loading && !refreshing ? (
           <LoadingState message="Loading executive approvals…" />
@@ -748,14 +666,14 @@ function ApprovalsForm() {
         ) : filteredApprovals.length === 0 ? (
           <EmptyState
             icon={<Shield className={registryQueueEmptyIconClass} />}
-            title={activeFilterCount > 0 ? 'No approvals match your filters' : 'No executive approvals found'}
+            title={hasActiveFilters ? 'No approvals match your filters' : 'No executive approvals found'}
             message={
-              activeFilterCount > 0
+              hasActiveFilters
                 ? 'Try adjusting your search or filters to see more results.'
                 : 'Executive approvals with digital seals will appear here once they are created.'
             }
-            actionLabel={activeFilterCount > 0 ? 'Clear Filters' : undefined}
-            onAction={activeFilterCount > 0 ? clearAllFilters : undefined}
+            actionLabel={hasActiveFilters ? 'Clear Filters' : undefined}
+            onAction={hasActiveFilters ? clearFilters : undefined}
           />
         ) : (
           <div className={correspondenceQueueListStackClass}>

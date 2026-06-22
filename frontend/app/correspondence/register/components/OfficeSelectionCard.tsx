@@ -1,16 +1,21 @@
 "use client";
 
-import { Building2, ArrowDown, ArrowUp, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Building2, ArrowDown, ArrowUp, AlertCircle, CheckCircle2, ChevronsUpDown, Check, Search } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import { FlowType } from '../register-utils';
 
 interface Office {
   id: string;
   name: string;
+  officeType: string;
 }
 
 interface OfficeSelectionCardProps {
@@ -22,6 +27,26 @@ interface OfficeSelectionCardProps {
   onFlowTypeChange: (flowType: FlowType) => void;
 }
 
+const OFFICE_TYPE_LABELS: Record<string, string> = {
+  md: 'Managing Director',
+  ed: 'Executive Director',
+  gm: 'General Manager',
+  agm: 'Assistant General Manager',
+  directorate: 'Directorate Offices',
+  division: 'Division Offices',
+  department: 'Department Offices',
+  unit: 'Units / Sections',
+  registry: 'Registry / Secretariat',
+  project: 'Programme / Project Offices',
+  custom: 'Other Offices',
+};
+
+const OFFICE_TYPE_ORDER = [
+  'md', 'ed', 'gm', 'agm',
+  'directorate', 'division', 'department',
+  'unit', 'registry', 'project', 'custom',
+];
+
 export function OfficeSelectionCard({
   offices,
   selectedOfficeId,
@@ -30,9 +55,22 @@ export function OfficeSelectionCard({
   onOfficeSelect,
   onFlowTypeChange,
 }: OfficeSelectionCardProps) {
+  const [open, setOpen] = useState(false);
   const hasSingleOffice = offices.length === 1;
   const hasNoOffice = offices.length === 0;
-  const _selectedOffice = offices.find((o) => o.id === selectedOfficeId);
+  const selectedOffice = offices.find((o) => o.id === selectedOfficeId);
+
+  const groupedOffices = useMemo(() => {
+    const groups = new Map<string, Office[]>();
+    for (const type of OFFICE_TYPE_ORDER) {
+      groups.set(type, []);
+    }
+    for (const office of offices) {
+      const type = OFFICE_TYPE_ORDER.includes(office.officeType) ? office.officeType : 'custom';
+      groups.get(type)!.push(office);
+    }
+    return groups;
+  }, [offices]);
 
   return (
     <Card>
@@ -112,20 +150,66 @@ export function OfficeSelectionCard({
               </Badge>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {offices.map((office) => (
+            <Popover open={open} onOpenChange={setOpen}>
+              <PopoverTrigger asChild>
                 <Button
-                  key={office.id}
-                  type="button"
-                  variant={selectedOfficeId === office.id ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => onOfficeSelect(office.id)}
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={open}
+                  className="w-full justify-between"
                 >
-                  <Building2 className="h-4 w-4 mr-2" />
-                  {office.name}
+                  {selectedOffice ? (
+                    <span className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 shrink-0" />
+                      {selectedOffice.name}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Select registering office...</span>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
-              ))}
-            </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search offices..." />
+                  <CommandList>
+                    <CommandEmpty>
+                      <div className="flex flex-col items-center gap-2 py-4 text-muted-foreground">
+                        <Search className="h-5 w-5" />
+                        <p className="text-sm">No offices found</p>
+                      </div>
+                    </CommandEmpty>
+                    {OFFICE_TYPE_ORDER.map((type) => {
+                      const group = groupedOffices.get(type);
+                      if (!group || group.length === 0) return null;
+                      return (
+                        <CommandGroup key={type} heading={OFFICE_TYPE_LABELS[type] || type}>
+                          {group.map((office) => (
+                            <CommandItem
+                              key={office.id}
+                              value={office.name}
+                              onSelect={() => {
+                                onOfficeSelect(office.id);
+                                setOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedOfficeId === office.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
+                              {office.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      );
+                    })}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           )}
           
           {error && (

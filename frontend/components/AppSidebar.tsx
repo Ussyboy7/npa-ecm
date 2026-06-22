@@ -8,7 +8,7 @@ import {
   LayoutDashboard, FileText, Inbox, Settings, ChevronDown,
   ChevronLeft, ChevronRight, Mail, Send, Archive, UserCog,
   HelpCircle, Shield, FolderTree, LayoutTemplate, Target,
-  FilePlus, ScrollText, Search, Webhook, FileCheck,
+  FilePlus, ScrollText, Search, Webhook, FileCheck, FolderKanban,
   Briefcase,
 } from "lucide-react";
 import {
@@ -135,6 +135,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarNavItem href="/documents" icon={FileText} label="My Documents" isCollapsed={isCollapsed} isActive={isActivePath('/documents')} badge={counts.myDocuments} badgeVariant="secondary" description="Your documents, shared with you, and awaiting action" />
+              <SidebarNavItem href="/workspaces" icon={FolderKanban} label="Workspaces" isCollapsed={isCollapsed} isActive={isActivePath('/workspaces')} description="Organize documents by project or theme" />
               <SidebarNavItem href="/search" icon={Search} label="Search Documents" isCollapsed={isCollapsed} isActive={isActivePath('/search')} description="Full-text search with context filters" />
               <SidebarNavItem href="/verify" icon={Shield} label="Verify Seal" isCollapsed={isCollapsed} isActive={isActivePath('/verify')} description="Verify digital executive seals" />
               <SidebarNavItem href="/forms" icon={FileCheck} label="Forms Library" isCollapsed={isCollapsed} isActive={isActivePath('/forms')} description="Create and manage form documents" />

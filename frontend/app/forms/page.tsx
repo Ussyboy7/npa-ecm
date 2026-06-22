@@ -7,9 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileCheck, Plus, Search, FileText, Clock, CheckCircle2, Users, Send, FileDown, Filter, Inbox, MoreHorizontal } from 'lucide-react';
+import { FileCheck, Plus, Search, FileText, Clock, CheckCircle2, Users, Send, FileDown, Inbox, MoreHorizontal } from 'lucide-react';
 import { getFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
 import { getFormTemplates, type FormTemplate } from '@/lib/api/forms';
 import { getSignatures } from '@/lib/api/forms';
@@ -36,7 +36,7 @@ import {
   registryQueueStatIconClass,
   registryQueueStatLabelClass,
   registryQueueStatValueClass,
-  registryQueueSearchInputWrapClass,
+  
   correspondenceQueueBadgeClass,
   correspondenceQueueDateClass,
   correspondenceQueueLeadingBoxClass,
@@ -48,7 +48,7 @@ import {
   correspondenceQueueSubjectClass,
 } from '@/components/shared/registry-queue-styles';
 import { cn } from '@/lib/utils';
-import { Label } from '@/components/ui/label';
+import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 type FormStatus = 'all' | 'draft' | 'in_progress' | 'awaiting_signatures' | 'completed';
@@ -76,8 +76,9 @@ const FormsPage = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>('updated_at');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [showFilters, setShowFilters] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   
   // Pagination
   const pagination = usePagination({
@@ -168,6 +169,8 @@ const FormsPage = () => {
       if (debouncedSearch) {
         params.search = debouncedSearch;
       }
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
       const data = await getFormDocuments({ ...params, signal: controller.signal });
       
       if (controller.signal.aborted) {
@@ -220,7 +223,7 @@ const FormsPage = () => {
         setLoading(false);
       }
     }
-  }, [statusFilter, templateFilter, executiveFilter, debouncedSearch, isSecretary, sortField, sortOrder, pagination.page, pagination.pageSize]);
+  }, [statusFilter, templateFilter, executiveFilter, debouncedSearch, isSecretary, sortField, sortOrder, pagination.page, pagination.pageSize, dateFrom, dateTo]);
   
   // Reload when pagination changes
   useEffect(() => {
@@ -336,11 +339,13 @@ const FormsPage = () => {
     };
   }, [allForms]);
   
-  const handleClearAllFilters = () => {
+  const clearFilters = () => {
     setStatusFilter('all');
     setTemplateFilter('all');
     setExecutiveFilter('all');
     setSearchQuery('');
+    setDateFrom('');
+    setDateTo('');
   };
   
   const handleDownloadPdf = async (form: FormDocument) => {
@@ -434,14 +439,17 @@ const FormsPage = () => {
     if (statusFilter !== 'all') count++;
     if (templateFilter !== 'all') count++;
     if (executiveFilter !== 'all') count++;
+    if (dateFrom || dateTo) count++;
     return count;
-  }, [activeTab, debouncedSearch, statusFilter, templateFilter, executiveFilter]);
+  }, [activeTab, debouncedSearch, statusFilter, templateFilter, executiveFilter, dateFrom, dateTo]);
 
   const hasListFilters =
     debouncedSearch ||
     statusFilter !== 'all' ||
     templateFilter !== 'all' ||
-    executiveFilter !== 'all';
+    executiveFilter !== 'all' ||
+    !!dateFrom ||
+    !!dateTo;
 
   return (
     <ClientErrorBoundary>
@@ -468,21 +476,6 @@ const FormsPage = () => {
                   <Plus className="mr-2 h-4 w-4" />
                   Start Form
                 </Button>
-                {activeTab === 'my-forms' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowFilters((prev) => !prev)}
-                  >
-                    <Filter className="mr-2 h-4 w-4" />
-                    Filters
-                    {activeFilterCount > 0 && (
-                      <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs font-medium">
-                        {activeFilterCount}
-                      </span>
-                    )}
-                  </Button>
-                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm">
@@ -525,104 +518,61 @@ const FormsPage = () => {
                 </TabsTrigger>
               </TabsList>
 
-              {/* Filters Panel - Only for My Forms */}
-              {activeTab === 'my-forms' && showFilters && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-lg">Form filters</CardTitle>
-                      {activeFilterCount > 0 && (
-                        <Button variant="ghost" size="sm" onClick={handleClearAllFilters}>
-                          Clear all
-                        </Button>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium mb-2 block">Status</Label>
-                        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as FormStatus)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Status</SelectItem>
-                            <SelectItem value="draft">Draft</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="awaiting_signatures">Awaiting Signatures</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {availableTemplates.length > 0 && (
-                        <div>
-                          <Label className="text-sm font-medium mb-2 block">Template</Label>
-                          <Select value={templateFilter} onValueChange={setTemplateFilter}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Templates</SelectItem>
-                              {availableTemplates.map(({ id, name }) => (
-                                <SelectItem key={id as string} value={id as string}>{name || 'Unnamed Template'}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                      {isSecretary && executives.length > 0 && (
-                        <div>
-                          <Label className="text-sm font-medium mb-2 block">Executive</Label>
-                          <Select value={executiveFilter} onValueChange={setExecutiveFilter}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Executives</SelectItem>
-                              {executives.map((exec) => (
-                                <SelectItem key={exec.id} value={exec.id}>{exec.name || 'Unknown Executive'}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                      <div>
-                        <Label className="text-sm font-medium mb-2 block">Sort By</Label>
-                        <Select value={`${sortField}_${sortOrder}`} onValueChange={(v) => {
-                          const [field, order] = v.split('_') as [SortField, SortOrder];
-                          setSortField(field);
-                          setSortOrder(order);
-                        }}>
-                          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="updated_at_desc">Recently Updated</SelectItem>
-                            <SelectItem value="updated_at_asc">Oldest Updated</SelectItem>
-                            <SelectItem value="created_at_desc">Recently Created</SelectItem>
-                            <SelectItem value="created_at_asc">Oldest Created</SelectItem>
-                            <SelectItem value="title_asc">Title (A-Z)</SelectItem>
-                            <SelectItem value="title_desc">Title (Z-A)</SelectItem>
-                            <SelectItem value="status_asc">Status (A-Z)</SelectItem>
-                            <SelectItem value="status_desc">Status (Z-A)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Inline Filter Bar */}
+              <Card>
+                <CardContent className="flex flex-wrap items-center gap-2 p-2">
+                  <div className="relative min-w-[200px] flex-1 max-w-sm">
+                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input placeholder="Search forms..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
+                  </div>
+                  <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as FormStatus)}>
+                    <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="awaiting_signatures">Awaiting Signatures</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {availableTemplates.length > 0 && (
+                    <Select value={templateFilter} onValueChange={setTemplateFilter}>
+                      <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Template" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Templates</SelectItem>
+                        {availableTemplates.map(({ id, name }) => (
+                          <SelectItem key={id as string} value={id as string}>{name || 'Unnamed Template'}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {isSecretary && executives.length > 0 && (
+                    <Select value={executiveFilter} onValueChange={setExecutiveFilter}>
+                      <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Executive" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Executives</SelectItem>
+                        {executives.map((exec) => (
+                          <SelectItem key={exec.id} value={exec.id}>{exec.name || 'Unknown Executive'}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+                  <Select value={`${sortField}-${sortOrder}`} onValueChange={(value) => { const [field, order] = value.split('-') as [SortField, SortOrder]; setSortField(field); setSortOrder(order); }}>
+                    <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="updated_at-desc">Last Updated</SelectItem>
+                      <SelectItem value="created_at-desc">Newest First</SelectItem>
+                      <SelectItem value="created_at-asc">Oldest First</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+                </CardContent>
+              </Card>
 
-              {/* Search + Stats */}
+              {/* Stats */}
               <Card>
                 <CardContent className={registryQueueSearchStatsShellContentClass}>
-                  <div className={registryQueueSearchInputWrapClass}>
-                    <Search
-                      className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                      aria-hidden
-                    />
-                    <Input
-                      placeholder="Search by title, reference…"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                      aria-label="Search forms"
-                      type="search"
-                    />
-                  </div>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     {[
                       {

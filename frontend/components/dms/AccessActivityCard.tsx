@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Activity, Download as DownloadIcon, Eye, Filter, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical } from 'lucide-react';
+import { Activity, Download as DownloadIcon, Eye, Filter, RefreshCw, Search, ArrowUpDown, Loader2, MoreVertical, ExternalLink } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -57,6 +58,7 @@ export const AccessActivityCard = ({
   const [searchQuery, setSearchQuery] = useState(initialState.search);
   const [sortOption, setSortOption] = useState<SortOption>(initialState.sort);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [logsDialogOpen, setLogsDialogOpen] = useState(false);
 
   const getDisplayUserName = (log: DocumentAccessLog): string =>
     userLookup.get(log.userId)?.name || log.userName || 'Unknown';
@@ -262,196 +264,204 @@ export const AccessActivityCard = ({
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {/* Filters and Search */}
-            <div className="space-y-2">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search users..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-7 text-xs pl-7"
-                />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div>
+                <p className="text-[10px] text-muted-foreground">Views</p>
+                <p className="text-sm font-semibold">{stats.views}</p>
               </div>
-              
-              {/* Filter Row */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Select
-                  value={accessLogFilter}
-                  onValueChange={(value) => setAccessLogFilter(value as 'all' | 'view' | 'download' | 'attempted-download')}
-                  aria-label="Filter by action"
-                >
-                  <SelectTrigger className="w-32 h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Actions</SelectItem>
-                    <SelectItem value="view">Views Only</SelectItem>
-                    <SelectItem value="download">Downloads Only</SelectItem>
-                    <SelectItem value="attempted-download">Attempted Downloads</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={accessLogDateFilter}
-                  onValueChange={(value) => setAccessLogDateFilter(value as 'all' | 'today' | 'week' | 'month')}
-                  aria-label="Filter by date"
-                >
-                  <SelectTrigger className="w-28 h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Time</SelectItem>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="week">This Week</SelectItem>
-                    <SelectItem value="month">This Month</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={sortOption}
-                  onValueChange={(value) => setSortOption(value as SortOption)}
-                  aria-label="Sort by"
-                >
-                  <SelectTrigger className="w-36 h-7 text-xs">
-                    <div className="flex items-center gap-1">
-                      <ArrowUpDown className="h-3 w-3" />
-                      <SelectValue />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="recent">Most Recent</SelectItem>
-                    <SelectItem value="oldest">Oldest First</SelectItem>
-                    <SelectItem value="user">By User</SelectItem>
-                    <SelectItem value="action">By Action</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Downloads</p>
+                <p className="text-sm font-semibold">{stats.downloads}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Attempted</p>
+                <p className="text-sm font-semibold">{stats.attempted}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Users</p>
+                <p className="text-sm font-semibold">{stats.users}</p>
               </div>
             </div>
-
-            {/* Filtered Logs */}
-            <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-2">
-                {isLoading ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <Loader2 className="h-6 w-6 text-muted-foreground mb-2 animate-spin" />
-                    <p className="text-xs text-muted-foreground">Loading access logs...</p>
-                  </div>
-                ) : filtered.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    {accessLogs.length === 0 ? (
-                      <>
-                        <Activity className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
-                        <p className="text-xs font-medium text-muted-foreground mb-1">No access activity yet</p>
-                        <p className="text-[10px] text-muted-foreground">Access logs will appear here when users view or download this document.</p>
-                      </>
-                    ) : (
-                      <>
-                        <Filter className="h-6 w-6 text-muted-foreground mb-2" />
-                        <p className="text-xs font-medium text-muted-foreground mb-1">No logs match your filters</p>
-                        <p className="text-[10px] text-muted-foreground">Try adjusting your filters or search query.</p>
-                        {(accessLogFilter !== 'all' || accessLogDateFilter !== 'all' || searchQuery.trim()) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs mt-2"
-                            onClick={() => {
-                              setAccessLogFilter('all');
-                              setAccessLogDateFilter('all');
-                              setSearchQuery('');
-                            }}
-                          >
-                            Clear filters
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  filtered.map((log) => {
-                    const userName = getDisplayUserName(log);
-                    const actionIcon = log.action === 'download' ? DownloadIcon : Eye;
-                    const actionLabel =
-                      log.action === 'download'
-                        ? 'Downloaded'
-                        : log.action === 'attempted-download'
-                          ? 'Attempted'
-                          : 'Viewed';
-                    const actionVariant =
-                      log.action === 'download'
-                        ? 'default'
-                        : log.action === 'attempted-download'
-                          ? 'destructive'
-                          : 'secondary';
-
-                    return (
-                      <div
-                        key={log.id}
-                        className="flex items-center gap-2.5 p-2.5 border border-border/50 rounded-lg hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          {actionIcon === DownloadIcon ? (
-                            <DownloadIcon className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                          ) : (
-                            <button
-                              onClick={() => handleViewClick(log)}
-                              className="p-0.5 hover:bg-muted rounded transition-colors cursor-pointer"
-                              title="View activity details"
-                              aria-label="View activity details"
-                            >
-                              <Eye className="h-3.5 w-3.5 text-muted-foreground hover:text-primary flex-shrink-0" />
-                            </button>
-                          )}
-                          <Avatar className="h-5 w-5 flex-shrink-0">
-                            <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
-                              {getDisplayUserInitials(log)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs font-medium truncate">{userName}</span>
-                          <Badge variant={actionVariant} className="text-[10px] px-1.5 py-0 h-4">
-                            {actionLabel}
-                          </Badge>
-                        </div>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="text-[10px] text-muted-foreground whitespace-nowrap cursor-help">
-                              {formatRelativeTime(log.timestamp)}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs">{formatDateTime(log.timestamp)}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-            {/* Statistics */}
-            {accessLogs.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t text-xs">
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Views</p>
-                  <p className="text-sm font-semibold">{stats.views}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Downloads</p>
-                  <p className="text-sm font-semibold">{stats.downloads}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Attempted</p>
-                  <p className="text-sm font-semibold">{stats.attempted}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Users</p>
-                  <p className="text-sm font-semibold">{stats.users}</p>
-                </div>
-              </div>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-1.5 text-xs"
+              onClick={() => setLogsDialogOpen(true)}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              View Activity Logs
+            </Button>
           </div>
         </CardContent>
       </Card>
 
+      <Dialog open={logsDialogOpen} onOpenChange={setLogsDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Access Activity Logs</DialogTitle>
+            <DialogDescription>
+              {filtered.length} {filtered.length === 1 ? 'log' : 'logs'} for this document
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 space-y-3 overflow-y-auto">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 text-sm pl-7"
+              />
+            </div>
+            {/* Filter Row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select
+                value={accessLogFilter}
+                onValueChange={(value) => setAccessLogFilter(value as 'all' | 'view' | 'download' | 'attempted-download')}
+              >
+                <SelectTrigger className="w-32 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Actions</SelectItem>
+                  <SelectItem value="view">Views Only</SelectItem>
+                  <SelectItem value="download">Downloads Only</SelectItem>
+                  <SelectItem value="attempted-download">Attempted Downloads</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={accessLogDateFilter}
+                onValueChange={(value) => setAccessLogDateFilter(value as 'all' | 'today' | 'week' | 'month')}
+              >
+                <SelectTrigger className="w-28 h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="week">This Week</SelectItem>
+                  <SelectItem value="month">This Month</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={sortOption}
+                onValueChange={(value) => setSortOption(value as SortOption)}
+              >
+                <SelectTrigger className="w-36 h-8 text-xs">
+                  <div className="flex items-center gap-1">
+                    <ArrowUpDown className="h-3 w-3" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Most Recent</SelectItem>
+                  <SelectItem value="oldest">Oldest First</SelectItem>
+                  <SelectItem value="user">By User</SelectItem>
+                  <SelectItem value="action">By Action</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Logs Table */}
+            <div className="space-y-1.5">
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Loader2 className="h-6 w-6 text-muted-foreground mb-2 animate-spin" />
+                  <p className="text-xs text-muted-foreground">Loading access logs...</p>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  {accessLogs.length === 0 ? (
+                    <>
+                      <Activity className="h-8 w-8 text-muted-foreground mb-2 opacity-50" />
+                      <p className="text-xs font-medium text-muted-foreground mb-1">No access activity yet</p>
+                      <p className="text-[10px] text-muted-foreground">Access logs will appear here when users view or download this document.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Filter className="h-6 w-6 text-muted-foreground mb-2" />
+                      <p className="text-xs font-medium text-muted-foreground mb-1">No logs match your filters</p>
+                      <p className="text-[10px] text-muted-foreground">Try adjusting your filters or search query.</p>
+                      {(accessLogFilter !== 'all' || accessLogDateFilter !== 'all' || searchQuery.trim()) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs mt-2"
+                          onClick={() => {
+                            setAccessLogFilter('all');
+                            setAccessLogDateFilter('all');
+                            setSearchQuery('');
+                          }}
+                        >
+                          Clear filters
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                filtered.map((log) => {
+                  const userName = getDisplayUserName(log);
+                  const actionIcon = log.action === 'download' ? DownloadIcon : Eye;
+                  const actionLabel =
+                    log.action === 'download'
+                      ? 'Downloaded'
+                      : log.action === 'attempted-download'
+                        ? 'Attempted'
+                        : 'Viewed';
+                  const actionVariant =
+                    log.action === 'download'
+                      ? 'default'
+                      : log.action === 'attempted-download'
+                        ? 'destructive'
+                        : 'secondary';
+
+                  return (
+                    <div
+                      key={log.id}
+                      className="flex items-center gap-2.5 p-2.5 border rounded-lg hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {actionIcon === DownloadIcon ? (
+                          <DownloadIcon className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        ) : (
+                          <button
+                            onClick={() => handleViewClick(log)}
+                            className="p-0.5 hover:bg-muted rounded transition-colors cursor-pointer"
+                            title="View activity details"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-muted-foreground hover:text-primary flex-shrink-0" />
+                          </button>
+                        )}
+                        <Avatar className="h-5 w-5 flex-shrink-0">
+                          <AvatarFallback className="text-[9px] bg-primary/10 text-primary">
+                            {getDisplayUserInitials(log)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs font-medium truncate">{userName}</span>
+                        <Badge variant={actionVariant} className="text-[10px] px-1.5 py-0 h-4">
+                          {actionLabel}
+                        </Badge>
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap cursor-help">
+                            {formatRelativeTime(log.timestamp)}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">{formatDateTime(log.timestamp)}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

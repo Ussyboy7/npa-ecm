@@ -60,7 +60,7 @@ export function DispatchModal({ correspondenceId, onSuccess }: DispatchModalProp
       toast.success("Correspondence dispatched successfully");
       setOpen(false);
       onSuccess();
-    } catch (err) {
+    } catch (_err) {
       toast.error("Failed to dispatch correspondence");
     } finally {
       setLoading(false);
@@ -140,7 +140,7 @@ export function AcknowledgeButton({ correspondenceId, onSuccess }: { corresponde
       });
       toast.success("Correspondence acknowledged");
       onSuccess();
-    } catch (err) {
+    } catch (_err) {
       toast.error("Failed to acknowledge");
     } finally {
       setLoading(false);

@@ -804,18 +804,18 @@ export const DocumentMetadataEditDialog = ({
               <DialogDescription>
                 You are about to change the document status from{' '}
                 <strong>{document.status}</strong> to <strong>{pendingStatusChange}</strong>.
-                {pendingStatusChange === 'published' && (
-                  <div className="mt-2 p-2 bg-primary/10 border border-primary/20 rounded text-sm">
-                    Publishing this document will make it visible to users with appropriate permissions.
-                  </div>
-                )}
-                {pendingStatusChange === 'archived' && (
-                  <div className="mt-2 p-2 bg-secondary/10 border border-secondary/20 rounded text-sm">
-                    Archiving this document will move it to archived status. It can still be accessed but
-                    won't appear in active document lists.
-                  </div>
-                )}
               </DialogDescription>
+              {pendingStatusChange === 'published' && (
+                <div className="mt-2 p-2 bg-primary/10 border border-primary/20 rounded text-sm">
+                  Publishing this document will make it visible to users with appropriate permissions.
+                </div>
+              )}
+              {pendingStatusChange === 'archived' && (
+                <div className="mt-2 p-2 bg-secondary/10 border border-secondary/20 rounded text-sm">
+                  Archiving this document will move it to archived status. It can still be accessed but
+                  won't appear in active document lists.
+                </div>
+              )}
             </DialogHeader>
             <div className="flex justify-end gap-2">
               <Button

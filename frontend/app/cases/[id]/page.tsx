@@ -354,8 +354,6 @@ const CaseDetailPage = () => {
             { label: 'Case Management', href: '/cases/my' },
             { label: 'Help & Guides', href: '/help' },
           ]}
-          dismissible
-          dismissKey="case-detail-guide"
         />
 
         {/* Case Description Card - Only show if description exists */}

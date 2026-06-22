@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Inbox,
-  Loader2,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -131,7 +130,7 @@ export default function FOIAListPage() {
       ]);
       setRequests(listResponse.results);
       setStats(statsResponse);
-    } catch (err) {
+    } catch (_err) {
       setError("Failed to load FOIA requests.");
     } finally {
       setLoading(false);

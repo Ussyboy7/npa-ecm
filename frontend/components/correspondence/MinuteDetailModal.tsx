@@ -1,6 +1,6 @@
 import { ERROR_UNKNOWN } from '@/lib/constants';
 import { DEFAULT_SEAL_OFFICE_NAME } from '@/lib/branding';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import Image from "next/image";
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { Badge } from "@/components/ui/badge";
@@ -1057,17 +1057,13 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
       {/* Document View Modal (Full Document View) */}
       <Dialog open={!!viewAttachment} onOpenChange={() => setViewAttachment(null)}>
         <DialogContent className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0 overflow-hidden">
-          <DialogHeader className="space-y-1 px-6 pt-6 flex-shrink-0">
-            <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Document Preview
+          <DialogHeader className="px-4 pt-3 pb-1 flex-shrink-0">
+            <DialogTitle className="text-sm font-medium truncate">
+              {viewAttachment?.fileName || 'Document'}
             </DialogTitle>
-            <DialogDescription>
-              {viewAttachment?.fileName} · Version 1
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 border-t border-b overflow-y-auto px-6" style={{ height: 'calc(90vh - 200px)', maxHeight: 'calc(90vh - 200px)' }}>
+          <div className="flex-1 border-t overflow-y-auto">
             {loadingAttachments ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1097,18 +1093,10 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 <FileText className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
                 <p className="text-lg font-medium mb-2 text-destructive">Error loading Word document</p>
                 <p className="text-sm text-muted-foreground mb-4">{wordError}</p>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => { void handleDownload(viewAttachment); }}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download to View
-                </Button>
               </div>
             ) : viewAttachment && wordHtml ? (
               <div className="w-full py-4">
-                <div className="prose prose-base dark:prose-invert max-w-none p-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 250px)' }}>
+                <div className="prose prose-base dark:prose-invert max-w-none p-6 overflow-y-auto">
                   <div dangerouslySetInnerHTML={{ __html: wordHtml }} />
                 </div>
               </div>
@@ -1121,14 +1109,6 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                 <p className="text-xs text-muted-foreground mb-4">
                   {viewAttachment.fileType || 'Unknown file type'}
                 </p>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => { void handleDownload(viewAttachment); }}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download to View
-                </Button>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -1140,34 +1120,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
             )}
           </div>
 
-          <DialogFooter className="px-6 pb-6 flex-shrink-0">
-            <div className="flex items-center justify-between w-full">
-              <div className="text-xs text-muted-foreground">
-                Previewing uploaded document
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => window.print()}
-                >
-                  Print
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => { void handleDownload(viewAttachment!); }}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => setViewAttachment(null)}
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          </DialogFooter>
+          <div className="h-2" />
         </DialogContent>
       </Dialog>
     </Dialog>

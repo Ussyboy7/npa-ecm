@@ -84,7 +84,9 @@ export async function getSignatureTemplates(params?: {
         : [];
     return templates.map(mapApiTemplateToFrontend);
   } catch (error: unknown) {
-    logError('Failed to fetch signature templates from backend', error);
+    if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      logError('Failed to fetch signature templates from backend', error);
+    }
     return [];
   }
 }
@@ -100,7 +102,9 @@ export async function getUserSignaturePreferences(signal?: AbortSignal): Promise
     );
     return mapApiPreferencesToFrontend(response);
   } catch (error: unknown) {
-    logError('Failed to fetch user signature preferences from backend', error);
+    if (!(error instanceof DOMException && error.name === 'AbortError')) {
+      logError('Failed to fetch user signature preferences from backend', error);
+    }
     return null;
   }
 }

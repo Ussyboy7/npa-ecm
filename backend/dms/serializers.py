@@ -30,11 +30,12 @@ class DocumentWorkspaceSerializer(serializers.ModelSerializer):
         required=False,
     )
     slug = serializers.SlugField(required=False, allow_blank=True, allow_null=True)
+    document_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = DocumentWorkspace
-        fields = ["id", "slug", "name", "description", "color", "member_ids", "created_at", "updated_at"]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        fields = ["id", "slug", "name", "description", "color", "member_ids", "created_at", "updated_at", "document_count"]
+        read_only_fields = ["id", "created_at", "updated_at", "document_count"]
 
 
 class DocumentVersionSerializer(serializers.ModelSerializer):
