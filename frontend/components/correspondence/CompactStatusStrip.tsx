@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { ArrowDown, ArrowUp, ArrowRight, Building2, Clock } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowRight, Building2, Clock, Send, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CompactStatusStripProps {
@@ -10,6 +10,8 @@ interface CompactStatusStripProps {
   direction?: "upward" | "downward" | "lateral" | "internal";
   currentOffice?: string;
   daysPending?: number;
+  dispatchedCount?: number;
+  acknowledgedCount?: number;
   className?: string;
 }
 
@@ -40,18 +42,31 @@ function formatDate(dateStr: string | undefined): string | null {
   }
 }
 
+function cleanOfficeName(name: string | undefined): string | null {
+  if (!name) return null;
+  // Fix "Office Office" duplication
+  return name.replace(/Office\s+Office/gi, "Office").trim();
+}
+
 export function CompactStatusStrip({
   status,
   receivedDate,
   direction,
   currentOffice,
   daysPending,
+  dispatchedCount,
+  acknowledgedCount,
   className,
 }: CompactStatusStripProps) {
   const cfg = statusConfig[status] || statusConfig.pending;
   const dir = direction ? directionConfig[direction] : null;
   const DirIcon = dir?.icon;
   const dateStr = formatDate(receivedDate);
+  const officeName = cleanOfficeName(currentOffice);
+
+  // Calculate dispatch progress
+  const hasDispatchProgress = dispatchedCount !== undefined && acknowledgedCount !== undefined && dispatchedCount > 0;
+  const allAcknowledged = hasDispatchProgress && acknowledgedCount === dispatchedCount;
 
   return (
     <div className={cn("w-full px-4 py-2 bg-muted/30 border-b border-border", className)}>
@@ -60,6 +75,24 @@ export function CompactStatusStrip({
         <Badge variant={cfg.variant} className={cn("text-[10px] h-5", cfg.className)}>
           {cfg.label}
         </Badge>
+
+        {/* Dispatch Progress */}
+        {hasDispatchProgress && (
+          <>
+            <span className="text-muted-foreground/40">·</span>
+            <div className={cn(
+              "flex items-center gap-1 text-xs",
+              allAcknowledged ? "text-success" : "text-info"
+            )}>
+              {allAcknowledged ? (
+                <CheckCircle2 className="h-3 w-3" />
+              ) : (
+                <Send className="h-3 w-3" />
+              )}
+              <span>{acknowledgedCount}/{dispatchedCount} acknowledged</span>
+            </div>
+          </>
+        )}
 
         {/* Separator */}
         {dateStr && <span className="text-muted-foreground/40">·</span>}
@@ -81,18 +114,18 @@ export function CompactStatusStrip({
         )}
 
         {/* Current Office */}
-        {currentOffice && (
+        {officeName && (
           <>
             <span className="text-muted-foreground/40">·</span>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Building2 className="h-3 w-3" />
-              <span className="truncate max-w-[200px]">{currentOffice}</span>
+              <span className="truncate max-w-[200px]">{officeName}</span>
             </div>
           </>
         )}
 
-        {/* Days Pending */}
-        {daysPending !== undefined && daysPending > 0 && (
+        {/* Days Pending - only show for non-terminal statuses */}
+        {daysPending !== undefined && daysPending > 0 && !["completed", "dispatched", "acknowledged", "archived", "withdrawn"].includes(status) && (
           <>
             <span className="text-muted-foreground/40">·</span>
             <div className={cn(

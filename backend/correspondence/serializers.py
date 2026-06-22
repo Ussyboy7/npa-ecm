@@ -210,6 +210,8 @@ class MinuteSerializer(serializers.ModelSerializer):
 
     can_be_edited = serializers.SerializerMethodField()
     can_be_recalled = serializers.SerializerMethodField()
+    is_dispatched = serializers.SerializerMethodField()
+    is_acknowledged = serializers.SerializerMethodField()
     seal_data = serializers.SerializerMethodField()
     parent_minute_id = serializers.PrimaryKeyRelatedField(
         source="parent_minute",
@@ -270,6 +272,11 @@ class MinuteSerializer(serializers.ModelSerializer):
             "recalled_at",
             "recall_reason",
             "can_be_recalled",
+            # Per-minute dispatch/acknowledge lifecycle
+            "is_dispatched",
+            "dispatched_at",
+            "is_acknowledged",
+            "acknowledged_at",
             # Purpose-based routing
             "purpose",
             "requires_response",
@@ -328,6 +335,8 @@ class MinuteSerializer(serializers.ModelSerializer):
             "consultation_from_branch",
             "consultation_to_branch",
             "seal_applied",
+            "dispatched_at",
+            "acknowledged_at",
         ]
 
     def get_can_be_edited(self, obj):
@@ -337,6 +346,14 @@ class MinuteSerializer(serializers.ModelSerializer):
     def get_can_be_recalled(self, obj):
         """Check if minute can still be recalled."""
         return obj.can_be_recalled()
+
+    def get_is_dispatched(self, obj):
+        """Check if minute has been dispatched."""
+        return obj.is_dispatched
+
+    def get_is_acknowledged(self, obj):
+        """Check if minute has been acknowledged."""
+        return obj.is_acknowledged
 
     def get_to_user_name(self, obj):
         """Get the recipient user's name."""

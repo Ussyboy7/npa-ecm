@@ -35,12 +35,12 @@ services:
     env_file:
       - ./backend/env/local.env
     environment:
-      # Explicitly set DB credentials to ensure they're used
       DB_NAME: npa_ecm_local
       DB_USER: ecmadmin
       DB_PASSWORD: ecmadmin
       DB_HOST: postgres
       DB_PORT: 5432
+      THROTTLE_USER_RATE: "1000/minute"
     volumes:
       - ./backend:/app
       - media-data:/app/media
@@ -64,12 +64,12 @@ services:
     env_file:
       - ./backend/env/local.env
     environment:
-      # Explicitly set DB credentials to ensure they're used
       DB_NAME: npa_ecm_local
       DB_USER: ecmadmin
       DB_PASSWORD: ecmadmin
       DB_HOST: postgres
       DB_PORT: 5432
+      THROTTLE_USER_RATE: "1000/minute"
     command: celery -A ecm_backend worker -l info
     volumes:
       - ./backend:/app

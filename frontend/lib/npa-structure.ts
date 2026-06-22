@@ -254,6 +254,11 @@ export type Minute = {
   recalledAt?: string;
   recallReason?: string;
   canBeRecalled?: boolean;
+  // Per-minute dispatch/acknowledge lifecycle
+  isDispatched?: boolean;
+  dispatchedAt?: string;
+  isAcknowledged?: boolean;
+  acknowledgedAt?: string;
   // Purpose-based routing
   purpose?: 'action' | 'information' | 'comment' | 'approval';
   requiresResponse?: boolean;

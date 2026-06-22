@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Check, Clock, Circle, AlertTriangle, ChevronRight } from "lucide-react";
+import { Check, Clock, Circle, AlertTriangle, ChevronRight, Send, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -394,6 +394,39 @@ export function WorkflowProgressIndicator({
             </div>
           </div>
         )}
+
+        {/* Dispatch Progress Summary */}
+        {(() => {
+          const nonRecalledMinutes = minutes.filter(m => !m.isRecalled);
+          const dispatchedMinutes = nonRecalledMinutes.filter(m => m.dispatchedAt);
+          const acknowledgedMinutes = nonRecalledMinutes.filter(m => m.acknowledgedAt);
+          
+          if (dispatchedMinutes.length === 0) return null;
+          
+          const allAcknowledged = dispatchedMinutes.length === acknowledgedMinutes.length;
+          
+          return (
+            <div className="mt-3 pt-2 border-t">
+              <div className="flex items-center gap-2 text-xs">
+                {allAcknowledged ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                    <span className="text-success font-medium">
+                      All {dispatchedMinutes.length} minute{dispatchedMinutes.length > 1 ? 's' : ''} acknowledged
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5 text-info" />
+                    <span className="text-muted-foreground">
+                      {acknowledgedMinutes.length}/{dispatchedMinutes.length} minutes acknowledged
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </CardContent>
     </Card>
   );

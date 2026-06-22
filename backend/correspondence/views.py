@@ -860,6 +860,36 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         output = self.get_serializer(correspondence)
         return Response(output.data)
 
+    @action(detail=True, methods=["post"], url_path="archive")
+    def archive_single(self, request, pk=None):
+        """Archive a single correspondence item."""
+        correspondence = self.get_object()
+
+        if correspondence.status == Correspondence.Status.ARCHIVED:
+            raise ValidationError({"detail": "Correspondence is already archived."})
+
+        if correspondence.status not in (
+            Correspondence.Status.COMPLETED,
+            Correspondence.Status.DISPATCHED,
+            Correspondence.Status.ACKNOWLEDGED,
+        ):
+            raise ValidationError({"detail": "Only completed, dispatched, or acknowledged correspondence can be archived."})
+
+        correspondence.status = Correspondence.Status.ARCHIVED
+        correspondence.archived_at = timezone.now()
+        correspondence.save(update_fields=["status", "archived_at", "updated_at"])
+
+        AuditService.log_correspondence_activity(
+            user=request.user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Archived correspondence: {correspondence.reference_number}",
+        )
+
+        output = self.get_serializer(correspondence)
+        return Response(output.data)
+
     @action(detail=False, methods=["post"], url_path="bulk-archive")
     def bulk_archive(self, request):
         """Archive multiple correspondence items at once."""
@@ -2651,6 +2681,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 performed_by=self.request.user,  # Audit trail - who actually did it
                 acted_by_assistant=True,
                 assistant_type='PA',  # Default to PA for delegated actions
+                dispatched_at=timezone.now(),  # Auto-set when minute is created
             )
             logger.info(
                 f"Delegation action: {self.request.user.get_full_name()} performed minute "
@@ -2663,7 +2694,11 @@ class MinuteViewSet(viewsets.ModelViewSet):
             )
         else:
             # Normal action - user acting as themselves
-            minute = serializer.save(user=self.request.user, from_office=from_office)
+            minute = serializer.save(
+                user=self.request.user,
+                from_office=from_office,
+                dispatched_at=timezone.now(),  # Auto-set when minute is created
+            )
         
         # Auto-grant document access to minute recipients
         from correspondence.services import CorrespondenceDocumentService
@@ -3158,13 +3193,27 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="mark-opened")
     def mark_opened(self, request, pk=None):
-        """Mark minute as opened by recipient."""
+        """Mark minute as opened by recipient (also serves as acknowledgment)."""
         minute = self.get_object()
         
+        update_fields = []
         if not minute.is_opened:
             minute.is_opened = True
             minute.opened_at = timezone.now()
-            minute.save(update_fields=["is_opened", "opened_at"])
+            update_fields.extend(["is_opened", "opened_at"])
+        
+        # Also set acknowledged_at when recipient opens/views the minute
+        if not minute.acknowledged_at:
+            minute.acknowledged_at = timezone.now()
+            update_fields.append("acknowledged_at")
+        
+        # Also set dispatched_at if not already set (auto-dispatch on first view)
+        if not minute.dispatched_at:
+            minute.dispatched_at = minute.timestamp  # Use creation time as dispatch time
+            update_fields.append("dispatched_at")
+        
+        if update_fields:
+            minute.save(update_fields=update_fields)
         
         return Response({"status": "marked_as_opened"})
 
@@ -3212,6 +3261,14 @@ class MinuteViewSet(viewsets.ModelViewSet):
         if recall_reason:
             minute.recall_reason = recall_reason
         minute.save(update_fields=["is_recalled", "recalled_at", "recall_reason"])
+        
+        # Invalidate digital seal if this minute had one
+        if minute.seal_applied:
+            seal = minute.seal_applied
+            seal.is_valid = False
+            seal.invalidated_at = tz.now()
+            seal.invalidated_reason = f"Minute recalled by {request.user.get_full_name() or request.user.username}"
+            seal.save(update_fields=["is_valid", "invalidated_at", "invalidated_reason"])
         
         # Mark all distribution entries linked to this minute as inactive
         # This ensures distribution recipients can't see the correspondence anymore
@@ -3461,8 +3518,18 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 }
             )
         
+        # Build response with warning if minute was acknowledged
         serializer = self.get_serializer(minute)
-        return Response(serializer.data)
+        response_data = serializer.data
+        
+        # Add warning if minute was acknowledged
+        if minute.acknowledged_at:
+            response_data['warning'] = (
+                f"This minute was acknowledged on {minute.acknowledged_at.strftime('%d %b %Y, %H:%M')}. "
+                f"Recalling will remove it from the recipient's inbox."
+            )
+        
+        return Response(response_data)
 
     @action(detail=False, methods=["post"], url_path="parallel-route")
     def parallel_route(self, request):

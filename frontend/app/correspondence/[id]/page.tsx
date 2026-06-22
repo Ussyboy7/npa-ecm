@@ -958,6 +958,8 @@ const CorrespondenceDetailContent = () => {
             ? Math.floor((Date.now() - new Date(correspondence.receivedDate).getTime()) / (1000 * 60 * 60 * 24))
             : undefined
           }
+          dispatchedCount={minutes.filter(m => !m.isRecalled && m.dispatchedAt).length}
+          acknowledgedCount={minutes.filter(m => !m.isRecalled && m.acknowledgedAt).length}
         />
 
         {/* Desktop 2-Column Layout */}
@@ -1003,7 +1005,7 @@ const CorrespondenceDetailContent = () => {
             <ScrollArea className="h-full w-full">
               <div className="p-4 space-y-4 overflow-x-hidden">
                 {/* Routing Progress - prominent at top of sidebar */}
-                {!isCompleted && minutes.length > 0 && (
+                {minutes.length > 0 && (
                   <WorkflowProgressIndicator
                     correspondence={correspondence}
                     minutes={minutes}
@@ -1081,7 +1083,7 @@ const CorrespondenceDetailContent = () => {
       {mobileActiveTab === 'actions' && (
         <div className="md:hidden p-4 space-y-4">
           {/* Routing Progress - mobile */}
-          {!isCompleted && minutes.length > 0 && (
+          {minutes.length > 0 && (
             <WorkflowProgressIndicator
               correspondence={correspondence}
               minutes={minutes}

@@ -70,8 +70,8 @@ export function DispatchModal({ correspondenceId, onSuccess }: DispatchModalProp
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="default" size="sm">
-          <Send className="h-4 w-4 mr-1" />
+        <Button variant="default" className="w-full">
+          <Send className="h-4 w-4 mr-2" />
           Dispatch
         </Button>
       </DialogTrigger>

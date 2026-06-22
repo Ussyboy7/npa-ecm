@@ -457,7 +457,7 @@ const OutboxDetailPage = () => {
 
   const handleWithdraw = () => {
     if (!correspondence || correspondence.status !== 'pending') {
-      toast.error('Only pending correspondence can be withdrawn');
+      toast.error('Only pending drafts can be cancelled');
       return;
     }
     setWithdrawDialogOpen(true);
@@ -465,7 +465,7 @@ const OutboxDetailPage = () => {
 
   const confirmWithdraw = async () => {
     if (!correspondence || !withdrawReason.trim()) {
-      toast.error('Please provide a reason for withdrawal');
+      toast.error('Please provide a reason for cancellation');
       return;
     }
 
@@ -477,7 +477,7 @@ const OutboxDetailPage = () => {
           'Content-Type': 'application/json',
         },
       });
-      toast.success('Correspondence withdrawn successfully');
+      toast.success('Draft cancelled successfully');
       setWithdrawDialogOpen(false);
       setWithdrawReason('');
       await loadData();
@@ -489,9 +489,9 @@ const OutboxDetailPage = () => {
       const errorStatus3 = errorObj3 && 'status' in errorObj3 ? errorObj3.status : null;
       const responseStatus3 = errorObj3 && errorObj3.response && typeof errorObj3.response === 'object' && 'status' in errorObj3.response ? (errorObj3.response as Record<string, unknown>).status : null;
       if (errorStatus3 === 404 || responseStatus3 === 404) {
-        toast.info('Withdraw functionality is not yet available on the backend');
+        toast.info('Cancel draft functionality is not yet available on the backend');
       } else {
-        let errorMessage = 'Failed to withdraw correspondence';
+        let errorMessage = 'Failed to cancel draft';
         if (errorObj3) {
           if (errorObj3.response && typeof errorObj3.response === 'object') {
             const response = errorObj3.response as Record<string, unknown>;
@@ -717,7 +717,7 @@ const OutboxDetailPage = () => {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={handleWithdraw} className="text-destructive">
                         <Trash2 className="h-4 w-4 mr-2" />
-                        Withdraw
+                        Cancel Draft
                       </DropdownMenuItem>
                     </>
                   )}
@@ -1547,16 +1547,16 @@ const OutboxDetailPage = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Withdraw Confirmation Dialog */}
+      {/* Cancel Draft Confirmation Dialog */}
       <AlertDialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
         <AlertDialogContent className="max-w-2xl w-[95vw] sm:w-full">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Trash2 className="h-5 w-5 text-destructive" />
-              Withdraw Correspondence
+              Cancel Draft
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Withdrawing this correspondence will cancel it and prevent further routing. This action cannot be undone.
+              Cancelling this draft will prevent further routing. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-4 py-4">
@@ -1581,14 +1581,14 @@ const OutboxDetailPage = () => {
               </CardContent>
             </Card>
 
-            {/* Withdrawal Reason */}
+            {/* Cancellation Reason */}
             <div className="space-y-2">
               <Label htmlFor="withdraw-reason">
-                Reason for Withdrawal <span className="text-destructive">*</span>
+                Reason for Cancellation <span className="text-destructive">*</span>
               </Label>
               <Textarea
                 id="withdraw-reason"
-                placeholder="Please provide a reason for withdrawing this correspondence..."
+                placeholder="Please provide a reason for cancelling this draft..."
                 value={withdrawReason}
                 onChange={(e) => setWithdrawReason(e.target.value)}
                 rows={4}
@@ -1608,7 +1608,7 @@ const OutboxDetailPage = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               <Trash2 className="h-4 w-4 mr-2" />
-              Confirm Withdrawal
+              Confirm Cancellation
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

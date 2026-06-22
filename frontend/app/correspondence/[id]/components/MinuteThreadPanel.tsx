@@ -16,6 +16,8 @@ import {
   Plus,
   Image as ImageIcon,
   Shield,
+  CheckCircle2,
+  Send,
 } from 'lucide-react';
 import type { Minute } from '@/lib/npa-structure';
 import { formatDateTime } from '@/lib/correspondence-helpers';
@@ -181,6 +183,25 @@ export const MinuteThreadPanel = ({
                               <>
                                 <span className="text-muted-foreground/50">•</span>
                                 <span className="text-destructive">Recalled</span>
+                              </>
+                            )}
+                            {/* Per-minute dispatch/ack status */}
+                            {minuteItem.dispatchedAt && !minuteItem.isRecalled && (
+                              <>
+                                <span className="text-muted-foreground/50">•</span>
+                                <span className="flex items-center gap-1 text-info">
+                                  <Send className="h-3 w-3" />
+                                  Dispatched {formatDateTime(minuteItem.dispatchedAt)}
+                                </span>
+                              </>
+                            )}
+                            {minuteItem.acknowledgedAt && !minuteItem.isRecalled && (
+                              <>
+                                <span className="text-muted-foreground/50">•</span>
+                                <span className="flex items-center gap-1 text-success">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Acknowledged {formatDateTime(minuteItem.acknowledgedAt)}
+                                </span>
                               </>
                             )}
                             {(minuteItem.actedBySecretary || minuteItem.actedByAssistant) && (

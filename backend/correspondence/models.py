@@ -587,6 +587,9 @@ class Minute(UUIDModel, TimeStampedModel):
     is_recalled = models.BooleanField(default=False)  # Track if minute was recalled/withdrawn
     recalled_at = models.DateTimeField(null=True, blank=True)
     recall_reason = models.TextField(null=True, blank=True)  # Optional reason for recall
+    # Per-minute dispatch/acknowledge lifecycle
+    dispatched_at = models.DateTimeField(null=True, blank=True, help_text="When minute left sender's office")
+    acknowledged_at = models.DateTimeField(null=True, blank=True, help_text="When recipient opened/viewed the minute")
     # Purpose-based routing
     purpose = models.CharField(
         max_length=20,
@@ -701,6 +704,16 @@ class Minute(UUIDModel, TimeStampedModel):
             return False  # Window expired
         return True
 
+    @property
+    def is_dispatched(self):
+        """Check if minute has been dispatched (left sender's office)."""
+        return self.dispatched_at is not None
+
+    @property
+    def is_acknowledged(self):
+        """Check if minute has been acknowledged (recipient opened/viewed)."""
+        return self.acknowledged_at is not None
+
     def can_be_recalled(self):
         """
         Check if minute can still be recalled.
@@ -710,8 +723,8 @@ class Minute(UUIDModel, TimeStampedModel):
         2. No subsequent minutes have been created (no one has acted on it yet)
         
         If no subsequent minutes exist, we allow recall even if:
-        - The minute was opened (viewed)
-        - The 30-minute window has expired
+        - The minute was acknowledged (viewed/picked up)
+        - The minute was dispatched
         
         This is more flexible and practical - if no action has been taken,
         the sender should be able to recall their minute.
@@ -730,8 +743,7 @@ class Minute(UUIDModel, TimeStampedModel):
         if subsequent_minutes:
             return False  # Workflow has progressed, cannot recall
         
-        # If no subsequent minutes, allow recall regardless of opened status or time window
-        # The "opened" status is just view tracking, not an action
+        # If no subsequent minutes, allow recall regardless of dispatched/acknowledged status
         return True
 
     def save(self, *args, **kwargs):

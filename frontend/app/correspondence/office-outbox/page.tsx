@@ -34,6 +34,7 @@ import {
   Pencil,
   Undo2,
   Trash2,
+  RotateCcw,
   User as UserIcon,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -41,7 +42,9 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
-import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
+import type { Minute } from '@/lib/npa-structure';
+import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { exportToCSV } from '@/lib/admin-export';
@@ -138,6 +141,9 @@ const OfficeOutboxPage = () => {
   const [selectedItem, setSelectedItem] = useState<Correspondence | null>(null);
   const [withdrawReason, setWithdrawReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedMinute, setSelectedMinute] = useState<Minute | null>(null);
+  const [recallModalOpen, setRecallModalOpen] = useState(false);
+  const [recallLoading, setRecallLoading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const isSuperAdmin = currentUser?.isSuperuser === true || systemRole === 'super admin' || systemRole === 'admin';
@@ -321,7 +327,7 @@ const OfficeOutboxPage = () => {
 
   const handleWithdrawClick = (item: Correspondence) => {
     if (item.status as string !== 'pending' && item.status as string !== 'in-progress') {
-      toast.error('Only pending or in-progress correspondence can be withdrawn');
+      toast.error('Only pending drafts can be cancelled');
       return;
     }
     setSelectedItem(item);
@@ -330,7 +336,7 @@ const OfficeOutboxPage = () => {
 
   const confirmWithdraw = async () => {
     if (!selectedItem || !withdrawReason.trim()) {
-      toast.error('Please provide a reason for withdrawal');
+      toast.error('Please provide a reason for cancellation');
       return;
     }
 
@@ -345,7 +351,7 @@ const OfficeOutboxPage = () => {
         body: JSON.stringify({ reason: withdrawReason.trim() }),
       });
       
-      toast.success('Correspondence withdrawn successfully. You can edit and resend it later.');
+      toast.success('Draft cancelled successfully. You can edit and resend it later.');
       setWithdrawDialogOpen(false);
       setWithdrawReason('');
       setSelectedItem(null);
@@ -353,7 +359,7 @@ const OfficeOutboxPage = () => {
       // Refresh the list
       pagination.goToFirstPage();
     } catch (err: unknown) {
-      let errorMessage = 'Failed to withdraw correspondence';
+      let errorMessage = 'Failed to cancel draft';
       if (err && typeof err === 'object') {
         const errorObj = err as Record<string, unknown>;
         if (errorObj.response && typeof errorObj.response === 'object') {
@@ -370,6 +376,39 @@ const OfficeOutboxPage = () => {
       toast.error(`Failed to withdraw: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleRecallClick = async (item: Correspondence) => {
+    if (!currentUser) {
+      toast.error('You must be logged in to recall a minute');
+      return;
+    }
+
+    setRecallLoading(true);
+    try {
+      const response = await apiFetch<Record<string, unknown>>(`/correspondence/minutes/?correspondence=${item.id as string}`);
+      const rawMinutes = Array.isArray(response.results) ? response.results : [];
+      const minutes = rawMinutes.filter((m): m is Record<string, unknown> => typeof m === 'object' && m !== null).map(mapApiMinute);
+
+      // Find the current user's latest minute that can be recalled
+      const recallable = minutes
+        .filter(m => m.userId === currentUser.id && m.canBeRecalled && !m.isRecalled && !m.recalledAt)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+      if (recallable.length === 0) {
+        toast.error('No recallable minute found for this correspondence');
+        return;
+      }
+
+      // If there are multiple, pick the latest one
+      setSelectedMinute(recallable[0]);
+      setRecallModalOpen(true);
+    } catch (err: unknown) {
+      logError('Failed to fetch minutes for recall', err);
+      toast.error('Failed to check recall eligibility');
+    } finally {
+      setRecallLoading(false);
     }
   };
 
@@ -470,11 +509,11 @@ const OfficeOutboxPage = () => {
             </Button>
             <ContextualHelp
               title="How to use Office Outbox"
-              description="Review correspondence your office has sent or is preparing to dispatch. Withdraw or edit drafts while they are still pending."
+              description="Review correspondence your office has sent or is preparing to dispatch. Cancel drafts or recall routed minutes."
               steps={[
                 'Filter by office, status, or priority to find items.',
                 'Open a record to view routing details or continue processing.',
-                'Use Withdraw on pending or in-progress items if you need to recall and fix them.',
+                'Use Cancel Draft on pending items if you need to fix them before sending.',
               ]}
             />
           </div>
@@ -658,7 +697,7 @@ const OfficeOutboxPage = () => {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                              aria-label="Withdraw correspondence"
+                              aria-label="Cancel draft"
                               disabled={item.status as string !== 'pending' || isProcessing}
                               onClick={(e) => {
                                 e.preventDefault();
@@ -672,10 +711,34 @@ const OfficeOutboxPage = () => {
                         </TooltipTrigger>
                         <TooltipContent side="left">
                           {item.status as string === 'pending'
-                            ? 'Withdraw correspondence'
-                            : 'Only pending items can be withdrawn'}
+                            ? 'Cancel draft'
+                            : 'Only pending drafts can be cancelled'}
                         </TooltipContent>
                       </Tooltip>
+                      {item.status as string !== 'pending' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                aria-label="Recall minute"
+                                disabled={recallLoading || isProcessing}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  void handleRecallClick(item);
+                                }}
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Recall minute</TooltipContent>
+                        </Tooltip>
+                      )}
                       {item.status as string === 'pending' && isAdmin && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -778,25 +841,25 @@ const OfficeOutboxPage = () => {
           />
         )}
 
-        {/* Withdraw Confirmation Dialog */}
+        {/* Cancel Draft Confirmation Dialog */}
         <AlertDialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Withdraw Correspondence</AlertDialogTitle>
+              <AlertDialogTitle>Cancel Draft</AlertDialogTitle>
               <AlertDialogDescription>
-                Withdrawing this correspondence will cancel it and allow you to edit and resend it later (similar to recalling a minute). The correspondence will be marked as withdrawn but can be restored.
+                Cancelling this draft will allow you to edit and resend it later. The draft will be marked as cancelled but can be restored.
                 <br /><br />
-                <strong>Note:</strong> This is an <strong>outgoing</strong> correspondence sent from your office. Withdrawing allows you to fix mistakes and resend to the correct recipient.
+                <strong>Note:</strong> This is an <strong>outgoing</strong> correspondence draft from your office. Cancel it to fix mistakes and resend to the correct recipient.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="space-y-4 py-4">
               <div>
                 <label htmlFor="withdraw-reason" className="text-sm font-medium">
-                  Reason for Withdrawal <span className="text-destructive">*</span>
+                  Reason for Cancellation <span className="text-destructive">*</span>
                 </label>
                 <Input
                   id="withdraw-reason"
-                  placeholder="Please provide a reason for withdrawing this correspondence..."
+                  placeholder="Please provide a reason for cancelling this draft..."
                   value={withdrawReason}
                   onChange={(e) => setWithdrawReason(e.target.value)}
                   className="mt-2"
@@ -825,7 +888,7 @@ const OfficeOutboxPage = () => {
                 disabled={!withdrawReason.trim() || isProcessing}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                {isProcessing ? 'Withdrawing...' : 'Confirm Withdrawal'}
+                {isProcessing ? 'Cancelling...' : 'Confirm Cancellation'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -839,7 +902,7 @@ const OfficeOutboxPage = () => {
               <AlertDialogDescription>
                 <strong>Admin Only:</strong> Are you sure you want to permanently delete this correspondence? This action will permanently remove it from the system and cannot be undone.
                 <br /><br />
-                <strong>Note:</strong> For regular users, use "Withdraw" instead to cancel and allow editing/resending. Delete is only available to administrators.
+                <strong>Note:</strong> For regular users, use "Cancel Draft" instead to allow editing/resending. Delete is only available to administrators.
               </AlertDialogDescription>
             </AlertDialogHeader>
             {selectedItem && (
@@ -866,6 +929,20 @@ const OfficeOutboxPage = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Recall Minute Modal */}
+        <RecallMinuteModal
+          minute={selectedMinute}
+          isOpen={recallModalOpen}
+          onClose={() => {
+            setRecallModalOpen(false);
+            setSelectedMinute(null);
+          }}
+          onSuccess={() => {
+            setSelectedMinute(null);
+            pagination.goToFirstPage();
+          }}
+        />
         </div>
         </ErrorBoundary>
       )}

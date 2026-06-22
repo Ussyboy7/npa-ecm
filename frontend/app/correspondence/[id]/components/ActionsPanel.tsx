@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { formatDateShort } from "@/lib/correspondence-helpers";
 import { DispatchModal, AcknowledgeButton } from "@/components/correspondence/DispatchModal";
+import { apiFetch } from "@/lib/api-client";
 import type { Correspondence, Minute, User, Office, OfficeMembership } from "@/lib/npa-structure";
 
 interface ActionsPanelProps {
@@ -47,7 +48,7 @@ interface ActionsPanelProps {
 
 export function ActionsPanel({
   correspondence,
-  minutes: _minutes = [],
+  minutes = [],
   activeUser,
   isCompleted = false,
   isCurrentUserTurn = false,
@@ -79,6 +80,11 @@ export function ActionsPanel({
     );
   }
 
+  // Check if all non-recalled minutes have been acknowledged
+  const nonRecalledMinutes = minutes.filter(m => !m.isRecalled);
+  const allMinutesAcknowledged = nonRecalledMinutes.length > 0 && 
+    nonRecalledMinutes.every(m => m.acknowledgedAt);
+
   return (
     <div className="space-y-4">
       {isCompleted ? (
@@ -86,7 +92,7 @@ export function ActionsPanel({
           <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
             <p className="text-sm font-medium text-success">Correspondence Completed</p>
             <p className="text-xs text-muted-foreground mt-2">
-              Closed{completionGeneratedAt ? ` on ${formatDateShort(completionGeneratedAt)}` : ""}. This item is now archived and read-only for audit purposes.
+              Closed{completionGeneratedAt ? ` on ${formatDateShort(completionGeneratedAt)}` : ""}.
             </p>
           </div>
           {completionPackageUrl && onDownloadCompletionPackage && (
@@ -101,10 +107,13 @@ export function ActionsPanel({
           )}
 
           {correspondence.status !== "dispatched" && correspondence.status !== "acknowledged" && correspondence.status !== "archived" && (
-            <DispatchModal
-              correspondenceId={correspondence.id}
-              onSuccess={() => _onSyncFromApi?.()}
-            />
+            <div className="p-3 bg-muted/50 border border-border rounded-lg">
+              <p className="text-xs text-muted-foreground mb-2">Ready to dispatch</p>
+              <DispatchModal
+                correspondenceId={correspondence.id}
+                onSuccess={() => _onSyncFromApi?.()}
+              />
+            </div>
           )}
 
           {correspondence.status === "dispatched" && (
@@ -112,6 +121,26 @@ export function ActionsPanel({
               correspondenceId={correspondence.id}
               onSuccess={() => _onSyncFromApi?.()}
             />
+          )}
+
+          {(correspondence.status === "completed" || correspondence.status === "acknowledged") && (
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await apiFetch(`/correspondence/items/${correspondence.id}/archive/`, {
+                    method: 'POST',
+                  });
+                  _onSyncFromApi?.();
+                } catch (error) {
+                  console.error('Failed to archive', error);
+                }
+              }}
+            >
+              <Archive className="h-4 w-4 mr-2" />
+              Archive
+            </Button>
           )}
         </div>
       ) : (
@@ -209,16 +238,27 @@ export function ActionsPanel({
             </>
           )}
 
-          {!isForInformationOnly && (
+          {!isForInformationOnly && allMinutesAcknowledged && (
             <Button
               className="w-full mt-3"
               variant="outline"
               onClick={onOpenCompletionModal}
               disabled={turnRestrictedDisabled}
             >
-              <Archive className="h-4 w-4 mr-2" />
-              Mark Complete & Archive
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Mark Complete
             </Button>
+          )}
+
+          {!isForInformationOnly && !allMinutesAcknowledged && nonRecalledMinutes.length > 0 && (
+            <div className="p-3 bg-muted/50 border border-border rounded-lg mt-3">
+              <p className="text-xs text-muted-foreground">
+                {nonRecalledMinutes.filter(m => m.acknowledgedAt).length}/{nonRecalledMinutes.length} minutes acknowledged
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Complete button will appear after all minutes are acknowledged
+              </p>
+            </div>
           )}
 
           <Separator />
