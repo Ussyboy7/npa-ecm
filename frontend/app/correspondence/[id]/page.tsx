@@ -54,7 +54,8 @@ import { correspondenceDetailReducer, initialState } from './correspondence-stat
 import { CorrespondenceHeader } from './components/CorrespondenceHeader';
 import { MinuteThreadPanel } from './components/MinuteThreadPanel';
 import { ActionsPanel } from './components/ActionsPanel';
-import { LifecycleProgressBar } from '@/components/correspondence/LifecycleProgressBar';
+import { CompactStatusStrip } from '@/components/correspondence/CompactStatusStrip';
+import { WorkflowProgressIndicator } from '@/components/correspondence/WorkflowProgressIndicator';
 
 // Download handler that forces download instead of opening in new tab
 const _handleDownload = async (url: string, filename: string) => {
@@ -947,12 +948,15 @@ const CorrespondenceDetailContent = () => {
           </div>
         </div>
 
-        {/* Lifecycle Progress Bar */}
-        <LifecycleProgressBar
-          stages={correspondence.lifecycleStages ?? []}
-          currentStage={
-            correspondence.status === "withdrawn" ? -1 :
-            correspondence.lifecycleStages?.find(s => s.key === correspondence.status.replace("-", "_"))?.index ?? 0
+        {/* Compact Status Strip */}
+        <CompactStatusStrip
+          status={correspondence.status}
+          receivedDate={correspondence.receivedDate}
+          direction={correspondence.direction as "upward" | "downward" | "lateral" | "internal" | undefined}
+          currentOffice={correspondence.currentOfficeName}
+          daysPending={correspondence.receivedDate
+            ? Math.floor((Date.now() - new Date(correspondence.receivedDate).getTime()) / (1000 * 60 * 60 * 24))
+            : undefined
           }
         />
 
@@ -998,6 +1002,18 @@ const CorrespondenceDetailContent = () => {
             </div>
             <ScrollArea className="h-full w-full">
               <div className="p-4 space-y-4 overflow-x-hidden">
+                {/* Routing Progress - prominent at top of sidebar */}
+                {!isCompleted && minutes.length > 0 && (
+                  <WorkflowProgressIndicator
+                    correspondence={correspondence}
+                    minutes={minutes}
+                    currentApprover={correspondence.currentApproverId ? lookupUser(correspondence.currentApproverId) : undefined}
+                    users={organizationUsers}
+                    offices={offices}
+                    officeMemberships={officeMemberships}
+                  />
+                )}
+
                 <ActionsPanel
                   correspondence={correspondence}
                   minutes={minutes}
@@ -1063,7 +1079,19 @@ const CorrespondenceDetailContent = () => {
         </div>
       )}
       {mobileActiveTab === 'actions' && (
-        <div className="md:hidden">
+        <div className="md:hidden p-4 space-y-4">
+          {/* Routing Progress - mobile */}
+          {!isCompleted && minutes.length > 0 && (
+            <WorkflowProgressIndicator
+              correspondence={correspondence}
+              minutes={minutes}
+              currentApprover={correspondence.currentApproverId ? lookupUser(correspondence.currentApproverId) : undefined}
+              users={organizationUsers}
+              offices={offices}
+              officeMemberships={officeMemberships}
+            />
+          )}
+
           <ActionsPanel
             correspondence={correspondence}
             minutes={minutes}

@@ -2,13 +2,11 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   MessageSquare,
   Download,
   CheckCircle,
-  Clock,
   Archive,
   Users,
   UserIcon,
@@ -16,9 +14,7 @@ import {
   ArrowRight,
   Info,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { formatDateShort } from "@/lib/correspondence-helpers";
-import { WorkflowProgressIndicator } from "@/components/correspondence/WorkflowProgressIndicator";
 import { DispatchModal, AcknowledgeButton } from "@/components/correspondence/DispatchModal";
 import type { Correspondence, Minute, User, Office, OfficeMembership } from "@/lib/npa-structure";
 
@@ -51,7 +47,7 @@ interface ActionsPanelProps {
 
 export function ActionsPanel({
   correspondence,
-  minutes = [],
+  minutes: _minutes = [],
   activeUser,
   isCompleted = false,
   isCurrentUserTurn = false,
@@ -62,9 +58,9 @@ export function ActionsPanel({
   completionGeneratedAt,
   activeDelegation,
   organizationUsers = [],
-  offices = [],
-  officeMemberships = [],
-  lookupUser = () => undefined,
+  offices: _offices = [],
+  officeMemberships: _officeMemberships = [],
+  lookupUser: _lookupUser = () => undefined,
   onOpenMinuteModal,
   onOpenTreatmentModal,
   onOpenParallelRouteModal,
@@ -83,85 +79,8 @@ export function ActionsPanel({
     );
   }
 
-  const daysPending = correspondence.receivedDate
-    ? Math.floor((Date.now() - new Date(correspondence.receivedDate).getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
-  const lastMinute = minutes[minutes.length - 1];
-  let currentApproverId = correspondence.currentApproverId;
-  const routingActions = ["minute", "forward", "approve", "treat"];
-  if (lastMinute?.isRecalled && routingActions.includes(lastMinute.actionType) && lastMinute.userId) {
-    currentApproverId = lastMinute.userId;
-  }
-  const currentApprover = currentApproverId ? lookupUser(currentApproverId) : null;
-  const slaWarning = daysPending >= 5;
-  const slaBreach = daysPending >= 7;
-
   return (
     <div className="space-y-4">
-      {/* Current Status Card */}
-      <Card className={cn(slaBreach ? "border-destructive/50 bg-destructive/5" : slaWarning ? "border-warning/50 bg-warning/5" : "")}>
-        <CardContent className="p-3">
-          <div className="flex items-start gap-3">
-            <div className={cn(
-              "h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0",
-              isCompleted ? "bg-success/20" : isCurrentUserTurn ? "bg-primary animate-pulse" : "bg-muted"
-            )}>
-              {isCompleted ? (
-                <CheckCircle className="h-5 w-5 text-success" />
-              ) : isCurrentUserTurn ? (
-                <div className="h-3 w-3 rounded-full bg-primary-foreground" />
-              ) : (
-                <Clock className="h-5 w-5 text-muted-foreground" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium truncate">
-                  {isCompleted ? "Completed" : currentApprover?.name ?? "Pending Assignment"}
-                </p>
-                {isCurrentUserTurn && !isCompleted && (
-                  <Badge variant="default" className="text-[10px] h-5">Your Turn</Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {isCompleted
-                  ? `Closed ${completionGeneratedAt ? formatDateShort(completionGeneratedAt) : ""}`
-                  : currentApprover?.systemRole ?? "Awaiting action"
-                }
-              </p>
-              {!isCompleted && (
-                <div className="flex items-center gap-2 mt-1.5">
-                  <Badge
-                    variant={slaBreach ? "destructive" : slaWarning ? "outline" : "secondary"}
-                    className={cn("text-[10px] h-5", slaWarning && !slaBreach && "border-warning text-warning")}
-                  >
-                    {daysPending} {daysPending === 1 ? "day" : "days"} pending
-                  </Badge>
-                  {slaBreach && (
-                    <Badge variant="destructive" className="text-[10px] h-5">SLA Breach</Badge>
-                  )}
-                  {slaWarning && !slaBreach && (
-                    <Badge variant="outline" className="text-[10px] h-5 border-warning text-warning">SLA Warning</Badge>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Workflow Progress Indicator */}
-      {!isCompleted && minutes.length > 0 && (
-        <WorkflowProgressIndicator
-          correspondence={correspondence}
-          minutes={minutes}
-          currentApprover={correspondence.currentApproverId ? lookupUser(correspondence.currentApproverId) : undefined}
-          users={organizationUsers}
-          offices={offices}
-          officeMemberships={officeMemberships}
-        />
-      )}
-
       {isCompleted ? (
         <div className="space-y-3">
           <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
