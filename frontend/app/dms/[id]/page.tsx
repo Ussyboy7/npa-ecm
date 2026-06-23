@@ -40,6 +40,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { apiFetch } from '@/lib/api-client';
 import { Correspondence, Minute } from '@/lib/npa-structure';
+import { mapApiMinute } from '@/contexts/CorrespondenceContext';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { unlinkDocumentFromCase } from '@/lib/api/cases';
@@ -436,58 +437,8 @@ const DocumentDetailContent = () => {
                       ? minutesResponseTyped 
                       : (minutesResponseTyped?.results || minutesResponseTyped?.data || []);
 
-                    // Map minutes to extract user info
-                    const minutes: Minute[] = minutesArray.map((item: Record<string, unknown>) => {
-
-                      return {
-                        id: String(item.id as string),
-                        correspondenceId: String(corrId),
-                        userId: normalizeId(item.user ?? item.user_id) ?? '',
-                        userName:
-                          typeof item.user === 'object' && item.user
-                            ? (() => {
-                                const userObj = item.user as Record<string, unknown>;
-                                const firstName = userObj.first_name ? String(userObj.first_name) : '';
-                                const lastName = userObj.last_name ? String(userObj.last_name) : '';
-                                const fullName = `${firstName} ${lastName}`.trim();
-                                if (fullName.length > 0) return fullName;
-                                return userObj.username ? String(userObj.username) : undefined;
-                              })()
-                            : undefined,
-                        userEmail: (typeof item.user === 'object' && item.user) ? ((item.user as Record<string, unknown>).email ? String((item.user as Record<string, unknown>).email) : undefined) : undefined,
-                        userSystemRole: undefined, // Can be extracted if needed
-                        gradeLevel: String(item.grade_level ?? ''),
-                        actionType: (item.action_type ?? 'minute') as 'minute' | 'forward' | 'approve' | 'reject' | 'treat',
-                        minuteText: String(item.minute_text ?? ''),
-                        direction: (item.direction ?? 'downward') as 'upward' | 'downward',
-                        stepNumber: typeof item.step_number === 'number' ? item.step_number : 1,
-                        timestamp: (typeof item.timestamp === 'string' ? item.timestamp : new Date().toISOString()),
-                        actedBySecretary: Boolean(item.acted_by_secretary ?? false),
-                        actedByAssistant: Boolean(item.acted_by_assistant ?? false),
-                        assistantType: (item.assistant_type && typeof item.assistant_type === 'string' && (item.assistant_type === 'TA' || item.assistant_type === 'PA')) ? item.assistant_type as 'TA' | 'PA' : undefined,
-                        readAt: (item.read_at && typeof item.read_at === 'string') ? item.read_at : undefined,
-                        mentions: Array.isArray(item.mentions) ? item.mentions.map(m => String(m)) : [],
-                        signature: (item.signature_payload && typeof item.signature_payload === 'object' && 'imageData' in item.signature_payload && 'appliedAt' in item.signature_payload) ? {
-                          imageData: String((item.signature_payload as Record<string, unknown>).imageData || ''),
-                          appliedAt: String((item.signature_payload as Record<string, unknown>).appliedAt || ''),
-                          fileName: (item.signature_payload as Record<string, unknown>).fileName ? String((item.signature_payload as Record<string, unknown>).fileName) : undefined,
-                          templateId: (item.signature_payload as Record<string, unknown>).templateId ? String((item.signature_payload as Record<string, unknown>).templateId) : undefined,
-                          templateType: ((item.signature_payload as Record<string, unknown>).templateType && ['approval', 'minute', 'forward', 'treatment'].includes(String((item.signature_payload as Record<string, unknown>).templateType))) ? (item.signature_payload as Record<string, unknown>).templateType as 'approval' | 'minute' | 'forward' | 'treatment' : undefined,
-                        } : undefined,
-                        toOfficeId: item.to_office ? (typeof item.to_office === 'string' ? item.to_office : (typeof item.to_office === 'object' && item.to_office && 'id' in item.to_office ? String(item.to_office.id) : undefined)) : undefined,
-                        toOfficeName: (item.to_office_name && typeof item.to_office_name === 'string') ? item.to_office_name : (typeof item.to_office === 'object' && item.to_office && 'name' in item.to_office && typeof item.to_office.name === 'string' ? item.to_office.name : undefined),
-                        toUserId: item.to_user ? (typeof item.to_user === 'string' ? item.to_user : (typeof item.to_user === 'object' && item.to_user && 'id' in item.to_user ? String(item.to_user.id) : undefined)) : undefined,
-                        toUserName: (item.to_user_name && typeof item.to_user_name === 'string') ? item.to_user_name : (typeof item.to_user === 'object' && item.to_user ? (() => {
-                          const firstName = (item.to_user as Record<string, unknown>).first_name ? String((item.to_user as Record<string, unknown>).first_name) : '';
-                          const lastName = (item.to_user as Record<string, unknown>).last_name ? String((item.to_user as Record<string, unknown>).last_name) : '';
-                          const fullName = `${firstName} ${lastName}`.trim();
-                          return fullName.length > 0 ? fullName : undefined;
-                        })() : undefined),
-                        isRecalled: Boolean(item.is_recalled ?? false),
-                        recalledAt: (item.recalled_at && typeof item.recalled_at === 'string') ? item.recalled_at : undefined,
-                        recallReason: (item.recall_reason && typeof item.recall_reason === 'string') ? item.recall_reason : undefined,
-                      };
-                    });
+                    // Map minutes using canonical mapper
+                    const minutes: Minute[] = minutesArray.map((item: Record<string, unknown>) => mapApiMinute(item));
                     // Map distribution (reuse normalizeId function defined above)
                     const distribution = Array.isArray(corrResponse.distribution)
                       ? corrResponse.distribution.map((recipient: Record<string, unknown>) => {

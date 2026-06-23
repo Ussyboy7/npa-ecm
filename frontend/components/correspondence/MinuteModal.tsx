@@ -86,7 +86,7 @@ interface MinuteModalProps {
 }
 
 const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: initialDirection }: MinuteModalProps) => {
-  const {addMinute: _addMinute, updateCorrespondence: _updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
+  const {addMinute: _addMinute, updateCorrespondence: _updateCorrespondence, getMinutesByCorrespondenceId } = useCorrespondence();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [minuteText, setMinuteText] = useState('');
   const [minuteTextError, setMinuteTextError] = useState('');
@@ -287,7 +287,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       correspondence.owningOfficeId ??
       primaryOfficeMembership?.officeId ??
       '';
-    setTargetOfficeId(fallbackOfficeId ?? '');
+    setTargetOfficeId(fallbackOfficeId);
   }, [
     isOpen,
     correspondence.id,
@@ -896,9 +896,9 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     if (canDistribute && distribution.length > 0) {
       distributionWithAddedBy = distribution.map((recipient) => ({
         ...recipient,
-        addedById: recipient.addedById || currentUser.id,
-        addedByName: recipient.addedByName || currentUser.name,
-        addedAt: recipient.addedAt || new Date().toISOString(),
+        addedById: recipient.addedById ?? currentUser.id,
+        addedByName: recipient.addedByName ?? currentUser.name,
+        addedAt: recipient.addedAt ?? new Date().toISOString(),
       }));
       
       logInfo('[MinuteModal] Distribution with added by', distributionWithAddedBy);
@@ -1251,7 +1251,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         }
       }
 
-      await syncFromApi();
+      // Parent's handleMinuteClose will sync context after modal closes
 
       if (draftId) {
         try {

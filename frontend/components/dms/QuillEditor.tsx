@@ -88,8 +88,8 @@ export function QuillEditor({
   useEffect(() => {
     if (!mounted || !editorRef.current) return;
     if (value !== htmlValue) {
-      setHtmlValue(value || "");
-      editorRef.current.innerHTML = value || "";
+      setHtmlValue(value ?? "");
+      editorRef.current.innerHTML = value ?? "";
     }
   }, [value, mounted, htmlValue]);
 

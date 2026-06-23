@@ -666,7 +666,7 @@ export const DocumentUploadDialog = ({
           }
         }
       } else if (error instanceof Error) {
-        errorMessage = (error instanceof Error ? error.message : ERROR_UNKNOWN);
+        errorMessage = error.message;
       }
       
       toast.error('Failed to process document', {

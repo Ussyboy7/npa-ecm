@@ -410,11 +410,11 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
 
   return {
     id: String(item.id as string),
-    title: typeof item.title as string === 'string' ? item.title as string : 'Untitled Document',
+    title: typeof item.title === 'string' ? item.title : 'Untitled Document',
     description: typeof item.description === 'string' ? item.description : undefined,
     documentType: (item.document_type as DocumentType) ?? 'other',
     referenceNumber: typeof item.reference_number === 'string' ? item.reference_number : undefined,
-    status: (item.status as string as DocumentStatus) ?? 'draft',
+    status: (item.status as DocumentStatus) ?? 'draft',
     sensitivity: (item.sensitivity as DocumentSensitivity) ?? 'internal',
     authorId: author && 'id' in author ? String(author.id) : String(item.author ?? ''),
     divisionId: typeof item.division === 'string' ? item.division : (typeof item.division_id === 'string' ? item.division_id : undefined),

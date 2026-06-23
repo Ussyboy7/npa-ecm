@@ -37,8 +37,6 @@ export type {
 } from './dms-types';
 
 export {
-  getCachedDocuments,
-  getCachedWorkspaces,
   queryDocuments,
   fetchDocuments,
   fetchDocumentById,
@@ -51,7 +49,6 @@ export {
   shareDocumentWithUsers,
   shareDocument,
   userHasPermission,
-  getAccessibleDocumentsForUser,
 } from './dms-documents';
 
 export {

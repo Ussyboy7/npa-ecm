@@ -14,19 +14,6 @@ import type {
 } from './dms-types';
 import { mapDocument, mapWorkspace } from './dms-types';
 
-// ============ CACHE ============
-
-let documentsCache: DocumentRecord[] = [];
-let workspacesCache: DocumentWorkspace[] = [];
-
-const updateDocumentsCache = (document: DocumentRecord) => {
-  documentsCache = [document, ...documentsCache.filter((item) => item.id as string !== document.id)];
-  return documentsCache;
-};
-
-export const getCachedDocuments = () => documentsCache;
-export const getCachedWorkspaces = () => workspacesCache;
-
 // ============ HELPERS ============
 
 const buildDocumentQueryString = (params: DocumentQueryParams) => {
@@ -142,13 +129,11 @@ export const queryDocuments = async (params: DocumentQueryParams = {}): Promise<
 
 export const fetchDocuments = async (): Promise<DocumentRecord[]> => {
   if (!hasTokens()) {
-    documentsCache = [];
-    return documentsCache;
+    return [];
   }
 
   const response = await queryDocuments({ page: 1, pageSize: 100 });
-  documentsCache = response.results;
-  return documentsCache;
+  return response.results;
 };
 
 export const fetchDocumentById = async (id: string): Promise<DocumentRecord> => {
@@ -159,7 +144,6 @@ export const fetchDocumentById = async (id: string): Promise<DocumentRecord> => 
   try {
     const payload = await apiFetch<Record<string, unknown>>(`/dms/documents/${id}/`);
     const document = mapDocument(payload);
-    updateDocumentsCache(document);
     return document;
   } catch (error: unknown) {
     if (error && typeof error === 'object' && 'status' in error && error.status === 404) {
@@ -178,13 +162,11 @@ export const fetchDocumentById = async (id: string): Promise<DocumentRecord> => 
 
 export const fetchWorkspaces = async (): Promise<DocumentWorkspace[]> => {
   if (!hasTokens()) {
-    workspacesCache = [];
-    return workspacesCache;
+    return [];
   }
 
   const payload = await apiFetch<unknown>('/dms/workspaces/');
-  workspacesCache = (unwrapResults(payload) as Record<string, unknown>[]).map(mapWorkspace);
-  return workspacesCache;
+  return (unwrapResults(payload) as Record<string, unknown>[]).map(mapWorkspace);
 };
 
 // ============ CREATE / UPDATE / REPLACE ============
@@ -204,7 +186,6 @@ export const createDocument = async (
   });
 
   const document = mapDocument(created);
-  updateDocumentsCache(document);
 
   const versionPayload = buildVersionPayload(document.id, versionInput);
   try {
@@ -293,7 +274,6 @@ export const updateDocumentMetadata = async (
   });
 
   const document = mapDocument(updated);
-  updateDocumentsCache(document);
   return document;
 };
 
@@ -418,8 +398,4 @@ export const userHasPermission = (user: User, document: DocumentRecord): boolean
   }
 
   return false;
-};
-
-export const getAccessibleDocumentsForUser = (user: User): DocumentRecord[] => {
-  return documentsCache.filter((document) => userHasPermission(user, document));
 };

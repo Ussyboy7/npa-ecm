@@ -65,7 +65,15 @@ function MyDocumentsForm() {
   const [dateTo, setDateTo] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const documentsRequestRef = useRef(0);
+
+  // Re-fetch when page gains focus (user navigates back)
+  useEffect(() => {
+    const handleFocus = () => setRefreshKey(k => k + 1);
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
   const pagination = usePagination({
     initialPage: 1,
@@ -151,7 +159,7 @@ function MyDocumentsForm() {
     };
 
     loadDocuments();
-  }, [activeTab, currentUser?.id, debouncedSearch, selectedStatus, selectedType, dateFrom, dateTo, ordering, pagination.page, pagination.pageSize]);
+  }, [activeTab, currentUser?.id, debouncedSearch, selectedStatus, selectedType, dateFrom, dateTo, ordering, pagination.page, pagination.pageSize, refreshKey]);
 
   return (
     <DashboardLayout>
