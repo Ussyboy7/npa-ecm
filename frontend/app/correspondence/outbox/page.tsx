@@ -34,7 +34,7 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
-import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence, mapApiMinute, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import type { Minute } from '@/lib/npa-structure';
 import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { useRouter } from 'next/navigation';
@@ -86,6 +86,7 @@ const OutboxPage = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, users: organizationUsers } = useOrganization();
+  const { dataVersion } = useCorrespondence();
 
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -151,6 +152,8 @@ const OutboxPage = () => {
     // Fetch data immediately after login (don't wait for currentUser hydration)
     if (!currentUser?.id) return;
 
+    const abortController = new AbortController();
+
     const fetchOutbox = async () => {
       setLoading(true);
       setError(null);
@@ -174,10 +177,11 @@ const OutboxPage = () => {
         params.append('page_size', String(pagination.pageSize));
 
         const [corrResponse, docsResponse] = await Promise.all([
-          apiFetch<Record<string, unknown>>(`/correspondence/items/outbox/?${params.toString()}`),
+          apiFetch<Record<string, unknown>>(`/correspondence/items/outbox/?${params.toString()}`, { signal: abortController.signal }),
           getDocumentsSharedByUser(currentUser.id, {
             search: debouncedQuery || undefined,
             pageSize: 50, // Get recent shared documents
+            signal: abortController.signal,
           }),
         ]);
 
@@ -215,7 +219,8 @@ const OutboxPage = () => {
     };
 
     void fetchOutbox();
-  }, [currentUser?.id, debouncedQuery, selectedStatus, selectedPriority, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey]);
+    return () => { abortController.abort(); };
+  }, [currentUser?.id, debouncedQuery, selectedStatus, selectedPriority, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey, dataVersion]);
 
   const handleWithdrawClick = (item: Correspondence) => {
     const status = item.status as string;

@@ -81,7 +81,7 @@ function SearchForm() {
                     router.push(`/cases/${result.id}`);
                   } else if (isCorrespondence) {
                     // Check if we have a correspondence ID field
-                    const corrId = result.id || result.correspondence_id;
+                    const corrId = result.correspondence_id || result.id;
                     if (corrId) {
                       router.push(`/correspondence/${corrId}`);
                     } else {

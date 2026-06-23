@@ -60,26 +60,9 @@ import { processOCR } from '@/lib/capture-storage';
 import { uploadUserSignature } from '@/lib/signature-storage';
 
 const DOCUMENT_TYPES: DocumentType[] = ['letter', 'memo', 'circular', 'policy', 'report', 'form', 'other'];
-const _SENSITIVITY_OPTIONS: DocumentSensitivity[] = ['public', 'internal', 'confidential', 'restricted'];
 const DRAFT_STORAGE_KEY = 'dms_upload_draft';
 const MAX_TITLE_LENGTH = 500;
 const MAX_REFERENCE_LENGTH = 100;
-const _MAX_DESCRIPTION_LENGTH = 2000;
-
-const _sensitivityLabel = (value: DocumentSensitivity) => {
-  switch (value) {
-    case 'public':
-      return 'Public';
-    case 'internal':
-      return 'Internal';
-    case 'confidential':
-      return 'Confidential';
-    case 'restricted':
-      return 'Restricted';
-    default:
-      return value;
-  }
-};
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -147,7 +130,6 @@ export const DocumentUploadDialog = ({
   const [scanMode, setScanMode] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
   const { signature: userSignature, refreshSignature } = useSignature({ userId: currentUser?.id, autoLoad: true });
-  const _formRef = useRef<HTMLFormElement>(null);
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const signatureInputRef = useRef<HTMLInputElement>(null);
   const isMountedRef = useRef(true);
@@ -428,18 +410,6 @@ export const DocumentUploadDialog = ({
     // Component will unmount when closed, naturally resetting everything
     onOpenChange(nextOpen);
   }, [onOpenChange]);
-
-  const _handleFileSelect = useCallback((selectedFile: File | null) => {
-    setFile(selectedFile);
-    setScanMode(false);
-    if (selectedFile && validationErrors.file) {
-      setValidationErrors((prev) => {
-        const next = { ...prev };
-        delete next.file;
-        return next;
-      });
-    }
-  }, [validationErrors]);
 
   const handleScanFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];

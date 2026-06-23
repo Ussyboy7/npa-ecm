@@ -127,7 +127,6 @@ export default function NotificationsPage() {
   };
 
   // Count from the current filtered list for display
-  const _displayCount = notifications.length;
   const unreadInList = notifications.filter((n) => n.status === 'unread').length;
 
   return (

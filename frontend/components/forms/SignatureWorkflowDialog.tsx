@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, X, Send } from "lucide-react";
 import { toast } from "sonner";
-import { createSignatureWorkflow } from "@/lib/api/forms";
+import { createFormSubmission, createSignatureWorkflow } from "@/lib/api/forms";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -105,7 +105,6 @@ export function SignatureWorkflowDialog({
       if (!submission.id.includes('-') || submission.id.length === 36) {
         // This might be a form document ID, try to create a submission
         try {
-          const { createFormSubmission } = await import("@/lib/api/forms");
           const newSubmission = await createFormSubmission({
             template_id: submission.template.id,
             data: submission.data || {},

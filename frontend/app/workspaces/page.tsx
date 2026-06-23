@@ -129,6 +129,7 @@ export default function WorkspacesPage() {
       setWorkspaces((prev) => prev.filter((w) => w.id !== deleting.id));
       toast.success("Workspace deleted");
       setDeleting(null);
+      await loadWorkspaces();
     } catch (_err) {
       toast.error("Failed to delete workspace");
     } finally {

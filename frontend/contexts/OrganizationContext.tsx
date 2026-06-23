@@ -171,34 +171,6 @@ export const OrganizationProvider: React.FC<{
     []
   );
 
-  /** Fetch all pages (for manual refresh when user explicitly requests full data). */
-  const _fetchAllResults = useCallback(async (basePath: string, pageSize = 100): Promise<Record<string, unknown>[]> => {
-    const collected: Record<string, unknown>[] = [];
-    let page = 1;
-    let hasNext = true;
-    let safetyCounter = 0;
-
-    while (hasNext && safetyCounter < 100) {
-      const separator = basePath.includes('?') ? '&' : '?';
-      const response = await apiFetch(`${basePath}${separator}page_size=${pageSize}&page=${page}`);
-      const rows = unwrapResults(response).filter(isRecord);
-      collected.push(...rows);
-
-      const isPaginated =
-        response && typeof response === 'object' && 'results' in response && 'next' in response;
-      const nextUrl = isPaginated ? (response as { next?: string | null }).next : null;
-      hasNext = Boolean(nextUrl);
-      page += 1;
-      safetyCounter += 1;
-
-      if (!isPaginated) {
-        hasNext = false;
-      }
-    }
-
-    return collected;
-  }, []);
-
   const refreshOrganizationData = useCallback(async () => {
     if (!currentUser?.id || !hasTokens()) {
       logInfo('Skipping organization data refresh:', { hasCurrentUser: !!currentUser?.id, hasTokens: hasTokens() });

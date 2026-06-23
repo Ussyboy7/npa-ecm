@@ -126,35 +126,16 @@ export const UsersManagementTab = () => {
   const [loading, setLoading] = useState(true);
   
   // Load from URL params or localStorage
-  const [searchQuery, setSearchQuery] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const urlQuery = searchParams.get('search');
-      const stored = localStorage.getItem('admin_users_search');
-      return urlQuery || stored || '';
-    }
-    return '';
-  });
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [filters, setFilters] = useState<ActiveFilter[]>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('admin_users_filters');
-      return parseStoredFilters(stored);
-    }
-    return [DEFAULT_ACTIVE_FILTER];
-  });
-  const [sortState, setSortState] = useState<SortState | null>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('admin_users_sort');
-      return parseStoredSort(stored);
-    }
-    return null;
-  });
+  const [filters, setFilters] = useState<ActiveFilter[]>([DEFAULT_ACTIVE_FILTER]);
+  const [sortState, setSortState] = useState<SortState | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
-  const [_isBulkActionMode, setIsBulkActionMode] = useState(false);
+  const [isBulkActionMode, setIsBulkActionMode] = useState(false);
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
-  const [_mounted, setMounted] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [showBulkDeactivateConfirm, setShowBulkDeactivateConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
@@ -177,6 +158,21 @@ export const UsersManagementTab = () => {
   // Ensure client-side only rendering for localStorage-dependent UI
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlQuery = searchParams.get('search');
+    if (urlQuery) {
+      setSearchQuery(urlQuery);
+    } else {
+      const storedSearch = localStorage.getItem('admin_users_search');
+      if (storedSearch) setSearchQuery(storedSearch);
+    }
+    const storedFilters = localStorage.getItem('admin_users_filters');
+    if (storedFilters) setFilters(parseStoredFilters(storedFilters));
+    const storedSort = localStorage.getItem('admin_users_sort');
+    if (storedSort) setSortState(parseStoredSort(storedSort));
   }, []);
 
   // Normalize legacy role filters (name-based) to UUID-based filters expected by backend.
@@ -1021,9 +1017,6 @@ export const UsersManagementTab = () => {
                 const grade = getGradeLabel(user.gradeLevel);
                 const division = user.division
                   ? divisions.find((div) => div.id === user.division)
-                  : undefined;
-                const _department = user.department
-                  ? departments.find((dept) => dept.id === user.department)
                   : undefined;
                 const isSelected = selectedUserIds.has(user.id);
                 return (

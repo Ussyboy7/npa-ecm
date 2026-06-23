@@ -52,7 +52,7 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
-import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -103,6 +103,7 @@ const CorrespondenceInbox = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, users: organizationUsers, offices, officeMemberships } = useOrganization();
+  const { dataVersion } = useCorrespondence();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -319,7 +320,7 @@ const CorrespondenceInbox = () => {
     };
 
     void fetchInbox();
-  }, [hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo]);
+  }, [hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo, dataVersion]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

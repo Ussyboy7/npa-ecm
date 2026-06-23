@@ -384,6 +384,6 @@ export function useSidebarVisibility(): SidebarVisibility {
     }
 
     return defaultVisibility;
-  }, [currentUser, officeMemberships, assistantAssignments, roleChecks, scopeChecks, roles]);
+  }, [currentUser?.id, officeMemberships, assistantAssignments, roleChecks, scopeChecks, roles]);
 }
 

@@ -11,6 +11,7 @@ interface CorrespondenceContextType {
   correspondence: Correspondence[];
   minutes: Minute[];
   delegations: Delegation[];
+  dataVersion: number;
   getCorrespondenceById: (id: string) => Correspondence | undefined;
   getMinutesByCorrespondenceId: (id: string) => Minute[];
   addMinute: (minute: Minute) => Promise<void>;
@@ -489,7 +490,8 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   const [correspondence, setCorrespondence] = useState<Correspondence[]>([]);
   const [minutes, setMinutes] = useState<Minute[]>([]);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
-  const {currentUser: _currentUser, hydrated: _hydrated } = useCurrentUser();
+  const [dataVersion, setDataVersion] = useState(0);
+  const {currentUser, hydrated } = useCurrentUser();
 
   const syncFromApi = useCallback(async () => {
     // Only requirement: authenticated (has token)
@@ -516,6 +518,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       setCorrespondence(correspondenceList);
       setMinutes(minutesList);
       setDelegations(delegationsList);
+      setDataVersion(v => v + 1);
     } catch (error: unknown) {
       if (error instanceof Error && (error instanceof Error ? error.message : ERROR_UNKNOWN).toLowerCase().includes('auth')) {
         logInfo('Correspondence data will sync after authentication is available.');
@@ -550,11 +553,6 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   const refreshData = useCallback(() => {
     void syncFromApi();
   }, [syncFromApi]);
-
-  // Initialize data on mount
-  useEffect(() => {
-    refreshData();
-  }, [refreshData]);
 
   const getCorrespondenceById = useCallback((id: string) => {
     return correspondence.find(c => c.id === id);
@@ -629,6 +627,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     correspondence,
     minutes,
     delegations,
+    dataVersion,
     getCorrespondenceById,
     getMinutesByCorrespondenceId,
     addMinute,
@@ -640,6 +639,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     correspondence,
     minutes,
     delegations,
+    dataVersion,
     getCorrespondenceById,
     getMinutesByCorrespondenceId,
     addMinute,

@@ -64,7 +64,6 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
     signature: FormSignature;
     workflow: FormSignatureWorkflow;
   } | null>(null);
-  const [, setShowLinkCorrespondence] = useState(false);
   const [showForwardDialog, setShowForwardDialog] = useState(false);
   const [allSignatures, setAllSignatures] = useState<FormSignature[]>([]);
   const [supportingDocuments, setSupportingDocuments] = useState<DocumentVersion[]>([]);
@@ -75,7 +74,9 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
   const supportingFileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     loadFormDocument();
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formDocumentId]);
 
@@ -525,15 +526,6 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
                 >
                   <FileDown className="h-3.5 w-3.5 mr-1.5" />
                   Generate PDF
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowLinkCorrespondence(true)}
-                  size="sm"
-                  className="h-8 text-xs px-2.5"
-                >
-                  <LinkIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Link Correspondence
                 </Button>
               </>
             )}

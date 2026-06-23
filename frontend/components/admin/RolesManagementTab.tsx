@@ -81,8 +81,6 @@ export const RolesManagementTab = () => {
     if (!roleToDelete) return;
 
     const role = roleToDelete;
-    const _userCount = role.userCount ?? 0;
-
     setIsDeleting(role.id);
     setShowDeleteConfirm(false);
     

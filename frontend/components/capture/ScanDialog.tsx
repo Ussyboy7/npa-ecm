@@ -38,7 +38,6 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [scannedFile, setScannedFile] = useState<File | null>(null);
-  const [_documentId, setDocumentId] = useState<string | null>(null);
   const [scanMode, setScanMode] = useState<'manual' | 'scanner'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -121,8 +120,6 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
         }
       );
 
-      setDocumentId(document.id);
-
       // Step 3: Process OCR automatically
       setScanProgress(70);
       try {
@@ -166,7 +163,6 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
       setIsScanning(false);
     }
     setScannedFile(null);
-    setDocumentId(null);
     setScanProgress(0);
     setScanMode('manual');
     onOpenChange(false);

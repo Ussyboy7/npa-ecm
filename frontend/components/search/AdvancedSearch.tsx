@@ -122,11 +122,12 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       if (urlQuery) {
         setQuery(urlQuery);
         // Auto-search if query is provided
-        setTimeout(() => {
+        const autoSearchTimer = setTimeout(() => {
           if (urlSearchType) setSearchType(urlSearchType);
           if (Object.keys(urlFilters).length > 0) setFilters(urlFilters);
           handleSearch(true);
         }, 100);
+        return () => clearTimeout(autoSearchTimer);
       } else {
         if (urlSearchType) setSearchType(urlSearchType);
         if (Object.keys(urlFilters).length > 0) setFilters(urlFilters);

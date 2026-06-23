@@ -63,7 +63,7 @@ const Dashboard = () => {
       
       attemptRefresh();
     }
-  }, [currentUser, refresh]);
+  }, [currentUser?.id, refresh]);
 
   const division = useMemo(() => {
     if (!currentUser?.division) return undefined;
@@ -75,7 +75,7 @@ const Dashboard = () => {
     if (typeof currentUser.systemRole === 'string') return currentUser.systemRole;
     const o = currentUser.systemRole as Record<string, unknown> | undefined;
     return o && typeof o.name === 'string' ? o.name : 'User';
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const userId = useMemo(() => {
     return currentUser?.id ? String(currentUser.id) : null;

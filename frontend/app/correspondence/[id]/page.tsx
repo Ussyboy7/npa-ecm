@@ -59,64 +59,12 @@ import { ActionsPanel } from './components/ActionsPanel';
 import { CompactStatusStrip } from '@/components/correspondence/CompactStatusStrip';
 import { WorkflowProgressIndicator } from '@/components/correspondence/WorkflowProgressIndicator';
 
-// Download handler that forces download instead of opening in new tab
-const _handleDownload = async (url: string, filename: string) => {
-  try {
-    // Fix URL using utility function
-    let fixedUrl = fixMediaUrl(url);
-    
-    // Ensure we have a full URL
-    if (!fixedUrl.startsWith('http')) {
-      fixedUrl = ensureAbsoluteUrl(fixedUrl);
-    }
-    
-    logInfo('[handleDownload] Original URL:', url);
-    logInfo('[handleDownload] Fixed URL:', fixedUrl);
-    
-    const token = localStorage.getItem('npa_ecm_access_token');
-    const abortController = new AbortController();
-    
-    const response = await fetch(fixedUrl, {
-      credentials: 'include',
-      headers: token ? {
-        'Authorization': `Bearer ${token}`,
-      } : {},
-      signal: abortController.signal,
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
-    }
-    
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(blobUrl);
-  } catch (error: unknown) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      logWarn('Download aborted');
-      return;
-    }
-    logError('Download error', error);
-    // Fallback: try to fix URL and open in new tab
-    const fallbackUrl = fixMediaUrl(url);
-    const absoluteUrl = fallbackUrl.startsWith('http') ? fallbackUrl : ensureAbsoluteUrl(fallbackUrl);
-    window.open(absoluteUrl, '_blank');
-  }
-};
 const CorrespondenceDetailContent = () => {
   const params = useParams();
   const id = params.id as string;
-  const _router = useRouter();
   const {getCorrespondenceById, getMinutesByCorrespondenceId, updateCorrespondence: _updateCorrespondence, refreshData, syncFromApi } =
     useCorrespondence();
   const cachedCorrespondence = id ? getCorrespondenceById(id) : null;
-  const _contextMinutes = id ? getMinutesByCorrespondenceId(id) : [];
   const { currentUser: activeUser } = useCurrentUser();
   const {
     directorates,
@@ -168,18 +116,6 @@ const CorrespondenceDetailContent = () => {
   }, []);
   const setSelectedAttachmentIndex = useCallback((index: number | null) => {
     dispatch({ type: 'SET_SELECTED_ATTACHMENT_INDEX', payload: index });
-  }, []);
-  const _setAttachmentSearchQuery = useCallback((query: string) => {
-    dispatch({ type: 'SET_ATTACHMENT_SEARCH_QUERY', payload: query });
-  }, []);
-  const _setSelectedLinkedDocVersion = useCallback((version: Record<string, number>) => {
-    dispatch({ type: 'SET_SELECTED_LINKED_DOC_VERSION', payload: version });
-  }, []);
-  const _setIsPreviewFullscreen = useCallback((fullscreen: boolean) => {
-    dispatch({ type: 'SET_PREVIEW_FULLSCREEN', payload: fullscreen });
-  }, []);
-  const _setDragActive = useCallback((active: boolean) => {
-    dispatch({ type: 'SET_DRAG_ACTIVE', payload: active });
   }, []);
   const setMobileActiveTab = useCallback((tab: 'document' | 'thread' | 'actions' | 'seals') => {
     dispatch({ type: 'SET_MOBILE_ACTIVE_TAB', payload: tab });
@@ -604,40 +540,6 @@ const CorrespondenceDetailContent = () => {
   // - de-duplicating by id
   // - if there are active (incomplete) groups, showing only the most recent one
   // - otherwise, showing only the most recently completed group
-  const _visibleParallelGroups = useMemo(() => {
-    if (!parallelRoutingGroups || parallelRoutingGroups.length === 0) {
-      return [] as ParallelRoutingGroup[];
-    }
-
-    // De-duplicate by id
-    const seenIds = new Set<string>();
-    const unique = (parallelRoutingGroups as Array<Record<string, unknown>>).filter((group) => {
-      const groupId = String(group.id);
-      if (seenIds.has(groupId)) {
-        logWarn('[ParallelRouting] Duplicate in state', { groupId });
-        return false;
-      }
-      seenIds.add(groupId);
-      return true;
-    });
-
-    // Sort by createdAt / updatedAt to find the most recent group(s)
-    const sorted = [...unique].sort((a, b) => {
-      const aTime = new Date((a.createdAt as string | number | undefined) ?? (a.updatedAt as string | number | undefined) ?? 0).getTime();
-      const bTime = new Date((b.createdAt as string | number | undefined) ?? (b.updatedAt as string | number | undefined) ?? 0).getTime();
-      return aTime - bTime;
-    });
-
-    const active = sorted.filter((g) => !g.isComplete);
-    if (active.length > 0) {
-      // Show only the most recent active group
-      return [active[active.length - 1]];
-    }
-
-    // All groups complete – show only the most recent completed one
-    return [sorted[sorted.length - 1]];
-  }, [parallelRoutingGroups]);
-
   // Keep hooks above early returns to preserve stable hook order.
   const selectedAttachmentForAccess =
     selectedAttachmentIndex !== null && correspondence?.attachments?.[selectedAttachmentIndex]
@@ -721,12 +623,6 @@ const CorrespondenceDetailContent = () => {
     wasDocumentPreviewOpenRef.current = isOpenNow;
   }, [isOpen, logCorrespondenceDmsAccess]);
 
-  const _division = correspondence?.divisionId
-    ? divisions.find((entry) => entry.id === correspondence?.divisionId) ?? null
-    : null;
-  const _department = correspondence?.departmentId
-    ? departments.find((entry) => entry.id === correspondence?.departmentId) ?? null
-    : null;
   // Use backend delegation (loaded from API)
   const activeDelegation = backendDelegation;
   
@@ -796,13 +692,6 @@ const CorrespondenceDetailContent = () => {
     return organizationUsers.find((user) => user.id === userId);
   };
 
-  // Wrapper for CorrespondenceTreeView that expects specific return type
-  const _lookupUserForTree = (userId: string): { name: string; email?: string } | null => {
-    const user = organizationUsers.find((u) => u.id === userId);
-    if (!user) return null;
-    return { name: user.name, email: user.email };
-  };
-
   // Helper functions moved to DocumentPreviewPanel component
 
   const handleLinkDocumentsSave = async (documentIds: string[]) => {
@@ -824,26 +713,6 @@ const CorrespondenceDetailContent = () => {
     }
   };
 
-  const _handleRemoveLink = async (docId: string) => {
-    if (!correspondence) return;
-    try {
-      const updatedIds = (correspondence.linkedDocumentIds ?? []).filter((idValue) => idValue !== docId);
-      await apiFetch(`/correspondence/items/${correspondence.id}/`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          linked_document_ids: updatedIds,
-        }),
-      });
-      toast.success('Document unlinked');
-      await syncFromApi();
-    } catch (error: unknown) {
-      logError('Failed to unlink document', error);
-      toast.error('Unable to unlink document', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
-    }
-  };
-
   const getActionIcon = (actionType: string) => {
     switch (actionType) {
       case 'minute':
@@ -857,27 +726,6 @@ const CorrespondenceDetailContent = () => {
       default:
         return MessageSquare;
     }
-  };
-
-  const _resolveDistributionName = (recipient: DistributionRecipient) => {
-    if (recipient.type === 'directorate') {
-      if (recipient.directorateId) {
-        const dir = directorates.find((d) => d.id === recipient.directorateId);
-        if (dir) return dir.name;
-      }
-      return recipient.name ?? 'Directorate';
-    }
-    if (recipient.type === 'department') {
-      if (recipient.departmentId) {
-        const dept = departments.find((d) => d.id === recipient.departmentId);
-        if (dept) return dept.name;
-      }
-    }
-    if (recipient.divisionId) {
-      const div = divisions.find((d) => d.id === recipient.divisionId);
-      if (div) return div.name;
-    }
-    return recipient.name ?? 'Recipient';
   };
 
   return (
@@ -1006,7 +854,7 @@ const CorrespondenceDetailContent = () => {
             }}
           />
 
-          <aside className="w-[35%] min-w-0 border-l border-border bg-background flex flex-col overflow-hidden">
+          <aside className="w-[45%] min-w-0 border-l border-border bg-background flex flex-col overflow-hidden">
             <div className="p-4 border-b border-border flex-shrink-0">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <Send className="h-4 w-4 text-accent" />

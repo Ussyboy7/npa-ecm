@@ -289,7 +289,7 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
     } else {
       wsManager.disconnect();
     }
-  }, [isWsEnabled, currentUser]);
+  }, [isWsEnabled, currentUser?.id]);
 
   // Poll for connection state updates (less frequent than before)
   useEffect(() => {
@@ -311,7 +311,7 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
     if (currentUser) {
       wsManager.connect(currentUser);
     }
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const disconnect = useCallback(() => {
     wsManager.disconnect();

@@ -65,7 +65,7 @@ export const MinuteThreadPanel = ({
         </h3>
       </div>
       <div className="flex-1 min-h-0">
-        <ScrollArea className="h-full max-h-[calc(100vh-300px)]">
+        <ScrollArea className="h-full">
         <div className="p-4 space-y-4 overflow-x-hidden min-w-0">
           {minutes.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">

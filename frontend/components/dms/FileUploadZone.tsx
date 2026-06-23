@@ -97,7 +97,6 @@ export const FileUploadZone = ({
   }, [maxSizeMB, onFileSelect]);
 
   const FileIcon = file ? (() => {
-    const _iconName = getFileTypeIcon(file);
     // Return a simple FileText for now - can be enhanced with dynamic icon loading
     return FileText;
   })() : Upload;

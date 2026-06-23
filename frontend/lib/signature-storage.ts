@@ -91,10 +91,7 @@ interface BackendSignatureResponse {
 // Local Storage Keys (for templates/preferences only)
 // ==========================================
 
-const _TEMPLATE_KEY = 'npa_signature_templates';
 const USER_PREF_KEY_PREFIX = 'npa_signature_pref_';
-
-const _getUserPrefKey = (userId: string) => `${USER_PREF_KEY_PREFIX}${userId}`;
 
 // ==========================================
 // Backend API Functions (for signature image)

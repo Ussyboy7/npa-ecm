@@ -120,10 +120,6 @@ const [selectedMinuteTemplateId, setSelectedMinuteTemplateId] = useState<string 
 const [newTemplateName, setNewTemplateName] = useState('');
 const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const [slaTargets, setSlaTargets] = useState<SLATargets | null>(null);
-  const _defaultUserSignaturePreferences: UserSignaturePreferences = {
-    templateOverrides: {},
-    autoApplyForMinutes: false,
-  };
   const { currentUser: activeUser } = useCurrentUser();
   const { assistantAssignments, users: organizationUsers, offices, officeMemberships, directorates, divisions } = useOrganization();
   
@@ -133,7 +129,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     autoLoad: true,
   });
 
-  const _allDirectoryUsers = organizationUsers;
   const activeDirectoryUsers = useMemo(
     () => organizationUsers.filter((user) => user.active !== false),
     [organizationUsers],
@@ -151,7 +146,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         return { assignment, assistant } as { assignment: AssistantAssignment; assistant: User };
       })
       .filter((entry): entry is { assignment: AssistantAssignment; assistant: User } => entry !== null);
-  }, [assistantAssignments, activeDirectoryUsers, currentUser]);
+  }, [assistantAssignments, activeDirectoryUsers, currentUser?.id]);
 
   const assistantAssignmentsById = useMemo(() => {
     const map = new Map<string, AssistantAssignment>();
@@ -217,35 +212,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     [officeOptions],
   );
 
-  // Filtered divisions for office filter (based on selected directorate)
-  const _filteredOfficeDivisions = useMemo(() => {
-    if (officeFilterDirectorate === 'all') return divisions;
-    return divisions.filter(d => d.directorateId === officeFilterDirectorate);
-  }, [divisions, officeFilterDirectorate]);
-
-  // Filtered offices based on directorate, division, and search
-  const _filteredOfficeOptions = useMemo(() => {
-    let result = [...officeOptions];
-
-    if (officeFilterDirectorate !== 'all') {
-      result = result.filter(o => o.directorateId === officeFilterDirectorate);
-    }
-
-    if (officeFilterDivision !== 'all') {
-      result = result.filter(o => o.divisionId === officeFilterDivision);
-    }
-
-    if (officeSearchQuery.trim()) {
-      const query = officeSearchQuery.toLowerCase();
-      result = result.filter(o =>
-        o.name.toLowerCase().includes(query) ||
-        o.code?.toLowerCase().includes(query) ||
-        o.officeType?.toLowerCase().includes(query)
-      );
-    }
-
-    return result;
-  }, [officeOptions, officeFilterDirectorate, officeFilterDivision, officeSearchQuery]);
   const primaryOfficeMembership = useMemo(
     () =>
       currentUser
@@ -253,7 +219,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             (membership) => membership.userId === currentUser.id && membership.isPrimary && membership.isActive,
           )
         : undefined,
-    [officeMemberships, currentUser],
+    [officeMemberships, currentUser?.id],
   );
 
   // Fetch SLA targets on mount
@@ -313,7 +279,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         setMinuteTemplates([]);
       }
     },
-    [currentUser],
+    [currentUser?.id],
   );
 
   const getTemplatePlainText = (template: DocumentTemplate) => {
@@ -399,7 +365,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         logError('Failed to load draft', error);
       });
     }
-  }, [isOpen, correspondence.id, initialDirection, refreshMinuteTemplates, currentUser]);
+  }, [isOpen, correspondence.id, initialDirection, refreshMinuteTemplates, currentUser?.id]);
 
   // Signature loading is now handled by useSignature hook
 
@@ -592,7 +558,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       activeUsers: activeDirectoryUsers,
       excludeUsers: usersWhoAlreadyActed,
     });
-  }, [currentUser, isMD, canChooseDirection, selectedDirection, initialDirection, correspondence, existingMinutes, offices, officeMemberships, activeDirectoryUsers, usersWhoAlreadyActed]);
+  }, [currentUser?.id, isMD, canChooseDirection, selectedDirection, initialDirection, correspondence, existingMinutes, offices, officeMemberships, activeDirectoryUsers, usersWhoAlreadyActed]);
   
   const suggestedNext = suggestedApprovers[0]; // Immediate next in hierarchy
   
@@ -622,26 +588,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const handleTextChange = (text: string) => {
     setMinuteText(text);
     setCharacterCount(text.length);
-  };
-
-  const _handleApplyMinuteTemplate = () => {
-    if (!selectedMinuteTemplate) {
-      toast.error('Select a template to insert.');
-      return;
-    }
-
-    const content = getTemplatePlainText(selectedMinuteTemplate);
-    if (!content) {
-      toast.error('Selected template has no content.');
-      return;
-    }
-
-    const updated = minuteText.trim()
-      ? `${minuteText.trim()}\n\n${content}`
-      : content;
-
-    handleTextChange(updated);
-    toast.success('Template inserted into your minute.');
   };
 
   const handleSaveMinuteTemplate = async () => {
@@ -684,23 +630,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     } catch (error: unknown) {
       logError('Failed to save template', error);
       toast.error('Failed to save template. Please try again.');
-    }
-  };
-
-  const _handleDeleteSelectedMinuteTemplate = async () => {
-    if (!selectedMinuteTemplate || !canDeleteSelectedTemplate) {
-      toast.error('Only custom templates can be removed.');
-      return;
-    }
-
-    try {
-      await deleteTemplate(selectedMinuteTemplate.id);
-      await refreshMinuteTemplates();
-      setSelectedMinuteTemplateId(null);
-      toast.success('Template removed.');
-    } catch (error: unknown) {
-      logError('Failed to delete template', error);
-      toast.error('Failed to delete template. Please try again.');
     }
   };
 
@@ -1226,7 +1155,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           logInfo('[MinuteModal] Distribution created successfully', distributionResults);
           if (distributionResults.length > 0) {
             const actionCount = actionUsers.length;
-            const _infoCount = otherDistribution.length;
             let message = `Distribution added: ${distributionResults.length} recipient(s) notified.`;
             if (actionCount > 0) {
               message += ` ${actionCount} parallel routing branch(es) created.`;
@@ -1367,10 +1295,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const templateTypeForAction: SignatureTemplate['templateType'] = actionType === 'approve' ? 'approval' : 'minute';
   const relevantTemplates = signatureTemplates.filter(template => template.templateType === templateTypeForAction);
   const selectedTemplate = selectedTemplateId ? signatureTemplates.find(template => template.id === selectedTemplateId) ?? null : null;
-  const _templatePreview = selectedTemplate && applySignature
-    ? renderTemplateText(selectedTemplate, getTemplateContext())
-    : '';
-
   return (
     <Dialog
       open={isOpen}

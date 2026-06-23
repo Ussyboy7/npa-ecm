@@ -246,7 +246,7 @@ export const DocumentCommentsDialog = ({
               onChange={(event) => {
                 const value = event.target.value;
                 setComment(value);
-                logInfo('Comment onChange:', value);
+                // Comment onChange:
               }}
               placeholder="Add a comment to discuss this document..."
               rows={4}
@@ -346,7 +346,7 @@ export const DocumentCommentsDialog = ({
                               onChange={(e) => {
                                 const value = e.target.value;
                                 setReplyText(value);
-                                logInfo('Reply onChange:', value);
+                                // Reply onChange:
                               }}
                               placeholder="Write a reply..."
                               rows={2}

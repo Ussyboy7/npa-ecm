@@ -88,31 +88,19 @@ const SecretaryDashboardContent = () => {
   });
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
 
-  // Fetch executives
+  // Fetch executives, metrics, and activities
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    const fetchExecutives = async () => {
-      try {
-        const response = await apiFetch<Executive[]>('/correspondence/cases/secretary-executives/');
-        setExecutives(response);
-      } catch (error: unknown) {
-        logError('Failed to load executives:', error);
-      }
-    };
-
-    void fetchExecutives();
-  }, [currentUser?.id]);
-
-  // Fetch metrics and activities
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const fetchMetrics = async () => {
+    const fetchAll = async () => {
       setLoading(true);
       try {
-        // Fetch secretary inbox summary
-        const inboxResponse = await apiFetch<Record<string, unknown>>('/correspondence/items/secretary-inbox/');
+        const [execResponse, inboxResponse] = await Promise.all([
+          apiFetch<Executive[]>('/correspondence/cases/secretary-executives/'),
+          apiFetch<Record<string, unknown>>('/correspondence/items/secretary-inbox/'),
+        ]);
+        setExecutives(execResponse);
+        const executivesCount = execResponse.length;
         const correspondence = Array.isArray(inboxResponse.results) 
           ? inboxResponse.results.map(mapApiCorrespondence)
           : [];
@@ -150,7 +138,7 @@ const SecretaryDashboardContent = () => {
           urgentItems,
           pendingActions,
           completedToday,
-          executivesSupported: executives.length,
+          executivesSupported: executivesCount,
         });
 
         // Build recent activities
@@ -191,8 +179,8 @@ const SecretaryDashboardContent = () => {
       }
     };
 
-    void fetchMetrics();
-  }, [currentUser?.id, executives.length]);
+    void fetchAll();
+  }, [currentUser?.id]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {

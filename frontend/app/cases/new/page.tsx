@@ -45,7 +45,7 @@ const priorityOptions = PRIORITY_OPTIONS;
 
 const NewCasePage = () => {
   const router = useRouter();
-  const {currentUser, hydrated: _hydrated } = useCurrentUser();
+  const {currentUser, hydrated } = useCurrentUser();
   const { divisions, departments, offices } = useOrganization();
   const abortControllerRef = useRef<AbortController | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);

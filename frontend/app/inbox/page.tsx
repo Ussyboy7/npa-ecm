@@ -149,17 +149,19 @@ const ExecutiveInbox = () => {
   }, [debouncedSearch, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, pagination.pageSize]);
 
   useEffect(() => {
+    let ignore = false;
     const loadSLATargets = async () => {
       try {
         const targets = await fetchSLATargets();
-        setSlaTargets(targets);
+        if (!ignore) setSlaTargets(targets);
       } catch (err) {
         logError('Failed to load SLA targets', err);
-        setSlaTargets({ urgent: 2, high: 3, medium: 5, low: 7 });
+        if (!ignore) setSlaTargets({ urgent: 2, high: 3, medium: 5, low: 7 });
       }
     };
     void loadSLATargets();
-  }, []);
+    return () => { ignore = true; };
+  }, [debouncedSearch, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, pagination.page]);
 
   useEffect(() => {
     if (!currentUser?.id) return;

@@ -270,45 +270,10 @@ const CaseDetailPage = () => {
     }
   };
   
-  const _handleEditClick = () => {
-    if (!caseData) return;
-    setEditFormData({
-      title: caseData.title,
-      description: caseData.description,
-      caseType: caseData.caseType,
-      priority: caseData.priority,
-      divisionId: caseData.divisionId,
-      departmentId: caseData.departmentId,
-      owningOfficeId: caseData.owningOfficeId,
-    });
-    setShowEditDialog(true);
-  };
-  
-  const _handleEditSubmit = async () => {
-    if (!caseData) return;
-    
-    setEditingCase(true);
-    try {
-      const updated = await updateCase(caseData.id, editFormData);
-      setCaseData({ ...caseData, ...updated });
-      toast.success("Case updated successfully");
-      setShowEditDialog(false);
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
-      logError("Failed to update case", err);
-      toast.error("Failed to update case");
-    } finally {
-      setEditingCase(false);
-    }
-  };
-
-
   if (!currentUser?.id) {
     return null;
   }
 
-  const _division = caseData ? divisions.find((d) => d.id === caseData.divisionId) : undefined;
-  const _department = caseData ? departments.find((d) => d.id === caseData.departmentId) : undefined;
   const owningOffice = caseData ? offices.find((o) => o.id === caseData.owningOfficeId) : undefined;
   const assignedTo = caseData ? users.find((u) => u.id === caseData.assignedToId) : undefined;
   const createdBy = caseData ? users.find((u) => u.id === caseData.createdById) : undefined;

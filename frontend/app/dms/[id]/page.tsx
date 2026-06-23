@@ -52,32 +52,6 @@ import { RelatedCorrespondenceCard } from '@/components/dms/RelatedCorrespondenc
 import { DocumentCommentsCard } from '@/components/dms/DocumentCommentsCard';
 import { DocumentThreadCard } from '@/components/dms/DocumentThreadCard';
 
-const _statusLabel = (status: DocumentRecord['status']) => {
-  switch (status) {
-    case 'draft':
-      return 'Draft';
-    case 'published':
-      return 'Published';
-    case 'archived':
-      return 'Archived';
-    default:
-      return status;
-  }
-};
-
-const _statusVariant = (status: DocumentRecord['status']): 'outline' | 'default' | 'secondary' => {
-  switch (status) {
-    case 'draft':
-      return 'outline';
-    case 'published':
-      return 'default';
-    case 'archived':
-      return 'secondary';
-    default:
-      return 'outline';
-  }
-};
-
 const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -128,28 +102,12 @@ const DocumentDetailContent = () => {
   const collaborationReducer = (state: CollaborationState, action: CollaborationAction): CollaborationState => {
     switch (action.type) {
       case 'SET_WORKSPACES':
-        // Only update if payload reference changed (shallow comparison)
-        if (state.workspaces === action.payload) {
-          return state;
-        }
         return { ...state, workspaces: action.payload };
       case 'SET_COMMENTS':
-        // Only update if payload reference changed (shallow comparison)
-        if (state.comments === action.payload) {
-          return state;
-        }
         return { ...state, comments: action.payload };
       case 'SET_ACCESS_LOGS':
-        // Only update if payload reference changed (shallow comparison)
-        if (state.accessLogs === action.payload) {
-          return state;
-        }
         return { ...state, accessLogs: action.payload };
       case 'SET_RELATED_CORRESPONDENCE':
-        // Only update if payload reference changed (shallow comparison)
-        if (state.relatedCorrespondence === action.payload) {
-          return state;
-        }
         return { ...state, relatedCorrespondence: action.payload };
       default:
         return state;
@@ -222,7 +180,7 @@ const DocumentDetailContent = () => {
   );
   const uploadUser = useMemo(
     () => currentUser ?? organizationUsers.find((user) => user.active) ?? null,
-    [currentUser, organizationUsers],
+    [currentUser?.id, organizationUsers],
   );
 
   // Load workspaces lookup
@@ -241,6 +199,7 @@ const DocumentDetailContent = () => {
 
   // Ref to track if we're currently loading to prevent infinite loops
   const isLoadingRef = useRef(false);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load document function - extracted for reuse
   const loadDocument = useCallback(async (): Promise<DocumentRecord | null> => {
@@ -371,153 +330,29 @@ const DocumentDetailContent = () => {
         }
 
         // Load collaboration data
-          // Load comments
-          const cmts = await getDocumentComments(params.id);
-          if (!ignore) dispatchCollaboration({ type: 'SET_COMMENTS', payload: cmts });
+        // Load comments
+        const cmts = await getDocumentComments(params.id);
+        if (!ignore) dispatchCollaboration({ type: 'SET_COMMENTS', payload: cmts });
 
-          // Log document view
-          if (doc) {
-            try {
-              await logDocumentAccess({
-                documentId: params.id,
-                userId: currentUser.id,
-                action: 'view',
-                sensitivity: doc.sensitivity,
-              });
-            } catch (error: unknown) {
-              logError('Failed to log document access', error);
-            }
-          }
-
-          // Load access logs
-          const logs = await getDocumentAccessLogs(params.id);
-          if (!ignore) dispatchCollaboration({ type: 'SET_ACCESS_LOGS', payload: logs });
-
-          // Load related correspondence
+        // Log document view
+        if (doc) {
           try {
-            const linksResponse = await apiFetch<Record<string, unknown>>(
-              `/correspondence/document-links/?document=${params.id}`
-            );
-            // Handle both array and paginated response
-            const links = Array.isArray(linksResponse)
-              ? linksResponse
-              : ((linksResponse && typeof linksResponse === 'object' && 'results' in linksResponse && Array.isArray(linksResponse.results)) ? linksResponse.results : ((linksResponse && typeof linksResponse === 'object' && 'data' in linksResponse && Array.isArray(linksResponse.data)) ? linksResponse.data : []));
-            
-            logInfo(`[DMS Detail] Loaded ${links.length} document link(s) for document ${params.id}`);
-            
-            if (links.length > 0) {
-              // Limit concurrent API calls to prevent overwhelming the backend
-              // Process in batches of 5 to balance performance and server load
-              const BATCH_SIZE = 5;
-              const correspondenceData: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string } | null> = [];
-              
-              for (let i = 0; i < links.length; i += BATCH_SIZE) {
-                const batch = links.slice(i, i + BATCH_SIZE);
-                const batchResults = await Promise.all(
-                  batch.map(async (link) => {
-                    try {
-                      const corrId = typeof link.correspondence === 'string' ? link.correspondence : link.correspondence?.id;
-                      if (!corrId) return null;
-
-                      const [corrResponse, minutesResponse] = await Promise.all([
-                        apiFetch<Record<string, unknown>>(`/correspondence/items/${corrId}/`),
-                        apiFetch<unknown[]>(`/correspondence/minutes/?correspondence=${corrId}`),
-                      ]);
-
-                    logInfo(`[DMS Detail] Minutes API response for correspondence ${corrId}:`, minutesResponse);
-                    logInfo(`[DMS Detail] Correspondence API response for ${corrId}:`, {
-                      distribution: corrResponse.distribution,
-                      distributionCount: Array.isArray(corrResponse.distribution) ? corrResponse.distribution.length : 0
-                    });
-
-                    // Handle paginated response
-                    type MinutesResponse = Array<Record<string, unknown>> | { results?: Array<Record<string, unknown>>; data?: Array<Record<string, unknown>> };
-                    const minutesResponseTyped = minutesResponse as MinutesResponse;
-                    const minutesArray = Array.isArray(minutesResponseTyped) 
-                      ? minutesResponseTyped 
-                      : (minutesResponseTyped?.results || minutesResponseTyped?.data || []);
-
-                    // Map minutes using canonical mapper
-                    const minutes: Minute[] = minutesArray.map((item: Record<string, unknown>) => mapApiMinute(item));
-                    // Map distribution (reuse normalizeId function defined above)
-                    const distribution = Array.isArray(corrResponse.distribution)
-                      ? corrResponse.distribution.map((recipient: Record<string, unknown>) => {
-                          const recipientType = (recipient.recipient_type && typeof recipient.recipient_type === 'string' && ['office', 'division', 'department', 'directorate', 'user'].includes(recipient.recipient_type)) ? recipient.recipient_type as 'office' | 'division' | 'department' | 'directorate' | 'user' : 'division';
-                          return {
-                            id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
-                            type: recipientType as 'division' | 'department' | 'directorate' | 'user',
-                            directorateId: normalizeId(recipient.directorate),
-                            divisionId: normalizeId(recipient.division),
-                            departmentId: normalizeId(recipient.department),
-                            name: (recipient.directorate_name && typeof recipient.directorate_name === 'string') ? recipient.directorate_name : ((recipient.division_name && typeof recipient.division_name === 'string') ? recipient.division_name : ((recipient.department_name && typeof recipient.department_name === 'string') ? recipient.department_name : undefined)),
-                            addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
-                            addedByName:
-                              typeof recipient.added_by === 'object' && recipient.added_by
-                                ? (() => {
-                                    const addedByObj = recipient.added_by as Record<string, unknown>;
-                                    const firstName = addedByObj.first_name ? String(addedByObj.first_name) : '';
-                                    const lastName = addedByObj.last_name ? String(addedByObj.last_name) : '';
-                                    const fullName = `${firstName} ${lastName}`.trim();
-                                    if (fullName.length > 0) return fullName;
-                                    return addedByObj.username ? String(addedByObj.username) : undefined;
-                                  })()
-                                : undefined,
-                            addedAt: (recipient.created_at && typeof recipient.created_at === 'string') ? recipient.created_at : undefined,
-                            purpose: (recipient.purpose && typeof recipient.purpose === 'string' && (recipient.purpose === 'information' || recipient.purpose === 'action')) ? recipient.purpose as 'information' | 'action' : undefined,
-                          };
-                        })
-                      : [];
-                    
-                    const correspondence: Correspondence = {
-                      id: String(corrResponse.id),
-                      referenceNumber: String(corrResponse.reference_number ?? ''),
-                      subject: String(corrResponse.subject ?? ''),
-                      source: (corrResponse.source ?? 'internal') as 'internal' | 'external',
-                      receivedDate: String(corrResponse.received_date ?? ''),
-                      senderName: String(corrResponse.sender_name ?? ''),
-                      senderOrganization: String(corrResponse.sender_organization ?? ''),
-                      status: (corrResponse.status ?? 'pending') as 'pending' | 'in-progress' | 'completed' | 'archived',
-                      priority: (corrResponse.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'urgent',
-                      divisionId: corrResponse.division ? (typeof corrResponse.division === 'string' ? corrResponse.division : (typeof corrResponse.division === 'object' && corrResponse.division && 'id' in corrResponse.division ? String(corrResponse.division.id) : undefined)) : undefined,
-                      departmentId: corrResponse.department ? (typeof corrResponse.department === 'string' ? corrResponse.department : (typeof corrResponse.department === 'object' && corrResponse.department && 'id' in corrResponse.department ? String(corrResponse.department.id) : undefined)) : undefined,
-                      currentApproverId: corrResponse.current_approver ? (typeof corrResponse.current_approver === 'string' ? corrResponse.current_approver : (typeof corrResponse.current_approver === 'object' && corrResponse.current_approver && 'id' in corrResponse.current_approver ? String(corrResponse.current_approver.id) : undefined)) : undefined,
-                      createdById: corrResponse.created_by ? (typeof corrResponse.created_by === 'string' ? corrResponse.created_by : (typeof corrResponse.created_by === 'object' && corrResponse.created_by && 'id' in corrResponse.created_by ? String(corrResponse.created_by.id) : undefined)) : undefined,
-                      direction: (corrResponse.direction ?? 'upward') as 'upward' | 'downward',
-                      distribution,
-                      createdAt: (corrResponse.created_at && typeof corrResponse.created_at === 'string') ? corrResponse.created_at : undefined,
-                      updatedAt: (corrResponse.updated_at && typeof corrResponse.updated_at === 'string') ? corrResponse.updated_at : undefined,
-                    };
-
-                      return {
-                        correspondence,
-                        minutes,
-                        linkNotes: link.notes,
-                      };
-                    } catch (error: unknown) {
-                      logError('Failed to load related correspondence', error);
-                      return null;
-                    }
-                  })
-                );
-                correspondenceData.push(...batchResults);
-              }
-
-              const validData = correspondenceData.filter((item) => item !== null) as Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>;
-              logInfo('[DMS Detail] Processed correspondence data', { 
-                validDataCount: validData.length, 
-                totalMinutes: validData.reduce((sum, item) => sum + item.minutes.length, 0),
-                data: validData 
-              });
-              if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: validData });
-            } else {
-              logInfo('[DMS Detail] No document links found for document', { documentId: params.id });
-              if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
-            }
+            await logDocumentAccess({
+              documentId: params.id,
+              userId: currentUser.id,
+              action: 'view',
+              sensitivity: doc.sensitivity,
+            });
           } catch (error: unknown) {
-            logError('[DMS Detail] Error loading related correspondence', error);
-            logError('Failed to load related correspondence', error);
-            if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
+            logError('Failed to log document access', error);
+          }
         }
+
+        // Load access logs
+        const logs = await getDocumentAccessLogs(params.id);
+        if (!ignore) dispatchCollaboration({ type: 'SET_ACCESS_LOGS', payload: logs });
+
+        // Related correspondence loaded on-demand when Related tab is active
       } catch (error: unknown) {
         logError('Failed to load document', error);
         toast.error('Unable to load document');
@@ -533,24 +368,18 @@ const DocumentDetailContent = () => {
       ignore = true;
       isLoadingRef.current = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDocument stable (memoized with params?.id), normalizeId and router are stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDocument stable (memoized with params?.id), normalizeId and router are stable
   }, [params?.id, hydrated, currentUser?.id]);
 
 
 
   const handleVersionUploadComplete = useCallback((updated: DocumentRecord) => {
-    // 1. Close dialogs immediately to trigger the closing animation
     setUploadDialogOpen(false);
     setCreateVersionDialogOpen(false);
-    
-    // 2. Defer the heavy document state update until the dialog is fully closed
-    // This prevents the page from re-rendering heavily while the dialog is still unmounting
-    setTimeout(() => {
-      startTransition(() => {
-        setDocument(updated);
-        toast.success('Document updated successfully');
-      });
-    }, 300);
+    startTransition(() => {
+      setDocument(updated);
+      toast.success('Document updated successfully');
+    });
   }, []);
 
   const handleQuickVersionUpload = () => {
@@ -562,6 +391,105 @@ const DocumentDetailContent = () => {
     if (!document || !uploadUser) return;
     setCreateVersionDialogOpen(true);
   };
+
+  // Lazy-load related correspondence when Related tab is activated
+  useEffect(() => {
+    if (activeTab !== 'related' || !params?.id || collaborationState.relatedCorrespondence.length > 0) return;
+
+    let ignore = false;
+    const loadRelated = async () => {
+      try {
+        const linksResponse = await apiFetch<Record<string, unknown>>(
+          `/correspondence/document-links/?document=${params.id}`
+        );
+        const links = Array.isArray(linksResponse)
+          ? linksResponse
+          : ((linksResponse && typeof linksResponse === 'object' && 'results' in linksResponse && Array.isArray(linksResponse.results)) ? linksResponse.results : []);
+        if (ignore) return;
+
+        if (links.length > 0) {
+          const BATCH_SIZE = 5;
+          const correspondenceData: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string } | null> = [];
+
+          for (let i = 0; i < links.length; i += BATCH_SIZE) {
+            const batch = links.slice(i, i + BATCH_SIZE);
+            const batchResults = await Promise.all(
+              batch.map(async (link) => {
+                try {
+                  const corrId = typeof link.correspondence === 'string' ? link.correspondence : link.correspondence?.id;
+                  if (!corrId) return null;
+
+                  const [corrResponse, minutesResponse] = await Promise.all([
+                    apiFetch<Record<string, unknown>>(`/correspondence/items/${corrId}/`),
+                    apiFetch<unknown[]>(`/correspondence/minutes/?correspondence=${corrId}`),
+                  ]);
+                  if (ignore) return null;
+
+                  const minutesArray = (() => {
+                    const typed = minutesResponse as Array<Record<string, unknown>> | { results?: Array<Record<string, unknown>> };
+                    return Array.isArray(typed) ? typed : (typed?.results || []);
+                  })();
+                  const minutes: Minute[] = minutesArray.map(mapApiMinute);
+                  const distribution = Array.isArray(corrResponse.distribution)
+                    ? corrResponse.distribution.map((recipient: Record<string, unknown>) => ({
+                        id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
+                        type: (recipient.recipient_type === 'office' || recipient.recipient_type === 'division' || recipient.recipient_type === 'department' || recipient.recipient_type === 'directorate' || recipient.recipient_type === 'user' ? recipient.recipient_type : 'division') as 'division' | 'department' | 'directorate' | 'user',
+                        directorateId: normalizeId(recipient.directorate),
+                        divisionId: normalizeId(recipient.division),
+                        departmentId: normalizeId(recipient.department),
+                        name: String(recipient.directorate_name || recipient.division_name || recipient.department_name || ''),
+                        addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
+                        addedAt: recipient.created_at as string | undefined,
+                        purpose: (recipient.purpose === 'information' || recipient.purpose === 'action') ? recipient.purpose as 'information' | 'action' : undefined,
+                      }))
+                    : [];
+
+                  const correspondence: Correspondence = {
+                    id: String(corrResponse.id),
+                    referenceNumber: String(corrResponse.reference_number ?? ''),
+                    subject: String(corrResponse.subject ?? ''),
+                    source: (corrResponse.source ?? 'internal') as 'internal' | 'external',
+                    receivedDate: String(corrResponse.received_date ?? ''),
+                    senderName: String(corrResponse.sender_name ?? ''),
+                    senderOrganization: String(corrResponse.sender_organization ?? ''),
+                    status: (corrResponse.status ?? 'pending') as 'pending' | 'in-progress' | 'completed' | 'archived',
+                    priority: (corrResponse.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'urgent',
+                    divisionId: normalizeId(corrResponse.division),
+                    departmentId: normalizeId(corrResponse.department),
+                    currentApproverId: normalizeId(corrResponse.current_approver),
+                    createdById: normalizeId(corrResponse.created_by),
+                    direction: (corrResponse.direction ?? 'upward') as 'upward' | 'downward',
+                    distribution,
+                    createdAt: corrResponse.created_at as string | undefined,
+                    updatedAt: corrResponse.updated_at as string | undefined,
+                  };
+
+                  return { correspondence, minutes, linkNotes: link.notes };
+                } catch {
+                  return null;
+                }
+              })
+            );
+            correspondenceData.push(...batchResults);
+          }
+
+          if (!ignore) {
+            dispatchCollaboration({
+              type: 'SET_RELATED_CORRESPONDENCE',
+              payload: correspondenceData.filter((item) => item !== null) as Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>,
+            });
+          }
+        } else {
+          if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
+        }
+      } catch (error: unknown) {
+        logError('Failed to load related correspondence', error);
+        if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
+      }
+    };
+    void loadRelated();
+    return () => { ignore = true; };
+  }, [activeTab, params?.id, collaborationState.relatedCorrespondence.length]);
 
   // OCR handlers
   const handleVersionOCR = async (versionId: string) => {
@@ -650,6 +578,11 @@ const DocumentDetailContent = () => {
   };
 
   const pollOCRJobStatus = async (versionId: string, jobId: string) => {
+    // Clear any existing poll for this version
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+
     let pollCount = 0;
     const maxPolls = 150; // 5 minutes max (150 * 2 seconds)
     
@@ -658,6 +591,8 @@ const DocumentDetailContent = () => {
       
       try {
         const updatedJob = await getCaptureJob(jobId);
+        
+        if (pollIntervalRef.current !== pollInterval) return; // stale interval
         
         dispatchOCR({ 
           type: 'SET_PROCESSING', 
@@ -673,16 +608,19 @@ const DocumentDetailContent = () => {
 
         if (updatedJob.status === 'completed') {
           clearInterval(pollInterval);
+          pollIntervalRef.current = null;
           toast.success('OCR processing completed');
           await loadDocument();
         } else if (updatedJob.status === 'failed' || updatedJob.status === 'cancelled') {
           clearInterval(pollInterval);
+          pollIntervalRef.current = null;
           if (updatedJob.status === 'failed') {
             toast.error(updatedJob.error_message || 'OCR processing failed');
           }
         } else if (pollCount >= maxPolls) {
           // Timeout after max polls
           clearInterval(pollInterval);
+          pollIntervalRef.current = null;
           dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
           dispatchOCR({ type: 'SET_JOB', versionId, job: updatedJob });
           dispatchOCR({ type: 'SET_ERROR', versionId, error: 'OCR processing timed out. The job may still be running in the background.' });
@@ -693,6 +631,7 @@ const DocumentDetailContent = () => {
         // Don't clear interval on first error, but clear after multiple failures
         if (pollCount >= 10) {
         clearInterval(pollInterval);
+        pollIntervalRef.current = null;
           dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
           dispatchOCR({ type: 'SET_JOB', versionId, job: null });
           const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Failed to check OCR status. The Celery worker may not be running.';
@@ -701,10 +640,14 @@ const DocumentDetailContent = () => {
         }
       }
     }, 2000);
+    pollIntervalRef.current = pollInterval;
 
     // Cleanup after 5 minutes
     setTimeout(() => {
-      clearInterval(pollInterval);
+      if (pollIntervalRef.current === pollInterval) {
+        clearInterval(pollInterval);
+        pollIntervalRef.current = null;
+      }
       // Check final status
       getCaptureJob(jobId).then((finalJob) => {
         if (finalJob.status === 'processing') {

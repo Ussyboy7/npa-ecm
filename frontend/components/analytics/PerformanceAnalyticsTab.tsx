@@ -79,8 +79,6 @@ export const PerformanceAnalyticsTab = () => {
     }));
   }, [divisionPerformance]);
 
-  const _totalActions = rolePerformance.reduce((sum, role) => sum + role.actions, 0);
-  
   // Calculate average SLA target (weighted by typical distribution)
   const avgSLATargetDays = useMemo(() => {
     if (!slaTargets) return 5; // Default fallback

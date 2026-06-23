@@ -222,16 +222,23 @@ const FormsTemplatesPage = () => {
                           </Button>
                         </div>
                       </div>
-                      {template.description && (
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{template.description}</p>
-                      )}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 flex-wrap">
-                        <span>{getTemplateMetrics(template).required} required</span>
-                        <span>•</span>
-                        <span>{getTemplateMetrics(template).total} fields</span>
-                        <span>•</span>
-                        <span>{getTemplateMetrics(template).sections} section{getTemplateMetrics(template).sections === 1 ? "" : "s"}</span>
-                      </div>
+                      {(() => {
+                        const metrics = getTemplateMetrics(template);
+                        return (
+                          <>
+                            {template.description && (
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{template.description}</p>
+                            )}
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 flex-wrap">
+                              <span>{metrics.required} required</span>
+                              <span>•</span>
+                              <span>{metrics.total} fields</span>
+                              <span>•</span>
+                              <span>{metrics.sections} section{metrics.sections === 1 ? "" : "s"}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </CardContent>

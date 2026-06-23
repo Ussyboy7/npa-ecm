@@ -49,7 +49,6 @@ import {
 import { apiFetch } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { useRouter } from 'next/navigation';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getForwardingOptions, getSuggestedApprovers } from '@/lib/routing-utils';
@@ -87,7 +86,6 @@ interface TreatmentModalProps {
 // UploadedFile type is now imported from use-file-upload hook
 
 const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentModalProps) => {
-  const _router = useRouter();
   const {addCorrespondence: _addCorrespondence, addMinute: _addMinute, updateCorrespondence: _updateCorrespondence, getMinutesByCorrespondenceId, syncFromApi } = useCorrespondence();
   const { currentUser: activeUser } = useCurrentUser();
   const { users, divisions, departments, offices, officeMemberships, directorates } = useOrganization();
@@ -162,9 +160,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
   const restoreBodyInteractivity = useCallback(() => {
     if (typeof document === 'undefined') return;
-    const _createdMinuteId: string | null = null;
-    const _originalCorrespondenceUpdated = false;
-    const _createdResponseCorrespondenceId: string | null = null;
 
     try {
       document.body.style.removeProperty('pointer-events');
@@ -252,7 +247,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       logError('Failed to load draft', error);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, correspondence.id, currentUser]);
+  }, [isOpen, correspondence.id, currentUser?.id]);
 
   // Load documents - simple callback like LinkDocumentDialog
   const loadDocuments = useCallback(
@@ -337,15 +332,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setSelectedSignatureTemplateId(null);
   };
 
-  const _forwardingOptions = useMemo(() => {
-    if (!currentUser) return [];
-    return getForwardingOptions({
-      currentUser,
-      activeUsers,
-      divisions: divisions.filter((d) => d.isActive !== false),
-    });
-  }, [currentUser, activeUsers, divisions]);
-
   const getRelationshipLabel = (current: typeof currentUser, superior: typeof currentUser) => {
     if (!current || !superior) return '';
     const currentLevel = GRADE_LEVELS.find(g => g.code === current.gradeLevel)?.level || 0;
@@ -374,7 +360,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const behalfOfOptions = useMemo(() => getBehalfOfOptions(), [activeUsers, currentUser, divisions]);
+  const behalfOfOptions = useMemo(() => getBehalfOfOptions(), [activeUsers, currentUser?.id, divisions]);
 
   // Get suggested approvers for routing (like MinuteModal)
   const existingMinutes = useMemo(() => getMinutesByCorrespondenceId(correspondence.id), [correspondence.id, getMinutesByCorrespondenceId]);
@@ -390,7 +376,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       officeMemberships,
       activeUsers,
     });
-  }, [currentUser, correspondence, existingMinutes, offices, officeMemberships, activeUsers]);
+  }, [currentUser?.id, correspondence, existingMinutes, offices, officeMemberships, activeUsers]);
 
   const assistantList: User[] = []; // Not used for treatment responses
   
@@ -514,32 +500,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
   const handleDismissSuggestedNote = () => {
     setShowSuggestedNote(false);
-  };
-
-  const _handleRemoveFile = (fileId: string) => {
-    setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
-  };
-
-  const _handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragActive(true);
-  };
-
-  const _handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragActive(false);
-  };
-
-  const _handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragActive(false);
-    handleFileSelect(e.dataTransfer.files);
-  };
-
-  const _formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   // Template handlers
@@ -1030,7 +990,6 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     ? divisions.find((division) => division.id === currentUser.division) ?? null
     : null;
   const selectedRecipient = forwardTo ? findUserById(forwardTo) ?? null : null;
-  const _selectedOffice = targetOfficeId ? offices.find(o => o.id === targetOfficeId) : null;
   const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) ?? null : null;
 
   return (

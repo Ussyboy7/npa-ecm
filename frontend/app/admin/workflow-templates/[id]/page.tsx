@@ -169,8 +169,6 @@ function WorkflowTemplateEditorPageContent() {
     }
   };
 
-  const _currentTemplateId = template?.id || (isNew ? undefined : id);
-
   return (
     <DashboardLayout>
       {loading ? (

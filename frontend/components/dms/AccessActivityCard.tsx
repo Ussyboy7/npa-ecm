@@ -38,25 +38,10 @@ export const AccessActivityCard = ({
   onRefresh,
   isLoading = false,
 }: AccessActivityCardProps) => {
-  // Load filter state from localStorage
-  const loadFilterState = () => {
-    if (typeof window === 'undefined') return { filter: 'all', dateFilter: 'all', search: '', sort: 'recent' as SortOption };
-    const stored = localStorage.getItem(`access-activity-filters-${documentId}`);
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch {
-        return { filter: 'all', dateFilter: 'all', search: '', sort: 'recent' as SortOption };
-      }
-    }
-    return { filter: 'all', dateFilter: 'all', search: '', sort: 'recent' as SortOption };
-  };
-
-  const initialState = loadFilterState();
-  const [accessLogFilter, setAccessLogFilter] = useState<'all' | 'view' | 'download' | 'attempted-download'>(initialState.filter);
-  const [accessLogDateFilter, setAccessLogDateFilter] = useState<'all' | 'today' | 'week' | 'month'>(initialState.dateFilter);
-  const [searchQuery, setSearchQuery] = useState(initialState.search);
-  const [sortOption, setSortOption] = useState<SortOption>(initialState.sort);
+  const [accessLogFilter, setAccessLogFilter] = useState<'all' | 'view' | 'download' | 'attempted-download'>('all');
+  const [accessLogDateFilter, setAccessLogDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState<SortOption>('recent');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [logsDialogOpen, setLogsDialogOpen] = useState(false);
 
@@ -74,6 +59,21 @@ export const AccessActivityCard = ({
     }
     return name.slice(0, 2).toUpperCase();
   };
+
+  // Restore filter state from localStorage after mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem(`access-activity-filters-${documentId}`);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.filter) setAccessLogFilter(parsed.filter);
+        if (parsed.dateFilter) setAccessLogDateFilter(parsed.dateFilter);
+        if (parsed.search) setSearchQuery(parsed.search);
+        if (parsed.sort) setSortOption(parsed.sort);
+      } catch { /* ignore */ }
+    }
+  }, [documentId]);
 
   // Persist filter state to localStorage
   useEffect(() => {

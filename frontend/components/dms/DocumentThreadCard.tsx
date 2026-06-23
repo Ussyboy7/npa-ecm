@@ -97,9 +97,11 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
   };
 
   useEffect(() => {
+    const controller = new AbortController();
     if (documentId) {
       loadThreadDocuments();
     }
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentId, parentDocumentId]);
 

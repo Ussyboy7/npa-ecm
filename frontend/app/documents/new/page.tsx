@@ -15,10 +15,6 @@ export default function CreateDocumentPage() {
     router.push(`/dms/${document.id}`);
   };
 
-  const _handleCancel = () => {
-    router.back();
-  };
-
   return (
     <DashboardLayout>
       {!hydrated ? (

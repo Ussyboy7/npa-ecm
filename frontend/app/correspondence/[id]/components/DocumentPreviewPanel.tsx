@@ -152,34 +152,6 @@ export const DocumentPreviewPanel = ({
     }
   }, [currentUser?.id, resolveDmsAccessTarget]);
 
-  const _resolveDistributionName = (recipient: DistributionRecipient) => {
-    if (recipient.type === 'office') {
-      return recipient.name ?? 'Office';
-    }
-
-    if (recipient.type === 'directorate') {
-      if (recipient.directorateId) {
-        const directorate = directorates.find((dir) => dir.id === recipient.directorateId);
-        if (directorate) return directorate.name;
-      }
-      return recipient.name ?? 'Directorate';
-    }
-
-    if (recipient.type === 'department') {
-      if (recipient.departmentId) {
-        const departmentRecord = departments.find((dept) => dept.id === recipient.departmentId);
-        if (departmentRecord) return departmentRecord.name;
-      }
-    }
-
-    if (recipient.divisionId) {
-      const divisionRecord = divisions.find((div) => div.id === recipient.divisionId);
-      if (divisionRecord) return divisionRecord.name;
-    }
-
-    return recipient.name ?? 'Recipient';
-  };
-
   const handleAttachmentUpload = useCallback(async (files: File[]) => {
     if (!correspondence || files.length === 0) return;
 

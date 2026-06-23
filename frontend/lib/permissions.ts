@@ -45,7 +45,6 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
   const isAGM = grade === "MSS2";
   const isPrincipalManager = grade === "MSS3";
   const isSeniorManager = grade === "MSS4";
-  const _isAssistantManager = grade === "SSS1";
   const isSeniorOfficer = grade === "SSS2";
   const isOfficerI = grade === "SSS3";
   const isOfficerII = grade === "SSS4";
@@ -80,15 +79,7 @@ export const getPermissionProfile = (user?: User | null): PermissionProfile => {
     profile.canViewCorrespondenceRegistry = true;
   }
 
-  const _canRegisterByGrade =
-    isSuperAdmin ||
-    role === "Secretary" ||
-    isSeniorOfficer ||
-    isOfficerI ||
-    isOfficerII ||
-    isStaffI ||
-    isStaffII ||
-    isStaffIII;
+
 
   // Use backend-driven permission (Role.permissions["can_register_correspondence"]).
   // No fallback to legacy grade-based behavior.

@@ -691,7 +691,6 @@ export const DocumentMetadataEditDialog = ({
                                   key={tag}
                                   onSelect={() => {
                                     const currentTags = metadataDraft.tags.split(',').map(t => t.trim()).filter(Boolean);
-                                    const _lastTag = currentTags.pop() || '';
                                     const newTags = [...currentTags, tag].join(', ');
                                     setMetadataDraft((prev) => ({ ...prev, tags: newTags }));
                                     setHasUnsavedChanges(true);

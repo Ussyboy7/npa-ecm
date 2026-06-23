@@ -177,41 +177,6 @@ const FormsPage = () => {
         return;
       }
       setAllForms(data);
-      
-      // Apply sorting
-      const sorted = [...data].sort((a, b) => {
-        let aValue: string | number;
-        let bValue: string | number;
-
-        switch (sortField) {
-          case 'title':
-            aValue = a.document.title.toLowerCase();
-            bValue = b.document.title.toLowerCase();
-            break;
-          case 'status':
-            aValue = a.status as string;
-            bValue = b.status as string;
-            break;
-          case 'created_at':
-            aValue = new Date(a.created_at).getTime();
-            bValue = new Date(b.created_at).getTime();
-            break;
-          case 'updated_at':
-          default:
-            aValue = new Date(a.updated_at).getTime();
-            bValue = new Date(b.updated_at).getTime();
-            break;
-        }
-
-        if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
-        return 0;
-      });
-      
-      // Apply pagination
-      const startIndex = (pagination.page - 1) * pagination.pageSize;
-      const endIndex = startIndex + pagination.pageSize;
-      setForms(sorted.slice(startIndex, endIndex));
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         return;
@@ -223,7 +188,7 @@ const FormsPage = () => {
         setLoading(false);
       }
     }
-  }, [statusFilter, templateFilter, executiveFilter, debouncedSearch, isSecretary, sortField, sortOrder, pagination.page, pagination.pageSize, dateFrom, dateTo]);
+  }, [statusFilter, templateFilter, executiveFilter, debouncedSearch, isSecretary, sortField, sortOrder, dateFrom, dateTo]);
   
   // Reload when pagination changes
   useEffect(() => {
@@ -390,11 +355,6 @@ const FormsPage = () => {
 
   const handleCreateForm = (documentId: string) => {
     router.push(`/forms/${documentId}`);
-  };
-
-  const _handleTemplateSelect = (template: FormTemplate) => {
-    setSelectedTemplate(template);
-    setCreateDialogOpen(true);
   };
 
   const handleExport = async () => {

@@ -97,7 +97,7 @@ const buildExtendedDocumentQueryString = (params: ExtendedDocumentQueryParams) =
 /**
  * Query documents with extended filters (author, date range)
  */
-export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams = {}): Promise<PaginatedDocuments> => {
+export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams & { signal?: AbortSignal } = {}): Promise<PaginatedDocuments> => {
   if (!hasTokens()) {
     logWarn('[DMS] No tokens available, returning empty results');
     return { results: [], count: 0, next: null, previous: null };
@@ -108,7 +108,7 @@ export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams
 
   try {
     const payload = await Promise.race([
-      apiFetch<Record<string, unknown>>(url),
+      apiFetch<Record<string, unknown>>(url, { signal: params.signal }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000),
       ),

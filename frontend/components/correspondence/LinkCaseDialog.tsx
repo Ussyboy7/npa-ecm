@@ -55,21 +55,12 @@ export function LinkCaseDialog({
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
-  const [_previewCase, setPreviewCase] = useState<Case | null>(null);
+  const [previewCase, setPreviewCase] = useState<Case | null>(null);
   const [notes, setNotes] = useState("");
   const [creatingNew, setCreatingNew] = useState(false);
   const [newCaseTitle, setNewCaseTitle] = useState("");
   const [newCaseDescription, setNewCaseDescription] = useState("");
-  const [newCaseType, setNewCaseType] = useState<Case["caseType"]>(() => {
-    // Remember last used case type from localStorage
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('last_case_type');
-      if (saved && ['general', 'complaint', 'request', 'inquiry', 'project', 'legal', 'audit'].includes(saved)) {
-        return saved as Case["caseType"];
-      }
-    }
-    return "general";
-  });
+  const [newCaseType, setNewCaseType] = useState<Case["caseType"]>("general");
   const [linking, setLinking] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -100,6 +91,15 @@ export function LinkCaseDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('last_case_type');
+      if (saved && ['general', 'complaint', 'request', 'inquiry', 'project', 'legal', 'audit'].includes(saved)) {
+        setNewCaseType(saved as Case["caseType"]);
+      }
+    }
+  }, []);
 
   const fetchCases = useCallback(async (pageNum: number = 1, append: boolean = false) => {
     setLoading(true);

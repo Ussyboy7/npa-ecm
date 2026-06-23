@@ -292,8 +292,6 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
     const isPDF = viewAttachment.fileType === 'application/pdf' || viewAttachment.fileName?.toLowerCase().endsWith('.pdf');
     const isWordDocx = viewAttachment.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
                        viewAttachment.fileName?.toLowerCase().endsWith('.docx');
-    const _isWordDoc = viewAttachment.fileType === 'application/msword' || 
-                     viewAttachment.fileName?.toLowerCase().endsWith('.doc');
     const isHtml = viewAttachment.fileType === 'text/html' ||
       viewAttachment.fileName?.toLowerCase().endsWith('.html') ||
       viewAttachment.fileName?.toLowerCase().endsWith('.htm');

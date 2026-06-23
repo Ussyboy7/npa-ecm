@@ -158,7 +158,7 @@ export const getSharedDocuments = async (
  */
 export const getDocumentsSharedByUser = async (
   userId: string,
-  params: Omit<DocumentQueryParams, 'authorId'> = {},
+  params: Omit<DocumentQueryParams, 'authorId'> & { signal?: AbortSignal } = {},
 ): Promise<PaginatedDocuments> => {
   if (!hasTokens()) {
     return { results: [], count: 0, next: null, previous: null };

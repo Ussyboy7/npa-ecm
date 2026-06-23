@@ -30,6 +30,12 @@ export default function WorkspaceDetailPage() {
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const loadWorkspace = useCallback(async () => {
     if (!params?.id) return;
@@ -51,7 +57,7 @@ export default function WorkspaceDetailPage() {
       const result = await queryDocumentsExtended({
         workspaceId: params.id,
         pageSize: 50,
-        search: searchQuery.trim() || undefined,
+        search: debouncedQuery || undefined,
       });
       setDocuments(result.results);
       setTotalCount(result.count);
@@ -69,21 +75,6 @@ export default function WorkspaceDetailPage() {
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
-
-  const filteredDocs = useMemo(() => {
-    if (!searchQuery.trim()) return documents;
-    const q = searchQuery.toLowerCase();
-    return documents.filter(
-      (d) =>
-        d.title.toLowerCase().includes(q) ||
-        (d.referenceNumber ?? "").toLowerCase().includes(q) ||
-        (d.tags ?? []).some((t) => t.toLowerCase().includes(q))
-    );
-  }, [documents, searchQuery]);
-
-  const handleSearch = () => {
-    loadDocuments();
-  };
 
   if (loadingWs) {
     return (
@@ -138,19 +129,19 @@ export default function WorkspaceDetailPage() {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') loadDocuments(); }}
                 placeholder="Search documents in workspace..."
                 className="pl-9 h-9"
               />
             </div>
-            <Button variant="outline" size="sm" className="h-9" onClick={handleSearch}>
+            <Button variant="outline" size="sm" className="h-9" onClick={loadDocuments}>
               Search
             </Button>
           </div>
 
           {loadingDocs ? (
             <LoadingState message="Loading documents..." />
-          ) : filteredDocs.length === 0 ? (
+          ) : documents.length === 0 ? (
             <EmptyState
               icon={<FileText className="h-8 w-8" />}
               title={searchQuery ? "No matching documents" : "No documents in this workspace"}
@@ -162,7 +153,7 @@ export default function WorkspaceDetailPage() {
             />
           ) : (
             <div className="space-y-2">
-              {filteredDocs.map((doc) => (
+              {documents.map((doc) => (
                 <Link key={doc.id} href={`/dms/${doc.id}`} className="block">
                   <Card className="hover:bg-muted/50 transition-colors cursor-pointer">
                     <CardContent className="p-4">

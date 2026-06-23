@@ -86,30 +86,37 @@ function ApprovalsForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Initialize filters from URL params or localStorage
-  const getInitialFilter = (key: string, defaultValue: string): string => {
-    if (typeof window === 'undefined') return defaultValue;
-    const urlParam = searchParams.get(key);
-    if (urlParam) return urlParam;
-    const saved = localStorage.getItem(`approvals_filter_${key}`);
-    return saved ? JSON.parse(saved) : defaultValue;
-  };
-
   const [approvals, setApprovals] = useState<ExecutiveApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState(() => getInitialFilter('search', ''));
+  const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterRole, setFilterRole] = useState<string>(() => getInitialFilter('role', 'all'));
-  const [filterStatus, setFilterStatus] = useState<string>(() => getInitialFilter('status', 'all'));
-  const [dateFrom, setDateFrom] = useState<string>(() => getInitialFilter('dateFrom', ''));
-  const [dateTo, setDateTo] = useState<string>(() => getInitialFilter('dateTo', ''));
-  const [sortBy, setSortBy] = useState<string>(() => getInitialFilter('sortBy', 'sealedAt'));
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (getInitialFilter('sortOrder', 'desc') as 'asc' | 'desc'));
+  const [filterRole, setFilterRole] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('sealedAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Restore filters from localStorage after mount
+  useEffect(() => {
+    const restore = (key: string, setter: (v: string) => void, defaultValue: string) => {
+      const urlParam = searchParams.get(key);
+      if (urlParam) { setter(urlParam); return; }
+      const saved = localStorage.getItem(`approvals_filter_${key}`);
+      if (saved) { setter(JSON.parse(saved)); }
+    };
+    restore('search', setSearchQuery, '');
+    restore('role', v => setFilterRole(v), 'all');
+    restore('status', v => setFilterStatus(v), 'all');
+    restore('dateFrom', v => setDateFrom(v), '');
+    restore('dateTo', v => setDateTo(v), '');
+    restore('sortBy', v => setSortBy(v), 'sealedAt');
+    restore('sortOrder', v => setSortOrder(v as 'asc' | 'desc'), 'desc');
+  }, [searchParams, setSearchQuery, setFilterRole, setFilterStatus, setDateFrom, setDateTo, setSortBy, setSortOrder]);
   const [count, setCount] = useState(0);
-  const fetchApprovalsRef = useRef<(() => Promise<void>) | null>(null);
 
   // Debounced search
   useEffect(() => {
@@ -261,11 +268,6 @@ function ApprovalsForm() {
     }
   }, [getFilterParams]);
 
-  // Store loadApprovals ref
-  useEffect(() => {
-    fetchApprovalsRef.current = loadApprovals;
-  }, [loadApprovals]);
-
   const handleRefresh = () => {
     setRefreshing(true);
     void loadApprovals(pagination.page, pagination.pageSize, true);
@@ -384,11 +386,6 @@ function ApprovalsForm() {
 
   // With server-side pagination, filteredApprovals already contains the current page
   // Client-side filtering is applied to the current page's data only
-  const _paginatedApprovals = useMemo(() => {
-    return filteredApprovals;
-  }, [filteredApprovals]);
-
-
   // Summary: total from API count; other figures are for the current page only (quick scan).
   const statistics = useMemo(() => {
     const filtered = filteredApprovals;

@@ -7,13 +7,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { CaseAnalyticsTab } from '@/components/analytics/CaseAnalyticsTab';
 
 export default function CaseAnalyticsPage() {
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const _permissions = useUserPermissions(currentUser ?? undefined);
-
   return (
     <DashboardLayout>
       {!currentUser ? (

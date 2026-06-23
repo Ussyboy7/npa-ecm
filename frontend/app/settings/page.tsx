@@ -157,9 +157,6 @@ export default function SettingsPage() {
   const [signaturePreferences, setSignaturePreferences] = useState<UserSignaturePreferences>(defaultPreferences);
   const [initialPreferences, setInitialPreferences] = useState<UserSignaturePreferences>(defaultPreferences);
 
-  const _templateTypes: SignatureTemplateType[] = ['approval', 'minute', 'forward', 'treatment'];
-  const _hasPreferenceChanges = JSON.stringify(signaturePreferences) !== JSON.stringify(initialPreferences);
-
   // Initialize profile from currentUser (already fetched by useCurrentUser)
   useEffect(() => {
     if (currentUser) {
@@ -200,6 +197,7 @@ export default function SettingsPage() {
     };
     
     void loadNotificationPreferences();
+    // only runs once on mount
   }, []);
 
   // Load signature data
@@ -249,7 +247,7 @@ export default function SettingsPage() {
     if (hash === 'notifications' || hash === 'appearance' || hash === 'security' || hash === 'signature' || hash === 'profile') {
       setActiveTab(hash as typeof activeTab);
     }
-  }, []);
+  }, [setActiveTab]);
 
   const handleProfileChange = useCallback((field: string, value: string) => {
     setProfile(prev => ({ ...prev, [field]: value }));
@@ -543,44 +541,6 @@ export default function SettingsPage() {
     toast.success('Backup codes copied to clipboard');
   };
   
-  const _handleSignatureUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!currentUser?.id) {
-      toast.error('No active user context found');
-      return;
-    }
-
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!ALLOWED_SIGNATURE_MIME_TYPES.includes(file.type)) {
-      toast.error('Please upload a valid image (PNG, JPG, or SVG)');
-      return;
-    }
-
-    if (file.size > MAX_SIGNATURE_SIZE_MB * 1024 * 1024) {
-      toast.error(`Signature file size must be ${MAX_SIGNATURE_SIZE_MB}MB or less`);
-      return;
-    }
-
-    try {
-      setIsUploading(true);
-      const base64 = await fileToBase64(file);
-      const stored: StoredSignature = {
-        imageData: base64,
-        fileName: file.name,
-        uploadedAt: new Date().toISOString(),
-      };
-      saveUserSignature(currentUser.id, stored);
-      setSignature(stored);
-      toast.success('Signature uploaded successfully');
-    } catch (error: unknown) {
-      logError('Failed to upload signature', error);
-      toast.error('Failed to upload signature');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   const handleSignatureDelete = () => {
     if (!currentUser?.id) return;
     deleteUserSignature(currentUser.id);
@@ -589,86 +549,9 @@ export default function SettingsPage() {
     toast.success('Signature removed');
   };
 
-  const _handleTemplateOverrideChange = (type: SignatureTemplateType, value: string) => {
-    setSignaturePreferences(prev => {
-      const overrides = { ...(prev.templateOverrides ?? {}) };
-      if (value === '__organization__') {
-        delete overrides[type];
-      } else {
-        overrides[type] = value;
-      }
-      return { ...prev, templateOverrides: overrides };
-    });
-  };
-
-  const _handleAutoApplyMinutesChange = (checked: boolean) => {
-    setSignaturePreferences(prev => ({ ...prev, autoApplyForMinutes: checked }));
-  };
-
-  const _handleSavePersonalPreferences = () => {
-    if (!currentUser?.id) {
-      toast.error('No active user context found');
-      return;
-    }
-    const normalized: UserSignaturePreferences = {
-      templateOverrides: { ...(signaturePreferences.templateOverrides ?? {}) },
-      autoApplyForMinutes: signaturePreferences.autoApplyForMinutes ?? false,
-    };
-    saveUserSignaturePreferences(currentUser.id, normalized);
-    setSignaturePreferences(normalized);
-    setInitialPreferences({
-      templateOverrides: { ...normalized.templateOverrides },
-      autoApplyForMinutes: normalized.autoApplyForMinutes,
-    });
-    toast.success('Personal signature preferences saved');
-  };
-
-  const _handleResetPersonalPreferences = () => {
-    if (!currentUser?.id) {
-      toast.error('No active user context found');
-      return;
-    }
-    const resetPrefs: UserSignaturePreferences = {
-      templateOverrides: {},
-      autoApplyForMinutes: false,
-    };
-    setSignaturePreferences(resetPrefs);
-    setInitialPreferences({ ...resetPrefs, templateOverrides: {} });
-    saveUserSignaturePreferences(currentUser.id, resetPrefs);
-    toast.success('Personal signature preferences reset');
-  };
-
-  const _beginEditTemplate = (template: SignatureTemplate) => {
-    setEditingTemplateId(template.id);
-    setTemplateDraft({ ...template });
-  };
-
   const cancelEditTemplate = () => {
     setEditingTemplateId(null);
     setTemplateDraft(null);
-  };
-
-  const _updateTemplateDraft = (field: keyof SignatureTemplate, value: string | boolean) => {
-    if (!templateDraft) return;
-    setTemplateDraft({ ...templateDraft, [field]: value } as SignatureTemplate);
-  };
-
-  const _saveTemplateChanges = () => {
-    if (!templateDraft) return;
-    const updatedTemplates = signatureTemplates.map(template =>
-      template.id === templateDraft.id ? templateDraft : template
-    );
-    setSignatureTemplates(updatedTemplates);
-    saveSignatureTemplates(updatedTemplates);
-    toast.success('Template updated');
-    cancelEditTemplate();
-  };
-
-  const _resetOrganizationTemplates = () => {
-    saveSignatureTemplates(DEFAULT_SIGNATURE_TEMPLATES);
-    setSignatureTemplates([...DEFAULT_SIGNATURE_TEMPLATES]);
-    cancelEditTemplate();
-    toast.success('Organization templates reset to defaults');
   };
 
   const userInitials = currentUser
@@ -797,79 +680,7 @@ export default function SettingsPage() {
             <SignatureSettingsCard />
           </TabsContent>
 
-          {/* DELEGATION TAB - COMMENTED OUT - Use {false && ( ... )} to hide */}
-          {false && (
-          <TabsContent value="delegation" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Office Delegation
-                </CardTitle>
-                <CardDescription>
-                  Manage delegation for your office inbox. When you're away, your designated delegate can act on your behalf.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label>Select Office</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select an office to manage delegation" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="office-1">MD's Office</SelectItem>
-                      <SelectItem value="office-2">ED Finance Office</SelectItem>
-                      <SelectItem value="office-3">GM ICT Office</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="space-y-1">
-                    <p className="font-medium">Mark as Away</p>
-                    <p className="text-sm text-muted-foreground">When enabled, your delegate can access this office's inbox</p>
-                  </div>
-                  <Switch />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Away Start Date</Label>
-                    <Input type="datetime-local" placeholder="Select start date" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Away End Date</Label>
-                    <Input type="datetime-local" placeholder="Select end date" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Delegate User</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select delegate" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user-1">GM MDS Officer</SelectItem>
-                      <SelectItem value="user-2">Personal Assistant</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Delegate Role Title</Label>
-                  <Input placeholder="e.g., GM MDS Officer, Acting MD" />
-                </div>
-                <Button><Save className="h-4 w-4 mr-2" />Save Delegation Settings</Button>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Delegations Where You Are Delegate</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm text-muted-foreground">No active delegations.</div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          )}
+
         </Tabs>
         
         {/* Dialogs */}

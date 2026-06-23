@@ -41,7 +41,7 @@ import { formatDateShort } from '@/lib/correspondence-helpers';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
-import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
@@ -98,6 +98,7 @@ const RecordsArchiveForm = () => {
   const searchParams = useSearchParams();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const {directorates, divisions, departments, offices: _offices, officeMemberships } = useOrganization();
+  const { dataVersion } = useCorrespondence();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Initialize filters from URL params or localStorage
@@ -109,38 +110,40 @@ const RecordsArchiveForm = () => {
         localStorage.removeItem(`records_filter_${key}`);
       }
     });
+    if (typeof window === 'undefined') return;
+    const readFilter = (key: string, setter: (v: any) => void, defaultValue: any, isArray?: boolean) => {
+      const urlParam = searchParams.get(key);
+      if (urlParam) {
+        setter(isArray ? urlParam.split(',').filter(Boolean) : urlParam);
+        return;
+      }
+      const saved = localStorage.getItem(`records_filter_${key}`);
+      if (saved) {
+        try {
+          setter(JSON.parse(saved));
+        } catch {
+          setter(saved);
+        }
+      }
+    };
+    readFilter('search', setSearchQuery, '');
+    readFilter('directorate', setSelectedDirectorate, 'all');
+    readFilter('division', setSelectedDivision, 'all');
+    readFilter('department', setSelectedDepartment, 'all');
+    readFilter('priority', setSelectedPriority, '');
+    readFilter('sortBy', setSortBy, 'completed');
+    readFilter('sortOrder', setSortOrder, 'desc');
   }, []);
-  
-  const getInitialFilter = (key: string, defaultValue: string | string[]): string | string[] => {
-    if (typeof window === 'undefined') return defaultValue;
-    const urlParam = searchParams.get(key);
-    if (urlParam) {
-      if (Array.isArray(defaultValue)) {
-        return urlParam.split(',').filter(Boolean);
-      }
-      return urlParam;
-    }
-    const saved = localStorage.getItem(`records_filter_${key}`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed;
-      } catch {
-        return saved;
-      }
-    }
-    return defaultValue;
-  };
 
   // Filters
-  const [searchQuery, setSearchQuery] = useState(() => getInitialFilter('search', '') as string);
+  const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedDirectorate, setSelectedDirectorate] = useState<string>(() => getInitialFilter('directorate', 'all') as string);
-  const [selectedDivision, setSelectedDivision] = useState<string>(() => getInitialFilter('division', 'all') as string);
-  const [selectedDepartment, setSelectedDepartment] = useState<string>(() => getInitialFilter('department', 'all') as string);
-  const [selectedPriority, setSelectedPriority] = useState<string>(() => getInitialFilter('priority', '') as string);
-  const [sortBy, setSortBy] = useState<string>(() => getInitialFilter('sortBy', 'completed') as string);
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => (getInitialFilter('sortOrder', 'desc') as 'asc' | 'desc'));
+  const [selectedDirectorate, setSelectedDirectorate] = useState<string>('all');
+  const [selectedDivision, setSelectedDivision] = useState<string>('all');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
+  const [selectedPriority, setSelectedPriority] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('completed');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
 
@@ -459,7 +462,7 @@ const RecordsArchiveForm = () => {
         setRefreshing(false);
       }
     }
-  }, [currentUser?.id, getFilterParams, pagination.page, pagination.pageSize, sortBy, sortOrder]);
+  }, [currentUser?.id, getFilterParams, pagination.page, pagination.pageSize, sortBy, sortOrder, dataVersion]);
 
   useEffect(() => {
     fetchRecords();

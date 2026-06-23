@@ -60,6 +60,11 @@ export default function VerifyPage() {
     setMounted(true);
   }, []);
 
+  // Reset fetch state when serial changes (component reused across navigations)
+  useEffect(() => {
+    setHasFetched(false);
+  }, [serial]);
+
   // Track when component has mounted on client to avoid hydration mismatches
   useEffect(() => {
     // Prevent duplicate fetches in React StrictMode (development)

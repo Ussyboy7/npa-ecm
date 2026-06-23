@@ -269,16 +269,6 @@ const CorrespondenceRegisterForm = () => {
     );
   }, [organizationUsers]);
 
-  const _filteredExecutives = useMemo(() => {
-    if (!assignSearch.trim()) return executives;
-    const query = assignSearch.toLowerCase();
-    return executives.filter((user) =>
-      [user.name, user.systemRole, user.email]
-        .filter(Boolean)
-        .some((value) => value && typeof value === 'string' && value.toLowerCase().includes(query))
-    );
-  }, [executives, assignSearch]);
-
   const directorateMap = useMemo(
     () => new Map(directorates.map((item) => [item.id as string, item.name])),
     [directorates]

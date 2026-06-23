@@ -197,20 +197,6 @@ function PhysicalDocumentsForm() {
     }
   };
 
-  const filteredDocuments = useMemo(() => {
-    let list = documents;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (d) =>
-          d.description?.toLowerCase().includes(q) ||
-          d.barcode?.toLowerCase().includes(q) ||
-          d.tracking_number?.toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [documents, searchQuery]);
-
   const locationTabs = useMemo(() => {
     const tabs: { id: string; label: string }[] = [{ id: 'all', label: 'All Locations' }];
     for (const loc of locations) {
@@ -267,7 +253,7 @@ function PhysicalDocumentsForm() {
               <div className="p-6"><LoadingState message="Loading documents..." /></div>
             ) : error ? (
               <div className="p-6"><ErrorState message={error} variant="inline" onRetry={fetchDocuments} retryLabel="Retry" /></div>
-            ) : filteredDocuments.length === 0 ? (
+            ) : documents.length === 0 ? (
               <div className="p-6">
                 <EmptyState
                   icon={<BookOpen className="h-12 w-12 text-muted-foreground" />}
@@ -290,7 +276,7 @@ function PhysicalDocumentsForm() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredDocuments.map((doc) => (
+                    {documents.map((doc) => (
                       <TableRow key={doc.id}>
                         <TableCell className="font-medium max-w-[200px] truncate">
                           {doc.description || doc.tracking_number}
