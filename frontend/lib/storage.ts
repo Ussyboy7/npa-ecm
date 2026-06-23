@@ -1,12 +1,9 @@
 import { logError } from '@/lib/client-logger';
 // localStorage utilities for data persistence
 
-import { Correspondence, Minute } from './npa-structure';
 import type { DraftFileMetadata, Draft } from './api/drafts';
 
 export const STORAGE_KEYS = {
-  CORRESPONDENCE: 'npa_correspondence',
-  MINUTES: 'npa_minutes',
   DRAFTS: 'npa_drafts',
 } as const;
 
@@ -28,57 +25,6 @@ export const saveToStorage = (key: string, value: unknown) => {
 };
 
 export type { DraftFileMetadata, Draft };
-
-// Correspondence operations
-export const saveCorrespondence = (correspondence: Correspondence[]) => {
-  localStorage.setItem(STORAGE_KEYS.CORRESPONDENCE, JSON.stringify(correspondence));
-};
-
-export const loadCorrespondence = (): Correspondence[] | null => {
-  const data = localStorage.getItem(STORAGE_KEYS.CORRESPONDENCE);
-  return data ? JSON.parse(data) : null;
-};
-
-export const updateCorrespondence = (id: string, updates: Partial<Correspondence>) => {
-  const correspondence = loadCorrespondence();
-  if (!correspondence) return null;
-  
-  const index = correspondence.findIndex(c => c.id === id);
-  if (index === -1) return null;
-  
-  correspondence[index] = { ...correspondence[index], ...updates };
-  saveCorrespondence(correspondence);
-  return correspondence[index];
-};
-
-export const addCorrespondence = (newCorr: Correspondence) => {
-  const correspondence = loadCorrespondence() || [];
-  correspondence.unshift(newCorr); // Add to beginning
-  saveCorrespondence(correspondence);
-  return newCorr;
-};
-
-// Minutes operations
-export const saveMinutes = (minutes: Minute[]) => {
-  localStorage.setItem(STORAGE_KEYS.MINUTES, JSON.stringify(minutes));
-};
-
-export const loadMinutes = (): Minute[] | null => {
-  const data = localStorage.getItem(STORAGE_KEYS.MINUTES);
-  return data ? JSON.parse(data) : null;
-};
-
-export const addMinute = (newMinute: Minute) => {
-  const minutes = loadMinutes() || [];
-  minutes.push(newMinute);
-  saveMinutes(minutes);
-  return newMinute;
-};
-
-export const getMinutesByCorrespondence = (correspondenceId: string): Minute[] => {
-  const minutes = loadMinutes() || [];
-  return minutes.filter(m => m.correspondenceId === correspondenceId);
-};
 
 // Drafts operations - Now using backend API
 import * as draftApi from '@/lib/api/drafts';

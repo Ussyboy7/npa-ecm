@@ -239,11 +239,11 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "anon": os.getenv("THROTTLE_ANON_RATE", "10/minute"),
-        "user": os.getenv("THROTTLE_USER_RATE", "100/minute"),
-        "login": os.getenv("THROTTLE_LOGIN_RATE", "5/minute"),
-        "otp": os.getenv("THROTTLE_OTP_RATE", "3/minute"),
-        "password_change": os.getenv("THROTTLE_PASSWORD_CHANGE_RATE", "3/hour"),
+        "anon": os.getenv("THROTTLE_ANON_RATE", "20/minute"),
+        "user": os.getenv("THROTTLE_USER_RATE", "300/minute"),
+        "login": os.getenv("THROTTLE_LOGIN_RATE", "10/minute"),
+        "otp": os.getenv("THROTTLE_OTP_RATE", "5/minute"),
+        "password_change": os.getenv("THROTTLE_PASSWORD_CHANGE_RATE", "5/hour"),
     },
 }
 

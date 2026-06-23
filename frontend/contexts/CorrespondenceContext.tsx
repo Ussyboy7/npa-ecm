@@ -2,12 +2,6 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 import { logError, logInfo } from '@/lib/client-logger';
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { Correspondence, Minute, MinuteSignaturePayload } from '@/lib/npa-structure';
-import {
-  loadCorrespondence,
-  loadMinutes,
-  saveCorrespondence,
-  saveMinutes,
-} from '@/lib/storage';
 import { Delegation } from '@/lib/delegation-storage';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -519,8 +513,6 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         .map(mapApiDelegation)
         .filter((delegation) => delegation.correspondenceId);
 
-      saveCorrespondence(correspondenceList);
-      saveMinutes(minutesList);
       setCorrespondence(correspondenceList);
       setMinutes(minutesList);
       setDelegations(delegationsList);
@@ -556,12 +548,8 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   }, [syncFromApi]);
 
   const refreshData = useCallback(() => {
-    const loadedCorrespondence = loadCorrespondence() ?? [];
-    const loadedMinutes = loadMinutes() ?? [];
-    setCorrespondence(loadedCorrespondence);
-    setMinutes(loadedMinutes);
-    setDelegations([]);
-  }, []);
+    void syncFromApi();
+  }, [syncFromApi]);
 
   // Initialize data on mount
   useEffect(() => {
@@ -587,7 +575,6 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       const created = mapApiMinute(response);
       setMinutes((prev) => {
         const updated = [...prev, created];
-        saveMinutes(updated);
         return updated;
       });
     } catch (error: unknown) {
@@ -611,7 +598,6 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       const updated = mapApiCorrespondence(response);
       setCorrespondence((prev) => {
         const updatedList = prev.map((item) => (item.id as string === updated.id ? updated : item));
-        saveCorrespondence(updatedList);
         return updatedList;
       });
     } catch (error: unknown) {
@@ -630,7 +616,6 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
       const created = mapApiCorrespondence(response);
       setCorrespondence((prev) => {
         const updatedList = [created, ...prev];
-        saveCorrespondence(updatedList);
         return updatedList;
       });
       return created;

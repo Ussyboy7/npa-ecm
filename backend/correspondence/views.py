@@ -803,7 +803,11 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     def create_dispatch(self, request, pk=None):
         """Mark correspondence as dispatched with tracking details."""
         correspondence = self.get_object()
-        if correspondence.status != Correspondence.Status.COMPLETED:
+        force_override = request.data.get("force_override", False)
+        allowed_statuses = [Correspondence.Status.COMPLETED]
+        if force_override:
+            allowed_statuses.append(Correspondence.Status.DISPATCHED)
+        if correspondence.status not in allowed_statuses:
             raise ValidationError({"detail": "Only completed correspondence can be dispatched."})
 
         serializer = DispatchRecordSerializer(data=request.data, context={"request": request})

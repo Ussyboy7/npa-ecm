@@ -24,6 +24,7 @@ import {
   Archive,
   ChevronRight,
   Info,
+  Shield,
 } from 'lucide-react';
 import type { Minute, DistributionRecipient, Correspondence, ParallelRoutingGroup } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -44,6 +45,7 @@ import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
+import { SealTrackingPanel } from '@/components/seals/SealTrackingPanel';
 // Forms moved to DMS - FormsChecklistCard removed
 
 
@@ -179,7 +181,7 @@ const CorrespondenceDetailContent = () => {
   const _setDragActive = useCallback((active: boolean) => {
     dispatch({ type: 'SET_DRAG_ACTIVE', payload: active });
   }, []);
-  const setMobileActiveTab = useCallback((tab: 'document' | 'thread' | 'actions') => {
+  const setMobileActiveTab = useCallback((tab: 'document' | 'thread' | 'actions' | 'seals') => {
     dispatch({ type: 'SET_MOBILE_ACTIVE_TAB', payload: tab });
   }, []);
   
@@ -944,6 +946,15 @@ const CorrespondenceDetailContent = () => {
                 <Send className="h-3.5 w-3.5 mr-1" />
                 Actions
               </Button>
+              <Button
+                variant={mobileActiveTab === 'seals' ? 'default' : 'ghost'}
+                size="sm"
+                className="flex-1 text-xs"
+                onClick={() => setMobileActiveTab('seals')}
+              >
+                <Shield className="h-3.5 w-3.5 mr-1" />
+                Seals
+              </Button>
             </div>
           </div>
         </div>
@@ -1014,6 +1025,10 @@ const CorrespondenceDetailContent = () => {
                     offices={offices}
                     officeMemberships={officeMemberships}
                   />
+                )}
+
+                {minutes.filter(m => m.sealData || m.signature).length > 0 && (
+                  <SealTrackingPanel minutes={minutes} />
                 )}
 
                 <ActionsPanel
@@ -1119,6 +1134,11 @@ const CorrespondenceDetailContent = () => {
             onDownloadCompletionPackage={handleCompletionPackageDownload}
             onSyncFromApi={syncFromApi}
           />
+        </div>
+      )}
+      {mobileActiveTab === 'seals' && (
+        <div className="md:hidden p-4 space-y-4">
+          <SealTrackingPanel minutes={minutes} />
         </div>
       )}
 

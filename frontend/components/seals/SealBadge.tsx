@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { uploadSealImage } from "@/lib/api/seal-images";
 import { logWarn } from "@/lib/client-logger";
 
-interface SealData {
+export interface SealData {
   id: string;
   serialNumber: string;
   verificationUrl: string;
