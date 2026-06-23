@@ -41,7 +41,7 @@ import { formatDateShort } from '@/lib/correspondence-helpers';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
-import { mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { CorrespondenceProvider, mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
@@ -927,7 +927,9 @@ const RecordsArchiveForm = () => {
 
 const RecordsArchivePage = () => (
   <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
-    <RecordsArchiveForm />
+    <CorrespondenceProvider>
+      <RecordsArchiveForm />
+    </CorrespondenceProvider>
   </Suspense>
 );
 

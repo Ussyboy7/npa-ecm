@@ -52,7 +52,7 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
-import { mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { CorrespondenceProvider, mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -99,7 +99,7 @@ const DEFAULT_SUMMARY: InboxSummary = {
   assigned_to_user: 0,
 };
 
-const CorrespondenceInbox = () => {
+const CorrespondenceInboxContent = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, users: organizationUsers, offices, officeMemberships } = useOrganization();
@@ -621,5 +621,11 @@ const CorrespondenceInbox = () => {
     </DashboardLayout>
   );
 };
+
+const CorrespondenceInbox = () => (
+  <CorrespondenceProvider>
+    <CorrespondenceInboxContent />
+  </CorrespondenceProvider>
+);
 
 export default CorrespondenceInbox;
