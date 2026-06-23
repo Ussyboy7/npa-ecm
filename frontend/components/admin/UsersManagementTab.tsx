@@ -1258,6 +1258,7 @@ export const UsersManagementTab = () => {
           setEditOpen(open);
           if (!open) {
             setSelectedUser(null);
+            loadUsers();
           }
         }}
         user={selectedUser}
