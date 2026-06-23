@@ -82,7 +82,7 @@ const calculateDaysPending = (item: Correspondence): number => {
   return Math.floor((Date.now() - received) / (1000 * 60 * 60 * 24));
 };
 
-const OutboxPage = () => {
+const OutboxPageContent = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, users: organizationUsers } = useOrganization();
@@ -395,7 +395,6 @@ const OutboxPage = () => {
 
   return (
     <DashboardLayout>
-      <CorrespondenceProvider>
       <div className="container mx-auto p-6 space-y-6">
         {!currentUser ? (
           <LoadingState message="Loading outbox…" />
@@ -789,9 +788,14 @@ const OutboxPage = () => {
           }}
         />
       </div>
-      </CorrespondenceProvider>
     </DashboardLayout>
   );
 };
+
+const OutboxPage = () => (
+  <CorrespondenceProvider>
+    <OutboxPageContent />
+  </CorrespondenceProvider>
+);
 
 export default OutboxPage;
