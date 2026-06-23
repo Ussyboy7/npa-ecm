@@ -1,7 +1,5 @@
 "use client";
 
-export const dynamic = 'force-dynamic';
-
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/DashboardLayout';
@@ -36,7 +34,7 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
-import { mapApiCorrespondence, mapApiMinute, useCorrespondence } from '@/contexts/CorrespondenceContext';
+import { CorrespondenceProvider, mapApiCorrespondence, mapApiMinute, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import type { Minute } from '@/lib/npa-structure';
 import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
 import { useRouter } from 'next/navigation';
@@ -397,6 +395,7 @@ const OutboxPage = () => {
 
   return (
     <DashboardLayout>
+      <CorrespondenceProvider>
       <div className="container mx-auto p-6 space-y-6">
         {!currentUser ? (
           <LoadingState message="Loading outbox…" />
@@ -790,6 +789,7 @@ const OutboxPage = () => {
           }}
         />
       </div>
+      </CorrespondenceProvider>
     </DashboardLayout>
   );
 };
