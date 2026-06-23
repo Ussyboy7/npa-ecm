@@ -88,7 +88,6 @@ export const DocumentMetadataEditDialog = ({
   const [showStatusChangeConfirmation, setShowStatusChangeConfirmation] = useState(false);
   const [checkingReferenceNumber, setCheckingReferenceNumber] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
-  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
 
   // Filter departments by selected division
   const filteredDepartments = useMemo(() => {
@@ -96,23 +95,11 @@ export const DocumentMetadataEditDialog = ({
     return departments.filter((dept) => dept.divisionId === metadataDraft.divisionId);
   }, [departments, metadataDraft.divisionId]);
 
-  // Load tag suggestions from existing documents
-  useEffect(() => {
-    if (!open) return;
-    const loadTagSuggestions = async () => {
-      try {
-        const result = await queryDocuments({ page: 1, pageSize: 100 });
-        const allTags = new Set<string>();
-        result.results.forEach((doc) => {
-          doc.tags.forEach((tag) => allTags.add(tag.toLowerCase()));
-        });
-        setTagSuggestions(Array.from(allTags).slice(0, 20).sort());
-      } catch (_error: unknown) {
-        // Silently fail - tag suggestions are optional
-      }
-    };
-    void loadTagSuggestions();
-  }, [open]);
+  // Tag suggestions from current document's existing tags
+  const tagSuggestions = useMemo(() => {
+    if (!document?.tags?.length) return [];
+    return document.tags.map(t => t.toLowerCase()).sort();
+  }, [document?.tags]);
 
   // Initialize draft when dialog opens or document changes
   useEffect(() => {

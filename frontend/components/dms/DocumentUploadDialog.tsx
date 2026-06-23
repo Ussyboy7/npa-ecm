@@ -595,10 +595,7 @@ export const DocumentUploadDialog = ({
         }
         toast.success('Document created successfully');
         handleClose(false);
-        // Call onComplete after dialog closes
-        setTimeout(() => {
-          onComplete(created);
-        }, 200);
+        onComplete(created);
         return;
       }
 
@@ -641,11 +638,8 @@ export const DocumentUploadDialog = ({
         });
 
         handleClose(false);
-        // Call onComplete after dialog closes
-        setTimeout(() => {
-          onComplete(updated);
-          toast.success('New version added');
-        }, 200);
+        onComplete(updated);
+        toast.success('New version added');
       }
     } catch (error: unknown) {
       logError('Document upload error:', error);
