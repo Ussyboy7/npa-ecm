@@ -67,7 +67,7 @@ const RegisteredCorrespondencePage = () => {
   const permissions = useUserPermissions(currentUser ?? undefined);
   const {users, divisions, departments: _departments } = useOrganization();
   const [items, setItems] = useState<Correspondence[]>([]);
-  const [_loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [count, setCount] = useState(0);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -266,7 +266,13 @@ const RegisteredCorrespondencePage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedCorrespondence.length === 0 ? (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                        Loading registered correspondence...
+                      </TableCell>
+                    </TableRow>
+                  ) : paginatedCorrespondence.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                         No correspondence matches the current filters.

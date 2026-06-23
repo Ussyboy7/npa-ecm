@@ -101,8 +101,7 @@ const RecordsArchiveForm = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Initialize filters from URL params or localStorage
-  // Clear any invalid stored filters (empty strings or invalid UUIDs)
-  if (typeof window !== 'undefined') {
+  useEffect(() => {
     const invalidKeys = ['division', 'department', 'directorate'];
     invalidKeys.forEach(key => {
       const stored = localStorage.getItem(`records_filter_${key}`);
@@ -110,7 +109,7 @@ const RecordsArchiveForm = () => {
         localStorage.removeItem(`records_filter_${key}`);
       }
     });
-  }
+  }, []);
   
   const getInitialFilter = (key: string, defaultValue: string | string[]): string | string[] => {
     if (typeof window === 'undefined') return defaultValue;
@@ -170,7 +169,6 @@ const RecordsArchiveForm = () => {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const fetchRecordsRef = useRef<(() => Promise<void>) | null>(null);
 
   // Determine user's organizational scope
   const userScope = useMemo<UserScope>(() => {
@@ -462,11 +460,6 @@ const RecordsArchiveForm = () => {
       }
     }
   }, [currentUser?.id, getFilterParams, pagination.page, pagination.pageSize, sortBy, sortOrder]);
-
-  // Store fetchRecords ref
-  useEffect(() => {
-    fetchRecordsRef.current = fetchRecords;
-  }, [fetchRecords]);
 
   useEffect(() => {
     fetchRecords();

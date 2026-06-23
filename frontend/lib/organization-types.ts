@@ -179,17 +179,3 @@ export type UpdateUserInput = {
   employeeId?: string | null;
   password?: string;
 };
-
-export interface CachedData {
-  timestamp: number;
-  data: {
-    directorates: Directorate[];
-    divisions: Division[];
-    departments: Department[];
-    roles: Role[];
-    offices: Office[];
-    officeMemberships: OfficeMembership[];
-    users: User[];
-    assistantAssignments: AssistantAssignment[];
-  };
-}

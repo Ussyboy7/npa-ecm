@@ -17,8 +17,6 @@ import type {
   CreateUserInput, UpdateUserInput,
 } from '@/lib/organization-types';
 import {
-  readCachedData, writeCachedData, isCacheFresh,
-  CACHE_DURATION,
   mapApiUserToUser, mapApiDirectorate, mapApiDivision,
   mapApiDepartment, mapApiOffice, mapApiOfficeMembership,
   mapApiRole, mapApiDelegation,
@@ -108,32 +106,6 @@ export const OrganizationProvider: React.FC<{
       logInfo('Organization data loaded from server bootstrap');
     }
   }, [initialData]);
-
-  useEffect(() => {
-    if (hasSynced) return;
-    if (!hasTokens()) return;
-    const cached = readCachedData(currentUser?.id);
-    if (!isCacheFresh(cached, CACHE_DURATION)) return;
-    const data = cached?.data;
-    if (!data) return;
-    setDirectorates(data.directorates || []);
-    setDivisions(data.divisions || []);
-    setDepartments(data.departments || []);
-    setAssistantAssignments(data.assistantAssignments || []);
-    setOffices(data.offices || []);
-    setOfficeMemberships(data.officeMemberships || []);
-    setUsers(data.users || []);
-    setRoles(data.roles || []);
-    updateOrganizationCache({
-      directorates: data.directorates || [],
-      divisions: data.divisions || [],
-      departments: data.departments || [],
-      offices: data.offices || [],
-      officeMemberships: data.officeMemberships || [],
-      users: data.users || [],
-    });
-    setHasSynced(true);
-  }, [currentUser?.id, hasSynced]);
 
   const applyDirectorateUpdate = useCallback(
     (directorate: Directorate) => {
@@ -289,17 +261,6 @@ export const OrganizationProvider: React.FC<{
         officeMemberships: apiOfficeMemberships,
         users: sortedUsers,
       });
-
-      writeCachedData({
-        directorates: sortedDirectorates,
-        divisions: sortedDivisions,
-        departments: sortedDepartments,
-        roles: sortedRoles,
-        offices: sortedOffices,
-        officeMemberships: apiOfficeMemberships,
-        users: sortedUsers,
-        assistantAssignments: apiDelegations,
-      }, currentUser?.id);
 
       setHasSynced(true);
       logInfo('Organization data loaded successfully:', {

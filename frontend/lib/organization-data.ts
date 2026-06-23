@@ -1,45 +1,6 @@
-import type { Directorate, Division, Department, Office, OfficeMembership, AssistantAssignment, Role, CachedData } from './organization-types';
+import type { Directorate, Division, Department, Office, OfficeMembership, AssistantAssignment, Role } from './organization-types';
 import type { User } from './npa-structure';
 import { isRecord, asString } from '@/lib/type-utils';
-
-// Cache configuration
-const CACHE_KEY = 'org_data_cache';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-const USERS_CACHE_DURATION = 60 * 60 * 1000;
-
-const buildCacheKey = (userId?: string | null) => (
-  userId ? `${CACHE_KEY}:${userId}` : CACHE_KEY
-);
-
-const readCachedData = (userId?: string | null): CachedData | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(buildCacheKey(userId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedData;
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (typeof parsed.timestamp !== 'number') return null;
-    if (!parsed.data || typeof parsed.data !== 'object') return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-};
-
-const writeCachedData = (data: CachedData['data'], userId?: string | null) => {
-  if (typeof window === 'undefined') return;
-  const payload: CachedData = { timestamp: Date.now(), data };
-  try {
-    localStorage.setItem(buildCacheKey(userId), JSON.stringify(payload));
-  } catch {
-    // ignore
-  }
-};
-
-const isCacheFresh = (cache: CachedData | null, maxAgeMs: number) => {
-  if (!cache) return false;
-  return Date.now() - cache.timestamp < maxAgeMs;
-};
 
 const asStringOptional = (value: unknown): string | undefined => {
   if (value === null || value === undefined) return undefined;
@@ -260,13 +221,6 @@ const dedupeUsers = (incoming: User[]): User[] => {
 };
 
 export {
-  CACHE_KEY,
-  CACHE_DURATION,
-  USERS_CACHE_DURATION,
-  buildCacheKey,
-  readCachedData,
-  writeCachedData,
-  isCacheFresh,
   asStringOptional,
   asBoolean,
   normalizeId,
