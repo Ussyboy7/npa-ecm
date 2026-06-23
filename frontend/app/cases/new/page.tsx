@@ -66,6 +66,7 @@ const NewCasePage = () => {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('unsaved');
+  const [hasDraft, setHasDraft] = useState(false);
   const AUTO_SAVE_KEY = 'case-draft-new';
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -79,6 +80,7 @@ const NewCasePage = () => {
         const draft = JSON.parse(saved);
         setFormData(draft);
         setAutoSaveStatus('saved');
+        setHasDraft(true);
       }
     } catch (err) {
         logError('Failed to load draft', err);
@@ -105,9 +107,11 @@ const NewCasePage = () => {
         if (hasData) {
           localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify(formData));
           setAutoSaveStatus('saved');
+          setHasDraft(true);
         } else {
           localStorage.removeItem(AUTO_SAVE_KEY);
           setAutoSaveStatus('unsaved');
+          setHasDraft(false);
         }
       } catch (err) {
         logError('Failed to auto-save draft', err);
@@ -194,6 +198,7 @@ const NewCasePage = () => {
       if (saved) {
         const draft = JSON.parse(saved);
         setFormData(draft);
+        setHasDraft(true);
         toast.success("Draft loaded");
       }
     } catch (_err) {
@@ -204,6 +209,7 @@ const NewCasePage = () => {
   const handleClearDraft = () => {
     localStorage.removeItem(AUTO_SAVE_KEY);
     setAutoSaveStatus('unsaved');
+    setHasDraft(false);
     toast.success("Draft cleared");
   };
 
@@ -246,10 +252,10 @@ const NewCasePage = () => {
       
       toast.success("Case created successfully");
       setHasUnsavedChanges(false);
-      // Clear draft after successful creation
-      localStorage.removeItem(AUTO_SAVE_KEY);
+      setHasDraft(false);
       setAutoSaveStatus('unsaved');
-      router.push(`/cases/${newCase.id}`);
+      await router.push(`/cases/${newCase.id}`);
+      localStorage.removeItem(AUTO_SAVE_KEY);
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
       logError("Failed to create case", err);
@@ -319,7 +325,7 @@ const NewCasePage = () => {
             </div>
           </div>
           <div className="flex gap-2">
-            {localStorage.getItem(AUTO_SAVE_KEY) && (
+            {hasDraft && (
               <>
                 <Button
                   variant="outline"

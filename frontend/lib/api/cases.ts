@@ -17,10 +17,12 @@ export interface CaseQueryParams {
   owningOffice?: string;
   currentOffice?: string;
   assignedTo?: string;
-  executive?: string; // For secretaries: filter by executive they've acted for
-  scope?: "my" | "office" | "all" | "department" | "division" | "directorate" | "organization"; // Filter by scope
+  executive?: string;
+  scope?: "my" | "office" | "all" | "department" | "division" | "directorate" | "organization";
+  dateFrom?: string;
+  dateTo?: string;
   ordering?: string;
-  signal?: AbortSignal; // For request cancellation
+  signal?: AbortSignal;
 }
 
 // API response uses snake_case, frontend uses camelCase
@@ -143,6 +145,8 @@ export async function getCases(params: CaseQueryParams = {}): Promise<CaseListRe
   if (params.assignedTo) queryParams.append('assigned_to', params.assignedTo);
   if (params.executive) queryParams.append('executive', params.executive);
   if (params.scope) queryParams.append('scope', params.scope);
+  if (params.dateFrom) queryParams.append('date_from', params.dateFrom);
+  if (params.dateTo) queryParams.append('date_to', params.dateTo);
   if (params.ordering) queryParams.append('ordering', params.ordering);
   
   const response = await apiFetch<ApiCaseListResponse>(`${BASE_PATH}/?${queryParams.toString()}`, {

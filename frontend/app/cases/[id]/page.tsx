@@ -150,7 +150,7 @@ const CaseDetailPage = () => {
         abortControllerRef.current.abort();
       }
     };
-  }, [hydrated, currentUser, caseId, refreshKey]);
+  }, [hydrated, currentUser?.id, caseId, refreshKey]);
 
   const handleStatusUpdate = async (newStatus: CaseDetail["status"]) => {
     if (!caseData) return;

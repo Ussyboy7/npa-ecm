@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
+import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -90,10 +91,11 @@ const DelegatedInbox = () => {
       await apiFetch(`/correspondence/correspondence-delegations/${delegationId}/complete/`, {
         method: 'POST',
       });
-      // Remove from list
+      // Remove from list only after successful API call
       setDelegatedItems(prev => prev.filter(item => item.id as string !== delegationId));
     } catch (err) {
       logError('Failed to mark delegation as complete:', err);
+      toast.error('Failed to mark delegation as complete');
     } finally {
       setCompletingIds(prev => {
         const newSet = new Set(prev);

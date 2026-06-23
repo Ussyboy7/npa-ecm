@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Badge } from '@/components/ui/badge';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
@@ -38,6 +38,7 @@ const Dashboard = () => {
   const [executivePortfolio, setExecutivePortfolio] = useState<ExecutivePortfolio | null>(null);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [portfolioError, setPortfolioError] = useState<string | null>(null);
+  const isFetchingRef = useRef(false);
   
   const [pendingCorrespondence, setPendingCorrespondence] = useState<Correspondence[]>([]);
   const [stats, setStats] = useState({
@@ -81,6 +82,8 @@ const Dashboard = () => {
   }, [currentUser?.id]);
 
   const fetchDashboardData = async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setDashboardLoading(true);
     try {
       type InboxResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>>; summary?: Record<string, unknown> };
@@ -121,6 +124,7 @@ const Dashboard = () => {
       setPendingCorrespondence([]);
       setStats({ pending: 0, inProgress: 0, completedToday: 0, urgent: 0 });
     } finally {
+      isFetchingRef.current = false;
       setDashboardLoading(false);
     }
   };

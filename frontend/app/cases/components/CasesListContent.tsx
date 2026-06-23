@@ -159,14 +159,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
     initialPageSize: DEFAULT_PAGE_SIZE,
     totalCount: count,
   });
-  
-  // Calculate summary stats - fetch separately from API
-  const [, setSummary] = useState({
-    total: 0,
-    open: 0,
-    inProgress: 0,
-    urgent: 0,
-  });
 
   // Debounce search
   useEffect(() => {
@@ -243,6 +235,8 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           priority: selectedPriority || undefined,
           division: divisionFilter !== "all" ? divisionFilter : undefined,
           executive: (isSecretary || isSuperAdmin) && executiveFilter !== "all" ? executiveFilter : undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
           ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
         };
         
@@ -263,44 +257,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         
         setCases(response.results);
         setCount(response.count as number);
-        
-        // Fetch summary stats separately from API
-        try {
-          const summaryParams: CaseQueryParams = {
-            ...params,
-            page: 1,
-            pageSize: 1, // Just need count
-          };
-          const summaryResponse = await getCases(summaryParams);
-          
-          if (signal.aborted) return;
-          
-          // Fetch counts for each stat (4 metrics: Total, Open, In Progress, Urgent)
-          const [openResponse, inProgressResponse, urgentResponse] = await Promise.all([
-            getCases({ ...summaryParams, status: 'open', pageSize: 1, signal }),
-            getCases({ ...summaryParams, status: 'in_progress', pageSize: 1, signal }),
-            getCases({ ...summaryParams, priority: 'urgent', pageSize: 1, signal }),
-          ]);
-          
-          if (signal.aborted) return;
-          
-          setSummary({
-            total: summaryResponse.count,
-            open: openResponse.count,
-            inProgress: inProgressResponse.count,
-            urgent: urgentResponse.count,
-          });
-        } catch (summaryErr: unknown) {
-          if (summaryErr && typeof summaryErr === 'object' && 'name' in summaryErr && summaryErr.name === 'AbortError') return;
-          // Fallback to calculating from current page if summary fetch fails
-          const allCases = response.results;
-          setSummary({
-            total: response.count as number,
-            open: allCases.filter(c => c.status === 'open').length,
-            inProgress: allCases.filter(c => c.status === 'in_progress').length,
-            urgent: allCases.filter(c => c.priority === 'urgent').length,
-          });
-        }
       } catch (err: unknown) {
         if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
         logError("Failed to load cases", err);
