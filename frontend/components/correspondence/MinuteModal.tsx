@@ -548,7 +548,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
 
   // Get previous minute
   const previousMinute = useMemo(() => {
-    return existingMinutes
+    const active = existingMinutes.filter(m => !m.isRecalled && !m.recalledAt);
+    return active
       .slice()
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
   }, [existingMinutes]);
