@@ -2,31 +2,30 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PRODUCTION_SCRIPT_DIR="${SCRIPT_DIR}/../production"
+OPS_SCRIPT_DIR="${SCRIPT_DIR}/../ops"
 
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/ecm <command> <env> [options] [-- docker args]
+  scripts/utilities/ecm <command> <env> [options] [-- docker args]
 
 Commands:
-  up|start <env>        Start the stack (wraps scripts/start-stack.sh)
-  down|stop <env>       Stop the stack (wraps scripts/stop-stack.sh)
-  restart <env>         Restart the stack (wraps scripts/restart-stack.sh)
-  status <env>          Show container status (docker compose ps)
-  logs <env> [svc]      Show logs (optionally for a service)
-  health <env>          Check backend health (and frontend unless --no-frontend)
-  migrate <env>         Run Django migrations (manage.py migrate --noinput)
+  up|start <env>        Start the stack
+  down|stop <env>       Stop the stack
+  restart <env>         Restart the stack
+  status <env>          Show container status
+  logs <env> [svc]      Show logs
+  health <env>          Check backend + frontend health
+  migrate <env>         Run Django migrations
+  seed <env>            Run seed_demo_data
 
-Environments:
-  local | stag | prod
+Environments: local | stag | prod
 
 Examples:
-  scripts/ecm up local
-  scripts/ecm up stag -- --build
-  scripts/ecm restart prod --prune
-  scripts/ecm logs stag nginx_stag
-  scripts/ecm health stag --timeout 10
-  scripts/ecm migrate prod
+  scripts/utilities/ecm up local
+  scripts/utilities/ecm health stag
+  scripts/utilities/ecm logs local backend --follow
 USAGE
 }
 
@@ -39,41 +38,44 @@ COMMAND="$1"
 ENVIRONMENT="$2"
 shift 2 || true
 
+map_env() {
+  case "$1" in
+    local) echo "local" ;;
+    stag|staging) echo "stag" ;;
+    prod|production) echo "prod" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+ENV="$(map_env "$ENVIRONMENT")"
+
 case "$COMMAND" in
   up|start)
-    exec "${SCRIPT_DIR}/start-stack.sh" "$ENVIRONMENT" "$@"
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" start "$@"
     ;;
   down|stop)
-    exec "${SCRIPT_DIR}/stop-stack.sh" "$ENVIRONMENT" "$@"
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" stop "$@"
     ;;
   restart)
-    exec "${SCRIPT_DIR}/restart-stack.sh" "$ENVIRONMENT" "$@"
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" restart "$@"
     ;;
   status)
-    # Reuse stack-utils compose detection
-    # shellcheck source=/dev/null
-    source "${SCRIPT_DIR}/stack-utils.sh"
-    stack_init_env "$ENVIRONMENT"
-    exec stack_compose ps
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" status "$@"
     ;;
   logs)
-    # shellcheck source=/dev/null
-    source "${SCRIPT_DIR}/stack-utils.sh"
-    stack_init_env "$ENVIRONMENT"
-    if [[ $# -gt 0 ]]; then
-      exec stack_compose logs "$@"
-    else
-      exec stack_compose logs
-    fi
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" logs "$@"
     ;;
   health)
-    exec "${SCRIPT_DIR}/check-health.sh" "$ENVIRONMENT" "$@"
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" health "$@"
     ;;
   migrate)
-    # shellcheck source=/dev/null
-    source "${SCRIPT_DIR}/stack-utils.sh"
-    stack_init_env "$ENVIRONMENT"
-    exec stack_backend_manage migrate --noinput
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" migrate "$@"
+    ;;
+  seed)
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" seed "$@"
+    ;;
+  deploy)
+    exec "${OPS_SCRIPT_DIR}/env-manager.sh" "$ENV" deploy "$@"
     ;;
   *)
     echo "Unknown command: $COMMAND" >&2
@@ -81,5 +83,3 @@ case "$COMMAND" in
     exit 1
     ;;
 esac
-
-

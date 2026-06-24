@@ -1,0 +1,4 @@
+# Default Docker Compose project on developer machines — local dev only.
+# Staging runs on the remote server via docker-compose.stag.yml.
+include:
+  - path: docker-compose.local.yml

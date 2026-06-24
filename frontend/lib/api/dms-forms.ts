@@ -2,6 +2,9 @@
 
 import { apiFetch } from "@/lib/api-client";
 import { logError, logInfo } from '@/lib/client-logger';
+import type { PaginatedResponse } from '@/lib/pagination-utils';
+import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
+import { unwrapResults } from '@/lib/type-utils';
 
 const BASE_PATH = "/dms";
 
@@ -87,35 +90,58 @@ export interface CreateFormDocumentData {
   department_id?: string;
 }
 
-export async function getFormDocuments(params?: {
+export interface FormDocumentListParams {
   status?: string;
   template?: string;
   correspondence?: string;
   search?: string;
-  executive?: string; // For secretaries: filter by executive they've acted for
+  executive?: string;
+  page?: number;
+  pageSize?: number;
+  ordering?: string;
   signal?: AbortSignal;
-}): Promise<FormDocument[]> {
+}
+
+export interface FormDocumentListResult {
+  results: FormDocument[];
+  count: number;
+}
+
+export async function listFormDocuments(
+  params?: FormDocumentListParams,
+): Promise<FormDocumentListResult> {
   const queryParams = new URLSearchParams();
-  if (params?.status) queryParams.append("status", params.status);
-  if (params?.template) queryParams.append("template", params.template);
-  if (params?.correspondence) queryParams.append("correspondence", params.correspondence);
-  if (params?.search) queryParams.append("search", params.search);
-  if (params?.executive) queryParams.append("executive", params.executive);
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.template) queryParams.append('template', params.template);
+  if (params?.correspondence) queryParams.append('correspondence', params.correspondence);
+  if (params?.search) queryParams.append('search', params.search);
+  if (params?.executive) queryParams.append('executive', params.executive);
+  if (params?.page) queryParams.append('page', String(params.page));
+  if (params?.pageSize) queryParams.append('page_size', String(params.pageSize));
+  if (params?.ordering) queryParams.append('ordering', params.ordering);
 
   const query = queryParams.toString();
-  const response = await apiFetch<FormDocument[] | { results?: FormDocument[] }>(
-    `${BASE_PATH}/form-documents${query ? `?${query}` : ""}`,
-    {
-      signal: params?.signal,
-    }
+  const response = await apiFetch<PaginatedResponse<FormDocument> | FormDocument[]>(
+    `${BASE_PATH}/form-documents${query ? `?${query}` : ''}`,
+    { signal: params?.signal },
   );
+
   if (Array.isArray(response)) {
-    return response;
+    return { results: response, count: response.length };
   }
-  if (response && typeof response === "object" && Array.isArray(response.results)) {
-    return response.results;
-  }
-  return [];
+
+  const results = unwrapResults<FormDocument>(response);
+  const count = typeof response.count === 'number' ? response.count : results.length;
+  return { results, count };
+}
+
+export async function getFormDocuments(params?: FormDocumentListParams): Promise<FormDocument[]> {
+  const { results } = await listFormDocuments({
+    ...params,
+    page: params?.page ?? 1,
+    pageSize: params?.pageSize ?? DEFAULT_LIST_PAGE_SIZE,
+  });
+  return results;
 }
 
 export async function getFormDocument(id: string): Promise<FormDocument> {

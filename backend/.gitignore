@@ -20,11 +20,9 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# Virtual environments (not backend/env/ config directory)
 .venv/
 venv/
-ENV/
-env/
 
 # Django
 *.log
@@ -35,13 +33,14 @@ db.sqlite3-journal
 /staticfiles
 /static
 
-# Environment variables (SECURITY: Never commit .env files with secrets)
+# Environment secrets — commit *.env.example templates only
+env/*.env
+!env/*.env.example
 .env
 .env.local
 .env.*.local
 .env.*.prod
 .env.prod
-*.env
 
 # IDE
 .vscode/

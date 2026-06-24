@@ -9,6 +9,7 @@ import { FileText, ArrowUp, ArrowDown, ChevronRight, Loader2, RefreshCw } from '
 import { useRouter } from 'next/navigation';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
+import { fetchAllPaginated } from '@/lib/pagination-utils';
 import { toast } from 'sonner';
 import { isRecord } from '@/lib/type-utils';
 
@@ -63,14 +64,11 @@ export const DocumentThreadCard = ({ documentId, parentDocumentId }: DocumentThr
         }
       }
       
-      // Load child documents (response documents)
+      // Load child documents (response documents) — all pages
       try {
-        const response = await apiFetch<unknown>(`/dms/documents/?parent_document=${documentId}&page_size=100`);
-        const rows = Array.isArray(response)
-          ? response
-          : isRecord(response) && Array.isArray(response.results)
-            ? response.results
-            : [];
+        const rows = await fetchAllPaginated<Record<string, unknown>>(
+          `/dms/documents/?parent_document=${documentId}`,
+        );
         const children = rows
           .filter(isRecord)
           .map((doc) => ({

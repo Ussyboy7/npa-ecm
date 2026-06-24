@@ -3,6 +3,7 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { logError, logWarn } from '@/lib/client-logger';
+import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
 import {
   Dialog,
   DialogContent,
@@ -485,13 +486,17 @@ export const ShareDocumentDialog = ({
       return;
     }
 
+    if (shareableUsers.length > 0) {
+      setHasLoadedDirectShareUsers(true);
+      return;
+    }
+
     setLoadingFallbackRecipients(true);
     void (async () => {
       try {
-        const response = await apiFetch<unknown>('/accounts/users/?is_active=true&page_size=500&ordering=username');
-        const rows = Array.isArray(response)
-          ? response
-          : (isRecord(response) && Array.isArray(response.results) ? response.results : []);
+        const rows = await fetchAllCatalogPaginated<Record<string, unknown>>(
+          '/accounts/users/?is_active=true&ordering=username',
+        );
 
         const mapped = rows
           .filter(isRecord)
@@ -519,7 +524,7 @@ export const ShareDocumentDialog = ({
         setHasLoadedDirectShareUsers(true);
       }
     })();
-  }, [open, loadingFallbackRecipients, hasLoadedDirectShareUsers, currentUserId]);
+  }, [open, loadingFallbackRecipients, hasLoadedDirectShareUsers, currentUserId, shareableUsers.length]);
 
   const handleToggleDirectSharePerson = useCallback((userId: string) => {
     setSelectedUserIds((prev) => {

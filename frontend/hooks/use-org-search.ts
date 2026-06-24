@@ -10,6 +10,7 @@ import type {
 } from "@/contexts/OrganizationContext";
 import type { User } from "@/lib/npa-structure";
 import { unwrapResults } from "@/lib/type-utils";
+import { DEFAULT_CATALOG_PAGE_SIZE } from '@/lib/pagination-constants';
 
 // Shared mappers (minimal - just enough for dropdown display)
 const mapOffice = (o: Record<string, unknown>): Office => ({
@@ -191,7 +192,7 @@ export function useDirectoratesSearch(options?: { enabled?: boolean }) {
     }
     const controller = new AbortController();
     setLoading(true);
-    apiFetch<unknown>("/organization/directorates/?ordering=name&page_size=200&page=1", { signal: controller.signal })
+    apiFetch<unknown>(`/organization/directorates/?ordering=name&page_size=${DEFAULT_CATALOG_PAGE_SIZE}&page=1`, { signal: controller.signal })
       .then((res) => setItems(unwrapResults<Record<string, unknown>>(res).map(mapDirectorate)))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));

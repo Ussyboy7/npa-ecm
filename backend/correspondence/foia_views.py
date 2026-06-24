@@ -3,13 +3,14 @@
 import logging
 
 from django.utils import timezone
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import ValidationError, PermissionDenied
 
+from common.pagination import StandardPageNumberPagination
 from audit.services import AuditService
 from .foia_models import FOIARequest, FOIARequestDocument, FOIANote
 from .foia_serializers import (
@@ -21,14 +22,36 @@ from .foia_serializers import (
 
 logger = logging.getLogger(__name__)
 
+_OVERDUE_EXCLUDED_STATUSES = (
+    FOIARequest.Status.RESPONDED,
+    FOIARequest.Status.CLOSED,
+    FOIARequest.Status.APPEALED,
+)
+
+
+def _filter_overdue_queryset(qs):
+    today = timezone.now().date()
+    return qs.filter(deadline_date__lt=today).exclude(status__in=_OVERDUE_EXCLUDED_STATUSES)
+
 
 class FOIARequestViewSet(viewsets.ModelViewSet):
     queryset = FOIARequest.objects.select_related("assigned_to").prefetch_related(
         "documents", "notes_entries"
     )
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
+    pagination_class = StandardPageNumberPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "assigned_to"]
+    search_fields = ["request_number", "requester_name", "requester_email", "organization", "description"]
+    ordering_fields = ["received_date", "deadline", "created_at"]
+    ordering = ["-received_date"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        overdue_raw = self.request.query_params.get("overdue", "").lower()
+        if overdue_raw in ("1", "true", "yes"):
+            qs = _filter_overdue_queryset(qs)
+        return qs
 
     def get_serializer_class(self):
         if self.action == "retrieve":
@@ -102,10 +125,13 @@ class FOIARequestViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="overdue")
     def overdue(self, request):
-        qs = self.get_queryset().filter(
-            deadline_date__lt=timezone.now().date(),
-        ).exclude(
-            status__in=[FOIARequest.Status.RESPONDED, FOIARequest.Status.CLOSED]
+        """Paginated overdue list (prefer ?overdue=true on the list endpoint)."""
+        qs = self.filter_queryset(
+            _filter_overdue_queryset(
+                FOIARequest.objects.select_related("assigned_to").prefetch_related(
+                    "documents", "notes_entries"
+                )
+            )
         )
         page = self.paginate_queryset(qs)
         serializer = FOIARequestListSerializer(page, many=True, context={"request": request})
@@ -120,11 +146,7 @@ class FOIARequestViewSet(viewsets.ModelViewSet):
             "in_processing": base.filter(
                 status__in=[FOIARequest.Status.IN_PROCESSING, FOIARequest.Status.REVIEW]
             ).count(),
-            "overdue": base.filter(
-                deadline_date__lt=timezone.now().date(),
-            ).exclude(
-                status__in=[FOIARequest.Status.RESPONDED, FOIARequest.Status.CLOSED]
-            ).count(),
+            "overdue": _filter_overdue_queryset(base).count(),
             "closed_this_month": base.filter(
                 status=FOIARequest.Status.CLOSED,
                 updated_at__month=timezone.now().month,

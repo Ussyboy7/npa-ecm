@@ -27,6 +27,24 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { apiFetch } from "@/lib/api-client";
+import { usePagination } from "@/hooks/use-pagination";
+import { PaginationControls } from "@/components/shared/PaginationControls";
+import { unwrapResults } from "@/lib/type-utils";
+
+interface FOIARequestRow {
+  id: string;
+  request_number: string;
+  requester_name: string;
+  requester_email?: string;
+  requester_phone?: string;
+  organization?: string;
+  description_of_documents?: string;
+  status: FOIAStatus;
+  received_date: string;
+  deadline_date: string | null;
+  is_overdue?: boolean;
+  assigned_to?: { name?: string; username?: string } | string | null;
+}
 
 interface FOIARequest {
   id: string;
@@ -38,14 +56,33 @@ interface FOIARequest {
   description: string;
   status: FOIAStatus;
   received_date: string;
-  deadline: string;
-  assigned_to: string | null;
-  outcome: string | null;
-  exemption_reason: string | null;
-  acknowledged_at: string | null;
-  responded_at: string | null;
-  closed_at: string | null;
+  deadline_date: string | null;
+  is_overdue: boolean;
+  assigned_to_name: string | null;
 }
+
+const mapFoiaRequest = (row: FOIARequestRow): FOIARequest => {
+  const assigned =
+    row.assigned_to && typeof row.assigned_to === "object"
+      ? row.assigned_to.name || row.assigned_to.username || null
+      : typeof row.assigned_to === "string"
+        ? row.assigned_to
+        : null;
+  return {
+    id: row.id,
+    request_number: row.request_number,
+    requester_name: row.requester_name,
+    requester_email: row.requester_email ?? "",
+    requester_phone: row.requester_phone ?? "",
+    organization: row.organization ?? "",
+    description: row.description_of_documents ?? "",
+    status: row.status,
+    received_date: row.received_date,
+    deadline_date: row.deadline_date,
+    is_overdue: Boolean(row.is_overdue),
+    assigned_to_name: assigned,
+  };
+};
 
 type FOIAStatus =
   | "submitted"
@@ -107,6 +144,9 @@ export default function FOIAListPage() {
   const [activeTab, setActiveTab] = useState<FOIAStatus | "all" | "overdue">("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  const [count, setCount] = useState(0);
+  const pagination = usePagination({ totalCount: count });
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery), 350);
     return () => clearTimeout(timer);
@@ -114,66 +154,65 @@ export default function FOIAListPage() {
 
   useEffect(() => {
     setStatusFilter("all");
+    pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset page when tab changes
   }, [activeTab]);
+
+  useEffect(() => {
+    pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset page when filters change
+  }, [debouncedSearch, statusFilter]);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
+      const params = new URLSearchParams({
+        page: String(pagination.page),
+        page_size: String(pagination.pageSize),
+      });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      const statusParam =
+        statusFilter !== 'all'
+          ? statusFilter
+          : activeTab !== 'all' && activeTab !== 'overdue'
+            ? activeTab
+            : '';
+      if (statusParam) params.set('status', statusParam);
+      if (activeTab === 'overdue') params.set('overdue', 'true');
+
       const [listResponse, statsResponse] = await Promise.all([
-        apiFetch<{ results: FOIARequest[]; count: number }>(
-          `/api/correspondence/foia-requests/?page=1&page_size=100`
+        apiFetch<{ results?: FOIARequestRow[]; count?: number }>(
+          `/correspondence/foia-requests/?${params.toString()}`,
         ),
-        apiFetch<Stats>(
-          `/api/correspondence/foia-requests/stats/`
-        ),
+        apiFetch<Stats>(`/correspondence/foia-requests/stats/`),
       ]);
-      setRequests(listResponse.results);
+      const rows = unwrapResults<FOIARequestRow>(listResponse).map(mapFoiaRequest);
+      setRequests(rows);
+      setCount(
+        typeof listResponse.count === 'number' ? listResponse.count : rows.length,
+      );
       setStats(statsResponse);
     } catch (_err) {
-      setError("Failed to load FOIA requests.");
+      setError('Failed to load FOIA requests.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load when pagination or filters change
+  }, [pagination.page, pagination.pageSize, debouncedSearch, statusFilter, activeTab]);
 
-  const filtered = useMemo(() => {
-    let items = requests;
+  const filtered = requests;
 
-    if (activeTab === "overdue") {
-      items = items.filter((r) => {
-        if (!r.deadline) return false;
-        return new Date(r.deadline) < new Date() && r.status !== "closed";
-      });
-    } else if (activeTab !== "all") {
-      items = items.filter((r) => r.status === activeTab);
-    }
-
-    if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase();
-      items = items.filter(
-        (r) =>
-          r.request_number?.toLowerCase().includes(q) ||
-          r.requester_name?.toLowerCase().includes(q) ||
-          r.organization?.toLowerCase().includes(q)
-      );
-    }
-
-    if (statusFilter !== "all") {
-      items = items.filter((r) => r.status === statusFilter);
-    }
-
-    return items;
-  }, [requests, activeTab, debouncedSearch, statusFilter]);
-
-  const isOverdue = (deadline: string | null) => {
-    if (!deadline) return false;
-    return new Date(deadline) < new Date();
-  };
+  const isOverdue = (req: FOIARequest) =>
+    req.is_overdue
+    || (req.deadline_date
+      ? new Date(req.deadline_date) < new Date()
+        && !["closed", "responded", "appealed"].includes(req.status)
+      : false);
 
   const statCards = [
     {
@@ -305,7 +344,7 @@ export default function FOIAListPage() {
                 <div className="divide-y divide-border">
                   {filtered.map((req) => {
                     const badge = STATUS_BADGE[req.status] || STATUS_BADGE.submitted;
-                    const overdue = isOverdue(req.deadline) && req.status !== "closed" && req.status !== "responded";
+                    const overdue = isOverdue(req);
                     return (
                       <div
                         key={req.id}
@@ -332,15 +371,15 @@ export default function FOIAListPage() {
                           <p>Received: {req.received_date ? new Date(req.received_date).toLocaleDateString() : "—"}</p>
                           <p>
                             Deadline:{" "}
-                            {req.deadline
-                              ? new Date(req.deadline).toLocaleDateString()
+                            {req.deadline_date
+                              ? new Date(req.deadline_date).toLocaleDateString()
                               : "—"}
                           </p>
                         </div>
                         <div className="text-right">
                           <Badge className={badge.className}>{badge.label}</Badge>
-                          {req.assigned_to && (
-                            <p className="text-xs text-muted-foreground mt-1">{req.assigned_to}</p>
+                          {req.assigned_to_name && (
+                            <p className="text-xs text-muted-foreground mt-1">{req.assigned_to_name}</p>
                           )}
                         </div>
                       </div>
@@ -349,9 +388,7 @@ export default function FOIAListPage() {
                 </div>
               </CardContent>
             </Card>
-            <p className="text-sm text-muted-foreground text-center">
-              Showing {filtered.length} of {requests.length} requests
-            </p>
+            <PaginationControls pagination={pagination} />
           </>
         )}
       </div>

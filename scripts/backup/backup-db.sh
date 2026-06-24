@@ -3,7 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/stack-utils.sh"
+# shellcheck source=../lib/stack-utils.sh
+source "${SCRIPT_DIR}/../lib/stack-utils.sh"
 
 usage() {
     cat <<'USAGE'

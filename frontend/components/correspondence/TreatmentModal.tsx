@@ -47,6 +47,7 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
+import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
@@ -139,7 +140,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [selectedSignatureTemplateId, setSelectedSignatureTemplateId] = useState<string | null>(null);
   const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences } = useSignature({
     userId: activeUser?.id,
-    autoLoad: true,
+    autoLoad: isOpen,
   });
   
   // Check if user is executive
@@ -178,24 +179,23 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     [users],
   );
 
-  // Initialize templates (signature is now handled by useSignature hook)
+  // Load memo templates when the modal opens
   useEffect(() => {
-    if (activeUser) {
-      setCurrentUser(activeUser);
-      
-      // Load memo templates
-      const loadTemplates = async () => {
-        try {
-          const templates = await getTemplatesForUser(activeUser, 'treatment');
-          setMemoTemplates(templates);
-        } catch (error: unknown) {
-          logError('Failed to load memo templates:', error);
-          setMemoTemplates([]);
-        }
-      };
-      loadTemplates();
-    }
-  }, [activeUser]);
+    if (!isOpen || !activeUser) return;
+
+    setCurrentUser(activeUser);
+
+    const loadMemoTemplates = async () => {
+      try {
+        const templates = await getTemplatesForUser(activeUser, 'treatment');
+        setMemoTemplates(templates);
+      } catch (error: unknown) {
+        logError('Failed to load memo templates:', error);
+        setMemoTemplates([]);
+      }
+    };
+    void loadMemoTemplates();
+  }, [isOpen, activeUser]);
 
   // Cleanup: Cancel ongoing requests when modal closes
   useEffect(() => {
@@ -898,6 +898,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       });
 
       // Close modal
+      bumpSidebarCounts();
       setTimeout(() => {
         onClose();
         setTimeout(() => resetForm(), 100);

@@ -32,6 +32,10 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, BookOpen, RefreshCw, LogOut, LogIn } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
+import { unwrapResults } from '@/lib/type-utils';
+import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/shared/PaginationControls';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -78,6 +82,8 @@ interface PhysicalDocument {
 function PhysicalDocumentsForm() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [documents, setDocuments] = useState<PhysicalDocument[]>([]);
+  const [count, setCount] = useState(0);
+  const pagination = usePagination({ totalCount: count });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,8 +97,8 @@ function PhysicalDocumentsForm() {
 
   const fetchLocations = async () => {
     try {
-      const data = await apiFetch<Location[]>('/correspondence/locations/');
-      setLocations(Array.isArray(data) ? data : []);
+      const data = await apiFetch<unknown>('/correspondence/locations/');
+      setLocations(unwrapResults<Location>(data));
     } catch (err) {
       logError('Failed to fetch locations', err);
     }
@@ -102,28 +108,32 @@ function PhysicalDocumentsForm() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({
+        page: String(pagination.page),
+        page_size: String(pagination.pageSize),
+      });
       if (selectedLocation !== 'all') params.append('location', selectedLocation);
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
-      const qs = params.toString();
-      const data = await apiFetch<PhysicalDocument[]>(
-        `/correspondence/physical-documents/${qs ? `?${qs}` : ''}`
+      const data = await apiFetch<{ results?: PhysicalDocument[]; count?: number }>(
+        `/correspondence/physical-documents/?${params.toString()}`,
       );
-      setDocuments(Array.isArray(data) ? data : []);
+      const rows = unwrapResults<PhysicalDocument>(data);
+      setDocuments(rows);
+      setCount(typeof data.count === 'number' ? data.count : rows.length);
     } catch (err) {
       logError('Failed to fetch physical documents', err);
       setError('Failed to load physical documents.');
       setDocuments([]);
+      setCount(0);
     } finally {
       setLoading(false);
     }
-  }, [selectedLocation, searchQuery]);
+  }, [selectedLocation, searchQuery, pagination.page, pagination.pageSize]);
 
   const fetchUsers = async () => {
     try {
-      const data = await apiFetch<{ results?: UserBrief[]; users?: UserBrief[] }>('/accounts/users/?page_size=200');
-      const list = data?.results ?? data?.users ?? [];
-      setUsers(Array.isArray(list) ? list : []);
+      const list = await fetchAllCatalogPaginated<UserBrief>('/accounts/users/?is_active=true');
+      setUsers(list);
     } catch {
       setUsers([]);
     }
@@ -374,6 +384,7 @@ function PhysicalDocumentsForm() {
             )}
           </CardContent>
         </Card>
+        {count > 0 && <PaginationControls pagination={pagination} className="mt-4" />}
       </div>
     </DashboardLayout>
   );

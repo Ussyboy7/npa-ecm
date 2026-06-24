@@ -7,6 +7,7 @@ from django.db.models import Max, Q
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.conf import settings
+from common.pagination import StandardPageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -28,6 +29,7 @@ class FormDocumentViewSet(viewsets.ModelViewSet):
     ).prefetch_related("document__versions", "document__permissions")
     serializer_class = FormDocumentSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "template", "correspondence"]
     search_fields = ["document__title", "document__reference_number"]

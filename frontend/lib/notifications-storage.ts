@@ -4,7 +4,8 @@ import { logError, logInfo, logWarn } from '@/lib/client-logger';
  * Frontend API client for notifications.
  */
 
-import { apiFetch, hasTokens } from './api-client';
+import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
+import { apiFetch, hasTokens } from '@/lib/api-client';
 
 export interface Notification {
   id: string;
@@ -152,7 +153,7 @@ export const getNotifications = async (params?: {
   if (!hasTokens()) return [];
 
   const queryParams = new URLSearchParams();
-  queryParams.set('page_size', '50');
+  queryParams.set('page_size', String(DEFAULT_LIST_PAGE_SIZE));
   if (params?.status) queryParams.append('status', params.status);
   if (params?.notificationType) queryParams.append('notification_type', params.notificationType);
   if (params?.priority) queryParams.append('priority', params.priority);
@@ -197,7 +198,6 @@ const globalUnreadCountState: {
 };
 
 let globalUnreadCountPromise: Promise<number> | null = null;
-const globalUnreadCountSubscribers = new Set<(count: number) => void>();
 const UNREAD_COUNT_CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
 const setGlobalUnreadCount = (count: number): void => {
@@ -205,7 +205,6 @@ const setGlobalUnreadCount = (count: number): void => {
   globalUnreadCountState.count = safeCount;
   globalUnreadCountState.timestamp = Date.now();
   globalUnreadCountState.loading = false;
-  globalUnreadCountSubscribers.forEach((sub) => sub(safeCount));
 };
 
 /**
@@ -272,19 +271,6 @@ export const getUnreadCount = async (force = false): Promise<number> => {
   })();
 
   return await globalUnreadCountPromise;
-};
-
-/**
- * Subscribe to unread count updates (for components that want real-time updates)
- */
-export const subscribeToUnreadCount = (callback: (count: number) => void): (() => void) => {
-  globalUnreadCountSubscribers.add(callback);
-  // Immediately call with current count
-  callback(globalUnreadCountState.count);
-  
-  return () => {
-    globalUnreadCountSubscribers.delete(callback);
-  };
 };
 
 /**

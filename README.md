@@ -28,7 +28,7 @@ A modern, full-featured electronic content management system (ECM) built with Dj
 
 - Python 3.11+
 - Node.js 20+
-- PostgreSQL 15+
+- PostgreSQL 16+
 - Redis 7+
 - Docker & Docker Compose (optional)
 
@@ -44,176 +44,104 @@ A modern, full-featured electronic content management system (ECM) built with Dj
 - JWT Authentication
 
 ### Frontend
-- Next.js 15
+- Next.js 16
 - TypeScript
 - Tailwind CSS
 - Shadcn/ui Components
-- Axios
+- Native fetch via `lib/api-client.ts`
 
 ## 📦 Installation
 
 ### Method 1: Docker (Recommended)
 
-1. **Clone the repository**
+1. **Clone and enter the repository**
 ```bash
-cd npa-dms
-```
-
-2. **Configure environment variables**
-```bash
-# Backend
-cp backend/.env.example backend/.env
-# Edit backend/.env with your settings
-
-# Frontend
-cp frontend/.env.example frontend/.env
-# Edit frontend/.env with your settings
-```
-
-3. **Run with Docker Compose**
-```bash
-# Development
-docker-compose -f docker-compose.local.yml up -d
-
-# Production
-docker-compose -f docker-compose.prod.yml up -d
-```
-
-4. **Create superuser**
-```bash
-docker exec -it ecm-backend-local python manage.py createsuperuser
-```
-
-5. **Access the applications**
-- Frontend: http://localhost:3001
-- Backend API: http://localhost:8000/api/v1
-- API Docs: http://localhost:8000/api/docs
-- Admin Panel: http://localhost:8000/admin
-
-### Method 2: Manual Installation
-
-#### Backend Setup
-
-1. **Create virtual environment**
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-2. **Install dependencies**
-```bash
-pip install -r requirements.txt
-```
-
-3. **Configure database**
-```bash
-# Create PostgreSQL database
-createdb dms_db
-
-# Update backend/.env with database credentials
-```
-
-4. **Run migrations**
-```bash
-python manage.py migrate
-```
-
-5. **Create superuser**
-```bash
-python manage.py createsuperuser
-```
-
-6. **Start development server**
-```bash
-python manage.py runserver 8000
-```
-
-7. **Start Celery worker (in new terminal)**
-```bash
-celery -A dms worker -l info
-```
-
-8. **Start Celery beat (in new terminal)**
-```bash
-celery -A dms beat -l info
-```
-
-#### Frontend Setup
-
-1. **Install dependencies**
-```bash
-cd frontend
-npm install
+cd npa-ecm
 ```
 
 2. **Configure environment**
 ```bash
-cp .env.example .env.local
-# Edit .env.local with API URL
+cp backend/env/local.env.example backend/env/local.env
+# Edit backend/env/local.env
 ```
 
-3. **Run development server**
+3. **Start the local stack**
 ```bash
-npm run dev
+scripts/local/env-manager.sh start
+# or: docker compose up -d
 ```
 
-4. **Access application**
-- Frontend: http://localhost:3001
+4. **Seed demo data (optional)**
+```bash
+scripts/local/env-manager.sh seed
+```
+
+5. **Access the applications**
+- Frontend: http://localhost:3002
+- Backend API: http://localhost:8002/api/v1
+- API docs: http://localhost:8002/api/docs
+- Admin: http://localhost:8002/admin
+- Health (liveness): http://localhost:8002/api/v1/health/live/
+
+### Method 2: Manual Installation
+
+Prefer Docker (Method 1). For bare-metal dev:
+
+#### Backend Setup
+
+```bash
+make backend-install          # creates backend/.venv + installs deps
+cp backend/env/local.env.example backend/env/local.env
+make backend-migrate
+make backend-seed             # optional demo data
+make backend-run              # http://localhost:8002
+```
+
+Celery (separate terminals, from repo root with venv active):
+
+```bash
+backend/.venv/bin/celery -A ecm_backend worker -l info
+backend/.venv/bin/celery -A ecm_backend beat -l info
+```
+
+#### Frontend Setup
+
+```bash
+cd frontend && npm install
+cp .env.example .env.local    # set NEXT_PUBLIC_API_URL=http://localhost:8002/api/v1
+npm run dev                   # http://localhost:3002
+```
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-#### Backend (.env)
+#### Backend (`backend/env/local.env`)
+
+See `backend/env/local.env.example`. Key values for local Docker:
+
 ```env
-# Django
-DJANGO_ENV=local
-DJANGO_SECRET_KEY=your-secret-key
-DJANGO_DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# Database
-DB_NAME=dms_db
-DB_USER=dmsadmin
-DB_PASSWORD=dmsadmin
-DB_HOST=localhost
-DB_PORT=5432
-
-# Redis
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-
-# Celery
-CELERY_BROKER_URL=redis://127.0.0.1:6379/0
-
-# CORS
-CORS_ALLOWED_ORIGINS=http://localhost:3001
-
-# Storage (Optional - S3/MinIO)
-USE_S3=False
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_STORAGE_BUCKET_NAME=dms-documents
-AWS_S3_ENDPOINT_URL=http://localhost:9000
-
-# Upload Safety
-MAX_UPLOAD_SIZE_MB=10
-CLAMAV_SCAN_ENABLED=false
-CLAMAV_BINARY_PATH=clamscan
+DB_NAME=npa_ecm_local
+DB_USER=ecmadmin
+DB_PASSWORD=ecmadmin
+DB_HOST=postgres        # localhost when running manage.py on host
+DB_PORT=5432            # 5433 on host → mapped postgres container
+CORS_ALLOWED_ORIGINS=http://localhost:3002
 ```
 
-#### Frontend (.env.local)
+#### Frontend (`.env.local`)
+
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8000/api
-PORT=3001
+NEXT_PUBLIC_API_URL=http://localhost:8002/api/v1
+PORT=3002
 ```
 
 ## 📚 API Documentation
 
-- Swagger UI: http://localhost:8000/api/docs/
-- ReDoc: http://localhost:8000/api/redoc/
-- OpenAPI Schema: http://localhost:8000/api/schema/
+- Swagger UI: http://localhost:8002/api/docs/
+- ReDoc: http://localhost:8002/api/redoc/
+- OpenAPI Schema: http://localhost:8002/api/schema/
+- Liveness: http://localhost:8002/api/v1/health/live/
 
 ### Key Endpoints
 
@@ -285,14 +213,18 @@ docker-compose -f docker-compose.prod.yml logs -f
 ## 🧪 Testing
 
 ```bash
-# Backend tests
-cd backend
-pytest
+# Full suite (Postgres required on localhost:5433 for host runs)
+make test
 
-# Frontend tests
-cd frontend
-npm test
+# Or individually
+make test-backend
+make test-frontend
+
+# Mirror CI locally
+make ci
 ```
+
+Backend tests use `ecm_backend.settings_test` (Postgres test DB, in-memory Channels/Celery). See `AGENTS.md` and `backend/README.md`.
 
 ## 📝 Development
 

@@ -36,6 +36,8 @@ interface MinuteThreadPanelProps {
   onRecallMinute: (minute: Minute) => void;
   onAddNote: (minute: Minute) => void;
   fullWidth?: boolean;
+  /** Right-column layout: fills parent, no fixed widths */
+  embedded?: boolean;
 }
 
 export const MinuteThreadPanel = ({
@@ -50,14 +52,21 @@ export const MinuteThreadPanel = ({
   onRecallMinute,
   onAddNote,
   fullWidth,
+  embedded,
 }: MinuteThreadPanelProps) => {
   // Helper to check if minute is recalled (defensive check)
   const isMinuteRecalled = (minute: Minute): boolean => {
     return Boolean(minute.isRecalled || minute.recalledAt);
   };
 
+  const panelClass = embedded
+    ? 'flex flex-col flex-1 min-h-0 w-full border-0 bg-background'
+    : fullWidth
+      ? 'w-full border-b md:border-b-0 flex flex-col border-border bg-background'
+      : 'w-full md:w-[60%] md:max-w-[750px] md:min-w-[450px] border-b md:border-b-0 md:border-r rounded-lg flex flex-col border-border bg-background';
+
   return (
-    <main className={`${fullWidth ? "w-full border-b md:border-b-0" : "w-full md:w-[60%] md:max-w-[750px] md:min-w-[450px] border-b md:border-b-0 md:border-r rounded-lg"} max-w-full flex flex-col border-border bg-background`}>
+    <main className={panelClass}>
       <div className="p-4 border-b border-border bg-background flex-shrink-0">
         <h3 className="font-semibold text-sm flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-secondary" />

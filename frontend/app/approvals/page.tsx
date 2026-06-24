@@ -50,6 +50,7 @@ import { apiFetch } from "@/lib/api-client";
 import { ensureSealImageCached } from "@/lib/seal-cache";
 import { logError } from "@/lib/client-logger";
 import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
+import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { exportToCSV } from "@/lib/admin-export";
 import { toast } from "sonner";
 import { HelpGuideCard } from "@/components/help/HelpGuideCard";
@@ -281,11 +282,27 @@ function ApprovalsForm() {
     setExporting(true);
     try {
       // Fetch all approvals for export using backend filter with server-side filtering
-      const params = getFilterParams();
-      params.append('page_size', '1000'); // Reasonable limit for export
-      
-      const response = await apiFetch<Record<string, unknown> | Record<string, unknown>[] | { results: Record<string, unknown>[] }>(`/correspondence/minutes/?${params.toString()}`);
-      const minutes: Record<string, unknown>[] = Array.isArray(response) ? response : (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) ? response.results : [];
+      const baseParams = getFilterParams();
+      const minutes = await fetchAllPaginatedResults<Record<string, unknown>>(
+        async (page, pageSize) => {
+          const params = new URLSearchParams(baseParams.toString());
+          params.set('page', String(page));
+          params.set('page_size', String(pageSize));
+          const response = await apiFetch<Record<string, unknown>>(
+            `/correspondence/minutes/?${params.toString()}`,
+          );
+          const results = Array.isArray(response.results)
+            ? response.results
+            : Array.isArray(response)
+              ? response
+              : [];
+          return {
+            results,
+            count: typeof response.count === 'number' ? response.count : results.length,
+            next: typeof response.next === 'string' ? response.next : null,
+          };
+        },
+      );
       
       const exportData = minutes
         .map((m: Record<string, unknown>) => {
@@ -338,9 +355,7 @@ function ApprovalsForm() {
 
   // Use pagination hook with backend count
   const pagination = usePagination({
-    initialPage: 1,
-    initialPageSize: 25,
-    totalCount: count, // Use backend count for accurate pagination
+    totalCount: count,
   });
 
   // Load data when pagination or filters change

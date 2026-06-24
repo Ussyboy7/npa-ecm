@@ -1,7 +1,7 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
-import { ALLOWED_IMAGE_MIME_TYPES, ALLOWED_SIGNATURE_MIME_TYPES } from '@/lib/file-types';
+import { ALLOWED_IMAGE_MIME_TYPES } from '@/lib/file-types';
 import { useCallback, useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -20,16 +20,6 @@ import {
   SelectItem,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import dynamic from 'next/dynamic';
 
 const PasswordDialog = dynamic(() => import('@/components/settings/PasswordDialog').then(mod => ({ default: mod.PasswordDialog })), { ssr: false });
@@ -72,20 +62,6 @@ import {
   type NotificationPreferences as NotificationPreferencesType,
 } from '@/lib/notifications-storage';
 import {
-  loadUserSignature,
-  saveUserSignature,
-  deleteUserSignature,
-  type StoredSignature,
-  ensureDefaultSignatureTemplates,
-  saveSignatureTemplates,
-  loadUserSignaturePreferences,
-  saveUserSignaturePreferences,
-  type SignatureTemplate,
-  type UserSignaturePreferences,
-  DEFAULT_SIGNATURE_TEMPLATES,
-} from '@/lib/signature-storage';
-import {
-  MAX_SIGNATURE_SIZE_MB,
   MAX_PHOTO_SIZE_MB,
   fileToBase64,
   validateEmail,
@@ -94,8 +70,6 @@ import {
   convertBackendToFrontend,
   convertFrontendToBackend,
 } from './settings-utils';
-
-type SignatureTemplateType = SignatureTemplate['templateType'];
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -139,23 +113,7 @@ export default function SettingsPage() {
   // Password change state
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   
-  // Signature state
-  const [_signature, setSignature] = useState<StoredSignature | null>(null);
-  const [signatureTemplates, setSignatureTemplates] = useState<SignatureTemplate[]>([]);
-  const [_editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [templateDraft, setTemplateDraft] = useState<SignatureTemplate | null>(null);
-  const [_isUploading, setIsUploading] = useState(false);
-  const [showDeleteSignatureDialog, setShowDeleteSignatureDialog] = useState(false);
-  
   const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'appearance' | 'security' | 'signature' | 'delegation'>('profile');
-
-  const defaultPreferences: UserSignaturePreferences = {
-    templateOverrides: {},
-    autoApplyForMinutes: false,
-  };
-
-  const [signaturePreferences, setSignaturePreferences] = useState<UserSignaturePreferences>(defaultPreferences);
-  const [initialPreferences, setInitialPreferences] = useState<UserSignaturePreferences>(defaultPreferences);
 
   // Initialize profile from currentUser (already fetched by useCurrentUser)
   useEffect(() => {
@@ -199,47 +157,6 @@ export default function SettingsPage() {
     void loadNotificationPreferences();
     // only runs once on mount
   }, []);
-
-  // Load signature data
-  useEffect(() => {
-    const loadSignatureData = async () => {
-      try {
-        const defaults = await ensureDefaultSignatureTemplates();
-        setSignatureTemplates(defaults);
-      } catch (error: unknown) {
-        logError('Failed to load signature templates', error);
-        setSignatureTemplates(DEFAULT_SIGNATURE_TEMPLATES);
-      }
-
-      if (currentUser?.id) {
-        // Load signature from backend (deprecated localStorage function kept for compatibility)
-        const storedSignature = loadUserSignature(currentUser.id);
-        if (storedSignature) {
-          setSignature(storedSignature);
-        }
-        
-        try {
-          const prefs = await loadUserSignaturePreferences(currentUser.id);
-          const normalizedPrefs: UserSignaturePreferences = {
-            templateOverrides: { ...(prefs?.templateOverrides ?? {}) },
-            autoApplyForMinutes: prefs?.autoApplyForMinutes ?? false,
-          };
-          setSignaturePreferences(normalizedPrefs);
-          setInitialPreferences({
-            templateOverrides: { ...normalizedPrefs.templateOverrides },
-            autoApplyForMinutes: normalizedPrefs.autoApplyForMinutes,
-          });
-        } catch (error: unknown) {
-          logError('Failed to load signature preferences', error);
-          setSignaturePreferences(defaultPreferences);
-          setInitialPreferences(defaultPreferences);
-        }
-      }
-    };
-    
-    loadSignatureData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -540,19 +457,6 @@ export default function SettingsPage() {
     navigator.clipboard.writeText(backupCodes.join('\n'));
     toast.success('Backup codes copied to clipboard');
   };
-  
-  const handleSignatureDelete = () => {
-    if (!currentUser?.id) return;
-    deleteUserSignature(currentUser.id);
-    setSignature(null);
-    setShowDeleteSignatureDialog(false);
-    toast.success('Signature removed');
-  };
-
-  const cancelEditTemplate = () => {
-    setEditingTemplateId(null);
-    setTemplateDraft(null);
-  };
 
   const userInitials = currentUser
     ? currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'
@@ -686,24 +590,6 @@ export default function SettingsPage() {
         {/* Dialogs */}
         
         <PasswordDialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog} />
-
-        {/* Signature Delete Dialog */}
-        <AlertDialog open={showDeleteSignatureDialog} onOpenChange={setShowDeleteSignatureDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Signature</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to remove your digital signature? You will need to upload a new signature to approve correspondence.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleSignatureDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Delete Signature
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
 
         {/* 2FA Setup Dialog */}
         <Dialog open={showSetup2FA} onOpenChange={(open) => {

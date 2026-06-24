@@ -84,7 +84,7 @@ const calculateDaysPending = (item: Correspondence): number => {
 
 const OutboxPageContent = () => {
   const router = useRouter();
-  const {currentUser, hydrated: _hydrated } = useCurrentUser();
+  const {currentUser} = useCurrentUser();
   const { divisions, users: organizationUsers } = useOrganization();
   const { dataVersion } = useCorrespondence();
 
@@ -101,7 +101,6 @@ const OutboxPageContent = () => {
   const [count, setCount] = useState(0);
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: 25,
     totalCount: count,
   });
 

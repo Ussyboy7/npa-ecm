@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
 
 export interface UsePaginationOptions {
   initialPage?: number;
@@ -35,7 +36,7 @@ export interface UsePaginationReturn {
 export function usePagination(options: UsePaginationOptions = {}): UsePaginationReturn {
   const {
     initialPage = 1,
-    initialPageSize = 25,
+    initialPageSize = DEFAULT_LIST_PAGE_SIZE,
     totalCount = 0,
     onPageChange,
     onPageSizeChange,

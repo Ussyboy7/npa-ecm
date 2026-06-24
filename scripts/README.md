@@ -1,215 +1,150 @@
-# NPA-ECM Scripts
+# `scripts/` — ECM Operations Toolkit
 
-**Organized script collection for NPA Electronic Content Management system operations.**
+Shell entry-points for running, deploying, and troubleshooting the ECM stack across **local**, **staging**, and **production**.
 
----
+## Design
 
-## 📁 Script Organization
-
-Scripts are organized by category for better maintainability:
+One generic CLI (`ops/env-manager.sh`), thin per-env wrappers, shared `lib/`.
 
 ```
 scripts/
-├── utilities/          # Main control scripts
-├── production/         # Service management & deployment
-├── monitoring/         # Health checks & monitoring
-├── backup/             # Database backup operations
-├── security/           # Security-related scripts (if any)
-├── testing/            # Testing and validation scripts
-└── archive/            # Obsolete scripts (preserved)
+├── lib/
+│   ├── stack-utils.sh    # Compose file, env file, URLs, Mac staging guard
+│   └── ui.sh             # Colours and log helpers
+├── stack/                # Lifecycle primitives (<env> as first arg)
+│   ├── start.sh
+│   ├── stop.sh
+│   ├── restart.sh
+│   ├── health.sh
+│   ├── seed.sh
+│   ├── collect-static.sh
+│   └── backend-status.sh
+├── ops/
+│   ├── env-manager.sh    # Canonical CLI (all subcommands)
+│   ├── status.sh
+│   └── logs.sh
+├── local/env-manager.sh      # exec ops/env-manager.sh local "$@"
+├── staging/env-manager.sh    # exec ops/env-manager.sh stag "$@"
+├── production/env-manager.sh # exec ops/env-manager.sh prod "$@"
+├── ci/                       # validate-compose, run-backend-tests, run-local-ci
+├── backup/
+│   ├── backup-db.sh
+│   ├── verify_backup.sh
+│   ├── restore_backup.sh
+│   └── README.md
+├── monitoring/               # legacy shims
+│   ├── check-health.sh       # → stack/health.sh
+│   ├── check-backend-status.sh  # → stack/backend-status.sh stag
+│   └── check-staging-services.sh  # → staging/env-manager.sh diagnostics
+├── utilities/ecm               # shortcut → ops/env-manager.sh
+└── production/                 # legacy shims → stack/ or ops/
 ```
 
----
+## Cheat sheet
 
-## 🚀 Main Control Script
-
-### `utilities/ecm` - Primary Control Interface
-
-**Purpose**: Unified command-line interface for all ECM operations
-
-**Usage**:
 ```bash
-./scripts/utilities/ecm <command> <environment> [options]
-```
+# Local (Mac)
+scripts/local/env-manager.sh start
+scripts/local/env-manager.sh stop
+scripts/local/env-manager.sh status
+scripts/local/env-manager.sh logs backend --follow
+scripts/local/env-manager.sh seed
+docker compose up -d                    # same stack via compose.yaml
 
-**Examples**:
-```bash
-# Development
-./scripts/utilities/ecm up local
-./scripts/utilities/ecm status local
-./scripts/utilities/ecm logs local backend
-
-# Staging
-./scripts/utilities/ecm up stag -- --build
-./scripts/utilities/ecm restart stag
-./scripts/utilities/ecm migrate stag
+# Staging (on server 172.16.0.46, checkout /srv/npa-ecm)
+scripts/staging/env-manager.sh deploy
+scripts/staging/env-manager.sh health
+scripts/staging/env-manager.sh logs backend_stag --follow
 
 # Production
-./scripts/utilities/ecm up prod
-./scripts/utilities/ecm backup prod
-./scripts/utilities/ecm monitor prod
+scripts/production/env-manager.sh deploy
+scripts/production/env-manager.sh status
 ```
 
-**Supported Commands**:
-- `up` - Start services
-- `down` - Stop services
-- `restart` - Restart services
-- `status` - Show service status
-- `logs` - View service logs
-- `migrate` - Run database migrations
-- `backup` - Create database backup
-- `monitor` - Show monitoring dashboard
+Equivalent generic form:
 
----
-
-## 🏭 Production Management
-
-**Location**: `scripts/production/`
-
-### Service Management
-- `start-local.sh` - Start local development stack
-- `start-stag.sh` - Start staging environment
-- `start-prod.sh` - Start production environment
-- `stop-stack.sh` - Stop all services
-- `restart-stack.sh` - Restart all services
-
-### Backend Services
-- `start-backend-local.sh` - Start local backend
-- `start-backend-stag.sh` - Start staging backend
-- `start-backend-prod.sh` - Start production backend
-
-### Async Services
-- `start-celery-local.sh` - Start local Celery workers
-- `start-celery-stag.sh` - Start staging Celery workers
-- `start-celery-prod.sh` - Start production Celery workers
-
-### Deployment & Maintenance
-- `deploy-staging.sh` - Deploy to staging environment
-- `collect-static.sh` - Collect Django static files
-- `seed-data.sh` - Seed database with demo data
-- `stack-utils.sh` - Stack utility functions
-
-### Testing
-- `test-docker-compose.sh` - Test Docker Compose configuration
-
----
-
-## 👀 Monitoring & Health Checks
-
-**Location**: `scripts/monitoring/`
-
-### Health Monitoring
-- `check-health.sh` - General system health check
-- `check-backend-status.sh` - Backend service status
-- `check-staging-services.sh` - Staging environment checks
-
----
-
-## 💾 Backup Operations
-
-**Location**: `scripts/backup/`
-
-### Database Backups
-- `backup-db.sh` - Create database backup
-
----
-
-## 📚 Documentation
-
-**Location**: `scripts/` (root level)
-
-- `README.md` - This documentation
-- `BACKEND_STARTUP_GUIDE.md` - Backend server startup guide
-
----
-
-## 🏃 Running Scripts
-
-### Prerequisites
-- Bash shell (all scripts are shell scripts)
-- Docker and Docker Compose (for containerized operations)
-- Appropriate environment variables set
-
-### Execution
 ```bash
-# Make scripts executable (if needed)
-chmod +x scripts/**/*.sh
-chmod +x scripts/utilities/ecm
-
-# Run any script
-./scripts/production/start-local.sh
-./scripts/utilities/ecm status local
-./scripts/monitoring/check-health.sh
+scripts/ops/env-manager.sh local start
+scripts/ops/env-manager.sh stag deploy
 ```
 
-### Environment Variables
+## Environment files
 
-**Required for most scripts:**
-- `COMPOSE_FILE` - Path to docker-compose file
-- `STACK_NAME` - Stack identifier
-- Database connection variables
-- Service endpoint URLs
+Copy templates before first run:
 
----
+```bash
+cp backend/env/local.env.example backend/env/local.env
+cp backend/env/stag.env.example backend/env/stag.env   # on staging server
+cp backend/env/prod.env.example backend/env/prod.env     # on production server
+```
 
-## 🔄 Script Categories Comparison
+Docker Compose and Django both use `backend/env/<env>.env`.
 
-| Category | EMR Structure | NPA-ECM Structure | Status |
-|----------|----------------|-------------------|--------|
-| **Main Control** | `infra/scripts/` | `scripts/utilities/` | ✅ Organized |
-| **Production** | `infra/scripts/production/` | `scripts/production/` | ✅ Organized |
-| **Monitoring** | `infra/scripts/monitoring/` | `scripts/monitoring/` | ✅ Organized |
-| **Backup** | `infra/scripts/backup/` | `scripts/backup/` | ✅ Organized |
-| **Security** | `infra/scripts/security/` | `scripts/security/` | ✅ Ready |
-| **Testing** | `infra/scripts/testing/` | `scripts/testing/` | ✅ Ready |
+## `env-manager` commands
 
----
+| Command | Description |
+|---------|-------------|
+| `start` | `docker compose up -d` |
+| `stop` | `docker compose down` |
+| `restart` | Rolling restart |
+| `status` | Services + HTTP probes |
+| `health` | Backend (+ optional frontend) curl checks |
+| `logs [svc]` | Tail logs (`--follow`, `--tail N`) |
+| `backend-status` | Container + DB smoke check |
+| `shell` | Shell in backend container |
+| `migrate` | `manage.py migrate --noinput` |
+| `seed` | `seed_demo_data` |
+| `backup` | `scripts/backup/backup-db.sh` |
+| `verify-backup` | `scripts/backup/verify_backup.sh` (integrity check on latest dump) |
+| `restore-backup` | `scripts/backup/restore_backup.sh` (destructive — see `scripts/backup/README.md`) |
+| `collectstatic` | `collectstatic --noinput` in backend container |
+| `deploy` | Pull, rebuild, health wait, rollback (stag/prod) |
+| `diagnostics` | `ps` + recent logs |
 
-## 📝 Maintenance Guidelines
+## Staging deploy
 
-### Adding New Scripts
+Run **on the staging server**:
 
-1. **Choose appropriate category** based on script purpose
-2. **Follow naming conventions** (use `-` separators, `.sh` extension)
-3. **Add executable permissions** (`chmod +x`)
-4. **Update this README** with new script documentation
-5. **Test thoroughly** before committing
+```bash
+cd /srv/npa-ecm
+scripts/staging/env-manager.sh deploy
+```
 
-### Script Standards
+`deploy` does: optional pre-deploy DB snapshot, `git pull`, media dir prep, `compose down`, `up --build`, Docker health wait on `/health/live/`, rollback on failure.
 
-- **Header comments**: Include purpose, usage, and examples
-- **Error handling**: Use `set -e` for strict error checking
-- **Logging**: Use consistent log formats
-- **Environment variables**: Document required variables
-- **Idempotent operations**: Scripts should be safe to run multiple times
+Flags: `--no-backup`, `--no-pull`, `--no-rollback`, `--skip-health`
 
----
+## Legacy scripts
 
-## 🚨 Archived Scripts
+Removed bare-metal starters (`start-backend-local.sh`, etc.) — see `scripts/archive/README.md`.
 
-**Location**: `scripts/archive/`
+Shims kept for compatibility:
 
-Contains obsolete scripts that have been replaced or are no longer needed:
+- `production/start-stack.sh` → `stack/start.sh`
+- `production/deploy-staging.sh` → `staging/env-manager.sh deploy`
+- `production/test-docker-compose.sh` → `ci/validate-compose.sh`
+- `production/collect-static.sh` → `stack/collect-static.sh`
+- `monitoring/check-health.sh` → `stack/health.sh`
+- `monitoring/check-backend-status.sh` → `stack/backend-status.sh stag`
+- `monitoring/check-staging-services.sh` → `staging/env-manager.sh diagnostics`
 
-- Development automation scripts (TypeScript fixing, console cleanup)
-- One-time migration scripts (user hierarchy fixes)
-- Installation scripts (system dependencies)
-- Legacy utility scripts
+## Local CI
 
-**Purpose**: Historical reference - do not use for current operations.
+Mirror GitHub Actions before push:
 
----
+```bash
+make ci          # full: compose, migrations, backend tests, vitest, lint, type-check, build
+make ci-quick    # compose validation only
+make test        # backend + frontend unit tests
+make test-backend
+make test-frontend
+make security-check
+```
 
-## 🔗 Integration with Documentation
+Set `CI_SKIP_BACKEND_TESTS=1` to skip Django tests when Postgres is not running.
 
-Scripts are referenced throughout the project documentation:
+## Adding a new operation
 
-- **Setup guides** reference startup scripts
-- **Deployment docs** reference production scripts
-- **Monitoring guides** reference health check scripts
-- **Backup procedures** reference backup scripts
-
----
-
-**This script organization provides a clean, maintainable structure that matches industry best practices and enables efficient operations management.**
-
+1. Implement in `stack/` or `ops/` using `stack_init_env`
+2. Add a `cmd_*` handler in `ops/env-manager.sh`
+3. Document here — do not add new per-env shell files

@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { ImageIcon, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { signForm } from "@/lib/api/forms";
-import { loadUserSignature, type StoredSignature } from "@/lib/signature-storage";
+import { fetchUserSignature, type StoredSignature } from "@/lib/signature-storage";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 
@@ -37,13 +37,27 @@ export function FormSignatureDialog({
   const [signedDate, setSignedDate] = useState(new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
-    if (open && currentUser?.id) {
-      const signature = loadUserSignature(currentUser.id);
-      setUserSignature(signature);
-      if (!signature) {
+    if (!open || !currentUser?.id) return;
+
+    let cancelled = false;
+    void fetchUserSignature()
+      .then((signature) => {
+        if (cancelled) return;
+        setUserSignature(signature);
+        if (!signature) {
+          toast.error("Please upload your digital signature in Settings → Signature first");
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        logError("Failed to load signature", error);
+        setUserSignature(null);
         toast.error("Please upload your digital signature in Settings → Signature first");
-      }
-    }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open, currentUser?.id]);
 
   const handleSign = async () => {

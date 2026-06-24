@@ -40,8 +40,6 @@ import {
 } from '@/components/shared/registry-queue-styles';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 
-const PAGE_SIZE = 25;
-
 const ArchivedCorrespondence = () => {
   const router = useRouter();
   const { divisions, departments } = useOrganization();
@@ -64,7 +62,6 @@ const ArchivedCorrespondence = () => {
   // Use pagination hook
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: PAGE_SIZE,
     totalCount: count,
   });
 

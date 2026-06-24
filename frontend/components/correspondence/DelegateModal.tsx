@@ -102,7 +102,7 @@ export const DelegateModal = ({
   executiveId,
   onDelegate,
 }: DelegateModalProps) => {
-  const {assistantAssignments, users, addAssignment, divisions, departments, refreshOrganizationData } = useOrganization();
+  const { assistantAssignments, users, addAssignment, divisions, departments, refreshOrganizationData, isSyncing } = useOrganization();
   const [selectedAssistant, setSelectedAssistant] = useState('');
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');
@@ -118,7 +118,6 @@ export const DelegateModal = ({
   const [newAssistantId, setNewAssistantId] = useState('');
   const [newAssistantType, setNewAssistantType] = useState<'TA' | 'PA'>('PA');
   const [isAssigning, setIsAssigning] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Get the executive's user object to determine their organizational scope
   const executive = users.find(u => u.id === executiveId);
@@ -260,22 +259,8 @@ export const DelegateModal = ({
       setNewAssistantType('PA');
       setDelegationDuration('until_completed');
       setCustomExpiryDate('');
-      setIsRefreshing(false);
-    } else {
-      // Refresh organization data when modal opens to ensure we have latest assignments
-      const doRefresh = async () => {
-        setIsRefreshing(true);
-        try {
-          await refreshOrganizationData();
-        } catch (error: unknown) {
-          logError('Failed to refresh organization data', error);
-        } finally {
-          setIsRefreshing(false);
-        }
-      };
-      doRefresh();
     }
-  }, [open, refreshOrganizationData]);
+  }, [open]);
 
   // Calculate expiry date based on duration
   const calculateExpiryDate = (duration: string): string | undefined => {
@@ -450,7 +435,7 @@ export const DelegateModal = ({
         <div className="space-y-4">
           {availableAssistants.length === 0 && !isAssigningMode ? (
             <div className="text-center py-6 space-y-4">
-              {isRefreshing ? (
+              {isSyncing ? (
                 <>
                   <div className="mx-auto w-14 h-14 rounded-full bg-muted flex items-center justify-center">
                     <Loader2 className="h-7 w-7 text-muted-foreground animate-spin" />

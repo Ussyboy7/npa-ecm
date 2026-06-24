@@ -4,6 +4,8 @@ import React, { createContext, useContext, useEffect, useState, ReactNode, useCa
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { isRecord, unwrapResults } from '@/lib/type-utils';
+import { DEFAULT_CATALOG_PAGE_SIZE } from '@/lib/pagination-constants';
+import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
 import { updateOrganizationCache } from '@/lib/npa-structure';
 import type { User } from '@/lib/npa-structure';
 import type { BootstrapData } from '@/lib/server-bootstrap';
@@ -88,6 +90,7 @@ export const OrganizationProvider: React.FC<{
   const [hasSynced, setHasSynced] = useState(false);
   const { currentUser } = useCurrentUser();
   const appliedInitialRef = useRef(false);
+  const organizationRefreshPromiseRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (initialData && !appliedInitialRef.current) {
@@ -161,12 +164,11 @@ export const OrganizationProvider: React.FC<{
     []
   );
 
-  /** Fetch first page only (server-side pagination). Use for initial load. */
+  /** Fetch all pages of a catalog/list endpoint for bootstrap caches. */
   const fetchFirstPage = useCallback(
-    async (basePath: string, pageSize = 100): Promise<Record<string, unknown>[]> => {
-      const separator = basePath.includes('?') ? '&' : '?';
-      const response = await apiFetch(`${basePath}${separator}page_size=${pageSize}&page=1`);
-      return unwrapResults(response).filter(isRecord);
+    async (basePath: string, pageSize = DEFAULT_CATALOG_PAGE_SIZE): Promise<Record<string, unknown>[]> => {
+      const rows = await fetchAllCatalogPaginated<Record<string, unknown>>(basePath, pageSize);
+      return rows.filter(isRecord);
     },
     []
   );
@@ -177,8 +179,14 @@ export const OrganizationProvider: React.FC<{
       return;
     }
 
+    if (organizationRefreshPromiseRef.current) {
+      return organizationRefreshPromiseRef.current;
+    }
+
     logInfo('Refreshing organization data...');
     setIsSyncing(true);
+
+    const refreshPromise = (async () => {
     try {
       const [
         directoratesRows,
@@ -193,17 +201,17 @@ export const OrganizationProvider: React.FC<{
         fetchFirstPage('/organization/directorates/?ordering=name'),
         fetchFirstPage('/organization/divisions/?ordering=name'),
         fetchFirstPage('/organization/departments/?ordering=name'),
-        apiFetch('/correspondence/delegations/'),
+        fetchAllCatalogPaginated<Record<string, unknown>>('/correspondence/delegations/'),
         fetchFirstPage('/organization/roles/?ordering=name'),
         fetchFirstPage('/organization/offices/?ordering=name'),
         fetchFirstPage('/organization/office-memberships/?ordering=office__name'),
-        fetchFirstPage('/accounts/users/?is_active=true&ordering=username', 200),
+        fetchFirstPage('/accounts/users/?is_active=true&ordering=username'),
       ]);
 
       const apiDirectorates = directoratesRows.map(mapApiDirectorate);
       const apiDivisions = divisionsRows.map(mapApiDivision);
       const apiDepartments = departmentsRows.map(mapApiDepartment);
-      const apiDelegations = unwrapResults(delegationsRaw).filter(isRecord).map(mapApiDelegation);
+      const apiDelegations = delegationsRaw.filter(isRecord).map(mapApiDelegation);
       const apiRoles = rolesRows.map(mapApiRole);
       const apiOffices = officesRows.map(mapApiOffice);
       const apiOfficeMemberships = officeMembershipsRows.map(mapApiOfficeMembership);
@@ -248,7 +256,12 @@ export const OrganizationProvider: React.FC<{
       }
     } finally {
       setIsSyncing(false);
+      organizationRefreshPromiseRef.current = null;
     }
+    })();
+
+    organizationRefreshPromiseRef.current = refreshPromise;
+    return refreshPromise;
   }, [currentUser?.id, fetchFirstPage]);
 
   useEffect(() => {

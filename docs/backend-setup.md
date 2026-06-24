@@ -60,10 +60,10 @@ GET  /api/accounts/auth/me/
 
 ## 5. Environment variables
 
-Copy `.env` templates from `backend/env/` for the environment you are targeting, e.g.:
+Copy environment templates from `backend/env/`:
 
 ```bash
-cp backend/env/local.env backend/.env.local
+cp backend/env/local.env.example backend/env/local.env
 ```
 
-Update sensitive values before deploying outside of local development.
+For Docker local dev, `backend/env/local.env` is loaded by compose and Django (`DJANGO_ENV=local`).

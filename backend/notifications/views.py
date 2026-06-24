@@ -3,7 +3,7 @@
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
+from common.pagination import StandardPageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -12,20 +12,12 @@ from .serializers import NotificationPreferencesSerializer, NotificationSerializ
 from .services import NotificationService
 
 
-class NotificationListPagination(PageNumberPagination):
-    """Larger default page so the header dropdown can show recent items beyond global PAGE_SIZE."""
-
-    page_size = 50
-    page_size_query_param = "page_size"
-    max_page_size = 100
-
-
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for user notifications."""
 
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = NotificationListPagination
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "notification_type", "priority", "module"]
     search_fields = ["title", "message"]

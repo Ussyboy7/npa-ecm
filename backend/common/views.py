@@ -7,10 +7,19 @@ from django.core.cache import cache
 
 
 @require_http_methods(["GET"])
+def health_live(request):
+    """
+    Minimal liveness for Docker/K8s: no DB or cache checks.
+    Use /api/v1/health/ for full readiness (database + cache).
+    """
+    return JsonResponse({"status": "ok"})
+
+
+@require_http_methods(["GET"])
 def health_check(request):
     """
     Health check endpoint for monitoring and load balancers.
-    
+
     Returns:
         - 200 OK: All services are healthy
         - 503 Service Unavailable: One or more services are unhealthy

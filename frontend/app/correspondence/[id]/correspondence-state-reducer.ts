@@ -25,7 +25,7 @@ export interface CorrespondenceDetailState {
   selectedLinkedDocVersion: Record<string, number>;
   isPreviewFullscreen: boolean;
   dragActive: boolean;
-  mobileActiveTab: 'document' | 'thread' | 'actions' | 'seals';
+  mobileActiveTab: 'document' | 'routing';
 }
 
 export type CorrespondenceDetailAction =
@@ -41,7 +41,7 @@ export type CorrespondenceDetailAction =
   | { type: 'SET_SELECTED_LINKED_DOC_VERSION'; payload: Record<string, number> }
   | { type: 'SET_PREVIEW_FULLSCREEN'; payload: boolean }
   | { type: 'SET_DRAG_ACTIVE'; payload: boolean }
-  | { type: 'SET_MOBILE_ACTIVE_TAB'; payload: 'document' | 'thread' | 'actions' | 'seals' }
+  | { type: 'SET_MOBILE_ACTIVE_TAB'; payload: 'document' | 'routing' }
   | { type: 'RESET' };
 
 export const initialState: CorrespondenceDetailState = {
@@ -57,7 +57,7 @@ export const initialState: CorrespondenceDetailState = {
   selectedLinkedDocVersion: {},
   isPreviewFullscreen: false,
   dragActive: false,
-  mobileActiveTab: 'thread',
+  mobileActiveTab: 'document',
 };
 
 export const correspondenceDetailReducer = (

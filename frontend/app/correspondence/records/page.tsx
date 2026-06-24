@@ -42,9 +42,11 @@ import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { CorrespondenceProvider, mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
-import { exportToCSV } from '@/lib/admin-export';
+import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
+import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
+import { exportToCSV } from '@/lib/admin-export';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
@@ -165,7 +167,6 @@ const RecordsArchiveForm = () => {
   // Use pagination hook
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: 25,
     totalCount: count,
   });
   const [loading, setLoading] = useState(true);
@@ -335,7 +336,7 @@ const RecordsArchiveForm = () => {
     if (sortBy !== 'completed') params.set('sortBy', sortBy);
     if (sortOrder !== 'desc') params.set('sortOrder', sortOrder);
     if (pagination.page > 1) params.set('page', String(pagination.page));
-    if (pagination.pageSize !== 25) params.set('pageSize', String(pagination.pageSize));
+    if (pagination.pageSize !== DEFAULT_LIST_PAGE_SIZE) params.set('pageSize', String(pagination.pageSize));
 
     const newUrl = params.toString() ? `${window.location.pathname}?${params.toString()}` : window.location.pathname;
     window.history.replaceState({}, '', newUrl);
@@ -487,10 +488,21 @@ const RecordsArchiveForm = () => {
       if (selectedDepartment !== 'all') {
         params.append('department', selectedDepartment);
       }
-      params.append('page_size', '1000'); // Reasonable limit for export
-
-      const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/archive-records/?${params.toString()}`);
-      const allRecords = Array.isArray(response.results) ? response.results : [];
+      const allRecords = await fetchAllPaginatedResults<Record<string, unknown>>(
+        async (page, pageSize) => {
+          params.set('page', String(page));
+          params.set('page_size', String(pageSize));
+          const response = await apiFetch<Record<string, unknown>>(
+            `/correspondence/items/archive-records/?${params.toString()}`,
+          );
+          const results = Array.isArray(response.results) ? response.results : [];
+          return {
+            results,
+            count: typeof response.count === 'number' ? response.count : results.length,
+            next: typeof response.next === 'string' ? response.next : null,
+          };
+        },
+      );
       
       const exportData = allRecords.map((corr: Record<string, unknown>) => {
         const mapped = mapApiCorrespondence(corr);

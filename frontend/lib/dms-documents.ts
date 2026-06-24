@@ -1,8 +1,12 @@
 import { ERROR_AUTHENTICATION_REQUIRED, ERROR_UNKNOWN } from '@/lib/constants';
 import { apiFetch, hasTokens } from './api-client';
+import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { logError, logInfo, logWarn } from '@/lib/client-logger';
 import { unwrapResults } from '@/lib/type-utils';
 import type { User } from './npa-structure';
+import type { Correspondence, Minute } from './npa-structure';
+import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
+import { isRecord } from '@/lib/type-utils';
 import type {
   DocumentQueryParams,
   PaginatedDocuments,
@@ -132,8 +136,9 @@ export const fetchDocuments = async (): Promise<DocumentRecord[]> => {
     return [];
   }
 
-  const response = await queryDocuments({ page: 1, pageSize: 100 });
-  return response.results;
+  return fetchAllPaginatedResults((page, pageSize) =>
+    queryDocuments({ page, pageSize }),
+  );
 };
 
 export const fetchDocumentById = async (id: string): Promise<DocumentRecord> => {
@@ -156,6 +161,29 @@ export const fetchDocumentById = async (id: string): Promise<DocumentRecord> => 
     }
     throw error;
   }
+};
+
+export type DocumentRelatedCorrespondenceItem = {
+  correspondence: Correspondence;
+  minutes: Minute[];
+  linkNotes?: string;
+};
+
+export const fetchDocumentRelatedCorrespondence = async (
+  documentId: string,
+): Promise<DocumentRelatedCorrespondenceItem[]> => {
+  if (!hasTokens()) return [];
+
+  const payload = await apiFetch<unknown>(`/dms/documents/${documentId}/related-correspondence/`);
+  if (!Array.isArray(payload)) return [];
+
+  return payload.filter(isRecord).map((row) => ({
+    correspondence: mapApiCorrespondence(row.correspondence as Record<string, unknown>),
+    minutes: Array.isArray(row.minutes)
+      ? row.minutes.filter(isRecord).map((item) => mapApiMinute(item))
+      : [],
+    linkNotes: typeof row.link_notes === 'string' ? row.link_notes : undefined,
+  }));
 };
 
 // ============ WORKSPACES ============

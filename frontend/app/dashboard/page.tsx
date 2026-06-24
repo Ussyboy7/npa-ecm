@@ -9,6 +9,7 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from '@/hooks/use-role-checks';
 import { apiFetch } from '@/lib/api-client';
+import { MAX_LIST_PAGE_SIZE, PREVIEW_PAGE_SIZE } from '@/lib/pagination-constants';
 import { ExecutivePortfolio, fetchExecutivePortfolio } from '@/lib/analytics-client';
 import { logError } from '@/lib/client-logger';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
@@ -87,7 +88,7 @@ const Dashboard = () => {
     setDashboardLoading(true);
     try {
       type InboxResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>>; summary?: Record<string, unknown> };
-      const inboxResponse = await apiFetch<InboxResponse>('/correspondence/items/my-inbox/?page_size=10');
+      const inboxResponse = await apiFetch<InboxResponse>(`/correspondence/items/my-inbox/?page_size=${PREVIEW_PAGE_SIZE}`);
       const inboxDataArray = Array.isArray(inboxResponse) ? inboxResponse : (inboxResponse?.results || []);
       const summary = (inboxResponse && typeof inboxResponse === 'object' && 'summary' in inboxResponse) ? inboxResponse.summary as Record<string, unknown> : {};
       const pending = inboxDataArray
@@ -101,7 +102,7 @@ const Dashboard = () => {
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       const completedTodayResponse = await apiFetch<Record<string, unknown>>(
-        `/correspondence/items/?status=completed&page_size=100`
+        `/correspondence/items/?status=completed&page_size=${MAX_LIST_PAGE_SIZE}`
       );
       type CompletedResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
       const completedTodayResponseTyped = completedTodayResponse as CompletedResponse;

@@ -7,7 +7,7 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
-  Eye,
+  Maximize2,
   Printer,
   Download,
   FileText,
@@ -38,7 +38,7 @@ interface CorrespondenceHeaderProps {
   correspondence: Correspondence;
   minutes: Minute[];
   linkedDocuments: DocumentRecord[];
-  onOpenDocumentPreview: () => void;
+  onOpenFullscreenPreview: () => void;
   onOpenPrintPreview: () => void;
   onCaseUnlinked?: () => void;
   onOpenLinkCaseModal?: () => void;
@@ -49,7 +49,7 @@ export const CorrespondenceHeader = ({
   correspondence,
   minutes,
   linkedDocuments,
-  onOpenDocumentPreview,
+  onOpenFullscreenPreview,
   onOpenPrintPreview,
   onCaseUnlinked,
   onOpenLinkCaseModal,
@@ -301,10 +301,10 @@ export const CorrespondenceHeader = ({
             <Button
               variant="outline"
               size="icon"
-              onClick={onOpenDocumentPreview}
-              title="Preview Document"
+              onClick={onOpenFullscreenPreview}
+              title="Fullscreen preview"
             >
-              <Eye className="h-4 w-4" />
+              <Maximize2 className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
@@ -343,11 +343,11 @@ export const CorrespondenceHeader = ({
             )}
             <ContextualHelp
               title="Need help on this correspondence?"
-              description="Print previews generate a clean memo view, downloads attach the latest minutes, and the action panel lets you minute, treat, delegate, or archive."
+              description="The document is shown in the workspace below. Use fullscreen for a larger view, print preview for hard copies, and the routing panel to minute, treat, delegate, or archive."
               steps={[
-                'Use Print Preview before hard copies or PDF export.',
-                'Download to share as PDF or Word outside the ECM.',
-                'Use the right-hand actions to minute, treat, delegate, or complete.',
+                'Read the document in the left panel (or Document tab on mobile).',
+                'Use Fullscreen or Print Preview from here when you need a larger or printable view.',
+                'Use the routing panel on the right to minute, treat, delegate, or complete.',
               ]}
             />
           </div>
@@ -356,13 +356,13 @@ export const CorrespondenceHeader = ({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">
-                  <Eye className="h-4 w-4" />
+                  <Maximize2 className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onOpenDocumentPreview}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Preview Document
+                <DropdownMenuItem onClick={onOpenFullscreenPreview}>
+                  <Maximize2 className="h-4 w-4 mr-2" />
+                  Fullscreen
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onOpenPrintPreview}>
                   <Printer className="h-4 w-4 mr-2" />

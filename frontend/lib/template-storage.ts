@@ -1,6 +1,5 @@
 import { nanoid } from 'nanoid';
 import { logError } from '@/lib/client-logger';
-import { getFromStorage, saveToStorage } from './storage';
 import type { User } from './npa-structure';
 import * as templateApi from './api/templates';
 import { hasTokens } from './api-client';
@@ -24,61 +23,6 @@ export type DocumentTemplate = {
   actionType?: 'minute' | 'approve' | 'any';
 };
 
-export type TemplateStorage = {
-  templates: DocumentTemplate[];
-};
-
-const STORAGE_KEY = 'npa-dms-templates';
-const SEEDED_KEY = 'npa-dms-templates-seeded-v2';
-
-const ensureStorage = (): TemplateStorage => {
-  const existing = getFromStorage<TemplateStorage>(STORAGE_KEY);
-  if (!existing) {
-    const empty: TemplateStorage = { templates: [] };
-    saveToStorage(STORAGE_KEY, empty);
-    return empty;
-  }
-  return existing;
-};
-
-const persist = (storage: TemplateStorage) => {
-  saveToStorage(STORAGE_KEY, storage);
-};
-
-const buildBaseTemplate = (heading: string, subtitle: string, body?: string) => `
-  <section style="font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.6; color: #1f2933;">
-    <header style="border-bottom: 2px solid #004aad; padding-bottom: 12px; margin-bottom: 24px;">
-      <h1 style="margin: 0; font-size: 26px; color: #004aad;">${heading}</h1>
-      <p style="margin: 4px 0 0; font-size: 15px; color: #64748b;">${subtitle}</p>
-    </header>
-    <section>
-      ${
-        body ??
-        `<p>Dear Sir/Madam,</p>
-         <p>Kindly find the details of the document below. Update this section with the relevant content for your communication.</p>
-         <h2 style="font-size: 18px; color: #0f172a; margin-top: 24px;">Key Points</h2>
-         <ul style="margin: 12px 0 24px 20px;">
-           <li>Background and justification.</li>
-           <li>Action items and responsibilities.</li>
-           <li>Timelines and next steps.</li>
-         </ul>
-         <p>Thank you.</p>`
-      }
-    </section>
-    <footer style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 13px; color: #475569;">
-      <p><strong>Prepared by:</strong> _________________________</p>
-      <p><strong>Reviewed by:</strong> _________________________</p>
-      <p><strong>Date:</strong> _________________________</p>
-    </footer>
-  </section>
-`;
-
-const buildMinuteTemplate = (title: string, body: string) => ({
-  contentHtml: `<p>${body}</p>`,
-  contentText: body,
-  title,
-});
-
 const deriveContentText = (html: string, text?: string) => {
   if (text && text.trim().length > 0) {
     return text.trim();
@@ -87,175 +31,42 @@ const deriveContentText = (html: string, text?: string) => {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 };
 
-const templatesMatch = (a: DocumentTemplate, b: DocumentTemplate) => {
-  return (
-    a.scope === b.scope &&
-    (a.scopeId ?? null) === (b.scopeId ?? null) &&
-    a.templateType === b.templateType &&
-    a.title.trim().toLowerCase() === b.title.trim().toLowerCase()
-  );
+const TEMPLATES_CACHE_TTL_MS = 5 * 60 * 1000;
+let templatesCache: { data: DocumentTemplate[]; timestamp: number } | null = null;
+let templatesPromise: Promise<DocumentTemplate[]> | null = null;
+
+export const invalidateTemplatesCache = (): void => {
+  templatesCache = null;
 };
 
-const ensureTemplateEntry = (storage: TemplateStorage, template: DocumentTemplate) => {
-  const exists = storage.templates.some((existing) => templatesMatch(existing, template));
-  if (exists) {
-    return false;
-  }
-  storage.templates.push(template);
-  return true;
-};
-
-const seedTemplates = () => {
-  if (typeof window === 'undefined') return;
-
-  const storage = ensureStorage();
-  const now = new Date().toISOString();
-  let updated = false;
-
-  if (!localStorage.getItem(SEEDED_KEY)) {
-    const orgContentHtml = buildBaseTemplate(
-      'Nigerian Ports Authority',
-      'Official Correspondence Template',
-    );
-    updated =
-      ensureTemplateEntry(storage, {
-        id: nanoid(),
-        scope: 'organization',
-        scopeId: null,
-        title: 'Corporate Memorandum',
-        description: 'Baseline template for NPA official memoranda.',
-        contentHtml: orgContentHtml,
-        contentText: deriveContentText(orgContentHtml),
-        createdBy: 'system',
-        updatedBy: 'system',
-        createdAt: now,
-        updatedAt: now,
-        isDefault: true,
-        templateType: 'document',
-      }) || updated;
-
-    localStorage.setItem(SEEDED_KEY, 'true');
-  }
-
-  const minuteTemplates: Array<{
-    scope: TemplateScope;
-    scopeId: string | null;
-    title: string;
-    description: string;
-    content: string;
-    actionType: 'minute' | 'approve' | 'any';
-  }> = [
-    {
-      scope: 'organization',
-      scopeId: null,
-      title: 'Please Review & Revert',
-      description: 'Standard instruction to review and provide feedback.',
-      content: 'Kindly review the attached correspondence and revert with your input within 48 hours.',
-      actionType: 'any',
-    },
-    {
-      scope: 'organization',
-      scopeId: null,
-      title: 'For Immediate Action',
-      description: 'Escalation minute for urgent execution.',
-      content: 'Please treat as urgent and confirm completion before close of business.',
-      actionType: 'minute',
-    },
-  {
-    scope: 'organization',
-    scopeId: null,
-    title: 'Approval Granted with Conditions',
-    description: 'Approve the correspondence while highlighting follow-up expectations.',
-    content:
-      'Approval granted. Ensure all outlined conditions are met and provide a status update within five (5) working days.',
-    actionType: 'approve',
-  },
-  {
-    scope: 'organization',
-    scopeId: null,
-    title: 'Request Additional Documentation',
-    description: 'Ask the originating department to attach missing documents before further action.',
-    content:
-      'Kindly attach the supporting documents referenced in the memo and revert for further processing within 24 hours.',
-    actionType: 'minute',
-  },
-  {
-    scope: 'organization',
-    scopeId: null,
-    title: 'Acknowledged – In Progress',
-    description: 'Let the sender know the request has been received and assigned.',
-    content:
-      'Acknowledged. The matter is receiving attention. Assigned team to revert with progress update by close of business tomorrow.',
-    actionType: 'any',
-  },
-  {
-    scope: 'organization',
-    scopeId: null,
-    title: 'Completed – Close Out',
-    description: 'Communicate that all required actions have been completed.',
-    content:
-      'All required actions on this correspondence are complete. Please close out the ticket and archive the supporting documents.',
-    actionType: 'approve',
-  },
-    {
-      scope: 'directorate',
-      scopeId: 'dir-edfa',
-      title: 'Finance Clarification Request',
-      description: 'Minute requesting clarification on financial matters.',
-      content: 'Provide clarifications on the budget variance highlighted and advise on remedial steps.',
-      actionType: 'any',
-    },
-    {
-      scope: 'division',
-      scopeId: 'div-ict',
-      title: 'ICT Follow-up',
-      description: 'Minute to ICT division for system-related follow-up.',
-      content: 'ICT to assess the system impact and revert with a remediation plan.',
-      actionType: 'minute',
-    },
-  ];
-
-  minuteTemplates.forEach((template) => {
-    const body = buildMinuteTemplate(template.title, template.content);
-    updated =
-      ensureTemplateEntry(storage, {
-        id: nanoid(),
-        scope: template.scope,
-        scopeId: template.scopeId,
-        title: template.title,
-        description: template.description,
-        contentHtml: body.contentHtml,
-        contentText: body.contentText,
-        createdBy: 'system',
-        updatedBy: 'system',
-        createdAt: now,
-        updatedAt: now,
-        isDefault: true,
-        templateType: 'minute',
-        actionType: template.actionType,
-      }) || updated;
-  });
-
-  if (updated) {
-    persist(storage);
-  }
-};
-
-export const initializeTemplates = () => {
-  seedTemplates();
-};
-
-export const loadTemplates = async (): Promise<DocumentTemplate[]> => {
+export const loadTemplates = async (force = false): Promise<DocumentTemplate[]> => {
   if (!hasTokens()) {
     throw new Error('Authentication required to load templates');
   }
 
-  try {
-    return await templateApi.getTemplates({ isActive: true });
-  } catch (error: unknown) {
-    logError('Failed to load templates from backend:', error);
-    throw error;
+  const now = Date.now();
+  if (!force && templatesCache && now - templatesCache.timestamp < TEMPLATES_CACHE_TTL_MS) {
+    return templatesCache.data;
   }
+
+  if (!force && templatesPromise) {
+    return templatesPromise;
+  }
+
+  templatesPromise = (async () => {
+    try {
+      const data = await templateApi.getTemplates({ isActive: true });
+      templatesCache = { data, timestamp: Date.now() };
+      return data;
+    } catch (error: unknown) {
+      logError('Failed to load templates from backend:', error);
+      throw error;
+    } finally {
+      templatesPromise = null;
+    }
+  })();
+
+  return templatesPromise;
 };
 
 export const saveTemplate = async (template: DocumentTemplate): Promise<DocumentTemplate> => {
@@ -264,14 +75,12 @@ export const saveTemplate = async (template: DocumentTemplate): Promise<Document
     contentText: deriveContentText(template.contentHtml, template.contentText),
   };
 
-  // Use backend only - no localStorage fallback
   if (!hasTokens()) {
     throw new Error('Authentication required to save templates');
   }
 
   try {
     if (template.id && template.id.startsWith('temp_')) {
-      // New template - create in backend
       const created = await templateApi.createTemplate({
         scope: template.scope,
         scopeId: template.scopeId,
@@ -283,33 +92,34 @@ export const saveTemplate = async (template: DocumentTemplate): Promise<Document
         actionType: template.actionType,
         isDefault: template.isDefault,
       });
+      invalidateTemplatesCache();
       return created;
-    } else {
-      // Existing template - update in backend
-      try {
-        const updated = await templateApi.updateTemplate(template.id, {
-          title: template.title,
-          description: template.description,
-          contentHtml: template.contentHtml,
-          contentText: updatedTemplate.contentText,
-          isDefault: template.isDefault,
-        });
-        return updated;
-      } catch (_error: unknown) {
-        // If update fails (template might not exist in backend), create it
-        const created = await templateApi.createTemplate({
-          scope: template.scope,
-          scopeId: template.scopeId,
-          title: template.title,
-          description: template.description,
-          contentHtml: template.contentHtml,
-          contentText: updatedTemplate.contentText,
-          templateType: template.templateType,
-          actionType: template.actionType,
-          isDefault: template.isDefault,
-        });
-        return created;
-      }
+    }
+
+    try {
+      const updated = await templateApi.updateTemplate(template.id, {
+        title: template.title,
+        description: template.description,
+        contentHtml: template.contentHtml,
+        contentText: updatedTemplate.contentText,
+        isDefault: template.isDefault,
+      });
+      invalidateTemplatesCache();
+      return updated;
+    } catch (_error: unknown) {
+      const created = await templateApi.createTemplate({
+        scope: template.scope,
+        scopeId: template.scopeId,
+        title: template.title,
+        description: template.description,
+        contentHtml: template.contentHtml,
+        contentText: updatedTemplate.contentText,
+        templateType: template.templateType,
+        actionType: template.actionType,
+        isDefault: template.isDefault,
+      });
+      invalidateTemplatesCache();
+      return created;
     }
   } catch (error: unknown) {
     logError('Failed to save template to backend:', error);
@@ -321,7 +131,7 @@ export const createTemplate = async (data: Omit<DocumentTemplate, 'id' | 'create
   const now = new Date().toISOString();
   const template: DocumentTemplate = {
     ...data,
-    id: `temp_${nanoid()}`, // Temporary ID for new templates
+    id: `temp_${nanoid()}`,
     createdAt: now,
     updatedAt: now,
     contentText: deriveContentText(data.contentHtml, data.contentText),
@@ -330,18 +140,17 @@ export const createTemplate = async (data: Omit<DocumentTemplate, 'id' | 'create
 };
 
 export const deleteTemplate = async (id: string): Promise<void> => {
-  // Use backend only - no localStorage fallback
   if (!hasTokens()) {
     throw new Error('Authentication required to delete templates');
   }
 
   if (id.startsWith('temp_')) {
-    // Temporary template that was never saved - nothing to delete
     return;
   }
 
   try {
     await templateApi.deleteTemplate(id);
+    invalidateTemplatesCache();
   } catch (error: unknown) {
     logError('Failed to delete template from backend:', error);
     throw error;
@@ -393,62 +202,4 @@ export const getDefaultTemplateForUser = async (user: User, templateType: Templa
   const organization = templates.find((template) => template.scope === 'organization' && template.isDefault);
   if (organization) return organization;
   return templates[templates.length - 1];
-};
-
-export const upsertTemplate = (params: {
-  scope: TemplateScope;
-  scopeId: string | null;
-  title: string;
-  description?: string;
-  contentHtml: string;
-  contentText?: string;
-  userId: string;
-  isDefault?: boolean;
-  templateType?: TemplateType;
-  actionType?: 'minute' | 'approve' | 'any';
-}) => {
-  const storage = ensureStorage();
-  const now = new Date().toISOString();
-  const existing = storage.templates.find(
-    (template) =>
-      template.scope === params.scope &&
-      template.scopeId === params.scopeId &&
-      template.isDefault &&
-      template.templateType === (params.templateType ?? 'document'),
-  );
-
-  const template: DocumentTemplate = existing
-    ? {
-        ...existing,
-        title: params.title,
-        description: params.description,
-        contentHtml: params.contentHtml,
-        contentText: deriveContentText(params.contentHtml, params.contentText ?? existing.contentText),
-        updatedAt: now,
-        updatedBy: params.userId,
-        isDefault: params.isDefault ?? existing.isDefault,
-        templateType: params.templateType ?? existing.templateType,
-        actionType: params.actionType ?? existing.actionType,
-      }
-    : {
-        id: nanoid(),
-        scope: params.scope,
-        scopeId: params.scopeId,
-        title: params.title,
-        description: params.description,
-        contentHtml: params.contentHtml,
-        contentText: deriveContentText(params.contentHtml, params.contentText),
-        createdAt: now,
-        updatedAt: now,
-        createdBy: params.userId,
-        updatedBy: params.userId,
-        isDefault: params.isDefault ?? true,
-        templateType: params.templateType ?? 'document',
-        actionType: params.actionType,
-      };
-
-  storage.templates = storage.templates.filter((t) => t.id !== template.id);
-  storage.templates.push(template);
-  persist(storage);
-  return template;
 };

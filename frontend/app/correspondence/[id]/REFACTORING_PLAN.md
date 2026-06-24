@@ -1,63 +1,51 @@
 # Correspondence Detail Page Refactoring Plan
 
 ## Current State
-- **File:** `frontend/app/correspondence/[id]/page.tsx`
-- **Lines:** ~2,650
-- **Target:** <500 lines per file
+- **Main page:** `frontend/app/correspondence/[id]/page.tsx` (~550 lines)
+- **Layout:** Document left (58%) + Routing right (42%); mobile **Document | Routing** tabs
 
-## Components to Extract
+## Component Map
 
-### 1. ✅ CorrespondenceHeader (~150 lines)
-- **Status:** Created
+### ✅ CorrespondenceHeader
 - **Location:** `components/CorrespondenceHeader.tsx`
-- **Contains:** Reference number, priority, subject, action buttons, download menu
+- Reference, metadata, fullscreen / print / download actions
 
-### 2. DocumentPreviewPanel (~500 lines)
-- **Status:** To be created
+### ✅ DocumentPreviewPanel
 - **Location:** `components/DocumentPreviewPanel.tsx`
-- **Contains:** 
-  - Document metadata card (sender, date, distribution)
-  - Document preview area (PDF, Word, images)
-  - Attachment list
-  - Linked documents section
+- Inline document preview, attachments, linked DMS documents
 
-### 3. MinuteThreadPanel (~300 lines)
-- **Status:** To be created
+### ✅ RoutingPanel
+- **Location:** `components/RoutingPanel.tsx`
+- Composes ActionsPanel, WorkflowProgressIndicator, SealTrackingPanel, and embedded MinuteThreadPanel
+
+### ✅ MinuteThreadPanel
 - **Location:** `components/MinuteThreadPanel.tsx`
-- **Contains:**
-  - Minute cards
-  - Minute actions (edit, recall, add note)
-  - Parallel routing indicators
+- Minute cards and thread actions (`embedded` mode for right column)
 
-### 4. ActionsPanel (~400 lines)
-- **Status:** To be created
+### ✅ ActionsPanel
 - **Location:** `components/ActionsPanel.tsx`
-- **Contains:**
-  - Current status card
-  - Workflow progress
-  - Action buttons (Minute, Treat, Complete, Delegate, etc.)
-  - Delegation info
+- Route, treat, complete, delegate, and related actions
 
-### 5. LinkedDocuments (~150 lines)
-- **Status:** To be created
-- **Location:** `components/LinkedDocuments.tsx`
-- **Contains:**
-  - Linked DMS documents list
-  - Version selection
-  - Unlink functionality
+### ✅ CorrespondenceWorkspace
+- **Location:** `components/CorrespondenceWorkspace.tsx`
+- Desktop 2-column shell + mobile tab switcher
 
-## Expected Results
-- **Main page:** ~800-1000 lines (reduced from 2,650)
-- **Total components:** 5 new components
-- **Maintainability:** Significantly improved
-- **Reusability:** Components can be reused in other detail pages
+### ✅ CorrespondenceDetailModals
+- **Location:** `components/CorrespondenceDetailModals.tsx`
+- Lazy-mounted modals (minute, treatment, preview, delegate, link, etc.)
 
-## Implementation Order
-1. ✅ Create CorrespondenceHeader
-2. Create DocumentPreviewPanel (largest section)
-3. Create MinuteThreadPanel
-4. Create ActionsPanel
-5. Create LinkedDocuments
-6. Update main page to use all components
-7. Test and verify functionality
+### ✅ MobileStickyActionBar
+- **Location:** `components/MobileStickyActionBar.tsx`
+- Fixed bottom actions on mobile
 
+### ✅ useCorrespondenceDetailData
+- **Location:** `hooks/use-correspondence-detail-data.ts`
+- API hydrate, linked docs, parallel routing groups, mark-opened, refresh minutes
+
+## State
+- **Reducer:** `correspondence-state-reducer.ts` — minutes, linked docs, mobile tab, preview UI state
+
+## Optional Follow-ups
+- Extract DMS access / preview URL helpers into a small hook
+- Wire `parallelRoutingGroups` into thread UI if not already consumed downstream
+- Further trim `page.tsx` by moving delegate + completion handlers into hooks

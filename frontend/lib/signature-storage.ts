@@ -1,4 +1,4 @@
-import { logError, logWarn } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { apiFetch } from '@/lib/api-client';
 import type { SignatureTemplate, UserSignaturePreferences } from '@/lib/api/signature-templates';
 
@@ -93,6 +93,21 @@ interface BackendSignatureResponse {
 
 const USER_PREF_KEY_PREFIX = 'npa_signature_pref_';
 
+const SIGNATURE_CACHE_TTL_MS = 60 * 1000;
+const SIGNATURE_TEMPLATES_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let signatureCache: { data: StoredSignature | null; timestamp: number } | null = null;
+let signaturePromise: Promise<StoredSignature | null> | null = null;
+let signatureTemplatesCache: { data: SignatureTemplate[]; timestamp: number } | null = null;
+let signatureTemplatesPromise: Promise<SignatureTemplate[]> | null = null;
+let signaturePreferencesCache: { userId: string; data: UserSignaturePreferences | null; timestamp: number } | null = null;
+let signaturePreferencesPromise: Promise<UserSignaturePreferences | null> | null = null;
+
+export const invalidateSignatureCache = (): void => {
+  signatureCache = null;
+  signaturePromise = null;
+};
+
 // ==========================================
 // Backend API Functions (for signature image)
 // ==========================================
@@ -100,33 +115,50 @@ const USER_PREF_KEY_PREFIX = 'npa_signature_pref_';
 /**
  * Fetch the current user's signature from the backend
  */
-export const fetchUserSignature = async (signal?: AbortSignal): Promise<StoredSignature | null> => {
-  try {
-    const response = await apiFetch<BackendSignatureResponse>('/accounts/signature/', { signal });
-    
-    if (!response.has_signature) {
-      return null;
-    }
-    
-    return {
-      id: response.id,
-      imageData: response.signature_url || '',
-      fileName: response.original_filename,
-      uploadedAt: response.created_at,
-      sealOfficeName: response.seal_office_name,
-      sealOfficeTitle: response.seal_office_title,
-      sealPrefix: response.seal_prefix,
-      require2fa: response.require_2fa,
-      isActive: response.is_active,
-      lastUsedAt: response.last_used_at ?? undefined,
-      timesUsed: response.times_used,
-    };
-  } catch (error: unknown) {
-    if (!(error instanceof DOMException && error.name === 'AbortError')) {
-      logError('Failed to fetch signature from backend:', error);
-    }
-    return null;
+export const fetchUserSignature = async (signal?: AbortSignal, force = false): Promise<StoredSignature | null> => {
+  const now = Date.now();
+  if (!force && signatureCache && now - signatureCache.timestamp < SIGNATURE_CACHE_TTL_MS) {
+    return signatureCache.data;
   }
+  if (!force && signaturePromise) {
+    return signaturePromise;
+  }
+
+  signaturePromise = (async () => {
+    try {
+      const response = await apiFetch<BackendSignatureResponse>('/accounts/signature/', { signal });
+      
+      if (!response.has_signature) {
+        signatureCache = { data: null, timestamp: Date.now() };
+        return null;
+      }
+      
+      const result: StoredSignature = {
+        id: response.id,
+        imageData: response.signature_url || '',
+        fileName: response.original_filename,
+        uploadedAt: response.created_at,
+        sealOfficeName: response.seal_office_name,
+        sealOfficeTitle: response.seal_office_title,
+        sealPrefix: response.seal_prefix,
+        require2fa: response.require_2fa,
+        isActive: response.is_active,
+        lastUsedAt: response.last_used_at ?? undefined,
+        timesUsed: response.times_used,
+      };
+      signatureCache = { data: result, timestamp: Date.now() };
+      return result;
+    } catch (error: unknown) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        logError('Failed to fetch signature from backend:', error);
+      }
+      return null;
+    } finally {
+      signaturePromise = null;
+    }
+  })();
+
+  return signaturePromise;
 };
 
 /**
@@ -164,6 +196,7 @@ export const uploadUserSignature = async (
       // Don't set Content-Type header - browser will set it with boundary for FormData
     });
     
+    invalidateSignatureCache();
     return {
       id: response.id,
       imageData: response.signature_url || '',
@@ -209,6 +242,7 @@ export const updateSignatureSettings = async (
       body: JSON.stringify(payload),
     });
     
+    invalidateSignatureCache();
     return {
       id: response.id,
       imageData: response.signature_url || '',
@@ -236,56 +270,10 @@ export const deleteUserSignatureFromBackend = async (): Promise<void> => {
     await apiFetch('/accounts/signature/', {
       method: 'DELETE',
     });
+    invalidateSignatureCache();
   } catch (error: unknown) {
     logError('Failed to delete signature:', error);
     throw error;
-  }
-};
-
-// ==========================================
-// Legacy localStorage functions (backwards compatibility)
-// These are deprecated - use backend API instead
-// ==========================================
-
-/**
- * @deprecated Use fetchUserSignature() instead
- */
-export const loadUserSignature = (userId: string): StoredSignature | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const SIGNATURE_KEY_PREFIX = 'npa_signature_';
-    const data = localStorage.getItem(`${SIGNATURE_KEY_PREFIX}${userId}`);
-    if (!data) return null;
-    return JSON.parse(data) as StoredSignature;
-  } catch (error: unknown) {
-    logError('Failed to load signature from localStorage:', error);
-    return null;
-  }
-};
-
-/**
- * @deprecated Use uploadUserSignature() instead
- */
-export const saveUserSignature = (userId: string, signature: StoredSignature) => {
-  if (typeof window === 'undefined') return;
-  try {
-    const SIGNATURE_KEY_PREFIX = 'npa_signature_';
-    localStorage.setItem(`${SIGNATURE_KEY_PREFIX}${userId}`, JSON.stringify(signature));
-  } catch (error: unknown) {
-    logError('Failed to save signature to localStorage:', error);
-  }
-};
-
-/**
- * @deprecated Use deleteUserSignatureFromBackend() instead
- */
-export const deleteUserSignature = (userId: string) => {
-  if (typeof window === 'undefined') return;
-  try {
-    const SIGNATURE_KEY_PREFIX = 'npa_signature_';
-    localStorage.removeItem(`${SIGNATURE_KEY_PREFIX}${userId}`);
-  } catch (error: unknown) {
-    logError('Failed to delete signature from localStorage:', error);
   }
 };
 
@@ -295,25 +283,30 @@ export const deleteUserSignature = (userId: string) => {
 
 import * as signatureTemplateApi from '@/lib/api/signature-templates';
 
-export const loadSignatureTemplates = async (signal?: AbortSignal): Promise<SignatureTemplate[]> => {
-  try {
-    const templates = await signatureTemplateApi.getSignatureTemplates({}, signal);
-    // If no templates exist, return defaults (they'll be created in backend on first use)
-    if (templates.length === 0) {
-      return DEFAULT_SIGNATURE_TEMPLATES;
-    }
-    return templates;
-  } catch (error: unknown) {
-    logError('Failed to load signature templates from backend:', error);
-    // Fallback to defaults if backend fails
-    return DEFAULT_SIGNATURE_TEMPLATES;
+export const loadSignatureTemplates = async (signal?: AbortSignal, force = false): Promise<SignatureTemplate[]> => {
+  const now = Date.now();
+  if (!force && signatureTemplatesCache && now - signatureTemplatesCache.timestamp < SIGNATURE_TEMPLATES_CACHE_TTL_MS) {
+    return signatureTemplatesCache.data;
   }
-};
+  if (!force && signatureTemplatesPromise) {
+    return signatureTemplatesPromise;
+  }
 
-export const saveSignatureTemplates = async (_templates: SignatureTemplate[]): Promise<void> => {
-  // Templates are managed in backend - this function is kept for compatibility
-  // but doesn't actually save to localStorage anymore
-  logWarn('saveSignatureTemplates is deprecated - templates are managed in backend');
+  signatureTemplatesPromise = (async () => {
+    try {
+      const templates = await signatureTemplateApi.getSignatureTemplates({}, signal);
+      const result = templates.length === 0 ? DEFAULT_SIGNATURE_TEMPLATES : templates;
+      signatureTemplatesCache = { data: result, timestamp: Date.now() };
+      return result;
+    } catch (error: unknown) {
+      logError('Failed to load signature templates from backend:', error);
+      return DEFAULT_SIGNATURE_TEMPLATES;
+    } finally {
+      signatureTemplatesPromise = null;
+    }
+  })();
+
+  return signatureTemplatesPromise;
 };
 
 export const ensureDefaultSignatureTemplates = async (signal?: AbortSignal): Promise<SignatureTemplate[]> => {
@@ -328,18 +321,40 @@ export const ensureDefaultSignatureTemplates = async (signal?: AbortSignal): Pro
 // User Preferences (now using backend)
 // ==========================================
 
-export const loadUserSignaturePreferences = async (userId: string, signal?: AbortSignal): Promise<UserSignaturePreferences | null> => {
-  try {
-    return await signatureTemplateApi.getUserSignaturePreferences(signal);
-  } catch (error: unknown) {
-    logError('Failed to load signature preferences from backend:', error);
-    return null;
+export const loadUserSignaturePreferences = async (userId: string, signal?: AbortSignal, force = false): Promise<UserSignaturePreferences | null> => {
+  const now = Date.now();
+  if (
+    !force &&
+    signaturePreferencesCache &&
+    signaturePreferencesCache.userId === userId &&
+    now - signaturePreferencesCache.timestamp < SIGNATURE_CACHE_TTL_MS
+  ) {
+    return signaturePreferencesCache.data;
   }
+  if (!force && signaturePreferencesPromise) {
+    return signaturePreferencesPromise;
+  }
+
+  signaturePreferencesPromise = (async () => {
+    try {
+      const prefs = await signatureTemplateApi.getUserSignaturePreferences(signal);
+      signaturePreferencesCache = { userId, data: prefs, timestamp: Date.now() };
+      return prefs;
+    } catch (error: unknown) {
+      logError('Failed to load signature preferences from backend:', error);
+      return null;
+    } finally {
+      signaturePreferencesPromise = null;
+    }
+  })();
+
+  return signaturePreferencesPromise;
 };
 
 export const saveUserSignaturePreferences = async (userId: string, prefs: UserSignaturePreferences): Promise<void> => {
   try {
     await signatureTemplateApi.updateUserSignaturePreferences(prefs);
+    signaturePreferencesCache = { userId, data: prefs, timestamp: Date.now() };
   } catch (error: unknown) {
     logError('Failed to save signature preferences to backend:', error);
     throw error;

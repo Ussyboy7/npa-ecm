@@ -56,14 +56,16 @@ import {
   FileText,
   Download,
   RefreshCw,
-  ChevronLeft,
-  ChevronRight,
   MoreVertical,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { getActivityLogs, type ActivityLog } from '@/lib/audit-storage';
+import { PREVIEW_PAGE_SIZE } from '@/lib/pagination-constants';
+import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/shared/PaginationControls';
 import { logError, logWarn } from '@/lib/client-logger';
 import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
@@ -249,10 +251,8 @@ const AuditTrailPage = () => {
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  const pagination = usePagination({ totalCount });
   const [summaryStats, setSummaryStats] = useState<AuditSummary>(DEFAULT_SUMMARY);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [goToPageInput, setGoToPageInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -275,8 +275,9 @@ const AuditTrailPage = () => {
 
   // Reset page when filters change
   useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, pageSize, dateFrom, dateTo]);
+    pagination.goToFirstPage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset page when filters change
+  }, [debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, pagination.pageSize, dateFrom, dateTo]);
 
   // Build date range params
   const getDateRangeParams = () => {
@@ -295,8 +296,8 @@ const AuditTrailPage = () => {
     try {
       const dateParams = getDateRangeParams();
       const params: Record<string, unknown> = {
-        page,
-        pageSize,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
         ordering: sortOrder === 'desc' ? '-timestamp' : 'timestamp',
         ...dateParams,
       };
@@ -323,23 +324,30 @@ const AuditTrailPage = () => {
   const handleExport = async () => {
     setExporting(true);
     try {
-      // Fetch all logs for export (without pagination)
-      const dateParams = getDateRangeParams();
-      const params: Record<string, unknown> = {
-        page: 1,
-        pageSize: 10000, // Large limit for export
-        ordering: sortOrder === 'desc' ? '-timestamp' : 'timestamp',
-        ...dateParams,
+      const buildParams = (page: number, exportPageSize: number) => {
+        const dateParams = getDateRangeParams();
+        const params: Record<string, unknown> = {
+          page,
+          pageSize: exportPageSize,
+          ordering: sortOrder === 'desc' ? '-timestamp' : 'timestamp',
+          ...dateParams,
+        };
+        if (actionFilter !== 'all') params.action = actionFilter;
+        if (moduleFilter !== 'all') params.module = moduleFilter;
+        if (severityFilter !== 'all') params.severity = severityFilter;
+        if (successFilter !== 'all') params.success = successFilter === 'true';
+        if (debouncedSearch) params.search = debouncedSearch;
+        return params;
       };
-      if (actionFilter !== 'all') params.action = actionFilter;
-      if (moduleFilter !== 'all') params.module = moduleFilter;
-      if (severityFilter !== 'all') params.severity = severityFilter;
-      if (successFilter !== 'all') params.success = successFilter === 'true';
-      if (debouncedSearch) params.search = debouncedSearch;
 
-      const data = await getActivityLogs(params);
+      const allLogs = await fetchAllPaginatedResults<ActivityLog>(
+        async (page, exportPageSize) => {
+          const data = await getActivityLogs(buildParams(page, exportPageSize));
+          return data;
+        },
+      );
       
-      const exportData = data.results.map((log) => ({
+      const exportData = allLogs.map((log) => ({
         'Timestamp': formatDateTime(log.timestamp),
         'Action': log.action || 'N/A',
         'Module': log.module || 'N/A',
@@ -380,7 +388,7 @@ const AuditTrailPage = () => {
       const dateParams = getDateRangeParams();
       const baseParams: Record<string, unknown> = {
         page: 1,
-        pageSize: 1, // Just need count
+        pageSize: PREVIEW_PAGE_SIZE,
         ...dateParams,
       };
       if (moduleFilter !== 'all') baseParams.module = moduleFilter;
@@ -417,18 +425,8 @@ const AuditTrailPage = () => {
   useEffect(() => {
     void fetchLogs();
     void fetchSummaryStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, currentUser, page, pageSize, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateFrom, dateTo]);
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-
-  const handleGoToPage = () => {
-    const pageNum = parseInt(goToPageInput, 10);
-    if (pageNum >= 1 && pageNum <= totalPages) {
-      setPage(pageNum);
-      setGoToPageInput('');
-    }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load when pagination or filters change
+  }, [hydrated, currentUser, pagination.page, pagination.pageSize, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateFrom, dateTo]);
 
   // Use summary stats from API
   const summary = summaryStats;
@@ -641,121 +639,9 @@ const AuditTrailPage = () => {
           </div>
         )}
 
-        {/* Pagination */}
-        <div className="flex flex-col gap-3 border-t border-border/60 pt-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-muted-foreground">
-              Showing{' '}
-              {totalCount === 0
-                ? 0
-                : `${(page - 1) * pageSize + 1}-${Math.min(totalCount, (page - 1) * pageSize + logs.length)}`}{' '}
-              of {totalCount} audit logs
-            </p>
-            <div className="flex items-center gap-2">
-              <label htmlFor="audit-page-size" className="text-sm text-muted-foreground">
-                Per page:
-              </label>
-              <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-                <SelectTrigger id="audit-page-size" className="w-20 h-8" aria-label="Items per page">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="20">20</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-              disabled={page === 1 || loading}
-              aria-label="Previous page"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            
-            {/* Page number buttons */}
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (page <= 3) {
-                  pageNum = i + 1;
-                } else if (page >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = page - 2 + i;
-                }
-                
-                if (pageNum > totalPages) return null;
-                
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={page === pageNum ? 'default' : 'outline'}
-                    size="sm"
-                    className="w-8 h-8 p-0"
-                    onClick={() => setPage(pageNum)}
-                    disabled={loading}
-                    aria-label={`Go to page ${pageNum}`}
-                    aria-current={page === pageNum ? 'page' : undefined}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-            </div>
-            
-            {/* Go to page input */}
-            {totalPages > 5 && (
-              <div className="flex items-center gap-1">
-                <Input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={goToPageInput}
-                  onChange={(e) => setGoToPageInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleGoToPage();
-                    }
-                  }}
-                  placeholder="Page"
-                  className="w-16 h-8 text-xs"
-                  aria-label="Go to page number"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8"
-                  onClick={handleGoToPage}
-                  disabled={loading}
-                  aria-label="Go to page"
-                >
-                  Go
-                </Button>
-              </div>
-            )}
-            
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-              disabled={page >= totalPages || loading}
-              aria-label="Next page"
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-                      </div>
-                    </div>
+        {totalCount > 0 && (
+          <PaginationControls pagination={pagination} className="border-t border-border/60 pt-4" />
+        )}
       </div>
     )}
   </DashboardLayout>

@@ -9,6 +9,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django.http import HttpResponse
 
 from common.permissions import IsSystemAdminRole
+from common.pagination import StandardPageNumberPagination
 from forms.models import FormTemplate, FormSubmission
 from forms.serializers import (
     FormTemplateSerializer,
@@ -31,12 +32,12 @@ class FormTemplateViewSet(viewsets.ModelViewSet):
     queryset = FormTemplate.objects.all()
     serializer_class = FormTemplateSerializer
     permission_classes = [IsAuthenticated, IsSystemAdminRole]
-    pagination_class = None  # Disable pagination for form templates
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ["category", "is_active"]
     search_fields = ["name", "description", "slug"]
     ordering_fields = ["name", "category", "created_at"]
     ordering = ["category", "name"]
+    pagination_class = StandardPageNumberPagination
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -64,11 +65,11 @@ class FormSubmissionViewSet(viewsets.ModelViewSet):
     queryset = FormSubmission.objects.all()
     serializer_class = FormSubmissionSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None  # Disable pagination for form submissions
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ["template", "correspondence", "is_draft"]
     ordering_fields = ["created_at", "submitted_at"]
     ordering = ["-created_at"]
+    pagination_class = StandardPageNumberPagination
 
     def get_serializer_class(self):
         if self.action == "list":

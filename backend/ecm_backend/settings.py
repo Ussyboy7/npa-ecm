@@ -16,14 +16,29 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DJANGO_ENV = os.environ.get("DJANGO_ENV", "local")
-env_file = BASE_DIR / f".env.{DJANGO_ENV}"
+IS_LOCAL_ENV = DJANGO_ENV == "local"
+IS_STRICT_ENV = not IS_LOCAL_ENV
+
+# Canonical: backend/env/{DJANGO_ENV}.env (used by Docker compose and scripts).
+env_file = BASE_DIR / "env" / f"{DJANGO_ENV}.env"
 
 if env_file.exists():
     load_dotenv(env_file)
 else:
-    fallback_env = BASE_DIR / ".env"
-    if fallback_env.exists():
-        load_dotenv(fallback_env)
+    if IS_LOCAL_ENV:
+        fallback_env = BASE_DIR / f".env.{DJANGO_ENV}"
+        if fallback_env.exists():
+            load_dotenv(fallback_env)
+        else:
+            final_fallback = BASE_DIR / ".env"
+            if final_fallback.exists():
+                load_dotenv(final_fallback)
+    else:
+        raise RuntimeError(
+            f"Expected environment file not found: {env_file}. "
+            "Copy backend/env/{DJANGO_ENV}.env.example to backend/env/{DJANGO_ENV}.env "
+            "before running outside local development."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +245,7 @@ REST_FRAMEWORK = {
         "rest_framework.filters.SearchFilter",
         "rest_framework.filters.OrderingFilter",
     ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": int(os.getenv("PAGINATION_PAGE_SIZE", "20")),
+    "DEFAULT_PAGINATION_CLASS": "common.pagination.StandardPageNumberPagination",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "ecm_backend.exception_handler.custom_exception_handler",
     "DEFAULT_THROTTLE_CLASSES": [
@@ -299,11 +313,16 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [
-                (
-                    os.getenv("REDIS_HOST", "localhost"),
-                    int(os.getenv("REDIS_PORT", "6379")),
-                )
-            ]
+                {
+                    "host": os.getenv("REDIS_HOST", "localhost"),
+                    "port": int(os.getenv("REDIS_PORT", "6379")),
+                    "db": 0,
+                    # channels_redis uses blocking BZPOPMIN; redis-py 8+ defaults
+                    # socket_timeout=5 which raises TimeoutError on idle connections.
+                    "socket_timeout": None,
+                    "socket_connect_timeout": 5,
+                }
+            ],
         },
     }
 }

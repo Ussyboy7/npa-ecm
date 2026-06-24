@@ -5,6 +5,9 @@ import { Correspondence, Minute, MinuteSignaturePayload } from '@/lib/npa-struct
 import { Delegation } from '@/lib/delegation-storage';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
+import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
+import { fetchAllPaginated } from '@/lib/pagination-utils';
 import { isRecord, asString, unwrapResults } from '@/lib/type-utils';
 
 interface CorrespondenceContextType {
@@ -14,6 +17,7 @@ interface CorrespondenceContextType {
   dataVersion: number;
   getCorrespondenceById: (id: string) => Correspondence | undefined;
   getMinutesByCorrespondenceId: (id: string) => Minute[];
+  mergeMinutes: (incoming: Minute[]) => void;
   addMinute: (minute: Minute) => Promise<void>;
   updateCorrespondence: (id: string, updates: Partial<Correspondence>) => Promise<void>;
   addCorrespondence: (correspondence: Correspondence) => Promise<Correspondence>;
@@ -499,24 +503,19 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     if (!hasTokens()) return;
 
     try {
-      // Use pagination to avoid loading all correspondence at once
-      // Load only first page (25 items) for initial sync
-      // Individual pages will load more as needed
-      const [correspondenceRaw, minutesRaw, delegationsRaw] = await Promise.all([
-        apiFetch('/correspondence/items/?page_size=25&page=1'),
-        apiFetch('/correspondence/minutes/?page_size=100'),
-        apiFetch('/correspondence/delegations/?page_size=100'),
+      // Bootstrap: first page of correspondence for context cache; pages load more as needed.
+      const [correspondenceRaw, delegationsRaw] = await Promise.all([
+        apiFetch(`/correspondence/items/?page_size=${DEFAULT_LIST_PAGE_SIZE}&page=1`),
+        fetchAllPaginated<Record<string, unknown>>('/correspondence/delegations/'),
       ]);
 
       const correspondenceList = unwrapResults(correspondenceRaw).filter(isRecord).map(mapApiCorrespondence);
-      const minutesList = unwrapResults(minutesRaw).filter(isRecord).map(mapApiMinute);
-      const delegationsList = unwrapResults(delegationsRaw)
+      const delegationsList = delegationsRaw
         .filter(isRecord)
         .map(mapApiDelegation)
         .filter((delegation) => delegation.correspondenceId);
 
       setCorrespondence(correspondenceList);
-      setMinutes(minutesList);
       setDelegations(delegationsList);
       setDataVersion(v => v + 1);
     } catch (error: unknown) {
@@ -562,6 +561,15 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     return minutes.filter(m => m.correspondenceId === id);
   }, [minutes]);
 
+  const mergeMinutes = useCallback((incoming: Minute[]) => {
+    if (incoming.length === 0) return;
+    setMinutes((prev) => {
+      const byId = new Map(prev.map((minute) => [minute.id, minute]));
+      incoming.forEach((minute) => byId.set(minute.id, minute));
+      return Array.from(byId.values());
+    });
+  }, []);
+
   const addMinute = useCallback(async (minute: Minute) => {
     try {
       const payload = normalizeMinutePayload(buildMinuteCreatePayload(minute));
@@ -575,6 +583,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         const updated = [...prev, created];
         return updated;
       });
+      bumpSidebarCounts();
     } catch (error: unknown) {
       logError('Failed to add minute via API', error);
       throw error;
@@ -598,6 +607,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         const updatedList = prev.map((item) => (item.id as string === updated.id ? updated : item));
         return updatedList;
       });
+      bumpSidebarCounts();
     } catch (error: unknown) {
       logError('Failed to update correspondence via API', error);
       throw error;
@@ -616,6 +626,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
         const updatedList = [created, ...prev];
         return updatedList;
       });
+      bumpSidebarCounts();
       return created;
     } catch (error: unknown) {
       logError('Failed to create correspondence via API', error);
@@ -630,6 +641,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     dataVersion,
     getCorrespondenceById,
     getMinutesByCorrespondenceId,
+    mergeMinutes,
     addMinute,
     updateCorrespondence,
     addCorrespondence,
@@ -642,6 +654,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     dataVersion,
     getCorrespondenceById,
     getMinutesByCorrespondenceId,
+    mergeMinutes,
     addMinute,
     updateCorrespondence,
     addCorrespondence,

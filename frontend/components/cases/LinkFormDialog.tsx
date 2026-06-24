@@ -63,7 +63,6 @@ export function LinkFormDialog({
   // Pagination
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: 20,
     totalCount: totalCount,
   });
 

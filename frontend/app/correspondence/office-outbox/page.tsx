@@ -130,7 +130,6 @@ const OfficeOutboxPage = () => {
   const [count, setCount] = useState(0);
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: 25,
     totalCount: count,
   });
   const [loading, setLoading] = useState(true);

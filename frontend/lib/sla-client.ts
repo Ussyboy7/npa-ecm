@@ -449,19 +449,46 @@ export const deleteSLAConfiguration = async (id: string): Promise<void> => {
   await apiFetch(`/analytics/sla-config/${id}/`, { method: 'DELETE' });
 };
 
-export const fetchSLATargets = async (): Promise<SLATargets> => {
-  try {
-    const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
-    return {
-      urgent: asNumber(response.urgent, 48), // 2 days = 48 hours
-      high: asNumber(response.high, 72), // 3 days = 72 hours
-      medium: asNumber(response.medium, 120), // 5 days = 120 hours
-      low: asNumber(response.low, 168), // 7 days = 168 hours
-    };
-  } catch {
-    // Return defaults if API fails (in hours)
-    return { urgent: 48, high: 72, medium: 120, low: 168 };
+const SLA_TARGETS_CACHE_TTL_MS = 5 * 60 * 1000;
+let slaTargetsCache: SLATargets | null = null;
+let slaTargetsCachedAt = 0;
+let slaTargetsPromise: Promise<SLATargets> | null = null;
+
+export const invalidateSLATargetsCache = (): void => {
+  slaTargetsCache = null;
+  slaTargetsCachedAt = 0;
+  slaTargetsPromise = null;
+};
+
+export const fetchSLATargets = async (force = false): Promise<SLATargets> => {
+  const now = Date.now();
+  if (!force && slaTargetsCache && now - slaTargetsCachedAt < SLA_TARGETS_CACHE_TTL_MS) {
+    return slaTargetsCache;
   }
+  if (!force && slaTargetsPromise) {
+    return slaTargetsPromise;
+  }
+
+  slaTargetsPromise = (async () => {
+    try {
+      const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
+      const targets = {
+        urgent: asNumber(response.urgent, 48),
+        high: asNumber(response.high, 72),
+        medium: asNumber(response.medium, 120),
+        low: asNumber(response.low, 168),
+      };
+      slaTargetsCache = targets;
+      slaTargetsCachedAt = Date.now();
+      return targets;
+    } catch {
+      return { urgent: 48, high: 72, medium: 120, low: 168 };
+    } finally {
+      slaTargetsPromise = null;
+    }
+  })();
+
+  return slaTargetsPromise;
 };
 
 export const updateSLATargets = async (targets: SLATargets): Promise<{ updated: SLAConfiguration[] }> => {
@@ -469,6 +496,7 @@ export const updateSLATargets = async (targets: SLATargets): Promise<{ updated: 
     method: 'POST',
     body: JSON.stringify(targets),
   });
+  invalidateSLATargetsCache();
   return {
     updated: (Array.isArray(response.updated) ? response.updated : []).filter(isRecord).map(mapSLAConfiguration),
   };

@@ -71,16 +71,17 @@ interface FOIARequest {
   requester_phone: string;
   requester_address: string;
   organization: string;
-  description: string;
+  description_of_documents: string;
   status: FOIAStatus;
   received_date: string;
-  deadline: string;
-  assigned_to: string | null;
-  outcome: string | null;
+  deadline_date: string | null;
+  days_remaining?: number;
+  is_overdue?: boolean;
+  assigned_to: { name?: string; username?: string } | string | null;
   exemption_reason: string | null;
-  acknowledged_at: string | null;
-  responded_at: string | null;
-  closed_at: string | null;
+  outcome?: string | null;
+  acknowledged_date: string | null;
+  response_date: string | null;
   format_preference: string;
 }
 
@@ -228,11 +229,11 @@ export default function FOIADetailPage() {
     request?.status === "denied" ||
     request?.status === "responded";
 
-  const daysRemaining = request?.deadline
+  const daysRemaining = request?.days_remaining ?? (request?.deadline_date
     ? Math.ceil(
-        (new Date(request.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        (new Date(request.deadline_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       )
-    : null;
+    : null);
 
   const isPastDeadline = daysRemaining !== null && daysRemaining < 0;
   const statusInfo = request ? STATUS_BADGE[request.status] : null;
@@ -316,8 +317,8 @@ export default function FOIADetailPage() {
                       }`}
                     >
                       <Clock className="h-3.5 w-3.5" />
-                      {request.deadline
-                        ? new Date(request.deadline).toLocaleDateString()
+                      {request.deadline_date
+                        ? new Date(request.deadline_date).toLocaleDateString()
                         : "—"}
                       {daysRemaining !== null && (
                         <span className={isPastDeadline ? "text-red-600" : "text-muted-foreground"}>
@@ -332,13 +333,17 @@ export default function FOIADetailPage() {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Assigned To</Label>
-                    <p className="text-sm mt-0.5">{request.assigned_to || "Unassigned"}</p>
+                    <p className="text-sm mt-0.5">
+                      {request.assigned_to && typeof request.assigned_to === "object"
+                        ? request.assigned_to.name || request.assigned_to.username || "Unassigned"
+                        : request.assigned_to || "Unassigned"}
+                    </p>
                   </div>
                 </div>
                 <Separator />
                 <div>
                   <Label className="text-xs text-muted-foreground">Description</Label>
-                  <p className="text-sm mt-1 whitespace-pre-wrap">{request.description}</p>
+                  <p className="text-sm mt-1 whitespace-pre-wrap">{request.description_of_documents}</p>
                 </div>
               </CardContent>
             </Card>

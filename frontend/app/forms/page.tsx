@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileCheck, Plus, Search, FileText, Clock, CheckCircle2, Users, Send, FileDown, Inbox, MoreHorizontal } from 'lucide-react';
-import { getFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
+import { getFormDocuments, listFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
 import { getFormTemplates, type FormTemplate } from '@/lib/api/forms';
 import { getSignatures } from '@/lib/api/forms';
 import { apiFetch } from '@/lib/api-client';
@@ -47,6 +47,8 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
 } from '@/components/shared/registry-queue-styles';
+import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
+import { LIST_PAGE_SIZE_OPTIONS } from '@/lib/pagination-constants';
 import { cn } from '@/lib/utils';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -56,15 +58,14 @@ type TabValue = 'my-forms' | 'pending';
 type SortField = 'updated_at' | 'created_at' | 'title' | 'status';
 type SortOrder = 'asc' | 'desc';
 
-const DEFAULT_PAGE_SIZE = 25;
-
 const FormsPage = () => {
   const router = useRouter();
   const { currentUser } = useCurrentUser();
   const abortControllerRef = useRef<AbortController | null>(null);
   const [activeTab, setActiveTab] = useState<TabValue>('my-forms');
   const [forms, setForms] = useState<FormDocument[]>([]);
-  const [allForms, setAllForms] = useState<FormDocument[]>([]); // Store all forms for client-side pagination
+  const [formsCount, setFormsCount] = useState(0);
+  const [pendingFormsList, setPendingFormsList] = useState<FormDocument[]>([]);
   const [allTemplates, setAllTemplates] = useState<FormTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,11 +81,16 @@ const FormsPage = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   
-  // Pagination
+  const [statistics, setStatistics] = useState({
+    total: 0,
+    draft: 0,
+    inProgress: 0,
+    awaitingSignatures: 0,
+    completed: 0,
+  });
+
   const pagination = usePagination({
-    initialPage: 1,
-    initialPageSize: DEFAULT_PAGE_SIZE,
-    totalCount: allForms.length,
+    totalCount: formsCount,
   });
   
   // Reset to first page when filters change
@@ -146,7 +152,6 @@ const FormsPage = () => {
   }, []);
 
   const loadForms = useCallback(async () => {
-    // Cancel previous request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -156,82 +161,100 @@ const FormsPage = () => {
 
     try {
       setLoading(true);
-      const params: Record<string, string> = {};
-      if (statusFilter !== 'all') {
-        params.status = statusFilter;
-      }
-      if (templateFilter !== 'all') {
-        params.template = templateFilter;
-      }
-      if (isSecretary && executiveFilter !== 'all') {
-        params.executive = executiveFilter;
-      }
-      if (debouncedSearch) {
-        params.search = debouncedSearch;
-      }
-      if (dateFrom) params.date_from = dateFrom;
-      if (dateTo) params.date_to = dateTo;
-      const data = await getFormDocuments({ ...params, signal: controller.signal });
-      
-      if (controller.signal.aborted) {
-        return;
-      }
-      setAllForms(data);
+      const ordering = sortOrder === 'desc' ? `-${sortField}` : sortField;
+      const params: Parameters<typeof listFormDocuments>[0] = {
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        ordering,
+        signal: controller.signal,
+      };
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (templateFilter !== 'all') params.template = templateFilter;
+      if (isSecretary && executiveFilter !== 'all') params.executive = executiveFilter;
+      if (debouncedSearch) params.search = debouncedSearch;
+      const { results, count } = await listFormDocuments(params);
+
+      if (controller.signal.aborted) return;
+      setForms(results);
+      setFormsCount(count);
     } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return;
-      }
+      if (error instanceof Error && error.name === 'AbortError') return;
       logError('Failed to load forms', error);
       toast.error('Failed to load forms');
     } finally {
-      if (!controller.signal.aborted) {
-        setLoading(false);
-      }
+      if (!controller.signal.aborted) setLoading(false);
     }
-  }, [statusFilter, templateFilter, executiveFilter, debouncedSearch, isSecretary, sortField, sortOrder, dateFrom, dateTo]);
-  
-  // Reload when pagination changes
-  useEffect(() => {
-    if (allForms.length > 0) {
-      const sorted = [...allForms].sort((a, b) => {
-        let aValue: string | number;
-        let bValue: string | number;
+  }, [
+    statusFilter,
+    templateFilter,
+    executiveFilter,
+    debouncedSearch,
+    isSecretary,
+    sortField,
+    sortOrder,
+    pagination.page,
+    pagination.pageSize,
+  ]);
 
-        switch (sortField) {
-          case 'title':
-            aValue = a.document.title.toLowerCase();
-            bValue = b.document.title.toLowerCase();
-            break;
-          case 'status':
-            aValue = a.status;
-            bValue = b.status;
-            break;
-          case 'created_at':
-            aValue = new Date(a.created_at).getTime();
-            bValue = new Date(b.created_at).getTime();
-            break;
-          case 'updated_at':
-          default:
-            aValue = new Date(a.updated_at).getTime();
-            bValue = new Date(b.updated_at).getTime();
-            break;
-        }
-        
-        if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
-        if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
-        return 0;
-      });
-      
-      const startIndex = (pagination.page - 1) * pagination.pageSize;
-      const endIndex = startIndex + pagination.pageSize;
-      setForms(sorted.slice(startIndex, endIndex));
+  const loadStatistics = useCallback(async () => {
+    try {
+      const countFor = async (status?: string) => {
+        const { count } = await listFormDocuments({
+          page: 1,
+          pageSize: 1,
+          status,
+          template: templateFilter !== 'all' ? templateFilter : undefined,
+          executive: isSecretary && executiveFilter !== 'all' ? executiveFilter : undefined,
+          search: debouncedSearch || undefined,
+        });
+        return count;
+      };
+      const [total, draft, inProgress, awaitingSignatures, completed] = await Promise.all([
+        countFor(),
+        countFor('draft'),
+        countFor('in_progress'),
+        countFor('awaiting_signatures'),
+        countFor('completed'),
+      ]);
+      setStatistics({ total, draft, inProgress, awaitingSignatures, completed });
+    } catch (error: unknown) {
+      logError('Failed to load form statistics', error);
     }
-  }, [pagination.page, pagination.pageSize, sortField, sortOrder, allForms]);
+  }, [templateFilter, executiveFilter, debouncedSearch, isSecretary]);
 
-  // Load forms
+  const loadPendingFormsList = useCallback(async () => {
+    try {
+      const results = await fetchAllPaginatedResults<FormDocument>(
+        (page, pageSize) =>
+          listFormDocuments({
+            page,
+            pageSize,
+            status: 'awaiting_signatures',
+            executive: isSecretary && executiveFilter !== 'all' ? executiveFilter : undefined,
+          }),
+      );
+      setPendingFormsList(results);
+    } catch (error: unknown) {
+      logError('Failed to load pending forms', error);
+      setPendingFormsList([]);
+    }
+  }, [executiveFilter, isSecretary]);
+
   useEffect(() => {
-    loadForms();
-  }, [activeTab, statusFilter, templateFilter, executiveFilter, debouncedSearch, currentUser?.id, loadForms]);
+    if (activeTab === 'my-forms') {
+      void loadForms();
+    }
+  }, [activeTab, loadForms]);
+
+  useEffect(() => {
+    void loadStatistics();
+  }, [loadStatistics]);
+
+  useEffect(() => {
+    if (activeTab === 'pending') {
+      void loadPendingFormsList();
+    }
+  }, [activeTab, loadPendingFormsList]);
 
   // Load pending signatures for current user
   useEffect(() => {
@@ -267,42 +290,22 @@ const FormsPage = () => {
     }
   };
 
-  // Filter forms for pending actions - only show forms where user has pending signature
   const pendingForms = useMemo(() => {
-    return allForms.filter(form => {
-      // Only show forms that are awaiting signatures AND user has pending signature
-      if (form.status === 'awaiting_signatures' && form.signature_workflow) {
-        const workflowId = typeof form.signature_workflow === 'string' 
-          ? form.signature_workflow 
-          : form.signature_workflow.id;
-        if (workflowId && pendingSignatures.has(workflowId)) {
-          return true;
-        }
+    return pendingFormsList.filter((form) => {
+      if (form.signature_workflow) {
+        const workflowId =
+          typeof form.signature_workflow === 'string'
+            ? form.signature_workflow
+            : form.signature_workflow.id;
+        if (workflowId && pendingSignatures.has(workflowId)) return true;
       }
       return false;
     });
-  }, [allForms, pendingSignatures]);
+  }, [pendingFormsList, pendingSignatures]);
 
-  // Get unique templates from all forms for filter dropdown
   const availableTemplates = useMemo(() => {
-    const templateIds = new Set(allForms.map(f => f.template?.id).filter(Boolean));
-    return Array.from(templateIds).map(id => {
-      const template = allTemplates.find(t => t.id === id);
-      return { id, name: template?.name || id };
-    });
-  }, [allForms, allTemplates]);
-
-  
-  // Calculate statistics
-  const statistics = useMemo(() => {
-    return {
-      total: allForms.length,
-      draft: allForms.filter(f => f.status === 'draft').length,
-      inProgress: allForms.filter(f => f.status === 'in_progress').length,
-      awaitingSignatures: allForms.filter(f => f.status === 'awaiting_signatures').length,
-      completed: allForms.filter(f => f.status === 'completed').length,
-    };
-  }, [allForms]);
+    return allTemplates.map((template) => ({ id: template.id, name: template.name }));
+  }, [allTemplates]);
   
   const clearFilters = () => {
     setStatusFilter('all');
@@ -358,10 +361,20 @@ const FormsPage = () => {
   };
 
   const handleExport = async () => {
-    if (allForms.length === 0) return;
+    if (formsCount === 0) return;
     try {
       setExporting(true);
-      const exportData = allForms.map((form) => ({
+      const allRows = await fetchAllPaginatedResults<FormDocument>((page, pageSize) =>
+        listFormDocuments({
+          page,
+          pageSize,
+          status: statusFilter !== 'all' ? statusFilter : undefined,
+          template: templateFilter !== 'all' ? templateFilter : undefined,
+          executive: isSecretary && executiveFilter !== 'all' ? executiveFilter : undefined,
+          search: debouncedSearch || undefined,
+        }),
+      );
+      const exportData = allRows.map((form) => ({
         title: form.document.title,
         template: form.template?.name || 'No template',
         status: form.status,
@@ -447,7 +460,7 @@ const FormsPage = () => {
                     <DropdownMenuItem onClick={() => router.push('/forms/templates')}>
                       Browse Templates
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleExport} disabled={exporting || allForms.length === 0}>
+                    <DropdownMenuItem onClick={handleExport} disabled={exporting || formsCount === 0}>
                       {exporting ? 'Exporting…' : 'Export CSV'}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -616,11 +629,11 @@ const FormsPage = () => {
                         />
                       ))}
                     </div>
-                    {allForms.length > pagination.pageSize && (
+                    {formsCount > pagination.pageSize && (
                       <div className="mt-6">
                         <PaginationControls
                           pagination={pagination}
-                          pageSizeOptions={[10, 25, 50, 100]}
+                          pageSizeOptions={[...LIST_PAGE_SIZE_OPTIONS]}
                         />
                       </div>
                     )}

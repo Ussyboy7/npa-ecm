@@ -16,7 +16,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.pagination import PageNumberPagination
+from common.pagination import StandardPageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -120,12 +120,6 @@ class DocumentWorkspaceViewSet(viewsets.ModelViewSet):
         serializer.save(slug=slug)
 
 
-class DocumentPagination(PageNumberPagination):
-    page_size = 25
-    page_size_query_param = "page_size"
-    max_page_size = 100
-
-
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.none()
     base_queryset = Document.all_objects.select_related("author", "division", "department", "form_document").prefetch_related(
@@ -135,7 +129,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
     )
     serializer_class = DocumentSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = DocumentPagination
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = [
         "document_type",
@@ -629,6 +623,39 @@ class DocumentViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Failed to generate summary: {e}")
             raise ValidationError({"detail": "Failed to generate summary. Please try again or contact support."})
+
+    @action(detail=True, methods=["get"], url_path="related-correspondence")
+    def related_correspondence(self, request, pk=None):
+        """Return correspondence workflows linked to this document, with minutes."""
+        from correspondence.models import CorrespondenceDocumentLink
+        from correspondence.serializers import CorrespondenceSerializer, MinuteSerializer
+
+        document = self.get_object()
+        links = (
+            CorrespondenceDocumentLink.objects.filter(document=document)
+            .select_related("correspondence")
+            .prefetch_related("correspondence__minutes")
+        )
+
+        results = []
+        for link in links:
+            correspondence = link.correspondence
+            if correspondence.is_deleted:
+                continue
+            minutes = correspondence.minutes.order_by("timestamp")
+            results.append(
+                {
+                    "correspondence": CorrespondenceSerializer(
+                        correspondence, context={"request": request}
+                    ).data,
+                    "minutes": MinuteSerializer(
+                        minutes, many=True, context={"request": request}
+                    ).data,
+                    "link_notes": link.notes or "",
+                }
+            )
+
+        return Response(results)
 
 
 class DocumentVersionViewSet(viewsets.ModelViewSet):

@@ -107,13 +107,11 @@ const CorrespondenceInboxContent = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedOfficeId, setSelectedOfficeId] = useState<string>('all');
+  const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
   
   // Use pagination hook
   const [count, setCount] = useState(0);
   const pagination = usePagination({
-    initialPage: 1,
-    initialPageSize: 25,
     totalCount: count,
   });
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -207,7 +205,7 @@ const CorrespondenceInboxContent = () => {
     if (assignedOnly) count++;
     if (dateFrom) count++;
     if (dateTo) count++;
-    if (selectedOfficeId !== 'all') count++;
+    if (selectedOfficeId && selectedOfficeId !== 'all') count++;
     return count;
   }, [selectedStatus, selectedPriority, assignedOnly, dateFrom, dateTo, selectedOfficeId]);
 
@@ -223,22 +221,33 @@ const CorrespondenceInboxContent = () => {
   };
 
   useEffect(() => {
-    if (!hasCorrespondenceAccess) return;
+    if (!hasCorrespondenceAccess) {
+      setSelectedOfficeId(null);
+      return;
+    }
+    if (selectedOfficeId !== null) return;
+
+    let nextOffice = 'all';
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved && (saved === 'all' || userOfficeIds.includes(saved) || (isSuperuser && selectableOffices.some((office) => office.id === saved)))) {
-        setSelectedOfficeId(saved);
-        return;
+      if (
+        saved &&
+        (saved === 'all' ||
+          userOfficeIds.includes(saved) ||
+          (isSuperuser && selectableOffices.some((office) => office.id === saved)))
+      ) {
+        nextOffice = saved;
+      } else if (userOfficeIds.length > 0) {
+        nextOffice = userOfficeIds[0];
       }
+    } else if (userOfficeIds.length > 0) {
+      nextOffice = userOfficeIds[0];
     }
-    if (userOfficeIds.length > 0) {
-      setSelectedOfficeId(userOfficeIds[0]);
-    } else if (isSuperuser) {
-      setSelectedOfficeId('all');
-    }
-  }, [hasCorrespondenceAccess, userOfficeIds, isSuperuser, selectableOffices]);
+    setSelectedOfficeId(nextOffice);
+  }, [hasCorrespondenceAccess, selectedOfficeId, userOfficeIds, isSuperuser, selectableOffices]);
 
   useEffect(() => {
+    if (selectedOfficeId === null) return;
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, selectedOfficeId);
     }
@@ -262,8 +271,7 @@ const CorrespondenceInboxContent = () => {
   }, [hasCorrespondenceAccess, router]);
 
   useEffect(() => {
-    // Fetch data immediately if user has correspondence access (don't wait for currentUser hydration)
-    if (!hasCorrespondenceAccess) return;
+    if (!hasCorrespondenceAccess || selectedOfficeId === null) return;
 
     const fetchInbox = async () => {
       setLoading(true);
@@ -537,7 +545,7 @@ const CorrespondenceInboxContent = () => {
                 <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={selectedOfficeId} onValueChange={setSelectedOfficeId}>
+            <Select value={selectedOfficeId ?? 'all'} onValueChange={setSelectedOfficeId}>
               <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder={isSuperuser ? 'All Offices' : 'All My Offices'} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{isSuperuser ? 'All Offices' : 'All My Offices'}</SelectItem>

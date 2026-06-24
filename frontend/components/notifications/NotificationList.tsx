@@ -17,16 +17,14 @@ import { Check, CheckCheck, Archive, ExternalLink, Settings, Loader2 } from 'luc
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { usePolling } from '@/hooks/use-polling';
-import { NOTIFICATION_POLL_INTERVAL_MS } from '@/lib/constants';
+import { useNotificationWebSocket } from '@/hooks/use-notification-websocket';
 
 interface NotificationListProps {
   onClose?: () => void;
   isOpen?: boolean;
-  isConnected?: boolean;
 }
 
-export const NotificationList = ({ onClose, isOpen = false, isConnected = false }: NotificationListProps) => {
+export const NotificationList = ({ onClose, isOpen = false }: NotificationListProps) => {
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,70 +36,56 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
   const loadNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      // Fetch recent notifications (limit to 50 for dropdown performance)
-      // The dropdown is for quick access, full list is available on notifications page
       const allData = await getNotifications();
       logInfo('[NotificationList] Loaded notifications:', { count: allData.length });
-      
-      // Filter out archived and sort by created date (newest first)
-      // Limit to 50 most recent for dropdown performance
+
       const filtered = allData
         .filter((n) => n.status !== 'archived')
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 50); // Limit to 50 most recent
-      
+        .slice(0, 50);
+
       setNotifications(filtered);
     } catch (error: unknown) {
       logError('Failed to load notifications', error);
       toast.error('Failed to load notifications');
-      // On error, try to at least fetch unread notifications as fallback
-      try {
-        const unreadData = await getNotifications({ status: 'unread' });
-        logInfo('[NotificationList] Fallback: loaded unread notifications', { count: unreadData.length });
-        setNotifications(unreadData.filter((n) => n.status !== 'archived').slice(0, 50));
-      } catch (fallbackError) {
-        logError('Failed to load unread notifications as fallback', fallbackError);
-        setNotifications([]);
-      }
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Only poll when dropdown is open and WebSocket is disconnected
-  usePolling(loadNotifications, NOTIFICATION_POLL_INTERVAL_MS, {
-    runImmediately: isOpen,
-    enabled: isOpen && !isConnected,
+  useNotificationWebSocket({
+    enabled: isOpen,
+    onNotification: () => {
+      void loadNotifications();
+    },
   });
 
-  // Load notifications when dropdown opens
   useEffect(() => {
     if (isOpen) {
-      loadNotifications();
+      void loadNotifications();
     }
   }, [isOpen, loadNotifications]);
 
-  // Debounced update function to prevent excessive re-renders
   const debouncedUpdateNotifications = useCallback((updater: (prev: Notification[]) => Notification[]) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     debounceTimerRef.current = setTimeout(() => {
       setNotifications(updater);
-    }, 100); // 100ms debounce
+    }, 100);
   }, []);
 
   const handleMarkRead = async (notification: Notification) => {
-    if (markingRead === notification.id) return; // Prevent double-click
-    
+    if (markingRead === notification.id) return;
+
     setMarkingRead(notification.id);
     try {
       await markNotificationAsRead(notification.id);
-      // Use debounced update for better performance
       debouncedUpdateNotifications((prev) =>
-        prev.map((n) => 
-          n.id === notification.id 
-            ? { ...n, status: 'read' as const, readAt: new Date().toISOString() } 
+        prev.map((n) =>
+          n.id === notification.id
+            ? { ...n, status: 'read' as const, readAt: new Date().toISOString() }
             : n
         )
       );
@@ -114,8 +98,8 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
   };
 
   const handleMarkAllRead = useCallback(async () => {
-    if (markingAllRead) return; // Prevent double-click
-    
+    if (markingAllRead) return;
+
     setMarkingAllRead(true);
     try {
       await markAllNotificationsAsRead();
@@ -129,12 +113,10 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
     }
   }, [markingAllRead, loadNotifications]);
 
-  // Keyboard shortcut: Ctrl+Shift+M or Cmd+Shift+M to mark all as read
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check for Ctrl+Shift+M (Windows/Linux) or Cmd+Shift+M (Mac)
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
         e.preventDefault();
         const unreadCount = notifications.filter((n) => n.status === 'unread').length;
@@ -149,8 +131,8 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
   }, [isOpen, notifications, markingAllRead, handleMarkAllRead]);
 
   const handleArchive = async (notification: Notification) => {
-    if (archiving === notification.id) return; // Prevent double-click
-    
+    if (archiving === notification.id) return;
+
     setArchiving(notification.id);
     try {
       await markNotificationAsArchived(notification.id);
@@ -194,10 +176,8 @@ export const NotificationList = ({ onClose, isOpen = false, isConnected = false 
     }
   };
 
-  // Sanitize content to prevent XSS attacks
   const sanitizeContent = (content: string): string => {
     if (!content) return '';
-    // Use textContent to strip all HTML and return plain text
     const div = document.createElement('div');
     div.textContent = content;
     return div.textContent || '';

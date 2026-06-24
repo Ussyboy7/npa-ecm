@@ -1,5 +1,6 @@
 """API views for audit logs."""
 
+from common.pagination import StandardPageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -13,6 +14,7 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = ActivityLogSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["user", "action", "object_type", "object_id", "module", "severity", "success"]
     search_fields = ["description", "object_repr", "user__username", "user__email"]

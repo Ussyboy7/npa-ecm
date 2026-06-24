@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/lib/api-client';
 
 export interface SidebarCounts {
@@ -23,16 +23,103 @@ const INITIAL_COUNTS: SidebarCounts = {
   allCases: 0, executiveApprovals: 0, myDocuments: 0,
 };
 
-export function useSidebarCounts() {
-  const [counts, setCounts] = useState<SidebarCounts>(INITIAL_COUNTS);
+const SIDEBAR_COUNTS_TTL_MS = 60 * 1000;
+let cachedCounts: SidebarCounts | null = null;
+let cachedAt = 0;
+let fetchPromise: Promise<SidebarCounts> | null = null;
+const listeners = new Set<() => void>();
 
-  useEffect(() => {
-    const controller = new AbortController();
-    apiFetch<SidebarCounts>('/correspondence/items/sidebar-counts/', { signal: controller.signal })
+const notifyListeners = (): void => {
+  listeners.forEach((listener) => listener());
+};
+
+const normalizeCounts = (raw: Partial<SidebarCounts> | Record<string, number>): SidebarCounts => ({
+  officeInbox: Number(raw.officeInbox ?? 0),
+  myInbox: Number(raw.myInbox ?? 0),
+  outbox: Number(raw.outbox ?? 0),
+  officeOutbox: Number(raw.officeOutbox ?? 0),
+  delegated: Number(raw.delegated ?? 0),
+  secretaryInbox: Number(raw.secretaryInbox ?? 0),
+  myCases: Number(raw.myCases ?? 0),
+  officeCases: Number(raw.officeCases ?? 0),
+  allCases: Number(raw.allCases ?? 0),
+  executiveApprovals: Number(raw.executiveApprovals ?? 0),
+  myDocuments: Number(raw.myDocuments ?? 0),
+});
+
+export const seedSidebarCounts = (counts: Partial<SidebarCounts> | Record<string, number>): void => {
+  cachedCounts = normalizeCounts(counts);
+  cachedAt = Date.now();
+  notifyListeners();
+};
+
+export const invalidateSidebarCounts = (): void => {
+  cachedCounts = null;
+  cachedAt = 0;
+  fetchPromise = null;
+  notifyListeners();
+};
+
+/** Invalidate cache and refetch counts (deduped). Call after correspondence actions. */
+export const bumpSidebarCounts = (): void => {
+  invalidateSidebarCounts();
+  void fetchSidebarCounts(undefined, true)
+    .then(() => notifyListeners())
+    .catch(() => {});
+};
+
+const fetchSidebarCounts = async (signal?: AbortSignal, force = false): Promise<SidebarCounts> => {
+  const now = Date.now();
+  if (!force && cachedCounts && now - cachedAt < SIDEBAR_COUNTS_TTL_MS) {
+    return cachedCounts;
+  }
+  if (!force && fetchPromise) {
+    return fetchPromise;
+  }
+
+  fetchPromise = apiFetch<SidebarCounts>('/correspondence/items/sidebar-counts/', { signal })
+    .then((data) => {
+      cachedCounts = normalizeCounts(data);
+      cachedAt = Date.now();
+      return cachedCounts;
+    })
+    .finally(() => {
+      fetchPromise = null;
+    });
+
+  return fetchPromise;
+};
+
+export function useSidebarCounts() {
+  const [counts, setCounts] = useState<SidebarCounts>(cachedCounts ?? INITIAL_COUNTS);
+
+  const refreshCounts = useCallback(() => {
+    if (cachedCounts && Date.now() - cachedAt < SIDEBAR_COUNTS_TTL_MS) {
+      setCounts(cachedCounts);
+      return;
+    }
+    void fetchSidebarCounts(undefined, false)
       .then((data) => setCounts(data))
       .catch(() => {});
-    return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    listeners.add(refreshCounts);
+
+    const controller = new AbortController();
+    void fetchSidebarCounts(controller.signal)
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setCounts(data);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      listeners.delete(refreshCounts);
+      controller.abort();
+    };
+  }, [refreshCounts]);
 
   return counts;
 }

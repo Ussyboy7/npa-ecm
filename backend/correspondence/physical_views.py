@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 
+from common.pagination import CatalogPageNumberPagination, StandardPageNumberPagination
 from audit.services import AuditService
 from .models import Location, PhysicalDocument, CheckOutEvent
 from .physical_serializers import (
@@ -21,7 +22,7 @@ class LocationViewSet(viewsets.ModelViewSet):
     queryset = Location.objects.filter(is_active=True)
     serializer_class = LocationSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["building", "floor"]
 
@@ -31,6 +32,7 @@ class PhysicalDocumentViewSet(viewsets.ModelViewSet):
         "location", "correspondence", "checked_out_to"
     )
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["status", "correspondence", "location"]
 
@@ -148,5 +150,6 @@ class CheckOutEventViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CheckOutEvent.objects.select_related("physical_document", "user").order_by("-created_at")
     serializer_class = CheckOutEventSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["physical_document", "action", "user"]

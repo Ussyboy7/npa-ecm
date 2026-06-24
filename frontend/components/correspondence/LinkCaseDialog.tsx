@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getCases, linkCorrespondenceToCase, linkDocumentToCase, linkFormToCase, createCase } from "@/lib/api/cases";
+import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/pagination-constants";
 import type { Case } from "@/lib/npa-structure";
 import type { DocumentRecord } from "@/lib/dms-storage";
 import { logError } from "@/lib/client-logger";
@@ -106,7 +107,7 @@ export function LinkCaseDialog({
     try {
       const response = await getCases({
         page: pageNum,
-        pageSize: 20,
+        pageSize: DEFAULT_LIST_PAGE_SIZE,
         search: searchQuery.trim() || undefined,
         ordering: "-opened_at",
       });
@@ -115,8 +116,12 @@ export function LinkCaseDialog({
       } else {
         setCases(response.results);
       }
-      setHasMore(response.results.length === 20 && (pageNum * 20) < (response.count as number || 0));
-      setTotalCount(response.count as number || 0);
+      const total = response.count as number || 0;
+      setHasMore(
+        response.results.length === DEFAULT_LIST_PAGE_SIZE
+          && pageNum * DEFAULT_LIST_PAGE_SIZE < total,
+      );
+      setTotalCount(total);
     } catch (err) {
       logError("Failed to fetch cases", err);
       toast.error("Failed to load cases");

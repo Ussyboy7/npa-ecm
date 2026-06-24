@@ -7,7 +7,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { logError } from '@/lib/client-logger';
 import {
   fetchUserSignature,
-  saveUserSignature,
   ensureDefaultSignatureTemplates,
   loadUserSignaturePreferences,
   type StoredSignature,
@@ -47,6 +46,7 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
 
   // Initialize templates
   useEffect(() => {
+    if (!autoLoad) return;
     const controller = new AbortController();
     abortRef.current = controller;
     const loadTemplates = async () => {
@@ -62,10 +62,11 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
     };
     loadTemplates();
     return () => controller.abort();
-  }, []);
+  }, [autoLoad]);
 
   // Load preferences
   useEffect(() => {
+    if (!autoLoad) return;
     const controller = new AbortController();
     const loadPreferences = async () => {
       if (userId) {
@@ -84,7 +85,7 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
     };
     loadPreferences();
     return () => controller.abort();
-  }, [userId]);
+  }, [userId, autoLoad]);
 
   const loadSignature = useCallback(async (signal?: AbortSignal) => {
     if (!userId) {
@@ -97,9 +98,6 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
 
     try {
       const sig = await fetchUserSignature(signal);
-      if (sig && !signal?.aborted) {
-        saveUserSignature(userId, sig);
-      }
       if (!signal?.aborted) setSignature(sig);
     } catch (err) {
       if (signal?.aborted) return;
@@ -120,7 +118,6 @@ export const useSignature = (options: UseSignatureOptions = {}): UseSignatureRet
     try {
       const sig = await fetchUserSignature(abortRef.current?.signal);
       if (sig) {
-        saveUserSignature(userId, sig);
         setSignature(sig);
       } else {
         setSignature(null);

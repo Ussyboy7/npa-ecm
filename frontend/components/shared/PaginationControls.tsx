@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { type UsePaginationReturn } from '@/hooks/use-pagination';
+import { LIST_PAGE_SIZE_OPTIONS } from '@/lib/pagination-constants';
 import { cn } from '@/lib/utils';
 
 export interface PaginationControlsProps {
@@ -31,7 +32,7 @@ export function PaginationControls({
   pagination,
   showPageSizeSelector = true,
   showGoToPage = true,
-  pageSizeOptions = [10, 25, 50, 100],
+  pageSizeOptions = [...LIST_PAGE_SIZE_OPTIONS],
   className,
   compact = false,
 }: PaginationControlsProps) {

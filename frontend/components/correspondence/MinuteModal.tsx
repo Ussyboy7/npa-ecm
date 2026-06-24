@@ -71,6 +71,7 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useOrganization, type AssistantAssignment } from '@/contexts/OrganizationContext';
 import { apiFetch } from '@/lib/api-client';
+import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { TwoFactorVerificationModal } from '@/components/seals/TwoFactorVerificationModal';
 import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
@@ -126,7 +127,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   // Use shared signature hook (after activeUser is available)
   const { signature: userSignature, templates: signatureTemplates, preferences: userSignaturePreferences, isLoading: isSignatureLoading } = useSignature({
     userId: activeUser?.id,
-    autoLoad: true,
+    autoLoad: isOpen,
   });
 
   const activeDirectoryUsers = useMemo(
@@ -307,12 +308,12 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   
   useEffect(() => {
     const selectedUser = activeUser ?? organizationUsers.find((user) => user.active) ?? null;
-    if (!selectedUser) return;
+    if (!isOpen || !selectedUser) return;
     setCurrentUser(selectedUser);
     refreshMinuteTemplates(selectedUser).catch((error) => {
       logError('Failed to refresh templates', error);
     });
-  }, [activeUser, organizationUsers, refreshMinuteTemplates]);
+  }, [isOpen, activeUser, organizationUsers, refreshMinuteTemplates]);
 
   // Check if user is management level (MDCS, EDCS, MSS1, MSS2, MSS3)
   const userPermissions = useUserPermissions(currentUser ?? undefined);
@@ -1190,6 +1191,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       }
 
       setShowConfirmation(false);
+
+      bumpSidebarCounts();
 
       setTimeout(() => {
         onClose();

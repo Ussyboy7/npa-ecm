@@ -58,7 +58,8 @@ class PhysicalDocumentTests(TestCase):
         url = reverse("api_v1:location-list")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        results = response.data.get("results", response.data)
+        self.assertEqual(len(results), 1)
 
     def test_update_location(self):
         url = reverse("api_v1:location-detail", args=[self.location.id])

@@ -40,6 +40,7 @@ export {
   queryDocuments,
   fetchDocuments,
   fetchDocumentById,
+  fetchDocumentRelatedCorrespondence,
   fetchWorkspaces,
   createDocument,
   createDocumentVersion,
@@ -49,6 +50,7 @@ export {
   shareDocumentWithUsers,
   shareDocument,
   userHasPermission,
+  type DocumentRelatedCorrespondenceItem,
 } from './dms-documents';
 
 export {

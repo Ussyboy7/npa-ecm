@@ -24,6 +24,7 @@ import {
 import { useCurrentUser } from '@/hooks/use-current-user';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
+import { MAX_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 import { getSharedDocuments, type DocumentRecord } from '@/lib/dms-storage';
 import { usePagination } from '@/hooks/use-pagination';
@@ -107,7 +108,6 @@ const ExecutiveInbox = () => {
   const [count, setCount] = useState(0);
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: 25,
     totalCount: count,
   });
 
@@ -161,7 +161,7 @@ const ExecutiveInbox = () => {
     };
     void loadSLATargets();
     return () => { ignore = true; };
-  }, [debouncedSearch, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, pagination.page]);
+  }, []);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -187,7 +187,7 @@ const ExecutiveInbox = () => {
             search: debouncedSearch || undefined,
             pageSize: 50,
           }),
-          apiFetch<Record<string, unknown>>('/correspondence/minutes/pending-approvals/?page_size=100').catch(() => ({ results: [] })),
+          apiFetch<Record<string, unknown>>(`/correspondence/minutes/pending-approvals/?page_size=${MAX_LIST_PAGE_SIZE}`).catch(() => ({ results: [] })),
         ]);
 
         const corrResults = Array.isArray(corrResponse.results) ? corrResponse.results : [];
@@ -229,7 +229,7 @@ const ExecutiveInbox = () => {
     };
 
     void fetchInbox();
-  }, [currentUser?.id, debouncedSearch, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, pagination.page, pagination.pageSize, slaTargets]);
+  }, [currentUser?.id, debouncedSearch, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, pagination.page, pagination.pageSize]);
 
   const slaPriority = (s: 'overdue' | 'due-soon' | 'pending') =>
     s === 'overdue' ? 0 : s === 'due-soon' ? 1 : 2;

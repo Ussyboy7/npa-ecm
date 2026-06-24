@@ -1,21 +1,19 @@
 "use client";
 
-import { logError, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { formatDistanceToNow } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState, useReducer, useRef, startTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   fetchDocumentById,
   fetchWorkspaces,
-  getDocumentComments,
   updateDocumentWorkspaces,
   getDocumentAccessLogs,
-  logDocumentAccess,
   runOCROnVersion,
   type DocumentRecord,
   type DocumentVersion,
@@ -25,8 +23,7 @@ import {
 } from '@/lib/dms-storage';
 import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
 import { formatDateTime } from '@/lib/correspondence-helpers';
-import { formatFileSize } from '@/lib/file-utils';
-import { ArrowLeft, FileText, Download, Layers, User as UserIcon, Pencil, FilePlus, Clock, Eye, Activity, Shield, Loader2, AlertCircle, PenTool, Scan, Download as DownloadIcon, Link2, Info } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Clock, Eye, Activity, Shield, Loader2, AlertCircle, Download as DownloadIcon } from 'lucide-react';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -35,31 +32,90 @@ import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
 import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
-import { FormDocumentEditor } from '@/components/dms/FormDocumentEditor';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { DmsDocumentWorkspace, DocumentMobileTabBar } from '@/app/dms/[id]/components/DocumentWorkspace';
+import { DocumentMobileStickyBar } from '@/app/dms/[id]/components/DocumentMobileStickyBar';
 import { apiFetch } from '@/lib/api-client';
-import { Correspondence, Minute } from '@/lib/npa-structure';
-import { mapApiMinute } from '@/contexts/CorrespondenceContext';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { unlinkDocumentFromCase } from '@/lib/api/cases';
 import { processOCR, getCaptureJob, cancelCaptureJob, type CaptureJob } from '@/lib/capture-storage';
 import { DocumentHeader } from '@/components/dms/DocumentHeader';
-import { CollaborationPanel } from '@/components/dms/CollaborationPanel';
-import { AccessActivityCard } from '@/components/dms/AccessActivityCard';
-import { RelatedCorrespondenceCard } from '@/components/dms/RelatedCorrespondenceCard';
-import { DocumentCommentsCard } from '@/components/dms/DocumentCommentsCard';
-import { DocumentThreadCard } from '@/components/dms/DocumentThreadCard';
+import { useDocumentDetail } from '@/app/dms/[id]/hooks/use-document-detail';
+import { Correspondence } from '@/lib/npa-structure';
+
+type OCRState = Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>;
+
+type OCRAction =
+  | { type: 'SET_PROCESSING'; versionId: string; isProcessing: boolean }
+  | { type: 'SET_JOB'; versionId: string; job: CaptureJob | null }
+  | { type: 'SET_ERROR'; versionId: string; error: string | null }
+  | { type: 'RESET'; versionId: string }
+  | { type: 'RESET_ALL' };
+
+const ocrReducer = (state: OCRState, action: OCRAction): OCRState => {
+  switch (action.type) {
+    case 'SET_PROCESSING':
+      return {
+        ...state,
+        [action.versionId]: {
+          ...state[action.versionId],
+          isProcessing: action.isProcessing,
+        },
+      };
+    case 'SET_JOB':
+      return {
+        ...state,
+        [action.versionId]: {
+          ...state[action.versionId] ?? { isProcessing: false, currentJob: null, error: null },
+          currentJob: action.job,
+        },
+      };
+    case 'SET_ERROR':
+      return {
+        ...state,
+        [action.versionId]: {
+          ...state[action.versionId] ?? { isProcessing: false, currentJob: null, error: null },
+          error: action.error,
+          isProcessing: false,
+        },
+      };
+    case 'RESET': {
+      const { [action.versionId]: _, ...rest } = state;
+      return rest;
+    }
+    case 'RESET_ALL':
+      return {};
+    default:
+      return state;
+  }
+};
 
 const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const documentId = params?.id;
+
+  const {
+    document,
+    setDocument,
+    loading,
+    error: documentError,
+    formDocumentId,
+    comments,
+    setComments,
+    accessLogs,
+    setAccessLogs,
+    relatedCorrespondence,
+    workspaces,
+    setWorkspaces,
+    refreshDocument,
+  } = useDocumentDetail(documentId);
   // Dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDialogInitialView, setShareDialogInitialView] = useState<'share' | 'permissions'>('share');
-  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [createVersionDialogOpen, setCreateVersionDialogOpen] = useState(false);
+  const [versionUploadOpen, setVersionUploadOpen] = useState(false);
   const [linkCaseDialogOpen, setLinkCaseDialogOpen] = useState(false);
   const [minuteDocumentModalOpen, setMinuteDocumentModalOpen] = useState(false);
   const [commentsDialogOpen, setCommentsDialogOpen] = useState(false);
@@ -68,107 +124,11 @@ const DocumentDetailContent = () => {
   const [replaceVersionId, setReplaceVersionId] = useState<string | null>(null);
   const [minuteDocumentCorrespondence, setMinuteDocumentCorrespondence] = useState<Correspondence | null>(null);
   const [selectedAccessLog, setSelectedAccessLog] = useState<DocumentAccessLog | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'versions' | 'related'>('overview');
+  const [mobileActiveTab, setMobileActiveTab] = useState<'document' | 'details'>('document');
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
-  // Helper function to normalize IDs
-  const normalizeId = (value: unknown): string | undefined => {
-    if (value === null || value === undefined) return undefined;
-    if (typeof value === 'object' && 'id' in (value as Record<string, unknown>)) {
-      return normalizeId((value as Record<string, unknown>).id);
-    }
-    return String(value);
-  };
-
-  // Document state
-  const [document, setDocument] = useState<DocumentRecord | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [documentError, setDocumentError] = useState<string | null>(null);
-  const [formDocumentId, setFormDocumentId] = useState<string | null>(null);
-  
-  // Collaboration state - using useReducer
-  type CollaborationState = {
-    workspaces: DocumentWorkspace[];
-    comments: DocumentComment[];
-    accessLogs: DocumentAccessLog[];
-    relatedCorrespondence: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>;
-  };
-  
-  type CollaborationAction =
-    | { type: 'SET_WORKSPACES'; payload: DocumentWorkspace[] }
-    | { type: 'SET_COMMENTS'; payload: DocumentComment[] }
-    | { type: 'SET_ACCESS_LOGS'; payload: DocumentAccessLog[] }
-    | { type: 'SET_RELATED_CORRESPONDENCE'; payload: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }> };
-  
-  const collaborationReducer = (state: CollaborationState, action: CollaborationAction): CollaborationState => {
-    switch (action.type) {
-      case 'SET_WORKSPACES':
-        return { ...state, workspaces: action.payload };
-      case 'SET_COMMENTS':
-        return { ...state, comments: action.payload };
-      case 'SET_ACCESS_LOGS':
-        return { ...state, accessLogs: action.payload };
-      case 'SET_RELATED_CORRESPONDENCE':
-        return { ...state, relatedCorrespondence: action.payload };
-      default:
-        return state;
-    }
-  };
-  
-  const [collaborationState, dispatchCollaboration] = useReducer(collaborationReducer, {
-    workspaces: [],
-    comments: [],
-    accessLogs: [],
-    relatedCorrespondence: [],
-  });
-  
-  // OCR state - using useReducer
-  type OCRState = Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>;
-  
-  type OCRAction =
-    | { type: 'SET_PROCESSING'; versionId: string; isProcessing: boolean }
-    | { type: 'SET_JOB'; versionId: string; job: CaptureJob | null }
-    | { type: 'SET_ERROR'; versionId: string; error: string | null }
-    | { type: 'RESET'; versionId: string }
-    | { type: 'RESET_ALL' };
-  
-  const ocrReducer = (state: OCRState, action: OCRAction): OCRState => {
-    switch (action.type) {
-      case 'SET_PROCESSING':
-        return {
-          ...state,
-          [action.versionId]: {
-            ...state[action.versionId],
-            isProcessing: action.isProcessing,
-          },
-        };
-      case 'SET_JOB':
-        return {
-          ...state,
-          [action.versionId]: {
-            ...state[action.versionId] || { isProcessing: false, currentJob: null, error: null },
-            currentJob: action.job,
-          },
-        };
-      case 'SET_ERROR':
-        return {
-          ...state,
-          [action.versionId]: {
-            ...state[action.versionId] || { isProcessing: false, currentJob: null, error: null },
-            error: action.error,
-            isProcessing: false,
-          },
-        };
-      case 'RESET':
-        const { [action.versionId]: _, ...rest } = state;
-        return rest;
-      case 'RESET_ALL':
-        return {};
-      default:
-        return state;
-    }
-  };
-  
   const [ocrState, dispatchOCR] = useReducer(ocrReducer, {});
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { currentUser, hydrated } = useCurrentUser();
   const { users: organizationUsers, divisions, departments } = useOrganization();
@@ -183,313 +143,22 @@ const DocumentDetailContent = () => {
     [currentUser?.id, organizationUsers],
   );
 
-  // Load workspaces lookup
   useEffect(() => {
-    const loadWorkspaces = async () => {
-      try {
-        const ws = await fetchWorkspaces();
-        dispatchCollaboration({ type: 'SET_WORKSPACES', payload: ws });
-      } catch (error: unknown) {
-        logError('Failed to load workspaces', error);
-      }
-    };
-    void loadWorkspaces();
-  }, []);
-
-
-  // Ref to track if we're currently loading to prevent infinite loops
-  const isLoadingRef = useRef(false);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Load document function - extracted for reuse
-  const loadDocument = useCallback(async (): Promise<DocumentRecord | null> => {
-    if (!params?.id || params.id === 'undefined' || params.id === 'null' || params.id.trim() === '') {
-      setDocumentError('Invalid document ID');
-      setLoading(false);
-      return null;
-    }
-    
-    setLoading(true);
-    setDocumentError(null);
-    
-    try {
-      const doc = await fetchDocumentById(params.id);
-      // Log versions with OCR text for debugging
-      if (doc.versions && doc.versions.length > 0) {
-        doc.versions.forEach((v, i) => {
-          if (v.ocrText) {
-            logInfo(`Version ${i + 1} (${v.fileName}) has OCR text: ${v.ocrText.length} characters`);
-          }
-        });
-      }
-      setDocument(doc);
-      setDocumentError(null);
-      
-      // If this is a form document, fetch the form document ID
-      if (doc.documentType === 'form') {
-        try {
-          logInfo('[DocumentDetail] Fetching form document for document', { documentId: params.id });
-          // Check if form_document is already in the document data
-          if (doc.form_document?.id) {
-            logInfo('[DocumentDetail] Form document ID from document data', { formDocumentId: doc.form_document.id });
-            setFormDocumentId(doc.form_document.id);
-          } else {
-            // Fallback: query form documents
-            const formDocs = await Promise.race([
-              apiFetch<Array<{ id: string; document: { id: string } }>>(
-                `/dms/form-documents/?document=${params.id}`
-              ),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Form document query timeout')), 10000)
-              )
-            ]) as Array<{ id: string; document: { id: string } }>;
-            
-            logInfo('[DocumentDetail] Form documents query result', formDocs);
-            if (formDocs && formDocs.length > 0) {
-              setFormDocumentId(formDocs[0].id);
-            }
-          }
-        } catch (error: unknown) {
-          logError('Failed to load form document', error);
-        }
-      }
-      return doc;
-    } catch (error: unknown) {
-      // Check if it's a 404 (expected for missing documents) - don't log as error
-      const errorObj = error && typeof error === 'object' ? error as Record<string, unknown> : null;
-      const isNotFound = (errorObj && errorObj.status === 404) || (errorObj && errorObj.isNotFound === true) || (errorObj && typeof errorObj.message === 'string' && (errorObj.message.includes('No Document matches') || errorObj.message.includes('not found')));
-      
-      if (!isNotFound) {
-        // Only log unexpected errors
-        logError('Failed to load document', error);
-        let errorMessage = 'Failed to load document';
-        if (errorObj) {
-          if (errorObj.response && typeof errorObj.response === 'object') {
-            const response = errorObj.response as Record<string, unknown>;
-            if (response.data && typeof response.data === 'object') {
-              const data = response.data as Record<string, unknown>;
-              errorMessage = (data.detail as string) || errorMessage;
-            }
-          }
-          if (errorMessage === 'Failed to load document') {
-            errorMessage = (errorObj.message as string) || errorMessage;
-          }
-        }
-        setDocumentError(errorMessage);
-        setDocument(null);
-        return null;
-      }
-      
-      // For expected 404s, provide a helpful error message
-      // The document might be: deleted, permission-restricted, or truly doesn't exist
-      let errorMessage = 'The document you are looking for does not exist, has been deleted, or you do not have permission to view it.';
-      if (errorObj) {
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (errorMessage === 'The document you are looking for does not exist, has been deleted, or you do not have permission to view it.') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
-      
-        // For expected 404s, just log as info (suppressed in production)
-        logInfo('Document not found:', params.id);
-      
-      setDocumentError(errorMessage);
-      setDocument(null);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [params?.id]);
-
-  // Load document and collaboration data
-  useEffect(() => {
-    if (!params?.id) return;
-    if (!hydrated || !currentUser?.id) return; // Wait for user to be fully hydrated
-
-    // Prevent multiple concurrent loads
-    if (isLoadingRef.current) return;
-    isLoadingRef.current = true;
-
-    let ignore = false;
-
-    const load = async () => {
-      try {
-        // Load document first
-        const doc = await loadDocument();
-        if (ignore) return;
-        
-        if (!doc) {
-          // Document not found or failed to load - skip loading related data
-          return;
-        }
-
-        // Load collaboration data
-        // Load comments
-        const cmts = await getDocumentComments(params.id);
-        if (!ignore) dispatchCollaboration({ type: 'SET_COMMENTS', payload: cmts });
-
-        // Log document view
-        if (doc) {
-          try {
-            await logDocumentAccess({
-              documentId: params.id,
-              userId: currentUser.id,
-              action: 'view',
-              sensitivity: doc.sensitivity,
-            });
-          } catch (error: unknown) {
-            logError('Failed to log document access', error);
-          }
-        }
-
-        // Load access logs
-        const logs = await getDocumentAccessLogs(params.id);
-        if (!ignore) dispatchCollaboration({ type: 'SET_ACCESS_LOGS', payload: logs });
-
-        // Related correspondence loaded on-demand when Related tab is active
-      } catch (error: unknown) {
-        logError('Failed to load document', error);
-        toast.error('Unable to load document');
-        router.push('/documents');
-      }
-    };
-
-    void load().finally(() => {
-      isLoadingRef.current = false;
-    });
-
-    return () => {
-      ignore = true;
-      isLoadingRef.current = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDocument stable (memoized with params?.id), normalizeId and router are stable
-  }, [params?.id, hydrated, currentUser?.id]);
-
-
+    setSelectedVersionId(null);
+  }, [documentId]);
 
   const handleVersionUploadComplete = useCallback((updated: DocumentRecord) => {
-    setUploadDialogOpen(false);
-    setCreateVersionDialogOpen(false);
+    setVersionUploadOpen(false);
     startTransition(() => {
       setDocument(updated);
       toast.success('Document updated successfully');
     });
-  }, []);
+  }, [setDocument]);
 
-  const handleQuickVersionUpload = () => {
+  const openVersionUpload = useCallback(() => {
     if (!document || !uploadUser) return;
-    setUploadDialogOpen(true);
-  };
-
-  const handleCreateVersion = () => {
-    if (!document || !uploadUser) return;
-    setCreateVersionDialogOpen(true);
-  };
-
-  // Lazy-load related correspondence when Related tab is activated
-  useEffect(() => {
-    if (activeTab !== 'related' || !params?.id || collaborationState.relatedCorrespondence.length > 0) return;
-
-    let ignore = false;
-    const loadRelated = async () => {
-      try {
-        const linksResponse = await apiFetch<Record<string, unknown>>(
-          `/correspondence/document-links/?document=${params.id}`
-        );
-        const links = Array.isArray(linksResponse)
-          ? linksResponse
-          : ((linksResponse && typeof linksResponse === 'object' && 'results' in linksResponse && Array.isArray(linksResponse.results)) ? linksResponse.results : []);
-        if (ignore) return;
-
-        if (links.length > 0) {
-          const BATCH_SIZE = 5;
-          const correspondenceData: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string } | null> = [];
-
-          for (let i = 0; i < links.length; i += BATCH_SIZE) {
-            const batch = links.slice(i, i + BATCH_SIZE);
-            const batchResults = await Promise.all(
-              batch.map(async (link) => {
-                try {
-                  const corrId = typeof link.correspondence === 'string' ? link.correspondence : link.correspondence?.id;
-                  if (!corrId) return null;
-
-                  const [corrResponse, minutesResponse] = await Promise.all([
-                    apiFetch<Record<string, unknown>>(`/correspondence/items/${corrId}/`),
-                    apiFetch<unknown[]>(`/correspondence/minutes/?correspondence=${corrId}`),
-                  ]);
-                  if (ignore) return null;
-
-                  const minutesArray = (() => {
-                    const typed = minutesResponse as Array<Record<string, unknown>> | { results?: Array<Record<string, unknown>> };
-                    return Array.isArray(typed) ? typed : (typed?.results || []);
-                  })();
-                  const minutes: Minute[] = minutesArray.map(mapApiMinute);
-                  const distribution = Array.isArray(corrResponse.distribution)
-                    ? corrResponse.distribution.map((recipient: Record<string, unknown>) => ({
-                        id: normalizeId(recipient.id) ?? `${corrResponse.id}-dist-${Math.random().toString(36).slice(2)}`,
-                        type: (recipient.recipient_type === 'office' || recipient.recipient_type === 'division' || recipient.recipient_type === 'department' || recipient.recipient_type === 'directorate' || recipient.recipient_type === 'user' ? recipient.recipient_type : 'division') as 'division' | 'department' | 'directorate' | 'user',
-                        directorateId: normalizeId(recipient.directorate),
-                        divisionId: normalizeId(recipient.division),
-                        departmentId: normalizeId(recipient.department),
-                        name: String(recipient.directorate_name || recipient.division_name || recipient.department_name || ''),
-                        addedById: normalizeId(recipient.added_by ?? recipient.added_by_id),
-                        addedAt: recipient.created_at as string | undefined,
-                        purpose: (recipient.purpose === 'information' || recipient.purpose === 'action') ? recipient.purpose as 'information' | 'action' : undefined,
-                      }))
-                    : [];
-
-                  const correspondence: Correspondence = {
-                    id: String(corrResponse.id),
-                    referenceNumber: String(corrResponse.reference_number ?? ''),
-                    subject: String(corrResponse.subject ?? ''),
-                    source: (corrResponse.source ?? 'internal') as 'internal' | 'external',
-                    receivedDate: String(corrResponse.received_date ?? ''),
-                    senderName: String(corrResponse.sender_name ?? ''),
-                    senderOrganization: String(corrResponse.sender_organization ?? ''),
-                    status: (corrResponse.status ?? 'pending') as 'pending' | 'in-progress' | 'completed' | 'archived',
-                    priority: (corrResponse.priority ?? 'medium') as 'low' | 'medium' | 'high' | 'urgent',
-                    divisionId: normalizeId(corrResponse.division),
-                    departmentId: normalizeId(corrResponse.department),
-                    currentApproverId: normalizeId(corrResponse.current_approver),
-                    createdById: normalizeId(corrResponse.created_by),
-                    direction: (corrResponse.direction ?? 'upward') as 'upward' | 'downward',
-                    distribution,
-                    createdAt: corrResponse.created_at as string | undefined,
-                    updatedAt: corrResponse.updated_at as string | undefined,
-                  };
-
-                  return { correspondence, minutes, linkNotes: link.notes };
-                } catch {
-                  return null;
-                }
-              })
-            );
-            correspondenceData.push(...batchResults);
-          }
-
-          if (!ignore) {
-            dispatchCollaboration({
-              type: 'SET_RELATED_CORRESPONDENCE',
-              payload: correspondenceData.filter((item) => item !== null) as Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>,
-            });
-          }
-        } else {
-          if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
-        }
-      } catch (error: unknown) {
-        logError('Failed to load related correspondence', error);
-        if (!ignore) dispatchCollaboration({ type: 'SET_RELATED_CORRESPONDENCE', payload: [] });
-      }
-    };
-    void loadRelated();
-    return () => { ignore = true; };
-  }, [activeTab, params?.id, collaborationState.relatedCorrespondence.length]);
+    setVersionUploadOpen(true);
+  }, [document, uploadUser]);
 
   // OCR handlers
   const handleVersionOCR = async (versionId: string) => {
@@ -521,7 +190,7 @@ const DocumentDetailContent = () => {
         
         const method = isWordDoc ? 'Word document' : 'HTML content';
         toast.success(`Text extracted from ${method} (${result.characters} characters)`);
-        await loadDocument();
+        await refreshDocument();
         return;
       } catch (err: unknown) {
         const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : (isWordDoc ? 'Failed to extract text from Word document' : 'Failed to extract text from HTML');
@@ -561,7 +230,7 @@ const DocumentDetailContent = () => {
         dispatchOCR({ type: 'SET_JOB', versionId, job });
         dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
         toast.success('OCR processing completed');
-        await loadDocument();
+        await refreshDocument();
       } else {
         toast.info('OCR processing started. This may take a few moments...');
         // Start polling for status updates
@@ -610,7 +279,7 @@ const DocumentDetailContent = () => {
           clearInterval(pollInterval);
           pollIntervalRef.current = null;
           toast.success('OCR processing completed');
-          await loadDocument();
+          await refreshDocument();
         } else if (updatedJob.status === 'failed' || updatedJob.status === 'cancelled') {
           clearInterval(pollInterval);
           pollIntervalRef.current = null;
@@ -678,7 +347,7 @@ const DocumentDetailContent = () => {
   };
 
   // Workspace management
-  const workspaceLookup = useMemo(() => new Map(collaborationState.workspaces.map((ws) => [ws.id, ws])), [collaborationState.workspaces]);
+  const workspaceLookup = useMemo(() => new Map(workspaces.map((ws) => [ws.id, ws])), [workspaces]);
   const documentWorkspaces = useMemo(() => {
     if (!document) return [];
     return document.workspaceIds
@@ -690,13 +359,13 @@ const DocumentDetailContent = () => {
   const handleRefreshAccessLogs = useCallback(async () => {
     if (!document?.id) return;
     const logs = await getDocumentAccessLogs(document.id);
-    dispatchCollaboration({ type: 'SET_ACCESS_LOGS', payload: logs });
+    setAccessLogs(logs);
   }, [document?.id]);
 
   // Memoize workspaces refresh handler
   const handleWorkspacesRefreshed = useCallback(async () => {
     const ws = await fetchWorkspaces();
-    dispatchCollaboration({ type: 'SET_WORKSPACES', payload: ws });
+    setWorkspaces(ws);
   }, []);
 
   // Memoize open comments dialog handler
@@ -748,8 +417,43 @@ const DocumentDetailContent = () => {
   };
 
   const author = document ? userLookup.get(document.authorId) : undefined;
-  const versions = Array.isArray(document?.versions) ? document?.versions : [];
-  const primaryVersion = versions?.[0];
+  const versions = useMemo(
+    () => (Array.isArray(document?.versions) ? document.versions : []),
+    [document?.versions],
+  );
+  const selectedVersion = useMemo(() => {
+    if (!versions.length) return null;
+    if (selectedVersionId) {
+      return versions.find((v) => v.id === selectedVersionId) ?? versions[0];
+    }
+    return versions[0];
+  }, [versions, selectedVersionId]);
+
+  const handleDownloadVersion = useCallback((version: DocumentVersion | null | undefined) => {
+    if (!version?.fileUrl?.trim()) {
+      toast.error('No file available to download');
+      return;
+    }
+    const link = window.document.createElement('a');
+    link.href = version.fileUrl;
+    link.download = version.fileName || 'document';
+    window.document.body.appendChild(link);
+    link.click();
+    window.document.body.removeChild(link);
+  }, []);
+
+  const handleDownloadLatest = useCallback(() => {
+    handleDownloadVersion(selectedVersion);
+  }, [handleDownloadVersion, selectedVersion]);
+
+  const handleOpenFullscreen = useCallback((version?: DocumentVersion | null) => {
+    const target = version ?? selectedVersion;
+    if (target) setPreviewVersion(target);
+  }, [selectedVersion]);
+
+  const handleSelectVersion = useCallback((version: DocumentVersion) => {
+    setSelectedVersionId(version.id);
+  }, []);
 
   return (
     <DashboardLayout>
@@ -782,8 +486,7 @@ const DocumentDetailContent = () => {
         </div>
       ) : (
         <ClientErrorBoundary>
-          <div className="flex flex-col min-h-screen">
-          {/* Header */}
+          <div className="flex flex-col min-w-0 flex-1 min-h-0">
           <DocumentHeader
             document={document}
             author={author}
@@ -792,7 +495,11 @@ const DocumentDetailContent = () => {
             departmentLookup={departmentLookup}
             divisions={divisions}
             departments={departments}
-            hasLinkedCorrespondence={collaborationState.relatedCorrespondence.length > 0}
+            hasLinkedCorrespondence={relatedCorrespondence.length > 0}
+            canDownload={Boolean(selectedVersion?.fileUrl?.trim())}
+            canFullscreen={Boolean(selectedVersion)}
+            onFullscreen={() => handleOpenFullscreen()}
+            onDownload={handleDownloadLatest}
             onShare={() => {
               setShareDialogInitialView('share');
               setShareDialogOpen(true);
@@ -805,7 +512,6 @@ const DocumentDetailContent = () => {
               try {
                 await unlinkDocumentFromCase(caseId, document.id);
                 toast.success("Document unlinked from case");
-                // Reload document
                 if (params?.id) {
                   const updated = await fetchDocumentById(params.id);
                   setDocument(updated);
@@ -815,520 +521,117 @@ const DocumentDetailContent = () => {
                 toast.error("Failed to unlink from case");
               }
             }}
-            onMinuteDocument={async () => {
+            onMinuteDocument={() => {
               if (!document || !currentUser) return;
-              
-              // Check if document is linked to correspondence
-              // Minutes are a correspondence workflow feature - only available for correspondence documents
-              const relatedCorrespondence = collaborationState.relatedCorrespondence;
-              if (!relatedCorrespondence || relatedCorrespondence.length === 0) {
+              if (relatedCorrespondence.length === 0) {
                 toast.error(
-                  'This document is not linked to any correspondence. ' +
-                  'Minutes are only available for correspondence documents. ' +
-                  'To minute this document, first link it to a correspondence item.'
+                  'This document is not linked to any correspondence. Link it to a correspondence item to minute.'
                 );
                 return;
               }
-
-              // Use the first linked correspondence
-              const existingCorr = relatedCorrespondence[0].correspondence;
-              setMinuteDocumentCorrespondence(existingCorr);
+              setMinuteDocumentCorrespondence(relatedCorrespondence[0].correspondence);
               setMinuteDocumentModalOpen(true);
             }}
           />
 
-          <div className="container mx-auto px-6 py-6">
-            {/* Main Content Grid */}
-            <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
-              {/* Left Column - Tabbed Content */}
-              <div className="lg:col-span-2 flex flex-col">
-                {/* Tab Navigation */}
-                <div className="flex items-center border-b mb-6 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('overview')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                      activeTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Info className="h-4 w-4" />
-                    Overview
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('versions')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                      activeTab === 'versions' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Layers className="h-4 w-4" />
-                    Versions
-                    {versions.length > 0 && (
-                      <span className="text-xs text-muted-foreground ml-1">({versions.length})</span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('related')}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                      activeTab === 'related' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Link2 className="h-4 w-4" />
-                    Related
-                    {collaborationState.relatedCorrespondence.length > 0 && (
-                      <span className="text-xs text-muted-foreground ml-1">({collaborationState.relatedCorrespondence.length})</span>
-                    )}
-                  </button>
-                </div>
+          <HelpGuideCard
+            title="Document workspace"
+            description="Expand the preview from the toolbar. Use the header icon for the full viewer with OCR."
+            links={[{ label: 'Help & Guides', href: '/help' }]}
+            dismissible
+            dismissKey="dms-document-workspace"
+          />
 
-                {/* Overview Tab */}
-                {activeTab === 'overview' && (
-                  <div className="space-y-6">
-                    <Card className="border-border/50">
-                      <CardHeader className="pb-4">
-                        <CardTitle className="text-base font-semibold flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-primary" />
-                          Document Details
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Title</dt>
-                            <dd className="font-medium">{document.title}</dd>
-                          </div>
-                          {document.referenceNumber && (
-                            <div>
-                              <dt className="text-xs text-muted-foreground">Reference Number</dt>
-                              <dd className="font-medium">{document.referenceNumber}</dd>
-                            </div>
-                          )}
-                          {document.description && (
-                            <div className="sm:col-span-2">
-                              <dt className="text-xs text-muted-foreground">Description</dt>
-                              <dd className="text-muted-foreground">{document.description}</dd>
-                            </div>
-                          )}
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Status</dt>
-                            <dd><Badge variant="outline" className="text-xs capitalize">{document.status}</Badge></dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Sensitivity</dt>
-                            <dd><Badge variant="outline" className="text-xs capitalize">{document.sensitivity}</Badge></dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Author</dt>
-                            <dd className="font-medium">{author?.name || document.authorId || 'Unknown'}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Division</dt>
-                            <dd className="font-medium">{divisionLookup.get(document.divisionId ?? '') || document.divisionId || '—'}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Department</dt>
-                            <dd className="font-medium">{departmentLookup.get(document.departmentId ?? '') || document.departmentId || '—'}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Document Type</dt>
-                            <dd className="font-medium capitalize">{document.documentType || '—'}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Created</dt>
-                            <dd className="font-medium">{document.createdAt ? formatDateTime(document.createdAt) : '—'}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Last Updated</dt>
-                            <dd className="font-medium">{document.updatedAt ? formatDateTime(document.updatedAt) : '—'}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Versions</dt>
-                            <dd className="font-medium">{versions.length}</dd>
-                          </div>
-                          <div>
-                            <dt className="text-xs text-muted-foreground">Workspaces</dt>
-                            <dd className="font-medium">{document.workspaceIds.length}</dd>
-                          </div>
-                          {document.tags && document.tags.length > 0 && (
-                            <div className="sm:col-span-2">
-                              <dt className="text-xs text-muted-foreground mb-1">Tags</dt>
-                              <dd className="flex flex-wrap gap-1">
-                                {document.tags.map((tag) => (
-                                  <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>
-                                ))}
-                              </dd>
-                            </div>
-                          )}
-                          {document.documentType === 'form' && formDocumentId && (
-                            <div className="sm:col-span-2">
-                              <dt className="text-xs text-muted-foreground">Form</dt>
-                              <dd className="font-medium">{formDocumentId}</dd>
-                            </div>
-                          )}
-                        </dl>
-                      </CardContent>
-                    </Card>
+          <DocumentMobileTabBar
+            mobileActiveTab={mobileActiveTab}
+            onSetMobileActiveTab={setMobileActiveTab}
+            commentsCount={comments.length}
+          />
 
-                    {document.workspaceIds.length > 0 && (
-                      <Card className="border-border/50">
-                        <CardHeader className="pb-4">
-                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                            <Layers className="h-3.5 w-3.5 text-primary" />
-                            Assigned Workspaces
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex flex-wrap gap-1.5">
-                            {documentWorkspaces.map((ws) => (
-                              <Badge
-                                key={ws.id}
-                                variant="outline"
-                                className="gap-1.5 text-xs py-1 px-2"
-                                style={{ borderColor: ws.color }}
-                              >
-                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: ws.color }} />
-                                {ws.name}
-                              </Badge>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
+          <DmsDocumentWorkspace
+            mobileActiveTab={mobileActiveTab}
+            onSetMobileActiveTab={setMobileActiveTab}
+            commentsCount={comments.length}
+            hideMobileTabBar
+            previewProps={{
+              document,
+              documentId: params.id,
+              formDocumentId,
+              versions,
+              selectedVersion,
+              onSelectVersion: handleSelectVersion,
+              onDownload: handleDownloadVersion,
+            }}
+            sidebarProps={{
+              document,
+              versions,
+              documentWorkspaces,
+              workspaces,
+              comments,
+              accessLogs,
+              relatedCorrespondence,
+              userLookup,
+              divisionLookup,
+              departmentLookup,
+              uploadUser,
+              ocrState,
+              workspaceManageOpen,
+              onWorkspaceManageOpenChange: setWorkspaceManageOpen,
+              onShare: () => {
+                setShareDialogInitialView('share');
+                setShareDialogOpen(true);
+              },
+              onLinkCase: () => setLinkCaseDialogOpen(true),
+              onQuickVersionUpload: openVersionUpload,
+              onCreateVersion: openVersionUpload,
+              onAddWorkspace: handleAddWorkspace,
+              onRemoveWorkspace: handleRemoveWorkspace,
+              onWorkspacesRefreshed: handleWorkspacesRefreshed,
+              onOpenCommentsDialog: handleOpenCommentsDialog,
+              onViewActivityDetails: (log: DocumentAccessLog) => setSelectedAccessLog(log),
+              onRefreshAccessLogs: handleRefreshAccessLogs,
+              onPreviewVersion: (version: DocumentVersion) => setPreviewVersion(version),
+              onReplaceVersion: setReplaceVersionId,
+              onVersionOCR: handleVersionOCR,
+              onCancelOCR: handleCancelOCR,
+              getUserInitials,
+            }}
+          />
 
-                    {/* Form Document Editor - Show for form documents */}
-                    {document.documentType === 'form' && formDocumentId ? (
-                      <FormDocumentEditor documentId={params.id} formDocumentId={formDocumentId} />
-                    ) : document.documentType === 'form' ? (
-                      <Card>
-                        <CardContent className="p-6">
-                          <div className="text-center py-8 text-muted-foreground">
-                            <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">Loading form document...</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ) : null}
-                  </div>
-                )}
-
-                {/* Versions Tab */}
-                {activeTab === 'versions' && (
-                  <Card className="border-border/50 flex flex-col flex-1 min-h-0">
-                    <CardHeader className="pb-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="text-base font-semibold flex items-center gap-2">
-                            <Layers className="h-4 w-4 text-primary" />
-                            Versions
-                          </CardTitle>
-                          <CardDescription className="mt-1">
-                            All uploaded versions of this document
-                          </CardDescription>
-                        </div>
-                        {handleCreateVersion ? (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!uploadUser}
-                                aria-label="Add new version"
-                              >
-                                <FilePlus className="h-4 w-4 mr-2" />
-                                Add Version
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={handleCreateVersion} disabled={!uploadUser}>
-                                <PenTool className="h-4 w-4 mr-2" />
-                                Create Version
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={handleQuickVersionUpload} disabled={!uploadUser}>
-                                <FilePlus className="h-4 w-4 mr-2" />
-                                Upload Version
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleQuickVersionUpload}
-                            disabled={!uploadUser}
-                            aria-label="Upload new version"
-                          >
-                          <FilePlus className="h-4 w-4 mr-2" />
-                          Upload Version
-                        </Button>
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="flex-1 min-h-0 flex flex-col">
-                      <div className="space-y-3 flex-1 overflow-y-auto pr-2">
-                        {versions.length === 0 ? (
-                          <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
-                            <Layers className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                            <p className="text-sm font-medium mb-1">No versions uploaded</p>
-                            <p className="text-xs">Upload the first version to get started.</p>
-                          </div>
-                        ) : (
-                          versions.map((version, index) => {
-                            const uploader = userLookup.get(version.uploadedBy);
-                            const isLatest = index === 0;
-                            const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
-                            const versionOCR = ocrState?.[version.id];
-                            const isProcessing = versionOCR?.isProcessing || false;
-                            const hasOCRText = version.ocrText && version.ocrText.trim() !== '';
-                            const canShowOCR = (version.fileUrl && version.fileUrl.trim() !== '' &&
-                              (version.fileType?.startsWith('image/') ||
-                                version.fileType === 'application/pdf' ||
-                                version.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                                version.fileType === 'application/msword' ||
-                                version.fileName?.toLowerCase().endsWith('.docx') ||
-                                version.fileName?.toLowerCase().endsWith('.doc')) ||
-                              (version.contentHtml && version.contentHtml.trim() !== ''));
-                            
-                            return (
-                              <div
-                                key={version.id}
-                                className={`p-3 border rounded-lg transition-colors hover:bg-muted/50 ${
-                                  isLatest ? 'border-primary/40 bg-primary/5' : 'border-border'
-                                }`}
-                              >
-                                <div className="flex flex-col gap-2">
-                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                                      <Badge variant={isLatest ? 'default' : 'outline'} className="flex-shrink-0 text-xs">
-                                        v{version.versionNumber}
-                                      </Badge>
-                                      {isLatest && (
-                                        <Badge variant="secondary" className="text-xs flex-shrink-0">
-                                          Latest
-                                        </Badge>
-                                      )}
-                                      <span className="text-sm font-medium text-foreground truncate min-w-0" title={version.fileName}>
-                                        {version.fileName}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                      {(version.fileName || (version.contentHtml && version.contentHtml.trim() !== '')) && (
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7"
-                                          onClick={() => setPreviewVersion(version)}
-                                          title="Preview version"
-                                          aria-label="Preview version"
-                                        >
-                                          <Eye className="h-3.5 w-3.5" />
-                                        </Button>
-                                      )}
-                                      {version.fileUrl && version.fileUrl.trim() !== '' && (
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7"
-                                          onClick={() => {
-                                            const link = window.document.createElement('a');
-                                            link.href = version.fileUrl as string;
-                                            link.download = version.fileName;
-                                            window.document.body.appendChild(link);
-                                            link.click();
-                                            window.document.body.removeChild(link);
-                                          }}
-                                          title="Download version"
-                                          aria-label="Download version"
-                                        >
-                                          <Download className="h-3.5 w-3.5" />
-                                        </Button>
-                                      )}
-                                      {canShowOCR && (
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7"
-                                          onClick={() => {
-                                            if (isProcessing) {
-                                              handleCancelOCR(version.id);
-                                            } else {
-                                              handleVersionOCR(version.id);
-                                            }
-                                          }}
-                                          title={isProcessing ? 'Cancel OCR processing' : hasOCRText ? 'Re-process OCR' : 'Process OCR'}
-                                          disabled={isProcessing && versionOCR?.currentJob?.status === 'processing'}
-                                          aria-label={isProcessing ? 'Cancel OCR' : 'Process OCR'}
-                                        >
-                                          {isProcessing ? (
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                          ) : (
-                                            <Scan className="h-3.5 w-3.5" />
-                                          )}
-                                        </Button>
-                                      )}
-                                      {uploadUser &&
-                                        (uploadUser.id === version.uploadedBy || uploadUser.id === document.authorId) && (
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-7 w-7"
-                                          onClick={() => setReplaceVersionId(version.id)}
-                                          title="Replace this version"
-                                          aria-label="Replace version"
-                                        >
-                                          <Pencil className="h-3.5 w-3.5" />
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                    <span className="capitalize">
-                                      {version.fileType?.split('/').pop() || version.fileType || 'Unknown'}
-                                    </span>
-                                    {fileSize && (
-                                      <>
-                                        <span>•</span>
-                                        <span>{fileSize}</span>
-                                      </>
-                                    )}
-                                    <span>•</span>
-                                    <Clock className="h-3 w-3" />
-                                    <span>{formatDateTime(version.uploadedAt)}</span>
-                                    {uploader && (
-                                      <>
-                                        <span>•</span>
-                                        <UserIcon className="h-3 w-3" />
-                                        <span>{uploader.name}</span>
-                                      </>
-                                    )}
-                                  </div>
-                                  {version.notes && (
-                                    <p className="text-xs text-muted-foreground">{version.notes}</p>
-                                  )}
-                                  {hasOCRText && (
-                                    <div className="flex items-center gap-2 mt-2 p-2 bg-muted/50 rounded border border-primary/20">
-                                      <FileText className="h-3.5 w-3.5 text-primary" />
-                                      <span className="text-xs text-muted-foreground">
-                                        OCR text available ({version.ocrText?.length || 0} characters)
-                                      </span>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 text-xs ml-auto"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          setPreviewVersion(version);
-                                        }}
-                                      >
-                                        View Text
-                                      </Button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Related Tab */}
-                {activeTab === 'related' && (
-                  <div className="space-y-6">
-                    <RelatedCorrespondenceCard
-                      relatedCorrespondence={collaborationState.relatedCorrespondence}
-                      userLookup={userLookup}
-                      divisionLookup={divisionLookup}
-                      departmentLookup={departmentLookup}
-                    />
-                    
-                    {document && (
-                      <DocumentThreadCard
-                        documentId={document.id}
-                        parentDocumentId={(document as DocumentRecord & { parent_document?: { id: string }; parent_document_id?: string }).parent_document?.id || (document as DocumentRecord & { parent_document_id?: string }).parent_document_id}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Right Column - Collaboration & Activity */}
-              <div className="space-y-6">
-                {/* Collaboration Section */}
-                <CollaborationPanel
-                  document={document}
-                  documentWorkspaces={documentWorkspaces}
-                  workspaces={collaborationState.workspaces}
-                  onAddWorkspace={handleAddWorkspace}
-                  onRemoveWorkspace={handleRemoveWorkspace}
-                  workspaceManageOpen={workspaceManageOpen}
-                  onWorkspaceManageOpenChange={setWorkspaceManageOpen}
-                  onWorkspacesRefreshed={handleWorkspacesRefreshed}
-                />
-
-              {/* Comments Section */}
-                <DocumentCommentsCard
-                  comments={collaborationState.comments}
-                  userLookup={userLookup}
-                  getUserInitials={getUserInitials}
-                  onOpenCommentsDialog={handleOpenCommentsDialog}
-                />
-
-              {/* Access Activity Section */}
-                <AccessActivityCard
-                  documentId={document.id}
-                  accessLogs={collaborationState.accessLogs}
-                  userLookup={userLookup}
-                  getUserInitials={getUserInitials}
-                  onViewActivityDetails={(log) => setSelectedAccessLog(log)}
-                  onRefresh={handleRefreshAccessLogs}
-                />
-                    </div>
-            </div>
+          <DocumentMobileStickyBar
+            canDownload={Boolean(selectedVersion?.fileUrl?.trim())}
+            canUpload={Boolean(uploadUser)}
+            onDownload={handleDownloadLatest}
+            onShare={() => {
+              setShareDialogInitialView('share');
+              setShareDialogOpen(true);
+            }}
+            onAddVersion={openVersionUpload}
+            onComments={handleOpenCommentsDialog}
+          />
           </div>
 
-          {/* Comments Dialog */}
           <DocumentCommentsDialog
             open={commentsDialogOpen}
             onOpenChange={setCommentsDialogOpen}
             documentId={document.id}
-            version={primaryVersion}
+            version={selectedVersion}
             currentUser={uploadUser}
             onCommentsUpdated={(updatedComments) => {
-              dispatchCollaboration({ type: 'SET_COMMENTS', payload: updatedComments });
+              setComments(updatedComments);
             }}
           />
 
-                </div>
-
-      {hydrated && uploadUser && document && (
-        <>
-          {uploadDialogOpen && (
+      {hydrated && uploadUser && document && versionUploadOpen && (
         <DocumentUploadDialog
-              key={`upload-version-${document.id}`}
-          open={uploadDialogOpen}
-          onOpenChange={setUploadDialogOpen}
+          key={`upload-version-${document.id}`}
+          open={versionUploadOpen}
+          onOpenChange={setVersionUploadOpen}
           mode="version"
           currentUser={uploadUser}
           document={document}
           onComplete={handleVersionUploadComplete}
         />
-          )}
-          {createVersionDialogOpen && (
-            <DocumentUploadDialog
-              key={`create-version-${document.id}`}
-              open={createVersionDialogOpen}
-              onOpenChange={setCreateVersionDialogOpen}
-              mode="version"
-              currentUser={uploadUser}
-              document={document}
-              onComplete={handleVersionUploadComplete}
-            />
-          )}
-        </>
       )}
 
       {shareDialogOpen && document && (
@@ -1426,7 +729,7 @@ const DocumentDetailContent = () => {
               const actionIcon = selectedAccessLog.action === 'download' ? DownloadIcon : Eye;
               
               // Check if this was the user's first access
-              const userLogs = collaborationState.accessLogs.filter((log) => log.userId === selectedAccessLog.userId);
+              const userLogs = accessLogs.filter((log) => log.userId === selectedAccessLog.userId);
               const sortedUserLogs = [...userLogs].sort((a, b) => 
                 new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
               );

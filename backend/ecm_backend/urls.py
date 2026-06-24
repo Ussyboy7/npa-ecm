@@ -6,10 +6,11 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
-from common.views import health_check
+from common.views import health_check, health_live
 
 
 api_v1_patterns = [
+    path('health/live/', health_live, name='health_live'),
     path('health/', health_check, name='health_check'),
     path('accounts/', include('accounts.urls')),
     path('organization/', include('organization.urls')),
@@ -28,6 +29,7 @@ api_v1_patterns = [
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('health/live/', health_live, name='health_live_short'),
     path('health/', health_check, name='health_check_short'),
 
     # OpenAPI schema & docs

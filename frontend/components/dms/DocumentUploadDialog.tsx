@@ -129,7 +129,10 @@ export const DocumentUploadDialog = ({
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [scanMode, setScanMode] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
-  const { signature: userSignature, refreshSignature } = useSignature({ userId: currentUser?.id, autoLoad: true });
+  const { signature: userSignature, refreshSignature } = useSignature({
+    userId: currentUser?.id,
+    autoLoad: open && composeMode,
+  });
   const scanFileInputRef = useRef<HTMLInputElement>(null);
   const signatureInputRef = useRef<HTMLInputElement>(null);
   const isMountedRef = useRef(true);
@@ -313,9 +316,9 @@ export const DocumentUploadDialog = ({
   // Templates are now loaded from backend - no initialization needed
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!open || !composeMode || !currentUser) return;
     setIsLoadingTemplates(true);
-    const loadTemplates = async () => {
+    const loadTemplateOptions = async () => {
       try {
         const available = await getTemplatesForUser(currentUser);
         setTemplates(available);
@@ -339,8 +342,9 @@ export const DocumentUploadDialog = ({
         setIsLoadingTemplates(false);
       }
     };
-    loadTemplates();
-  }, [currentUser, selectedTemplateId]);
+    void loadTemplateOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per open/compose session
+  }, [open, composeMode, currentUser?.id]);
 
   useEffect(() => {
     if (!composeMode || templateApplied) return;

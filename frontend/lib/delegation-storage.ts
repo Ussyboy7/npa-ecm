@@ -1,36 +1,18 @@
-import { logError, logWarn } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
+import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import * as delegationApi from '@/lib/api/delegations';
 
 // Re-export the type
 export type Delegation = delegationApi.Delegation;
 
 /**
- * Load all delegations from backend
- * @deprecated Use getCorrespondenceDelegations from @/lib/api/delegations directly
- */
-export const loadDelegations = async (): Promise<Delegation[]> => {
-  try {
-    return await delegationApi.getCorrespondenceDelegations();
-  } catch (error: unknown) {
-    logError('Error loading delegations from backend:', error);
-    return [];
-  }
-};
-
-/**
- * @deprecated Not needed - backend handles saving automatically
- */
-export const saveDelegations = (_delegations: Delegation[]): void => {
-  // No-op - backend handles persistence
-  logWarn('saveDelegations is deprecated - backend handles persistence automatically');
-};
-
-/**
  * Add a new delegation (creates in backend)
  */
 export const addDelegation = async (delegation: Omit<Delegation, 'id' | 'delegatedAt' | 'status'>): Promise<Delegation> => {
   try {
-    return await delegationApi.createCorrespondenceDelegation(delegation);
+    const created = await delegationApi.createCorrespondenceDelegation(delegation);
+    bumpSidebarCounts();
+    return created;
   } catch (error: unknown) {
     logError('Error creating delegation:', error);
     throw error;
@@ -91,7 +73,9 @@ export const completeDelegation = async (id: string): Promise<Delegation | null>
  */
 export const revokeDelegation = async (id: string): Promise<Delegation | null> => {
   try {
-    return await delegationApi.revokeDelegation(id);
+    const revoked = await delegationApi.revokeDelegation(id);
+    bumpSidebarCounts();
+    return revoked;
   } catch (error: unknown) {
     logError(`Error revoking delegation ${id}:`, error);
     return null;

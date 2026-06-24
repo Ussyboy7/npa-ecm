@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/tooltip";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
+import { fetchAllPaginatedResults } from "@/lib/pagination-utils";
 import { useScopeChecks } from "@/hooks/use-scope-checks";
 import { useRoleChecks } from "@/hooks/use-role-checks";
 import { ListRowCard } from "@/components/shared/ListRowCard";
@@ -47,8 +48,6 @@ import {
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
 } from "@/components/shared/registry-queue-styles";
-
-const DEFAULT_PAGE_SIZE = 25;
 
 const statusOptions = [
   { value: "all", label: "All Statuses" },
@@ -156,7 +155,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   // Use pagination hook
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: DEFAULT_PAGE_SIZE,
     totalCount: count,
   });
 
@@ -326,9 +324,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
     }
     setExporting(true);
     try {
-      const params: CaseQueryParams = {
-        page: 1,
-        pageSize: 1000,
+      const baseParams: CaseQueryParams = {
         search: debouncedSearch.trim() || undefined,
         status: selectedStatus || undefined,
         caseType: selectedType || undefined,
@@ -338,15 +334,19 @@ export function CasesListContent({ scope, title, description }: CasesListContent
         ordering: sortOrder === 'desc' ? `-${sortBy}` : sortBy,
       };
       if (scope === "my" && currentUser) {
-        params.scope = "my";
-        params.assignedTo = currentUser.id;
+        baseParams.scope = "my";
+        baseParams.assignedTo = currentUser.id;
       } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
-        params.scope = "office";
+        baseParams.scope = "office";
       } else if (scope === "all") {
-        params.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
+        baseParams.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
       }
-      const response = await getCases(params);
-      const exportData = response.results.map((c) => ({
+
+      const allCases = await fetchAllPaginatedResults((page, pageSize) =>
+        getCases({ ...baseParams, page, pageSize }),
+      );
+
+      const exportData = allCases.map((c) => ({
         'Case Number': c.caseNumber,
         'Title': c.title,
         'Status': c.status.replace('_', ' '),

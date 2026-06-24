@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from audit.services import AuditService
 from common.permissions import IsExecutiveGrade
+from common.pagination import StandardPageNumberPagination
 from notifications.models import Notification
 from notifications.services import NotificationService
 
@@ -65,7 +66,7 @@ class ApprovalTaskViewSet(viewsets.ModelViewSet):
     ).prefetch_related("actions")
     serializer_class = ApprovalTaskSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["status", "assignee", "document", "correspondence"]
     ordering_fields = ["created_at", "due_date"]

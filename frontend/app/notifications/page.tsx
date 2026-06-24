@@ -21,8 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { NotificationPreferencesDialog } from '@/components/notifications/NotificationPreferencesDialog';
-import { usePolling } from '@/hooks/use-polling';
-import { NOTIFICATION_POLL_INTERVAL_MS } from '@/lib/constants';
+import { useNotificationWebSocket } from '@/hooks/use-notification-websocket';
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -64,8 +63,10 @@ export default function NotificationsPage() {
     loadNotifications();
   }, [loadNotifications]);
 
-  usePolling(loadNotifications, NOTIFICATION_POLL_INTERVAL_MS, {
-    runImmediately: false,
+  useNotificationWebSocket({
+    onNotification: () => {
+      void loadNotifications();
+    },
   });
 
   const handleMarkRead = async (notification: Notification) => {

@@ -144,7 +144,7 @@ class WebSocketManager {
       };
 
       ws.onerror = (error) => {
-        logWarn('Notifications WebSocket error; falling back to polling.', { error });
+        logWarn('Notifications WebSocket error', { error });
         this.isConnected = false;
         this.isConnecting = false;
       };
@@ -177,16 +177,13 @@ class WebSocketManager {
           }, delay);
         } else if (this.reconnectAttempts >= NOTIFICATION_WS_MAX_RECONNECT_ATTEMPTS && !this.maxAttemptsReached) {
           this.maxAttemptsReached = true;
-          logWarn('Max WebSocket reconnection attempts reached; continuing with polling only.');
-          this.subscribers.forEach(sub => {
-            sub.onUnreadCountChange?.(-1);
-          });
+          logWarn('Max WebSocket reconnection attempts reached');
         }
       };
 
       this.ws = ws;
     } catch (error: unknown) {
-      logWarn('Failed to create WebSocket connection; continuing with polling only.', error);
+      logWarn('Failed to create WebSocket connection', error);
       this.isConnected = false;
       this.isConnecting = false;
     }

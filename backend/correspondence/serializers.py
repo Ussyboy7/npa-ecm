@@ -629,15 +629,28 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         return obj.lifecycle_stages
 
     def get_auto_created_document_id(self, obj):
-        """Get the ID of the auto-created DMS document for this correspondence."""
+        """Get the primary DMS document for this correspondence."""
         from correspondence.models import CorrespondenceDocumentLink
-        link = CorrespondenceDocumentLink.objects.filter(
-            correspondence=obj,
-            notes__icontains="Auto-created from correspondence registration"
-        ).select_related('document').first()
-        
-        if link and link.document:
-            return str(link.document.id)
+
+        auto_link = (
+            CorrespondenceDocumentLink.objects.filter(
+                correspondence=obj,
+                notes__icontains="Auto-created from correspondence registration",
+            )
+            .select_related("document")
+            .first()
+        )
+        if auto_link and auto_link.document:
+            return str(auto_link.document.id)
+
+        primary_link = (
+            CorrespondenceDocumentLink.objects.filter(correspondence=obj)
+            .select_related("document")
+            .order_by("created_at")
+            .first()
+        )
+        if primary_link and primary_link.document:
+            return str(primary_link.document.id)
         return None
 
     def get_parent_correspondence(self, obj):

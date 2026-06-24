@@ -1,3 +1,8 @@
+# Staging stack — intended for the staging SERVER (172.16.0.46), not day-to-day Mac dev.
+# On Mac: use docker-compose.local.yml (or `docker compose up` via compose.yaml).
+# To run staging locally for a one-off test: ECM_ALLOW_LOCAL_STAG=1 scripts/staging/env-manager.sh start
+name: npa-ecm-stag
+
 networks:
   ecm_stag_network:
     driver: bridge
@@ -51,6 +56,13 @@ services:
         condition: service_healthy
       redis_stag:
         condition: service_healthy
+    healthcheck:
+      # Liveness only — migrations/collectstatic can exceed a short start_period.
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live/', timeout=2).read()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     networks:
       - ecm_stag_network
     restart: unless-stopped

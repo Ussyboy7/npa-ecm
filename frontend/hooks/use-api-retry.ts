@@ -38,7 +38,15 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
  * }
  */
 export const useApiRetry = (options: RetryOptions = {}) => {
-  const config = useMemo(() => ({ ...DEFAULT_OPTIONS, ...options }), [options]);
+  const maxRetries = options.maxRetries ?? DEFAULT_OPTIONS.maxRetries;
+  const retryDelay = options.retryDelay ?? DEFAULT_OPTIONS.retryDelay;
+  const exponentialBackoff = options.exponentialBackoff ?? DEFAULT_OPTIONS.exponentialBackoff;
+  const retryableStatuses = options.retryableStatuses ?? DEFAULT_OPTIONS.retryableStatuses;
+
+  const config = useMemo(
+    () => ({ maxRetries, retryDelay, exponentialBackoff, retryableStatuses }),
+    [maxRetries, retryDelay, exponentialBackoff, retryableStatuses],
+  );
 
   const fetchWithRetry = useCallback(
     async <T>(

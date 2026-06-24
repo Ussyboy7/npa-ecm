@@ -1,83 +1,99 @@
 # NPA ECM Backend
 
+Django REST API for the Electronic Content Management system.
+
 ## Prerequisites
 
-- Python 3.13
-- pip
-- (Optional) PostgreSQL 13+ if you want to mirror production. For local lightweight development the project can fall back to SQLite by setting `DB_ENGINE=sqlite`.
+- Python 3.11+
+- PostgreSQL 16+ (required — SQLite is not supported)
+- Redis 7+ (caching, Celery, Channels)
 
-## First-time Setup
+## First-time setup
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-Create a `.env.local` file (or copy from `env/local.env`) and adjust secrets as needed.
+Copy `env/local.env.example` to `env/local.env` and adjust secrets.
+
+Or from repo root:
+
+```bash
+make backend-install
+```
 
 ## Database
 
-The settings default to PostgreSQL. For a quick local bootstrap you can use SQLite:
-
 ```bash
-export DB_ENGINE=sqlite
-python manage.py migrate
-python manage.py seed_demo_data
-```
+# With Docker stack running (recommended)
+make local-start
+make backend-migrate
+make backend-seed
 
-Using PostgreSQL instead:
-
-```bash
+# Manual Postgres
 createdb npa_ecm_local
-createuser npa_ecm_local --pwprompt  # set a password and reuse it below
-
-export DB_ENGINE=postgres
-export DB_NAME=npa_ecm_local
-export DB_USER=npa_ecm_local
-export DB_PASSWORD=changeme
-export DB_HOST=localhost
+export DB_NAME=npa_ecm_local DB_USER=ecmadmin DB_PASSWORD=ecmadmin DB_HOST=localhost DB_PORT=5433
 python manage.py migrate
 python manage.py seed_demo_data
 ```
 
-The seed command provisions demo users including:
-
-| Username   | Password      | Role                |
-|------------|---------------|---------------------|
-| superadmin | ChangeMe123!  | Super Admin         |
-| md         | ChangeMe123!  | Managing Director   |
-| edfa       | ChangeMe123!  | Executive Director  |
-| gmict      | ChangeMe123!  | General Manager ICT |
-| pamd       | ChangeMe123!  | Personal Assistant  |
+Demo users (password `ChangeMe123!`): `superadmin`, `md`, `edfa`, `gmict`, `pamd`.
 
 ## Running the API
 
 ```bash
-export DB_ENGINE=sqlite  # or postgres
-python manage.py runserver 0.0.0.0:8000
+# Local Docker (Daphne + WebSockets on 8002)
+make local-start
+
+# Dev server without Docker
+make backend-run   # http://localhost:8002
 ```
 
 ## Authentication
 
-The backend exposes JWT endpoints under `/api/accounts/auth/`:
+JWT endpoints under `/api/v1/accounts/auth/`:
 
-- `POST /api/accounts/auth/token/` – obtain access/refresh pair
-- `POST /api/accounts/auth/token/refresh/` – refresh access token
-- `POST /api/accounts/auth/token/blacklist/` – revoke refresh token
-- `GET /api/accounts/auth/me/` – current user profile (requires Bearer token)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/accounts/auth/token/` | POST | Obtain access/refresh tokens |
+| `/api/v1/accounts/auth/token/refresh/` | POST | Refresh access token |
+| `/api/v1/accounts/auth/token/blacklist/` | POST | Revoke refresh token |
+| `/api/v1/accounts/auth/me/` | GET | Current user profile |
 
-## Useful commands
+## Health
 
-| Command                         | Description                         |
-|---------------------------------|-------------------------------------|
-| `python manage.py seed_demo_data` | Load demo organizations, documents, correspondence, workflows, analytics, and support content |
-| `python manage.py createsuperuser` | Create an additional admin user |
+| Endpoint | Purpose |
+|----------|---------|
+| `/health/live/` | Liveness (Docker healthchecks) |
+| `/api/v1/health/live/` | Liveness (versioned) |
+| `/api/v1/health/` | Readiness (database + Redis) |
 
 ## Tests
 
-Pytest support is available but no suites have been authored yet:
-
 ```bash
-pytest
+# From repo root — requires Postgres (local Docker on :5433)
+make test-backend
+
+# Or directly
+export DJANGO_SETTINGS_MODULE=ecm_backend.settings_test
+export DB_HOST=localhost DB_PORT=5433 DB_NAME=npa_ecm_local DB_USER=ecmadmin DB_PASSWORD=ecmadmin
+bash scripts/ci/run-backend-tests.sh
 ```
+
+`settings_test.py` uses in-memory Channels/Celery and a separate test database.
+
+## Useful commands
+
+| Command | Description |
+|---------|-------------|
+| `python manage.py seed_demo_data` | Demo org, correspondence, DMS, workflows |
+| `python manage.py makemigrations --check --dry-run` | Verify migrations are committed |
+| `make security-check` | bandit + pip-audit |
+
+## API docs
+
+- Swagger: `http://localhost:8002/api/docs/`
+- OpenAPI schema: `http://localhost:8002/api/schema/`

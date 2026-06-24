@@ -32,7 +32,7 @@ from notifications.models import Notification
 from notifications.services import NotificationService
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.pagination import PageNumberPagination
+from common.pagination import StandardPageNumberPagination
 
 from organization.models import Office, OfficeMembership
 from dms.models import DocumentVersion
@@ -88,12 +88,6 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
-class OfficeInboxPagination(PageNumberPagination):
-    page_size = 25
-    page_size_query_param = "page_size"
-    max_page_size = 100
-
-
 class CorrespondenceViewSet(viewsets.ModelViewSet):
     queryset = Correspondence.objects.none()
     base_queryset = Correspondence.all_objects.select_related(
@@ -135,7 +129,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     )
     serializer_class = CorrespondenceSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = [
@@ -1408,7 +1402,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         overdue_count = queryset.filter(overdue_filter).count()
         assigned_count = queryset.filter(current_approver=user).count()
 
-        paginator = OfficeInboxPagination()
+        paginator = StandardPageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         serializer = self.get_serializer(page, many=True)
         response = paginator.get_paginated_response(serializer.data)
@@ -1517,7 +1511,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         overdue_count = queryset.filter(overdue_filter).count()
         
         # Pagination
-        paginator = OfficeInboxPagination()
+        paginator = StandardPageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         serializer = self.get_serializer(page, many=True)
         response = paginator.get_paginated_response(serializer.data)
@@ -1628,7 +1622,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         overdue_count = queryset.filter(overdue_filter).count()
         
         # Pagination
-        paginator = OfficeInboxPagination()
+        paginator = StandardPageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         serializer = self.get_serializer(page, many=True)
         response = paginator.get_paginated_response(serializer.data)
@@ -1761,7 +1755,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         in_progress_count = queryset.filter(status=Correspondence.Status.IN_PROGRESS).count()
         
         # Pagination
-        paginator = OfficeInboxPagination()
+        paginator = StandardPageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         serializer = self.get_serializer(page, many=True)
         response = paginator.get_paginated_response(serializer.data)
@@ -1902,7 +1896,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         current_year = timezone.now().year
         this_year_count = summary_queryset.filter(received_date__year=current_year).count()
 
-        paginator = OfficeInboxPagination()
+        paginator = StandardPageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         serializer = self.get_serializer(page, many=True)
         response = paginator.get_paginated_response(serializer.data)
@@ -2095,7 +2089,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             queryset = queryset.order_by("-completed_at", "-updated_at")
 
         # Paginate
-        paginator = OfficeInboxPagination()
+        paginator = StandardPageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         serializer = self.get_serializer(page, many=True)
         response = paginator.get_paginated_response(serializer.data)
@@ -2268,7 +2262,7 @@ class CorrespondenceAttachmentViewSet(viewsets.ModelViewSet):
     queryset = CorrespondenceAttachment.objects.select_related("correspondence")
     serializer_class = CorrespondenceAttachmentSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["correspondence"]
     ordering_fields = ["created_at"]
@@ -2341,7 +2335,7 @@ class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
     )
     serializer_class = CorrespondenceDistributionSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["correspondence", "recipient_type", "purpose"]
 
@@ -2460,7 +2454,7 @@ class CorrespondenceDocumentLinkViewSet(viewsets.ModelViewSet):
     queryset = CorrespondenceDocumentLink.objects.select_related("correspondence", "document")
     serializer_class = CorrespondenceDocumentLinkSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["correspondence", "document"]
 
@@ -2469,7 +2463,7 @@ class MinuteViewSet(viewsets.ModelViewSet):
     queryset = Minute.objects.select_related("correspondence", "user", "seal_applied", "seal_applied__sealed_by", "seal_applied__signature_used")
     serializer_class = MinuteSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = OfficeInboxPagination
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ["correspondence", "user", "action_type", "direction"]
     ordering_fields = ["timestamp", "step_number"]
@@ -2515,13 +2509,9 @@ class MinuteViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
 
-        page_size_raw = request.query_params.get("page_size")
-        if page_size_raw:
-            try:
-                page_size = max(1, min(int(page_size_raw), 1000))
-                qs = qs[:page_size]
-            except (TypeError, ValueError):
-                pass
+        paginator = StandardPageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        items = page if page is not None else qs
 
         results = [
             {
@@ -2535,10 +2525,13 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 "due_date": m.response_deadline.isoformat() if m.response_deadline else None,
                 "created_at": m.created_at.isoformat() if getattr(m, "created_at", None) else None,
             }
-            for m in qs
+            for m in items
         ]
 
-        return Response({"results": results})
+        if page is not None:
+            return paginator.get_paginated_response(results)
+
+        return Response({"results": results, "count": len(results)})
 
     def _find_office_recipient(self, office, preferred_user=None):
         """
@@ -3713,7 +3706,7 @@ class ParallelRoutingGroupViewSet(viewsets.ModelViewSet):
     queryset = ParallelRoutingGroup.objects.select_related("correspondence", "created_by").distinct()
     serializer_class = ParallelRoutingGroupSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["correspondence", "created_by", "is_complete", "merge_strategy"]
     
@@ -3734,7 +3727,7 @@ class DelegationViewSet(viewsets.ModelViewSet):
     queryset = Delegation.objects.select_related("principal", "assistant")
     serializer_class = DelegationSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["principal", "assistant", "active"]
 
@@ -3749,7 +3742,7 @@ class CorrespondenceDelegationViewSet(viewsets.ModelViewSet):
     )
     serializer_class = CorrespondenceDelegationSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ["correspondence", "principal", "assistant", "status"]
     search_fields = ["correspondence__subject", "correspondence__reference_number"]
@@ -3942,7 +3935,7 @@ class CorrespondenceDraftViewSet(viewsets.ModelViewSet):
     queryset = CorrespondenceDraft.objects.select_related("correspondence", "user")
     serializer_class = CorrespondenceDraftSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ["correspondence", "draft_type", "user"]
     search_fields = ["content", "subject"]
@@ -3970,6 +3963,7 @@ class CaseViewSet(viewsets.ModelViewSet):
     )
     serializer_class = CaseSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = [
         "status",
@@ -4795,6 +4789,6 @@ class CaseCorrespondenceLinkViewSet(viewsets.ModelViewSet):
     queryset = CaseCorrespondenceLink.objects.select_related("case", "correspondence")
     serializer_class = CaseCorrespondenceLinkSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["case", "correspondence", "is_primary"]

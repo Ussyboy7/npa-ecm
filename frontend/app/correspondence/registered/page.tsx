@@ -24,8 +24,6 @@ import type { Correspondence } from "@/lib/npa-structure";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 
-const DEFAULT_PAGE_SIZE = 25;
-
 const statusFilters = ["all", "pending", "in-progress", "completed", "archived"] as const;
 const priorityFilters = ["all", ...PRIORITY_VALUES] as const;
 
@@ -82,7 +80,6 @@ const RegisteredCorrespondencePage = () => {
   // Use pagination hook
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: DEFAULT_PAGE_SIZE,
     totalCount: count,
   });
 

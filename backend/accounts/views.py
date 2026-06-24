@@ -15,7 +15,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.pagination import PageNumberPagination
+from common.pagination import CatalogPageNumberPagination
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -79,20 +79,13 @@ def process_signature_background(image_bytes, threshold=200, fade_width=30):
     return output.getvalue()
 
 
-class UserPagination(PageNumberPagination):
-    """Pagination for user list."""
-    page_size = 50
-    page_size_query_param = 'page_size'
-    max_page_size = 200
-
-
 class UserViewSet(viewsets.ModelViewSet):
     """CRUD endpoints for managing users within the demo environment."""
 
     queryset = User.objects.select_related("directorate", "division", "department", "system_role")
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = UserPagination
+    pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["is_active", "is_management", "grade_level", "system_role", "division", "department"]
     search_fields = ["username", "email", "first_name", "last_name", "employee_id"]

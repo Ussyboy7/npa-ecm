@@ -1,36 +1,80 @@
 /** API client for forms and templates. */
 
 import { apiFetch } from "@/lib/api-client";
-import type { FormTemplate, FormSubmission, FormSubmissionListItem } from "@/lib/types/forms";
+import { fetchAllPaginated } from "@/lib/pagination-utils";
+import type { FormTemplate, FormSubmission, FormSubmissionListItem, FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 
 // Re-export types for convenience
 export type { FormTemplate, FormSubmission, FormSubmissionListItem };
 
 const BASE_PATH = "/forms";
 
+const FORM_TEMPLATES_CACHE_TTL_MS = 5 * 60 * 1000;
+const SIGNATURES_CACHE_TTL_MS = 60 * 1000;
+const formTemplatesCache = new Map<string, { data: FormTemplate[]; timestamp: number }>();
+const formTemplatesPromises = new Map<string, Promise<FormTemplate[]>>();
+const signaturesCache = new Map<string, { data: FormSignature[]; timestamp: number }>();
+const signaturesPromises = new Map<string, Promise<FormSignature[]>>();
+
+const buildFormTemplatesCacheKey = (params?: {
+  category?: string;
+  is_active?: boolean;
+  search?: string;
+}) =>
+  JSON.stringify({
+    category: params?.category ?? null,
+    is_active: params?.is_active ?? null,
+    search: params?.search ?? null,
+  });
+
+export const invalidateFormTemplatesCache = (): void => {
+  formTemplatesCache.clear();
+  formTemplatesPromises.clear();
+};
+
+export const invalidateSignaturesCache = (): void => {
+  signaturesCache.clear();
+  signaturesPromises.clear();
+};
+
 // Form Templates
 export async function getFormTemplates(params?: {
   category?: string;
   is_active?: boolean;
   search?: string;
-}): Promise<FormTemplate[]> {
+}, force = false): Promise<FormTemplate[]> {
+  const cacheKey = buildFormTemplatesCacheKey(params);
+  const now = Date.now();
+  const cached = formTemplatesCache.get(cacheKey);
+  if (!force && cached && now - cached.timestamp < FORM_TEMPLATES_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const inFlight = formTemplatesPromises.get(cacheKey);
+  if (!force && inFlight) {
+    return inFlight;
+  }
+
   const queryParams = new URLSearchParams();
   if (params?.category) queryParams.append("category", params.category);
   if (params?.is_active !== undefined) queryParams.append("is_active", String(params.is_active));
   if (params?.search) queryParams.append("search", params.search);
 
   const query = queryParams.toString();
-  const response = await apiFetch<FormTemplate[] | { results: FormTemplate[] }>(
-    `${BASE_PATH}/templates/${query ? `?${query}` : ""}`
-  );
-  
-  // Handle paginated response (if pagination is enabled)
-  if (response && typeof response === "object" && "results" in response) {
-    return (response as { results: FormTemplate[] }).results;
+  const request = (async () => {
+    const path = `${BASE_PATH}/templates/${query ? `?${query}` : ""}`;
+    return fetchAllPaginated<FormTemplate>(path);
+  })();
+
+  formTemplatesPromises.set(cacheKey, request);
+
+  try {
+    const data = await request;
+    formTemplatesCache.set(cacheKey, { data, timestamp: Date.now() });
+    return data;
+  } finally {
+    formTemplatesPromises.delete(cacheKey);
   }
-  
-  // Handle direct array response
-  return Array.isArray(response) ? response : [];
 }
 
 export async function getFormTemplate(id: string): Promise<FormTemplate> {
@@ -38,29 +82,36 @@ export async function getFormTemplate(id: string): Promise<FormTemplate> {
 }
 
 export async function createFormTemplate(data: Partial<FormTemplate>): Promise<FormTemplate> {
-  return apiFetch<FormTemplate>(`${BASE_PATH}/templates/`, {
+  const created = await apiFetch<FormTemplate>(`${BASE_PATH}/templates/`, {
     method: "POST",
     body: JSON.stringify(data),
   });
+  invalidateFormTemplatesCache();
+  return created;
 }
 
 export async function updateFormTemplate(id: string, data: Partial<FormTemplate>): Promise<FormTemplate> {
-  return apiFetch<FormTemplate>(`${BASE_PATH}/templates/${id}/`, {
+  const updated = await apiFetch<FormTemplate>(`${BASE_PATH}/templates/${id}/`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
+  invalidateFormTemplatesCache();
+  return updated;
 }
 
 export async function deleteFormTemplate(id: string): Promise<void> {
-  return apiFetch<void>(`${BASE_PATH}/templates/${id}/`, {
+  await apiFetch<void>(`${BASE_PATH}/templates/${id}/`, {
     method: "DELETE",
   });
+  invalidateFormTemplatesCache();
 }
 
 export async function cloneFormTemplate(id: string): Promise<FormTemplate> {
-  return apiFetch<FormTemplate>(`${BASE_PATH}/templates/${id}/clone/`, {
+  const cloned = await apiFetch<FormTemplate>(`${BASE_PATH}/templates/${id}/clone/`, {
     method: "POST",
   });
+  invalidateFormTemplatesCache();
+  return cloned;
 }
 
 // Form Submissions
@@ -154,7 +205,6 @@ export function getFormSubmissionPdfUrl(submissionId: string): string {
 }
 
 // Signature Workflow APIs
-import type { FormSignatureWorkflow, FormSignature } from "@/lib/types/forms";
 
 export async function createSignatureWorkflow(data: {
   submission_id: string;
@@ -208,21 +258,41 @@ export async function getSignatureWorkflows(params?: {
 export async function getSignatures(params?: {
   workflow?: string;
   status?: string;
-}): Promise<FormSignature[]> {
+}, force = false): Promise<FormSignature[]> {
+  const cacheKey = JSON.stringify({
+    workflow: params?.workflow ?? null,
+    status: params?.status ?? null,
+  });
+  const now = Date.now();
+  const cached = signaturesCache.get(cacheKey);
+  if (!force && cached && now - cached.timestamp < SIGNATURES_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const inFlight = signaturesPromises.get(cacheKey);
+  if (!force && inFlight) {
+    return inFlight;
+  }
+
   const queryParams = new URLSearchParams();
   if (params?.workflow) queryParams.append("workflow", params.workflow);
   if (params?.status) queryParams.append("status", params.status);
 
   const query = queryParams.toString();
-  const response = await apiFetch<FormSignature[] | { results: FormSignature[] }>(
-    `${BASE_PATH}/signatures/${query ? `?${query}` : ""}`
-  );
-  
-  if (response && typeof response === "object" && "results" in response) {
-    return (response as { results: FormSignature[] }).results;
+  const request = (async () => {
+    const path = `${BASE_PATH}/signatures/${query ? `?${query}` : ""}`;
+    return fetchAllPaginated<FormSignature>(path);
+  })();
+
+  signaturesPromises.set(cacheKey, request);
+
+  try {
+    const data = await request;
+    signaturesCache.set(cacheKey, { data, timestamp: Date.now() });
+    return data;
+  } finally {
+    signaturesPromises.delete(cacheKey);
   }
-  
-  return Array.isArray(response) ? response : [];
 }
 
 export async function signForm(workflowId: string, data: {
@@ -260,6 +330,7 @@ export async function signForm(workflowId: string, data: {
     throw new Error(errorData.error || errorData.message || "Failed to sign form");
   }
 
+  invalidateSignaturesCache();
   return response.json();
 }
 

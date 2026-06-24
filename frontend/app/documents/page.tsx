@@ -77,7 +77,6 @@ function MyDocumentsForm() {
 
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: 25,
     totalCount: count,
   });
 

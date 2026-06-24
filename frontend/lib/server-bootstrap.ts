@@ -37,6 +37,36 @@ function unwrapResults(payload: unknown): unknown[] {
   return [];
 }
 
+async function fetchAllCatalog(
+  path: string,
+  token: string,
+  pageSize = 500,
+): Promise<unknown[]> {
+  const all: unknown[] = [];
+  let page = 1;
+  for (;;) {
+    const separator = path.includes("?") ? "&" : "?";
+    const payload = await fetchWithToken(
+      `${path}${separator}page=${page}&page_size=${pageSize}`,
+      token,
+    );
+    const batch = unwrapResults(payload);
+    all.push(...batch);
+    if (
+      payload &&
+      typeof payload === "object" &&
+      "next" in payload &&
+      (payload as { next?: string | null }).next
+    ) {
+      page += 1;
+      continue;
+    }
+    if (batch.length < pageSize) break;
+    page += 1;
+  }
+  return all;
+}
+
 export interface BootstrapData {
   user: Record<string, unknown> | null;
   directorates: unknown[];
@@ -59,11 +89,27 @@ export async function fetchBootstrap(): Promise<BootstrapData | null> {
   if (!token) return null;
 
   try {
-    // Slim bootstrap: user + sidebarCounts + delegations only. Org data (directorates, divisions, etc.)
-    // is fetched on-demand by OrganizationProvider to avoid slow startup.
-    const [userRes, delegationsRes, sidebarCountsRes] = await Promise.all([
+    const [
+      userRes,
+      directorates,
+      divisions,
+      departments,
+      delegationsRes,
+      roles,
+      offices,
+      officeMemberships,
+      users,
+      sidebarCountsRes,
+    ] = await Promise.all([
       fetchWithToken("/accounts/auth/me/", token),
-      fetchWithToken("/correspondence/delegations/", token),
+      fetchAllCatalog("/organization/directorates/?ordering=name", token),
+      fetchAllCatalog("/organization/divisions/?ordering=name", token),
+      fetchAllCatalog("/organization/departments/?ordering=name", token),
+      fetchAllCatalog("/correspondence/delegations/", token),
+      fetchAllCatalog("/organization/roles/?ordering=name", token),
+      fetchAllCatalog("/organization/offices/?ordering=name", token),
+      fetchAllCatalog("/organization/office-memberships/?ordering=office__name", token),
+      fetchAllCatalog("/accounts/users/?is_active=true&ordering=username", token),
       fetchWithToken("/correspondence/items/sidebar-counts/", token),
     ]);
 
@@ -71,17 +117,17 @@ export async function fetchBootstrap(): Promise<BootstrapData | null> {
       ? (sidebarCountsRes as Record<string, number>)
       : null;
 
-    const delegations = delegationsRes ? unwrapResults(delegationsRes) : [];
+    const delegations = Array.isArray(delegationsRes) ? delegationsRes : unwrapResults(delegationsRes);
 
     return {
       user: userRes && typeof userRes === "object" ? (userRes as Record<string, unknown>) : null,
-      directorates: [],
-      divisions: [],
-      departments: [],
-      offices: [],
-      roles: [],
-      officeMemberships: [],
-      users: [],
+      directorates,
+      divisions,
+      departments,
+      offices,
+      roles,
+      officeMemberships,
+      users,
       assistantAssignments: delegations,
       sidebarCounts,
     };

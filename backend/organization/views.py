@@ -7,18 +7,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError, PermissionDenied
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from audit.services import AuditService
+from common.pagination import CatalogPageNumberPagination
 from .models import Department, Directorate, Division, Office, OfficeMembership, Role
-
-
-class OrgListPagination(PageNumberPagination):
-    page_size = 100
-    page_size_query_param = "page_size"
-    max_page_size = 200
 from .serializers import (
     DepartmentSerializer,
     DirectorateSerializer,
@@ -33,7 +27,7 @@ class DirectorateViewSet(viewsets.ModelViewSet):
     queryset = Directorate.objects.all().select_related("executive_director")
     serializer_class = DirectorateSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = OrgListPagination
+    pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["is_active"]
     search_fields = ["name", "code", "description"]
@@ -86,7 +80,7 @@ class DivisionViewSet(viewsets.ModelViewSet):
     queryset = Division.objects.select_related("directorate", "general_manager")
     serializer_class = DivisionSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = OrgListPagination
+    pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["directorate", "is_active"]
     search_fields = ["name", "code", "directorate__name"]
@@ -108,7 +102,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.select_related("division", "division__directorate", "head_of_department")
     serializer_class = DepartmentSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = OrgListPagination
+    pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["division", "division__directorate", "is_active"]
     search_fields = ["name", "code", "division__name", "division__directorate__name"]
@@ -135,7 +129,7 @@ class RoleViewSet(viewsets.ModelViewSet):
     queryset = Role.objects.annotate(user_count=Count("users")).prefetch_related("users")
     serializer_class = RoleSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = OrgListPagination
+    pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["is_active"]
     search_fields = ["name", "description"]
@@ -400,7 +394,7 @@ class OfficeViewSet(viewsets.ModelViewSet):
     queryset = Office.objects.select_related("directorate", "division", "department", "parent")
     serializer_class = OfficeSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = [
         "office_type",
@@ -419,7 +413,7 @@ class OfficeMembershipViewSet(viewsets.ModelViewSet):
     queryset = OfficeMembership.objects.select_related("office", "user")
     serializer_class = OfficeMembershipSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = OrgListPagination
+    pagination_class = CatalogPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["office", "user", "assignment_role", "is_primary", "is_active"]
     search_fields = ["user__username", "user__first_name", "user__last_name", "office__name", "office__code"]

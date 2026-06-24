@@ -13,6 +13,11 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import type { User } from "@/lib/npa-structure";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { usePagination } from "@/hooks/use-pagination";
+import {
+  DEFAULT_LIST_PAGE_SIZE,
+  LIST_PAGE_SIZE_OPTIONS,
+  MAX_CATALOG_PAGE_SIZE,
+} from '@/lib/pagination-constants';
 import { PaginationControls } from "@/components/shared/PaginationControls";
 import {
   apiFetch,
@@ -52,7 +57,6 @@ interface SimplifiedRoleSwitcherProps {
 const USERS_PER_GROUP = 25;
 const BACKEND_SEARCH_THRESHOLD = 500;
 const DEBOUNCE_DELAY = 300;
-const DEFAULT_PAGE_SIZE = 50; // Default page size for pagination
 
 const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProps) => {
   const { directorates, divisions, departments, users, refreshOrganizationData: _refreshOrganizationData } = useOrganization();
@@ -79,14 +83,14 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
   // Pagination for backend search
   const backendPagination = usePagination({
     initialPage: 1,
-    initialPageSize: DEFAULT_PAGE_SIZE,
+    initialPageSize: DEFAULT_LIST_PAGE_SIZE,
     totalCount: backendSearchTotal,
   });
   
   // Pagination for frontend filtered results
   const frontendPagination = usePagination({
     initialPage: 1,
-    initialPageSize: DEFAULT_PAGE_SIZE,
+    initialPageSize: DEFAULT_LIST_PAGE_SIZE,
     totalCount: 0, // Will be updated dynamically in pagination controls
   });
   
@@ -169,7 +173,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
     }
   }, [backendPagination.page, backendPagination.pageSize, debouncedSearchQuery, isSearchingBackend, shouldUseBackendSearch]);
 
-  const performBackendSearch = async (query: string, page: number = 1, pageSize: number = DEFAULT_PAGE_SIZE) => {
+  const performBackendSearch = async (query: string, page: number = 1, pageSize: number = DEFAULT_LIST_PAGE_SIZE) => {
     // Cancel previous request if still in progress
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -1065,7 +1069,7 @@ const SimplifiedRoleSwitcherComponent = ({ onClose }: SimplifiedRoleSwitcherProp
                 },
               }}
               showPageSizeSelector={true}
-              pageSizeOptions={[25, 50, 100, 200]}
+              pageSizeOptions={[...LIST_PAGE_SIZE_OPTIONS, MAX_CATALOG_PAGE_SIZE]}
               compact={false}
             />
           </div>

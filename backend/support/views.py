@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.pagination import StandardPageNumberPagination
 from .models import ClientLogEntry, FaqEntry, HelpGuide, SupportTicket
 from .serializers import ClientLogBatchSerializer, FaqEntrySerializer, HelpGuideSerializer, SupportTicketSerializer
 
@@ -38,7 +39,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
     queryset = SupportTicket.objects.select_related("created_by", "assigned_to")
     serializer_class = SupportTicketSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = StandardPageNumberPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "priority", "created_by", "assigned_to"]
     search_fields = ["subject", "description"]

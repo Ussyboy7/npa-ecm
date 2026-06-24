@@ -17,7 +17,7 @@ const MyPage = () => {
   
   const pagination = usePagination({
     initialPage: 1,
-    initialPageSize: 25,
+    initialPageSize: DEFAULT_LIST_PAGE_SIZE,
     totalCount,
     onPageChange: (page) => {
       // Optional: handle page change

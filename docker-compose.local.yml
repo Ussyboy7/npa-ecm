@@ -1,3 +1,6 @@
+# Local development stack (Mac). Project name isolates this from staging containers.
+name: npa-ecm-local
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -112,6 +115,12 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8002/api/v1
       INTERNAL_API_URL: http://backend:8002/api/v1
       NODE_ENV: development
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/node_modules
+      - /app/frontend/node_modules
+      # Isolated from host .next; if dev 500s / ENOENT build-manifest, remove volume next-dev-cache
+      - next-dev-cache:/app/frontend/.next
     ports:
       - "3002:3002"
     depends_on:
@@ -122,6 +131,7 @@ volumes:
   postgres-data:
   media-data:
   static-data:
+  next-dev-cache:
 
 
 
