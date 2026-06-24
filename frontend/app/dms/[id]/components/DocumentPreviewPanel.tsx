@@ -60,19 +60,19 @@ export function DocumentPreviewPanel({
 
   return (
     <aside className="w-full flex flex-col flex-1 min-h-0 overflow-hidden bg-background">
-      <div className="flex flex-col flex-1 min-h-0 p-3 md:p-4 gap-0">
+      <div className="flex flex-col flex-1 min-h-0 p-3 md:p-4 gap-0 overflow-hidden">
         {isForm && formDocumentId ? (
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <FormDocumentEditor documentId={documentId} formDocumentId={formDocumentId} />
           </ScrollArea>
         ) : isForm ? (
           <div className="flex items-center justify-center flex-1 text-sm text-muted-foreground">Loading form…</div>
         ) : (
           <div
-            className={`flex flex-col min-w-0 flex-1 min-h-[400px] ${
+            className={`flex flex-col min-w-0 flex-1 min-h-0 overflow-hidden ${
               isPreviewFullscreen
-                ? "fixed inset-4 z-50 bg-white dark:bg-background border border-border rounded-lg overflow-hidden shadow-lg"
-                : "min-h-0"
+                ? "fixed inset-4 z-50 bg-white dark:bg-background border border-border rounded-lg shadow-lg"
+                : ""
             }`}
           >
             <div
@@ -139,15 +139,14 @@ export function DocumentPreviewPanel({
                 </div>
               )}
 
-              <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
                 {selectedVersion ? (
                   <DmsVersionPreviewContent
                     version={selectedVersion}
-                    compact={!isPreviewFullscreen}
                     expanded={isPreviewFullscreen}
                   />
                 ) : (
-                  <div className="flex items-center justify-center min-h-[320px] text-sm text-muted-foreground">
+                  <div className="flex items-center justify-center h-full min-h-[200px] text-sm text-muted-foreground">
                     Select a version to preview.
                   </div>
                 )}

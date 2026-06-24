@@ -77,7 +77,10 @@ cmd_start() {
 
 cmd_stop() {
     ui_header "Stopping ECM ${STACK_ENVIRONMENT_TITLE}"
-    stack_compose down
+    stack_compose down --remove-orphans
+    if [[ "$STACK_ENVIRONMENT" != "local" ]]; then
+        stack_purge_fixed_containers
+    fi
 }
 
 cmd_restart() {
@@ -272,7 +275,8 @@ _deploy_prepare_media() {
 
 _deploy_stop_stack() {
     ui_step "Stopping existing stack"
-    stack_compose down --timeout 30 || true
+    stack_compose down --timeout 30 --remove-orphans || true
+    stack_purge_fixed_containers || true
 }
 
 _deploy_build_up() {

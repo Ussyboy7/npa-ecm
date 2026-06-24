@@ -219,14 +219,6 @@ export const DocumentHeader = ({
           <div className="hidden md:flex items-center gap-2 flex-shrink-0">{desktopActions}</div>
 
           <div className="md:hidden flex items-center gap-1 flex-shrink-0">
-            {canDownload && onDownload && (
-              <Button variant="outline" size="sm" onClick={onDownload}>
-                <Download className="h-4 w-4" />
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={onShare}>
-              <Share2 className="h-4 w-4" />
-            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm">

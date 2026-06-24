@@ -66,7 +66,7 @@ export default function WorkspaceDetailPage() {
     } finally {
       setLoadingDocs(false);
     }
-  }, [params?.id, searchQuery]);
+  }, [params?.id, debouncedQuery]);
 
   useEffect(() => {
     loadWorkspace();

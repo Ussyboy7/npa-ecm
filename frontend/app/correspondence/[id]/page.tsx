@@ -7,14 +7,14 @@ import { DashboardLayout } from '@/components/DashboardLayout';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { toast } from 'sonner';
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
-import type { Minute, Correspondence, ParallelRoutingGroup } from '@/lib/npa-structure';
+import type { Minute, Correspondence } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
-import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
+import { getCorrespondencePreviewContext, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
 import { useModalState } from '@/hooks/use-modal-state';
 import { useApiRetry } from '@/hooks/use-api-retry';
 import { correspondenceDetailReducer, initialState } from './correspondence-state-reducer';
@@ -28,14 +28,10 @@ import { useCorrespondenceDetailData } from './hooks/use-correspondence-detail-d
 const CorrespondenceDetailContent = () => {
   const params = useParams();
   const id = params.id as string;
-  const {getCorrespondenceById, updateCorrespondence: _updateCorrespondence, refreshData, syncFromApi, mergeMinutes } =
-    useCorrespondence();
+  const { getCorrespondenceById, refreshData, syncFromApi, mergeMinutes } = useCorrespondence();
   const cachedCorrespondence = id ? getCorrespondenceById(id) : null;
   const { currentUser: activeUser } = useCurrentUser();
   const {
-    directorates,
-    divisions,
-    departments,
     users: organizationUsers,
     offices,
     officeMemberships,
@@ -76,9 +72,6 @@ const CorrespondenceDetailContent = () => {
   const setLinkedDocuments = useCallback((docs: DocumentRecord[]) => {
     dispatch({ type: 'SET_LINKED_DOCUMENTS', payload: docs });
   }, []);
-  const setParallelRoutingGroups = useCallback((groups: ParallelRoutingGroup[]) => {
-    dispatch({ type: 'SET_PARALLEL_ROUTING_GROUPS', payload: groups });
-  }, []);
   const setSelectedMinute = useCallback((minute: Minute | null) => {
     dispatch({ type: 'SET_SELECTED_MINUTE', payload: minute });
   }, []);
@@ -105,7 +98,7 @@ const CorrespondenceDetailContent = () => {
   const isCompleted = (remoteCorrespondence?.status ?? initialStatus) === 'completed';
 
   // Use modal state hook to consolidate modal states
-  const {activeModal: _activeModal, openModal, closeModal, isOpen } = useModalState();
+  const { openModal, closeModal, isOpen } = useModalState();
   
   // Use API retry hook for critical requests
   const { fetchWithRetry } = useApiRetry({ maxRetries: 3 });
@@ -126,30 +119,14 @@ const CorrespondenceDetailContent = () => {
     setDetailLoading,
     setBackendDelegation,
     setLinkedDocuments,
-    setParallelRoutingGroups,
   });
 
-  const handleMinuteClose = () => {
+  const handleModalRefreshClose = () => {
     closeModal();
     refreshData();
     void syncFromApi();
     void refreshMinutes();
   };
-
-  const handleTreatmentClose = () => {
-    closeModal();
-    refreshData();
-    void syncFromApi();
-    void refreshMinutes();
-  };
-
-  const handleCompletionClose = () => {
-    closeModal();
-    refreshData();
-    void syncFromApi();
-    void refreshMinutes();
-  };
-
 
   const handleDelegate = async (
     assistantId: string, 
@@ -240,45 +217,14 @@ const CorrespondenceDetailContent = () => {
     return !!infoMinute || userMinutes.some((m) => m.purpose === 'information');
   }, [minutes, activeUser?.id, correspondence]);
 
-  // Determine which parallel routing groups to show in the UI.
-  // We avoid clutter by:
-  // - de-duplicating by id
-  // - if there are active (incomplete) groups, showing only the most recent one
-  // - otherwise, showing only the most recently completed group
-  // Keep hooks above early returns to preserve stable hook order.
-  const selectedAttachmentForAccess =
-    selectedAttachmentIndex !== null && correspondence?.attachments?.[selectedAttachmentIndex]
-      ? correspondence.attachments[selectedAttachmentIndex]
-      : null;
-  const completionPackageUrlForAccess = buildDownloadUrl(correspondence?.completionPackage?.fileUrl ?? null) ?? null;
-  const linkedDocumentLatestVersionForAccess = linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1];
-  const linkedDocumentPreviewUrlForAccess = buildDownloadUrl(linkedDocumentLatestVersionForAccess?.fileUrl);
-  const defaultPreviewAttachmentSourceForAccess: 'attachment' | 'completion-package' =
-    selectedAttachmentForAccess
-      ? 'attachment'
-      : (!linkedDocumentPreviewUrlForAccess && isCompleted && completionPackageUrlForAccess ? 'completion-package' : 'attachment');
-
-  const resolveDmsAccessTarget = useCallback((): { documentId: string; sensitivity: string } | null => {
-    if (defaultPreviewAttachmentSourceForAccess === 'completion-package' && correspondence?.completionPackage?.documentId) {
-      return { documentId: correspondence.completionPackage.documentId, sensitivity: 'internal' };
-    }
-
-    const linkedDoc = linkedDocuments[0];
-    if (linkedDoc?.id) {
-      return { documentId: linkedDoc.id, sensitivity: linkedDoc.sensitivity ?? 'internal' };
-    }
-
-    const linkedDocId = correspondence?.linkedDocumentIds?.[0];
-    if (linkedDocId) {
-      return { documentId: linkedDocId, sensitivity: 'internal' };
-    }
-
-    return null;
-  }, [defaultPreviewAttachmentSourceForAccess, correspondence?.completionPackage?.documentId, correspondence?.linkedDocumentIds, linkedDocuments]);
+  const previewContext = useMemo(
+    () => getCorrespondencePreviewContext(correspondence, linkedDocuments, selectedAttachmentIndex, isCompleted),
+    [correspondence, linkedDocuments, selectedAttachmentIndex, isCompleted],
+  );
 
   const logCorrespondenceDmsAccess = useCallback(async (action: 'view' | 'download' | 'attempted-download') => {
     if (!activeUser?.id) return;
-    const target = resolveDmsAccessTarget();
+    const target = resolveCorrespondenceDmsAccessTarget(correspondence, linkedDocuments, previewContext.source);
     if (!target) return;
 
     try {
@@ -289,10 +235,9 @@ const CorrespondenceDetailContent = () => {
         sensitivity: target.sensitivity,
       });
     } catch (error: unknown) {
-      // Access logging should not block correspondence usage.
       logWarn('Failed to write DMS access log from correspondence view', error);
     }
-  }, [activeUser?.id, resolveDmsAccessTarget]);
+  }, [activeUser?.id, correspondence, linkedDocuments, previewContext.source]);
 
   const handleCompletionPackageDownload = useCallback(
     async (_url: string, filename: string) => {
@@ -355,42 +300,14 @@ const CorrespondenceDetailContent = () => {
   // If routing was reverted after recall, enable actions for the sender
   const actionsDisabled = detailLoading || (isCompleted && !isRecalledAndReverted) || isForInformationOnly;
   const turnRestrictedDisabled = actionsDisabled || (!isCurrentUserTurn && !isRecalledAndReverted);
-  const completionPackageUrl = buildDownloadUrl(correspondence?.completionPackage?.fileUrl ?? null) ?? null;
+  const completionPackageUrl = previewContext.completionPackageUrl;
   const completionGeneratedAt =
     correspondence?.completionPackage?.generatedAt ??
     correspondence?.completionSummaryGeneratedAt ??
     correspondence?.completedAt;
-  const selectedAttachment =
-    selectedAttachmentIndex !== null && correspondence?.attachments?.[selectedAttachmentIndex]
-      ? correspondence?.attachments[selectedAttachmentIndex]
-      : null;
-  const completionPackageFileName = completionPackageUrl
-    ? (
-        completionPackageUrl.split('/').filter(Boolean).pop() ||
-        `${correspondence?.referenceNumber || 'completion-package'}.pdf`
-      )
-    : undefined;
-  const linkedDocumentLatestVersion = linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1];
-  const linkedDocumentPreviewUrl = buildDownloadUrl(linkedDocumentLatestVersion?.fileUrl);
-  const linkedDocumentPreviewFileName = linkedDocumentLatestVersion?.fileName;
-  const defaultPreviewAttachmentUrl = selectedAttachment
-    ? buildDownloadUrl(selectedAttachment.fileUrl)
-    : (linkedDocumentPreviewUrl
-        ? linkedDocumentPreviewUrl
-        : (isCompleted && completionPackageUrl
-            ? completionPackageUrl
-            : buildDownloadUrl(correspondence?.attachments?.[0]?.fileUrl)));
-  const defaultPreviewAttachmentFileName = selectedAttachment
-    ? selectedAttachment.fileName
-    : (linkedDocumentPreviewFileName
-        ? linkedDocumentPreviewFileName
-        : (isCompleted && completionPackageUrl
-            ? completionPackageFileName
-            : correspondence?.attachments?.[0]?.fileName));
-  const defaultPreviewAttachmentSource: 'attachment' | 'completion-package' =
-    selectedAttachment
-      ? 'attachment'
-      : (!linkedDocumentPreviewUrl && isCompleted && completionPackageUrl ? 'completion-package' : 'attachment');
+  const defaultPreviewAttachmentUrl = previewContext.previewUrl;
+  const defaultPreviewAttachmentFileName = previewContext.previewFileName;
+  const defaultPreviewAttachmentSource = previewContext.source;
 
   const lookupUser = (userId?: string) => {
     if (!userId) return undefined;
@@ -458,14 +375,22 @@ const CorrespondenceDetailContent = () => {
     openModal('additional-minute');
   }, [openModal, setSelectedMinute]);
 
-  const division = useMemo(
-    () => divisions.find((d) => d.id === correspondence?.divisionId) ?? null,
-    [divisions, correspondence?.divisionId],
-  );
-  const department = useMemo(
-    () => departments.find((d) => d.id === correspondence?.departmentId) ?? null,
-    [departments, correspondence?.departmentId],
-  );
+  const openFullscreenPreview = useCallback(() => openModal('document-preview'), [openModal]);
+
+  const documentPanelProps = {
+    linkedDocuments,
+    selectedLinkedDocVersion,
+    selectedAttachmentIndex,
+    attachmentSearchQuery,
+    isPreviewFullscreen,
+    isCompleted,
+    onSetAttachmentSearchQuery: setAttachmentSearchQuery,
+    onSetIsPreviewFullscreen: setIsPreviewFullscreen,
+    onSetSelectedAttachmentIndex: setSelectedAttachmentIndex,
+    onOpenLinkDocument: () => openModal('link-document'),
+    onOpenDocumentPreview: openFullscreenPreview,
+    onSyncFromApi: syncFromApi,
+  };
 
   const routingPanelProps = correspondence && activeUser ? {
     correspondence,
@@ -498,28 +423,6 @@ const CorrespondenceDetailContent = () => {
     onAddNote: handleAddNote,
   } : null;
 
-  const openFullscreenPreview = useCallback(() => openModal('document-preview'), [openModal]);
-
-  const documentPanelProps = {
-    linkedDocuments,
-    selectedLinkedDocVersion,
-    attachmentSearchQuery,
-    isPreviewFullscreen,
-    isCompleted,
-    division,
-    department,
-    directorates,
-    divisions,
-    departments,
-    onSetSelectedLinkedDocVersion: setSelectedLinkedDocVersion,
-    onSetAttachmentSearchQuery: setAttachmentSearchQuery,
-    onSetIsPreviewFullscreen: setIsPreviewFullscreen,
-    onSetSelectedAttachmentIndex: setSelectedAttachmentIndex,
-    onOpenLinkDocument: () => openModal('link-document'),
-    onOpenDocumentPreview: openFullscreenPreview,
-    onSyncFromApi: syncFromApi,
-  };
-
   const goToRoutingTab = useCallback(() => setMobileActiveTab('routing'), [setMobileActiveTab]);
 
   return (
@@ -534,7 +437,7 @@ const CorrespondenceDetailContent = () => {
         </div>
       ) : !activeUser ? null : (
         <>
-      <div className="flex flex-col min-w-0 flex-1">
+      <div className="flex flex-col min-w-0 flex-1 min-h-0 overflow-hidden">
         {/* Header - Full Width */}
         <div className="flex-shrink-0">
           <CorrespondenceHeader
@@ -583,15 +486,14 @@ const CorrespondenceDetailContent = () => {
           acknowledgedCount={minutes.filter((m) => !m.isRecalled && m.acknowledgedAt).length}
         />
 
-        <CorrespondenceWorkspace
-          correspondence={correspondence}
-          minutesCount={minutes.length}
-          mobileActiveTab={mobileActiveTab}
-          onSetMobileActiveTab={setMobileActiveTab}
-          documentPanelProps={documentPanelProps}
-          routingPanelProps={routingPanelProps}
-          hideMobileTabBar
-        />
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+          <CorrespondenceWorkspace
+            correspondence={correspondence}
+            mobileActiveTab={mobileActiveTab}
+            documentPanelProps={documentPanelProps}
+            routingPanelProps={routingPanelProps}
+          />
+        </div>
       </div>
 
       <CorrespondenceDetailModals
@@ -603,9 +505,9 @@ const CorrespondenceDetailContent = () => {
         isOpen={isOpen}
         openModal={openModal}
         closeModal={closeModal}
-        onMinuteClose={handleMinuteClose}
-        onTreatmentClose={handleTreatmentClose}
-        onCompletionClose={handleCompletionClose}
+        onMinuteClose={handleModalRefreshClose}
+        onTreatmentClose={handleModalRefreshClose}
+        onCompletionClose={handleModalRefreshClose}
         onDelegate={handleDelegate}
         onLinkDocumentsSave={handleLinkDocumentsSave}
         onSetSelectedMinute={setSelectedMinute}

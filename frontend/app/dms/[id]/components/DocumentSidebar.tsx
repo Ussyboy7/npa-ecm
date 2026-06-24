@@ -1,7 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Share2, FolderTree, FilePlus, MessageSquare } from "lucide-react";
 import { CollaborationPanel } from "@/components/dms/CollaborationPanel";
 import { AccessActivityCard } from "@/components/dms/AccessActivityCard";
 import { RelatedCorrespondenceCard } from "@/components/dms/RelatedCorrespondenceCard";
@@ -14,12 +12,10 @@ import type {
   DocumentAccessLog,
 } from "@/lib/dms-storage";
 import type { Correspondence, Minute, User } from "@/lib/npa-structure";
-import type { CaptureJob } from "@/lib/capture-storage";
 import { DocumentMetadataCard } from "./DocumentMetadataCard";
 import { DocumentVersionsPanel } from "./DocumentVersionsPanel";
 import type { DocumentVersion } from "@/lib/dms-storage";
-
-type OCRState = Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>;
+import type { OCRState } from "@/app/dms/[id]/hooks/use-document-ocr";
 
 export interface DocumentSidebarProps {
   document: DocumentRecord;
@@ -30,14 +26,10 @@ export interface DocumentSidebarProps {
   accessLogs: DocumentAccessLog[];
   relatedCorrespondence: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>;
   userLookup: Map<string, User>;
-  divisionLookup: Map<string, string>;
-  departmentLookup: Map<string, string>;
   uploadUser: User | null;
   ocrState: OCRState;
   workspaceManageOpen: boolean;
   onWorkspaceManageOpenChange: (open: boolean) => void;
-  onShare: () => void;
-  onLinkCase: () => void;
   onQuickVersionUpload: () => void;
   onCreateVersion?: () => void;
   onAddWorkspace: (workspaceId: string) => Promise<void>;
@@ -62,14 +54,10 @@ export function DocumentSidebar({
   accessLogs,
   relatedCorrespondence,
   userLookup,
-  divisionLookup,
-  departmentLookup,
   uploadUser,
   ocrState,
   workspaceManageOpen,
   onWorkspaceManageOpenChange,
-  onShare,
-  onLinkCase,
   onQuickVersionUpload,
   onCreateVersion,
   onAddWorkspace,
@@ -85,26 +73,7 @@ export function DocumentSidebar({
   getUserInitials,
 }: DocumentSidebarProps) {
   return (
-    <div className="space-y-4 overflow-y-auto min-h-0 flex-1 p-4">
-      <div className="hidden md:flex flex-wrap gap-2">
-          <Button variant="default" size="sm" className="text-xs" onClick={onShare}>
-            <Share2 className="h-3.5 w-3.5 mr-1" />
-            Share
-          </Button>
-          <Button variant="outline" size="sm" className="text-xs" onClick={onLinkCase}>
-            <FolderTree className="h-3.5 w-3.5 mr-1" />
-            Link case
-          </Button>
-          <Button variant="outline" size="sm" className="text-xs" onClick={onQuickVersionUpload} disabled={!uploadUser}>
-            <FilePlus className="h-3.5 w-3.5 mr-1" />
-            Add version
-          </Button>
-          <Button variant="outline" size="sm" className="text-xs" onClick={onOpenCommentsDialog}>
-            <MessageSquare className="h-3.5 w-3.5 mr-1" />
-            Comments
-          </Button>
-      </div>
-
+    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4 bg-muted/10">
       <DocumentMetadataCard document={document} />
 
       {relatedCorrespondence.length > 0 && (

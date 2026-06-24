@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FileText, Route } from 'lucide-react';
 import type { Correspondence } from '@/lib/npa-structure';
-import type { DocumentRecord } from '@/lib/dms-storage';
 import { DocumentPreviewPanel } from './DocumentPreviewPanel';
 import { RoutingPanel } from './RoutingPanel';
 import type { ComponentProps } from 'react';
@@ -14,19 +13,20 @@ type RoutingPanelProps = ComponentProps<typeof RoutingPanel>;
 
 interface CorrespondenceWorkspaceProps {
   correspondence: Correspondence;
-  minutesCount: number;
   mobileActiveTab: 'document' | 'routing';
-  onSetMobileActiveTab: (tab: 'document' | 'routing') => void;
   documentPanelProps: Omit<DocumentPreviewPanelProps, 'correspondence'>;
   routingPanelProps: RoutingPanelProps | null;
-  hideMobileTabBar?: boolean;
 }
 
 export function CorrespondenceMobileTabBar({
   minutesCount,
   mobileActiveTab,
   onSetMobileActiveTab,
-}: Pick<CorrespondenceWorkspaceProps, 'minutesCount' | 'mobileActiveTab' | 'onSetMobileActiveTab'>) {
+}: {
+  minutesCount: number;
+  mobileActiveTab: 'document' | 'routing';
+  onSetMobileActiveTab: (tab: 'document' | 'routing') => void;
+}) {
   return (
     <div className="md:hidden border-b border-border bg-background px-2 py-1">
       <div className="flex gap-1">
@@ -60,27 +60,16 @@ export function CorrespondenceMobileTabBar({
 
 export function CorrespondenceWorkspace({
   correspondence,
-  minutesCount,
   mobileActiveTab,
-  onSetMobileActiveTab,
   documentPanelProps,
   routingPanelProps,
-  hideMobileTabBar = false,
 }: CorrespondenceWorkspaceProps) {
   const documentPanel = (
     <DocumentPreviewPanel correspondence={correspondence} {...documentPanelProps} />
   );
 
   return (
-    <>
-      {!hideMobileTabBar && (
-        <CorrespondenceMobileTabBar
-          minutesCount={minutesCount}
-          mobileActiveTab={mobileActiveTab}
-          onSetMobileActiveTab={onSetMobileActiveTab}
-        />
-      )}
-
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <div className="hidden md:flex flex-1 min-h-0 overflow-hidden">
         <div className="w-[58%] min-w-0 flex flex-col border-r border-border bg-background">
           {documentPanel}
@@ -100,6 +89,6 @@ export function CorrespondenceWorkspace({
           <RoutingPanel {...routingPanelProps} />
         </div>
       )}
-    </>
+    </div>
   );
 }

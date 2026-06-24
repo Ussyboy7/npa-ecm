@@ -9,13 +9,11 @@ import type { DocumentVersion } from "@/lib/dms-storage";
 
 interface DmsVersionPreviewContentProps {
   version: DocumentVersion;
-  compact?: boolean;
   expanded?: boolean;
 }
 
 export function DmsVersionPreviewContent({
   version,
-  compact = false,
   expanded = false,
 }: DmsVersionPreviewContentProps) {
   const { pdfBlobUrl, wordHtml, isLoading, error } = useDocumentPreview({
@@ -24,7 +22,7 @@ export function DmsVersionPreviewContent({
     fileType: version.fileType,
   });
 
-  const minHeight = compact ? "min-h-[320px]" : "min-h-[480px]";
+  const minHeight = expanded ? "min-h-[480px]" : "min-h-[200px]";
   const fileName = version.fileName || "Document";
   const isPDF = fileName.toLowerCase().endsWith(".pdf") || version.fileType === "application/pdf";
   const isImage = Boolean(fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i) || version.fileType?.startsWith("image/"));
@@ -49,13 +47,13 @@ export function DmsVersionPreviewContent({
   if (hasHtml) {
     return (
       <div
-        className={`document-print-area overflow-y-auto ${minHeight} bg-white`}
+        className={`document-print-area bg-white ${expanded ? "overflow-y-auto" : ""} ${expanded ? minHeight : "min-h-full"}`}
         style={{
           fontFamily: "Verdana, Geneva, sans-serif",
           fontSize: "12px",
           lineHeight: "1.5",
           color: "#000",
-          padding: compact ? "24px" : "40px",
+          padding: expanded ? "40px" : "24px",
           maxWidth: "800px",
           margin: "0 auto",
           textAlign: "left",
@@ -98,17 +96,17 @@ export function DmsVersionPreviewContent({
     }
     if (pdfBlobUrl) {
       return (
-        <iframe
-          src={pdfBlobUrl}
-          className={
-            expanded
-              ? "w-full border-0 h-[calc(100vh-8rem)] min-h-[480px]"
-              : compact
-                ? "w-full border-0 h-[50vh] min-h-[320px]"
-                : "w-full border-0 h-[calc(100vh-320px)] min-h-[400px]"
-          }
-          title={`Preview of ${fileName}`}
-        />
+        <div className={expanded ? minHeight : "h-full min-h-0"}>
+          <iframe
+            src={pdfBlobUrl}
+            className={
+              expanded
+                ? "w-full border-0 h-[calc(100vh-8rem)] min-h-[480px]"
+                : "w-full h-full min-h-[240px] border-0"
+            }
+            title={`Preview of ${fileName}`}
+          />
+        </div>
       );
     }
     return (
@@ -152,7 +150,7 @@ export function DmsVersionPreviewContent({
     }
     if (wordHtml) {
       return (
-        <div className={`prose prose-sm dark:prose-invert max-w-none p-6 overflow-y-auto ${minHeight}`}>
+        <div className={`prose prose-sm dark:prose-invert max-w-none p-6 ${expanded ? `overflow-y-auto ${minHeight}` : ""}`}>
           <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(wordHtml) }} />
         </div>
       );

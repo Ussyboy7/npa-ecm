@@ -44,7 +44,7 @@ interface CaseHeaderProps {
   onStatusUpdate: (status: CaseDetail["status"]) => void;
   onGenerateCompletionPackage: () => void;
   onExport: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onImport: () => void;
   owningOffice?: { id: string; name: string } | null;
   assignedTo?: { id: string; name: string } | null;
@@ -271,11 +271,13 @@ export const CaseHeader = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onEdit}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Case
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
+              {onEdit && (
+                <DropdownMenuItem onClick={onEdit}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Case
+                </DropdownMenuItem>
+              )}
+              {onEdit && <DropdownMenuSeparator />}
               <DropdownMenuItem onClick={() => window.print()}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
@@ -337,10 +339,12 @@ export const CaseHeader = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onEdit}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit Case
-              </DropdownMenuItem>
+              {onEdit && (
+                <DropdownMenuItem onClick={onEdit}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Case
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => window.print()}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print

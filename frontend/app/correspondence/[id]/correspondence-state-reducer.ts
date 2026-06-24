@@ -1,6 +1,5 @@
 /**
  * Reducer for managing correspondence detail page state
- * Consolidates related state variables into a single reducer
  */
 
 import type { Correspondence, Minute } from '@/lib/npa-structure';
@@ -18,13 +17,11 @@ export interface CorrespondenceDetailState {
     delegatedAt: string;
   } | null;
   linkedDocuments: DocumentRecord[];
-  parallelRoutingGroups: unknown[];
   selectedMinute: Minute | null;
   selectedAttachmentIndex: number | null;
   attachmentSearchQuery: string;
   selectedLinkedDocVersion: Record<string, number>;
   isPreviewFullscreen: boolean;
-  dragActive: boolean;
   mobileActiveTab: 'document' | 'routing';
 }
 
@@ -34,13 +31,11 @@ export type CorrespondenceDetailAction =
   | { type: 'SET_DETAIL_LOADING'; payload: boolean }
   | { type: 'SET_BACKEND_DELEGATION'; payload: CorrespondenceDetailState['backendDelegation'] }
   | { type: 'SET_LINKED_DOCUMENTS'; payload: DocumentRecord[] }
-  | { type: 'SET_PARALLEL_ROUTING_GROUPS'; payload: unknown[] }
   | { type: 'SET_SELECTED_MINUTE'; payload: Minute | null }
   | { type: 'SET_SELECTED_ATTACHMENT_INDEX'; payload: number | null }
   | { type: 'SET_ATTACHMENT_SEARCH_QUERY'; payload: string }
   | { type: 'SET_SELECTED_LINKED_DOC_VERSION'; payload: Record<string, number> }
   | { type: 'SET_PREVIEW_FULLSCREEN'; payload: boolean }
-  | { type: 'SET_DRAG_ACTIVE'; payload: boolean }
   | { type: 'SET_MOBILE_ACTIVE_TAB'; payload: 'document' | 'routing' }
   | { type: 'RESET' };
 
@@ -50,13 +45,11 @@ export const initialState: CorrespondenceDetailState = {
   detailLoading: false,
   backendDelegation: null,
   linkedDocuments: [],
-  parallelRoutingGroups: [],
   selectedMinute: null,
   selectedAttachmentIndex: null,
   attachmentSearchQuery: '',
   selectedLinkedDocVersion: {},
   isPreviewFullscreen: false,
-  dragActive: false,
   mobileActiveTab: 'document',
 };
 
@@ -75,8 +68,6 @@ export const correspondenceDetailReducer = (
       return { ...state, backendDelegation: action.payload };
     case 'SET_LINKED_DOCUMENTS':
       return { ...state, linkedDocuments: action.payload };
-    case 'SET_PARALLEL_ROUTING_GROUPS':
-      return { ...state, parallelRoutingGroups: action.payload };
     case 'SET_SELECTED_MINUTE':
       return { ...state, selectedMinute: action.payload };
     case 'SET_SELECTED_ATTACHMENT_INDEX':
@@ -87,8 +78,6 @@ export const correspondenceDetailReducer = (
       return { ...state, selectedLinkedDocVersion: action.payload };
     case 'SET_PREVIEW_FULLSCREEN':
       return { ...state, isPreviewFullscreen: action.payload };
-    case 'SET_DRAG_ACTIVE':
-      return { ...state, dragActive: action.payload };
     case 'SET_MOBILE_ACTIVE_TAB':
       return { ...state, mobileActiveTab: action.payload };
     case 'RESET':
@@ -97,4 +86,3 @@ export const correspondenceDetailReducer = (
       return state;
   }
 };
-

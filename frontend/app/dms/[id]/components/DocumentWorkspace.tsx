@@ -12,18 +12,19 @@ type SidebarProps = ComponentProps<typeof DocumentSidebar>;
 
 interface DmsDocumentWorkspaceProps {
   mobileActiveTab: "document" | "details";
-  onSetMobileActiveTab: (tab: "document" | "details") => void;
-  commentsCount: number;
   previewProps: PreviewProps;
   sidebarProps: SidebarProps;
-  hideMobileTabBar?: boolean;
 }
 
 export function DocumentMobileTabBar({
   mobileActiveTab,
   onSetMobileActiveTab,
   commentsCount,
-}: Pick<DmsDocumentWorkspaceProps, "mobileActiveTab" | "onSetMobileActiveTab" | "commentsCount">) {
+}: {
+  mobileActiveTab: "document" | "details";
+  onSetMobileActiveTab: (tab: "document" | "details") => void;
+  commentsCount: number;
+}) {
   return (
     <div className="md:hidden border-b border-border bg-background px-2 py-1">
       <div className="flex gap-1">
@@ -57,27 +58,16 @@ export function DocumentMobileTabBar({
 
 export function DmsDocumentWorkspace({
   mobileActiveTab,
-  onSetMobileActiveTab,
-  commentsCount,
   previewProps,
   sidebarProps,
-  hideMobileTabBar = false,
 }: DmsDocumentWorkspaceProps) {
   return (
-    <>
-      {!hideMobileTabBar && (
-        <DocumentMobileTabBar
-          mobileActiveTab={mobileActiveTab}
-          onSetMobileActiveTab={onSetMobileActiveTab}
-          commentsCount={commentsCount}
-        />
-      )}
-
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <div className="hidden md:flex flex-1 min-h-0 overflow-hidden">
-        <div className="w-[58%] min-w-0 flex flex-col border-r border-border">
+        <div className="w-[58%] min-w-0 flex flex-col min-h-0 border-r border-border">
           <DocumentPreviewPanel {...previewProps} />
         </div>
-        <div className="w-[42%] min-w-0 flex flex-col min-h-0 bg-muted/10">
+        <div className="w-[42%] min-w-0 flex flex-col min-h-0 overflow-hidden">
           <DocumentSidebar {...sidebarProps} />
         </div>
       </div>
@@ -88,10 +78,10 @@ export function DmsDocumentWorkspace({
         </div>
       )}
       {mobileActiveTab === "details" && (
-        <div className="md:hidden flex-1 min-h-0 flex flex-col overflow-hidden pb-16 bg-muted/10">
+        <div className="md:hidden flex-1 min-h-0 flex flex-col overflow-hidden pb-16">
           <DocumentSidebar {...sidebarProps} />
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from 'next/image';
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -25,6 +25,7 @@ import {
 import type { Correspondence, DistributionRecipient } from '@/lib/npa-structure';
 import { logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
 import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
+import { getCorrespondencePreviewContext, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
 import { useDocumentPreview } from '@/hooks/use-document-preview';
 import { toast } from 'sonner';
 import { logError, logWarn } from '@/lib/client-logger';
@@ -36,15 +37,10 @@ interface DocumentPreviewPanelProps {
   correspondence: Correspondence;
   linkedDocuments: DocumentRecord[];
   selectedLinkedDocVersion: Record<string, number>;
+  selectedAttachmentIndex: number | null;
   attachmentSearchQuery: string;
   isPreviewFullscreen: boolean;
   isCompleted: boolean;
-  division: { name: string } | null;
-  department: { name: string } | null;
-  directorates: Array<{ id: string; name: string }>;
-  divisions: Array<{ id: string; name: string }>;
-  departments: Array<{ id: string; name: string }>;
-  onSetSelectedLinkedDocVersion: (version: Record<string, number>) => void;
   onSetAttachmentSearchQuery: (query: string) => void;
   onSetIsPreviewFullscreen: (fullscreen: boolean) => void;
   onSetSelectedAttachmentIndex: (index: number | null) => void;
@@ -94,12 +90,10 @@ export const DocumentPreviewPanel = ({
   correspondence,
   linkedDocuments,
   selectedLinkedDocVersion,
+  selectedAttachmentIndex,
   attachmentSearchQuery,
   isPreviewFullscreen,
   isCompleted,
-  directorates,
-  divisions,
-  departments,
   onSetAttachmentSearchQuery,
   onSetIsPreviewFullscreen,
   onSetSelectedAttachmentIndex,
@@ -109,35 +103,27 @@ export const DocumentPreviewPanel = ({
 }: DocumentPreviewPanelProps) => {
   const router = useRouter();
   const { currentUser } = useCurrentUser();
-  const [_dragActive, setDragActive] = useState(false);
-  
+
+  const previewContext = getCorrespondencePreviewContext(
+    correspondence,
+    linkedDocuments,
+    selectedAttachmentIndex,
+    isCompleted,
+  );
   const firstAttachment = correspondence?.attachments?.[0];
   const { pdfBlobUrl, wordHtml, isLoading: documentPreviewLoading, error: documentPreviewError } = useDocumentPreview(firstAttachment);
-  
-  // Get the auto-created document ID (first linked document, or use correspondence's auto_created_document_id if available)
-  const autoCreatedDocumentId = (correspondence as Correspondence & { auto_created_document_id?: string })?.auto_created_document_id || linkedDocuments[0]?.id;
-  const resolveDmsAccessTarget = useCallback((): { documentId: string; sensitivity: string } | null => {
-    const completionDocId = correspondence.completionPackage?.documentId;
-    if (completionDocId) {
-      return { documentId: completionDocId, sensitivity: 'internal' };
-    }
 
-    const linkedDoc = linkedDocuments[0];
-    if (linkedDoc?.id) {
-      return { documentId: linkedDoc.id, sensitivity: linkedDoc.sensitivity ?? 'internal' };
-    }
-
-    const linkedDocId = correspondence.linkedDocumentIds?.[0];
-    if (linkedDocId) {
-      return { documentId: linkedDocId, sensitivity: 'internal' };
-    }
-
-    return null;
-  }, [correspondence.completionPackage?.documentId, correspondence.linkedDocumentIds, linkedDocuments]);
+  const autoCreatedDocumentId =
+    (correspondence as Correspondence & { auto_created_document_id?: string })?.auto_created_document_id ||
+    linkedDocuments[0]?.id;
 
   const logPreviewPanelDmsAccess = useCallback(async (action: 'view' | 'download' | 'attempted-download') => {
     if (!currentUser?.id) return;
-    const target = resolveDmsAccessTarget();
+    const target = resolveCorrespondenceDmsAccessTarget(
+      correspondence,
+      linkedDocuments,
+      previewContext.source,
+    );
     if (!target) return;
 
     try {
@@ -150,7 +136,7 @@ export const DocumentPreviewPanel = ({
     } catch (error: unknown) {
       logWarn('[DocumentPreviewPanel] Failed to write DMS access log', error);
     }
-  }, [currentUser?.id, resolveDmsAccessTarget]);
+  }, [correspondence, currentUser?.id, linkedDocuments, previewContext.source]);
 
   const handleAttachmentUpload = useCallback(async (files: File[]) => {
     if (!correspondence || files.length === 0) return;
@@ -198,17 +184,11 @@ export const DocumentPreviewPanel = ({
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files);

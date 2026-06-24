@@ -64,7 +64,7 @@ const CaseDetailPage = () => {
   const router = useRouter();
   const caseId = params.id as string;
   const { currentUser, hydrated } = useCurrentUser();
-  const { divisions, departments, offices, users } = useOrganization();
+  const { offices, users } = useOrganization();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
@@ -89,9 +89,6 @@ const CaseDetailPage = () => {
   const [showLinkCorrespondenceDialog, setShowLinkCorrespondenceDialog] = useState(false);
   const [showLinkDocumentDialog, setShowLinkDocumentDialog] = useState(false);
   const [showLinkFormDialog, setShowLinkFormDialog] = useState(false);
-  const [_showEditDialog, setShowEditDialog] = useState(false);
-  const [_editingCase, setEditingCase] = useState(false);
-  const [editFormData, setEditFormData] = useState<Partial<CaseDetail>>({});
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -302,7 +299,6 @@ const CaseDetailPage = () => {
           onStatusUpdate={handleStatusUpdate}
           onGenerateCompletionPackage={handleGenerateCompletionPackage}
           onExport={handleExport}
-          onEdit={() => setShowEditDialog(true)}
           onImport={() => setShowImportDialog(true)}
           owningOffice={owningOffice || null}
           assignedTo={assignedTo || null}

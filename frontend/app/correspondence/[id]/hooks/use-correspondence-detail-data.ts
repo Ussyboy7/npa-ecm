@@ -4,7 +4,7 @@ import { handleAuthenticationError } from '@/lib/auth-errors';
 import { apiFetch } from '@/lib/api-client';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
-import type { Correspondence, Minute, ParallelRoutingGroup } from '@/lib/npa-structure';
+import type { Correspondence, Minute } from '@/lib/npa-structure';
 import type { CorrespondenceDetailState } from '../correspondence-state-reducer';
 import type { useApiRetry } from '@/hooks/use-api-retry';
 
@@ -26,7 +26,6 @@ interface UseCorrespondenceDetailDataOptions {
   setDetailLoading: (loading: boolean) => void;
   setBackendDelegation: (del: BackendDelegation) => void;
   setLinkedDocuments: (docs: DocumentRecord[]) => void;
-  setParallelRoutingGroups: (groups: ParallelRoutingGroup[]) => void;
 }
 
 export function useCorrespondenceDetailData({
@@ -44,9 +43,7 @@ export function useCorrespondenceDetailData({
   setDetailLoading,
   setBackendDelegation,
   setLinkedDocuments,
-  setParallelRoutingGroups,
 }: UseCorrespondenceDetailDataOptions) {
-  const fetchedParallelGroupsRef = useRef<string | null>(null);
   const markedAsOpenedRef = useRef<Set<string>>(new Set());
 
   const linkedDocIdsKey = (correspondence?.linkedDocumentIds ?? []).join(',');
@@ -210,49 +207,6 @@ export function useCorrespondenceDetailData({
       ),
     );
   }, [correspondence?.id, currentOfficeId, currentApproverId, activeUserId, detailLoading, minutes]);
-
-  useEffect(() => {
-    if (!id || detailLoading) return;
-    if (fetchedParallelGroupsRef.current === id) return;
-
-    fetchedParallelGroupsRef.current = id;
-    let ignore = false;
-
-    const fetchParallelGroups = async () => {
-      try {
-        const response = await fetchWithRetry(() =>
-          apiFetch(`/correspondence/parallel-routing-groups/?correspondence=${id}`),
-        );
-        if (ignore) return;
-
-        let groups: ParallelRoutingGroup[] = [];
-        if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
-          groups = response.results as ParallelRoutingGroup[];
-        } else if (Array.isArray(response)) {
-          groups = response as ParallelRoutingGroup[];
-        }
-
-        const seenIds = new Set<string>();
-        const uniqueGroups = groups.filter((group) => {
-          const groupId = String(group.id);
-          if (seenIds.has(groupId)) return false;
-          seenIds.add(groupId);
-          return true;
-        });
-
-        if (!ignore) {
-          setParallelRoutingGroups(uniqueGroups);
-        }
-      } catch (error: unknown) {
-        if (handleAuthenticationError(error)) return;
-        logWarn('[ParallelRouting] Failed to fetch parallel routing groups', error);
-      }
-    };
-    void fetchParallelGroups();
-    return () => {
-      ignore = true;
-    };
-  }, [id, detailLoading, fetchWithRetry, setParallelRoutingGroups]);
 
   const refreshMinutes = useCallback(async () => {
     if (!id) return;

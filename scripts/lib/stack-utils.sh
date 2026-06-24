@@ -155,3 +155,23 @@ stack_load_env_vars() {
 stack_timestamp() {
     date +"%Y%m%d_%H%M%S"
 }
+
+# Fixed container_name entries survive compose project renames; remove leftovers before up.
+stack_purge_fixed_containers() {
+    [[ -f "${STACK_COMPOSE_FILE:-}" ]] || return 0
+
+    local names=()
+    while IFS= read -r name; do
+        [[ -n "$name" ]] && names+=("$name")
+    done < <(grep -E '^\s+container_name:\s+' "$STACK_COMPOSE_FILE" | awk '{print $2}')
+
+    [[ ${#names[@]} -gt 0 ]] || return 0
+
+    local name
+    for name in "${names[@]}"; do
+        if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
+            echo "Removing stale container: ${name}" >&2
+            docker rm -f "$name" >/dev/null 2>&1 || true
+        fi
+    done
+}

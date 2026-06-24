@@ -1,20 +1,17 @@
 "use client";
 
 import { logError } from '@/lib/client-logger';
-import { formatDistanceToNow } from 'date-fns';
-import { useCallback, useEffect, useMemo, useState, useReducer, useRef, startTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   fetchDocumentById,
   fetchWorkspaces,
   updateDocumentWorkspaces,
   getDocumentAccessLogs,
-  runOCROnVersion,
   type DocumentRecord,
   type DocumentVersion,
   type DocumentWorkspace,
@@ -22,8 +19,7 @@ import {
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
 import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
-import { formatDateTime } from '@/lib/correspondence-helpers';
-import { ArrowLeft, User as UserIcon, Clock, Eye, Activity, Shield, Loader2, AlertCircle, Download as DownloadIcon } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -32,65 +28,17 @@ import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
 import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { DmsDocumentWorkspace, DocumentMobileTabBar } from '@/app/dms/[id]/components/DocumentWorkspace';
 import { DocumentMobileStickyBar } from '@/app/dms/[id]/components/DocumentMobileStickyBar';
-import { apiFetch } from '@/lib/api-client';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { unlinkDocumentFromCase } from '@/lib/api/cases';
-import { processOCR, getCaptureJob, cancelCaptureJob, type CaptureJob } from '@/lib/capture-storage';
 import { DocumentHeader } from '@/components/dms/DocumentHeader';
+import { AccessActivityDetailsDialog } from '@/components/dms/AccessActivityDetailsDialog';
 import { useDocumentDetail } from '@/app/dms/[id]/hooks/use-document-detail';
+import { useDocumentOcr } from '@/app/dms/[id]/hooks/use-document-ocr';
 import { Correspondence } from '@/lib/npa-structure';
-
-type OCRState = Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>;
-
-type OCRAction =
-  | { type: 'SET_PROCESSING'; versionId: string; isProcessing: boolean }
-  | { type: 'SET_JOB'; versionId: string; job: CaptureJob | null }
-  | { type: 'SET_ERROR'; versionId: string; error: string | null }
-  | { type: 'RESET'; versionId: string }
-  | { type: 'RESET_ALL' };
-
-const ocrReducer = (state: OCRState, action: OCRAction): OCRState => {
-  switch (action.type) {
-    case 'SET_PROCESSING':
-      return {
-        ...state,
-        [action.versionId]: {
-          ...state[action.versionId],
-          isProcessing: action.isProcessing,
-        },
-      };
-    case 'SET_JOB':
-      return {
-        ...state,
-        [action.versionId]: {
-          ...state[action.versionId] ?? { isProcessing: false, currentJob: null, error: null },
-          currentJob: action.job,
-        },
-      };
-    case 'SET_ERROR':
-      return {
-        ...state,
-        [action.versionId]: {
-          ...state[action.versionId] ?? { isProcessing: false, currentJob: null, error: null },
-          error: action.error,
-          isProcessing: false,
-        },
-      };
-    case 'RESET': {
-      const { [action.versionId]: _, ...rest } = state;
-      return rest;
-    }
-    case 'RESET_ALL':
-      return {};
-    default:
-      return state;
-  }
-};
 
 const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
@@ -114,7 +62,6 @@ const DocumentDetailContent = () => {
   } = useDocumentDetail(documentId);
   // Dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [shareDialogInitialView, setShareDialogInitialView] = useState<'share' | 'permissions'>('share');
   const [versionUploadOpen, setVersionUploadOpen] = useState(false);
   const [linkCaseDialogOpen, setLinkCaseDialogOpen] = useState(false);
   const [minuteDocumentModalOpen, setMinuteDocumentModalOpen] = useState(false);
@@ -126,9 +73,6 @@ const DocumentDetailContent = () => {
   const [selectedAccessLog, setSelectedAccessLog] = useState<DocumentAccessLog | null>(null);
   const [mobileActiveTab, setMobileActiveTab] = useState<'document' | 'details'>('document');
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
-
-  const [ocrState, dispatchOCR] = useReducer(ocrReducer, {});
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { currentUser, hydrated } = useCurrentUser();
   const { users: organizationUsers, divisions, departments } = useOrganization();
@@ -160,191 +104,12 @@ const DocumentDetailContent = () => {
     setVersionUploadOpen(true);
   }, [document, uploadUser]);
 
-  // OCR handlers
-  const handleVersionOCR = async (versionId: string) => {
-    if (!document) return;
+  const openShareDialog = useCallback(() => setShareDialogOpen(true), []);
 
-    // Find the version
-    const version = document.versions.find(v => v.id === versionId);
-    if (!version) return;
-
-    // Check if this is a Word document
-    const isWordDoc = version.fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                      version.fileType === 'application/msword' ||
-                      version.fileName?.toLowerCase().endsWith('.docx') ||
-                      version.fileName?.toLowerCase().endsWith('.doc');
-
-    // For HTML content or Word documents, extract text directly using backend API
-    if ((version.contentHtml && version.contentHtml.trim() !== '') || isWordDoc) {
-      try {
-        dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: true });
-        dispatchOCR({ type: 'SET_JOB', versionId, job: null });
-        dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
-
-        // Call backend API to extract text (works for both HTML and Word documents)
-        const result = await runOCROnVersion(versionId);
-        
-        dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
-        dispatchOCR({ type: 'SET_JOB', versionId, job: null });
-        dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
-        
-        const method = isWordDoc ? 'Word document' : 'HTML content';
-        toast.success(`Text extracted from ${method} (${result.characters} characters)`);
-        await refreshDocument();
-        return;
-      } catch (err: unknown) {
-        const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : (isWordDoc ? 'Failed to extract text from Word document' : 'Failed to extract text from HTML');
-        dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
-        dispatchOCR({ type: 'SET_JOB', versionId, job: null });
-        dispatchOCR({ type: 'SET_ERROR', versionId, error: errorMsg });
-        toast.error(errorMsg);
-        logError(`Failed to extract text from ${isWordDoc ? 'Word document' : 'HTML'}`, err);
-        return;
-      }
-    }
-
-    // For files (PDFs/images), use OCR
-    if (!version.fileUrl || version.fileUrl.trim() === '') {
-      toast.error('No file available for OCR processing');
-      return;
-    }
-
-    // Initialize OCR state for this version
-    dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: true });
-    dispatchOCR({ type: 'SET_JOB', versionId, job: null });
-    dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
-
-    try {
-      const job = await processOCR(document.id, {
-        language: 'eng',
-        extract_metadata: true,
-      });
-
-      dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: true });
-      dispatchOCR({ type: 'SET_JOB', versionId, job });
-      dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
-
-      // If job is already completed, handle immediately
-      if (job.status === 'completed') {
-        dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
-        dispatchOCR({ type: 'SET_JOB', versionId, job });
-        dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
-        toast.success('OCR processing completed');
-        await refreshDocument();
-      } else {
-        toast.info('OCR processing started. This may take a few moments...');
-        // Start polling for status updates
-        pollOCRJobStatus(versionId, job.id);
-      }
-    } catch (err: unknown) {
-      const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Failed to start OCR processing. Ensure Celery worker is running.';
-      dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
-      dispatchOCR({ type: 'SET_JOB', versionId, job: null });
-      dispatchOCR({ type: 'SET_ERROR', versionId, error: errorMsg });
-      toast.error(errorMsg);
-      logError('Failed to process OCR', err);
-    }
-  };
-
-  const pollOCRJobStatus = async (versionId: string, jobId: string) => {
-    // Clear any existing poll for this version
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-    }
-
-    let pollCount = 0;
-    const maxPolls = 150; // 5 minutes max (150 * 2 seconds)
-    
-    const pollInterval = setInterval(async () => {
-      pollCount++;
-      
-      try {
-        const updatedJob = await getCaptureJob(jobId);
-        
-        if (pollIntervalRef.current !== pollInterval) return; // stale interval
-        
-        dispatchOCR({ 
-          type: 'SET_PROCESSING', 
-          versionId, 
-          isProcessing: updatedJob.status !== 'completed' && updatedJob.status !== 'failed' && updatedJob.status !== 'cancelled' 
-        });
-        dispatchOCR({ type: 'SET_JOB', versionId, job: updatedJob });
-        dispatchOCR({ 
-          type: 'SET_ERROR', 
-          versionId, 
-            error: updatedJob.status === 'failed' ? (updatedJob.error_message || 'OCR processing failed') : null
-        });
-
-        if (updatedJob.status === 'completed') {
-          clearInterval(pollInterval);
-          pollIntervalRef.current = null;
-          toast.success('OCR processing completed');
-          await refreshDocument();
-        } else if (updatedJob.status === 'failed' || updatedJob.status === 'cancelled') {
-          clearInterval(pollInterval);
-          pollIntervalRef.current = null;
-          if (updatedJob.status === 'failed') {
-            toast.error(updatedJob.error_message || 'OCR processing failed');
-          }
-        } else if (pollCount >= maxPolls) {
-          // Timeout after max polls
-          clearInterval(pollInterval);
-          pollIntervalRef.current = null;
-          dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
-          dispatchOCR({ type: 'SET_JOB', versionId, job: updatedJob });
-          dispatchOCR({ type: 'SET_ERROR', versionId, error: 'OCR processing timed out. The job may still be running in the background.' });
-          toast.warning('OCR processing is taking longer than expected. Please check back later.');
-        }
-      } catch (err: unknown) {
-        logError('Failed to poll OCR job status', err);
-        // Don't clear interval on first error, but clear after multiple failures
-        if (pollCount >= 10) {
-        clearInterval(pollInterval);
-        pollIntervalRef.current = null;
-          dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
-          dispatchOCR({ type: 'SET_JOB', versionId, job: null });
-          const errorMsg = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Failed to check OCR status. The Celery worker may not be running.';
-          dispatchOCR({ type: 'SET_ERROR', versionId, error: errorMsg });
-          toast.error('Failed to check OCR status. Please ensure the backend worker is running.');
-        }
-      }
-    }, 2000);
-    pollIntervalRef.current = pollInterval;
-
-    // Cleanup after 5 minutes
-    setTimeout(() => {
-      if (pollIntervalRef.current === pollInterval) {
-        clearInterval(pollInterval);
-        pollIntervalRef.current = null;
-      }
-      // Check final status
-      getCaptureJob(jobId).then((finalJob) => {
-        if (finalJob.status === 'processing') {
-          dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
-          dispatchOCR({ type: 'SET_JOB', versionId, job: finalJob });
-          dispatchOCR({ type: 'SET_ERROR', versionId, error: 'OCR processing timed out. The job may still be running in the background.' });
-        }
-      }).catch((err) => {
-        console.warn("[OCR] Final status check failed:", err);
-      });
-    }, 5 * 60 * 1000);
-  };
-
-  const handleCancelOCR = async (versionId: string) => {
-    const state = ocrState[versionId];
-    if (!state?.currentJob) return;
-
-    try {
-      await cancelCaptureJob(state.currentJob.id);
-      dispatchOCR({ type: 'SET_PROCESSING', versionId, isProcessing: false });
-      dispatchOCR({ type: 'SET_JOB', versionId, job: null });
-      dispatchOCR({ type: 'SET_ERROR', versionId, error: null });
-      toast.info('OCR processing cancelled');
-    } catch (err) {
-      logError('Failed to cancel OCR job', err);
-      toast.error('Failed to cancel OCR processing');
-    }
-  };
+  const { ocrState, handleVersionOCR, handleCancelOCR } = useDocumentOcr({
+    document,
+    refreshDocument,
+  });
 
   // Workspace management
   const workspaceLookup = useMemo(() => new Map(workspaces.map((ws) => [ws.id, ws])), [workspaces]);
@@ -486,7 +251,8 @@ const DocumentDetailContent = () => {
         </div>
       ) : (
         <ClientErrorBoundary>
-          <div className="flex flex-col min-w-0 flex-1 min-h-0">
+          <div className="flex flex-col min-w-0 flex-1 min-h-0 overflow-hidden">
+          <div className="flex-shrink-0">
           <DocumentHeader
             document={document}
             author={author}
@@ -500,10 +266,7 @@ const DocumentDetailContent = () => {
             canFullscreen={Boolean(selectedVersion)}
             onFullscreen={() => handleOpenFullscreen()}
             onDownload={handleDownloadLatest}
-            onShare={() => {
-              setShareDialogInitialView('share');
-              setShareDialogOpen(true);
-            }}
+            onShare={openShareDialog}
             onDocumentUpdate={(updated) => {
               setDocument(updated);
             }}
@@ -547,12 +310,11 @@ const DocumentDetailContent = () => {
             onSetMobileActiveTab={setMobileActiveTab}
             commentsCount={comments.length}
           />
+          </div>
 
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           <DmsDocumentWorkspace
             mobileActiveTab={mobileActiveTab}
-            onSetMobileActiveTab={setMobileActiveTab}
-            commentsCount={comments.length}
-            hideMobileTabBar
             previewProps={{
               document,
               documentId: params.id,
@@ -571,17 +333,10 @@ const DocumentDetailContent = () => {
               accessLogs,
               relatedCorrespondence,
               userLookup,
-              divisionLookup,
-              departmentLookup,
               uploadUser,
               ocrState,
               workspaceManageOpen,
               onWorkspaceManageOpenChange: setWorkspaceManageOpen,
-              onShare: () => {
-                setShareDialogInitialView('share');
-                setShareDialogOpen(true);
-              },
-              onLinkCase: () => setLinkCaseDialogOpen(true),
               onQuickVersionUpload: openVersionUpload,
               onCreateVersion: openVersionUpload,
               onAddWorkspace: handleAddWorkspace,
@@ -597,15 +352,13 @@ const DocumentDetailContent = () => {
               getUserInitials,
             }}
           />
+          </div>
 
           <DocumentMobileStickyBar
             canDownload={Boolean(selectedVersion?.fileUrl?.trim())}
             canUpload={Boolean(uploadUser)}
             onDownload={handleDownloadLatest}
-            onShare={() => {
-              setShareDialogInitialView('share');
-              setShareDialogOpen(true);
-            }}
+            onShare={openShareDialog}
             onAddVersion={openVersionUpload}
             onComments={handleOpenCommentsDialog}
           />
@@ -640,7 +393,6 @@ const DocumentDetailContent = () => {
         onOpenChange={setShareDialogOpen}
         document={document}
         currentUserId={currentUser?.id}
-          initialView={shareDialogInitialView}
         />
       )}
       {minuteDocumentCorrespondence && (
@@ -706,109 +458,12 @@ const DocumentDetailContent = () => {
         />
       )}
 
-      {/* Access Activity Details Dialog */}
-      {selectedAccessLog && (
-        <Dialog open={!!selectedAccessLog} onOpenChange={(open) => !open && setSelectedAccessLog(null)}>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                Access Activity Details
-              </DialogTitle>
-              <DialogDescription>Detailed information about this access activity</DialogDescription>
-            </DialogHeader>
-            {(() => {
-              const user = userLookup.get(selectedAccessLog.userId);
-              const displayUserName = user?.name ?? selectedAccessLog.userName ?? 'Unknown User';
-              const actionLabel =
-                selectedAccessLog.action === 'download'
-                  ? 'Downloaded'
-                  : selectedAccessLog.action === 'attempted-download'
-                    ? 'Attempted Download'
-                    : 'Viewed';
-              const actionIcon = selectedAccessLog.action === 'download' ? DownloadIcon : Eye;
-              
-              // Check if this was the user's first access
-              const userLogs = accessLogs.filter((log) => log.userId === selectedAccessLog.userId);
-              const sortedUserLogs = [...userLogs].sort((a, b) => 
-                new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-              );
-              const isFirstAccess = sortedUserLogs.length > 0 && sortedUserLogs[0].id === selectedAccessLog.id;
-              
-              // Format relative time
-               const relativeTime = formatDistanceToNow(new Date(selectedAccessLog.timestamp), { addSuffix: true });
-
-              return (
-                <div className="space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      {actionIcon === DownloadIcon ? (
-                        <DownloadIcon className="h-5 w-5 text-primary" />
-                      ) : (
-                        <Eye className="h-5 w-5 text-muted-foreground" />
-                      )}
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Action</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <p className="text-sm text-muted-foreground">{actionLabel}</p>
-                          {selectedAccessLog.action === 'attempted-download' && (
-                            <Badge variant="destructive" className="text-[10px]">
-                              Failed
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <UserIcon className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">User</p>
-                        <p className="text-sm text-muted-foreground">{displayUserName}</p>
-                        {user?.gradeLevel && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {user.gradeLevel}
-                          </p>
-                        )}
-                        {isFirstAccess && (
-                          <Badge variant="secondary" className="text-[10px] mt-1">
-                            First Access
-                          </Badge>
-                        )}
-                    </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <Clock className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Timestamp</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDateTime(selectedAccessLog.timestamp)}
-                        </p>
-                        {relativeTime && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {relativeTime}
-                          </p>
-                        )}
-                    </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                      <Shield className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">Document Sensitivity</p>
-                        <Badge variant="outline" className="mt-1">
-                          {selectedAccessLog.sensitivity || 'N/A'}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </DialogContent>
-        </Dialog>
-      )}
+      <AccessActivityDetailsDialog
+        log={selectedAccessLog}
+        accessLogs={accessLogs}
+        userLookup={userLookup}
+        onClose={() => setSelectedAccessLog(null)}
+      />
 
       </ClientErrorBoundary>
     )}
