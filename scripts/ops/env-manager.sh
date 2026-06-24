@@ -209,6 +209,10 @@ _deploy_check_server() {
     if echo " $ips " | grep -q " ${SERVER_IP} "; then
         return 0
     fi
+    if [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
+        ui_warning "Expected host IP ${SERVER_IP}; found: ${ips:-none} (continuing in CI)"
+        return 0
+    fi
     ui_warning "Expected host IP ${SERVER_IP}; found: ${ips:-none}"
     read -r -p "Continue anyway? (y/N): " reply
     [[ "$reply" =~ ^[Yy]$ ]] || exit 1

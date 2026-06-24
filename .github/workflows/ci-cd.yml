@@ -189,8 +189,9 @@ jobs:
 
       - name: Deploy to staging
         run: |
-          cd /srv/npa-ecm
-          chmod +x scripts/staging/env-manager.sh scripts/ops/env-manager.sh scripts/lib/*.sh scripts/stack/*.sh scripts/backup/*.sh || true
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          chmod +x scripts/staging/env-manager.sh scripts/ops/env-manager.sh scripts/lib/*.sh scripts/stack/*.sh scripts/backup/*.sh
           DEPLOY_PATH=/srv/npa-ecm SERVER_IP=172.16.0.46 ./scripts/staging/env-manager.sh deploy
 
       - name: Smoke test staging
@@ -236,8 +237,10 @@ jobs:
 
       - name: Deploy to production
         run: |
-          cd "${DEPLOY_PATH:-/srv/npa-ecm-prod}"
-          ./scripts/production/env-manager.sh deploy
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          chmod +x scripts/production/env-manager.sh scripts/ops/env-manager.sh scripts/lib/*.sh scripts/stack/*.sh scripts/backup/*.sh
+          DEPLOY_PATH="${DEPLOY_PATH:-/srv/npa-ecm-prod}" ./scripts/production/env-manager.sh deploy
 
       - name: Smoke test production
         run: |
