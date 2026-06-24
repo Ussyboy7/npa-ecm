@@ -79,7 +79,7 @@ cmd_stop() {
     ui_header "Stopping ECM ${STACK_ENVIRONMENT_TITLE}"
     stack_compose down --remove-orphans
     if [[ "$STACK_ENVIRONMENT" != "local" ]]; then
-        stack_purge_fixed_containers
+        _deploy_purge_stale_containers
     fi
 }
 
@@ -273,15 +273,31 @@ _deploy_prepare_media() {
     chmod 755 backend/media 2>/dev/null || true
 }
 
+_deploy_purge_stale_containers() {
+    ui_step "Removing stale ECM containers"
+    local line purge_ok=true
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        if [[ "$line" == Failed* ]]; then
+            ui_error "$line"
+            purge_ok=false
+        else
+            ui_info "$line"
+        fi
+    done < <(stack_purge_fixed_containers 2>&1 || true)
+    $purge_ok || ui_warning "Some stale containers could not be removed — run: docker rm -f \$(docker ps -aq --filter name=ecm-.*-stag)"
+}
+
 _deploy_stop_stack() {
     ui_step "Stopping existing stack"
     stack_compose down --timeout 30 --remove-orphans || true
-    stack_purge_fixed_containers || true
+    _deploy_purge_stale_containers
 }
 
 _deploy_build_up() {
     ui_step "Building and starting stack"
     docker image prune -f >/dev/null 2>&1 || true
+    _deploy_purge_stale_containers
     stack_compose up -d --build
 }
 

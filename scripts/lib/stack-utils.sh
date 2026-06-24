@@ -156,22 +156,36 @@ stack_timestamp() {
     date +"%Y%m%d_%H%M%S"
 }
 
+stack_list_fixed_container_names() {
+    [[ -f "${STACK_COMPOSE_FILE:-}" ]] || return 0
+    grep 'container_name:' "$STACK_COMPOSE_FILE" 2>/dev/null | awk '{print $NF}' || true
+}
+
 # Fixed container_name entries survive compose project renames; remove leftovers before up.
 stack_purge_fixed_containers() {
-    [[ -f "${STACK_COMPOSE_FILE:-}" ]] || return 0
+    local name removed=0 failed=0
 
-    local names=()
     while IFS= read -r name; do
-        [[ -n "$name" ]] && names+=("$name")
-    done < <(grep -E '^\s+container_name:\s+' "$STACK_COMPOSE_FILE" | awk '{print $2}')
-
-    [[ ${#names[@]} -gt 0 ]] || return 0
-
-    local name
-    for name in "${names[@]}"; do
-        if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
-            echo "Removing stale container: ${name}" >&2
-            docker rm -f "$name" >/dev/null 2>&1 || true
+        [[ -z "$name" ]] && continue
+        if ! docker container inspect "$name" &>/dev/null; then
+            continue
         fi
-    done
+        if docker rm -f "$name" &>/dev/null; then
+            echo "Removed ${name}"
+            removed=$((removed + 1))
+            continue
+        fi
+        if command -v sudo &>/dev/null && sudo docker rm -f "$name" &>/dev/null; then
+            echo "Removed ${name} (sudo)"
+            removed=$((removed + 1))
+            continue
+        fi
+        echo "Failed to remove ${name}" >&2
+        failed=$((failed + 1))
+    done < <(stack_list_fixed_container_names)
+
+    if [[ "$failed" -gt 0 ]]; then
+        return 1
+    fi
+    return 0
 }
