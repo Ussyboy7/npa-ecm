@@ -1,10 +1,17 @@
-"""Test settings — Postgres test DB, in-memory Channels/Celery."""
+"""Test settings — Postgres test DB, in-memory cache/Channels/Celery."""
 
 from .settings import *  # noqa: F403
 import os
 
 DATABASES["default"]["TEST"] = {  # noqa: F405
     "NAME": os.getenv("TEST_DB_NAME", "test_npa_ecm_db"),
+}
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "test-cache",
+    }
 }
 
 CHANNEL_LAYERS = {
