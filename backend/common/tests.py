@@ -84,7 +84,7 @@ class SystemStatusTests(TestCase):
         self.client = APIClient()
         role = Role.objects.create(
             name="System Administrator",
-            permissions={"can_access_administration": True},
+            permissions={"can_access_system_health": True},
         )
         self.user = User.objects.create_user(
             username="ictadmin",
