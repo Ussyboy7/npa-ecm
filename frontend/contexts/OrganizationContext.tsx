@@ -94,7 +94,7 @@ export const OrganizationProvider: React.FC<{
   const [roles, setRoles] = useState<Role[]>(bootstrapState.roles);
   const [isSyncing, setIsSyncing] = useState(false);
   const [_hasSynced, setHasSynced] = useState(Boolean(initialData));
-  const currentUser = useSyncExternalStore(subscribeToStore, getCurrentUserSnapshot);
+  const currentUser = useSyncExternalStore(subscribeToStore, getCurrentUserSnapshot, getCurrentUserSnapshot);
   const appliedInitialRef = useRef(Boolean(initialData));
   const organizationRefreshPromiseRef = useRef<Promise<void> | null>(null);
 

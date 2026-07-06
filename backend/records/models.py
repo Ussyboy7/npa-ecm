@@ -62,7 +62,7 @@ class RetentionSchedule(UUIDModel, TimeStampedModel):
     class Meta:
         ordering = ["name"]
         indexes = [
-            models.Index(fields=["is_active", "record_type"]),
+            models.Index(fields=["is_active", "record_type"], name="records_ret_is_acti_idx"),
         ]
 
     def __str__(self) -> str:
@@ -170,7 +170,7 @@ class DisposalRequest(UUIDModel, TimeStampedModel):
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["status", "created_at"], name="records_dis_status_idx"),
         ]
 
     def __str__(self) -> str:

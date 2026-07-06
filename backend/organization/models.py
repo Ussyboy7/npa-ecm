@@ -297,7 +297,7 @@ class ExecutiveCalendarEvent(UUIDModel, TimeStampedModel):
     class Meta:
         ordering = ["starts_at"]
         indexes = [
-            models.Index(fields=["executive", "starts_at"]),
+            models.Index(fields=["executive", "starts_at"], name="org_cal_exec_start_idx"),
         ]
 
     def __str__(self) -> str:
