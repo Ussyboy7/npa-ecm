@@ -304,9 +304,9 @@ _deploy_build_up() {
 _deploy_wait_healthy() {
     ui_step "Waiting for backend health (${STACK_BACKEND_CONTAINER})"
     ui_info "Manual check URL: ${STACK_HEALTH_URL}"
-    local initial_sleep=8
-    local attempts=45
-    local interval=5
+    local initial_sleep=5
+    local attempts=30
+    local interval=3
     sleep "$initial_sleep"
     local i
     for ((i = 1; i <= attempts; i++)); do
