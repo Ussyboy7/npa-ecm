@@ -21,4 +21,5 @@ CHANNEL_LAYERS = {
 }
 
 CELERY_BROKER_URL = "memory://"
-CELERY_RESULT_BACKEND = "cache+memory://"
+CELERY_RESULT_BACKEND = "django-cache"
+CELERY_TASK_ALWAYS_EAGER = True
