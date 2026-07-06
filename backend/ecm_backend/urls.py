@@ -6,7 +6,8 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
-from common.views import health_check, health_live, prometheus_metrics
+from common.metrics import prometheus_metrics
+from common.views import health_check, health_live
 
 
 api_v1_patterns = [
