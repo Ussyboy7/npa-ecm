@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState, useMemo, Suspense } from 'react';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -216,7 +215,7 @@ function PhysicalDocumentsForm() {
   }, [locations]);
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex justify-between items-start">
           <div>
@@ -386,7 +385,7 @@ function PhysicalDocumentsForm() {
         </Card>
         {count > 0 && <PaginationControls pagination={pagination} className="mt-4" />}
       </div>
-    </DashboardLayout>
+    </>
   );
 }
 

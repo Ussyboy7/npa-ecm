@@ -1,5 +1,4 @@
 "use client";
-import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { logError, logWarn } from '@/lib/client-logger';
@@ -35,7 +34,7 @@ import type { User } from "@/lib/npa-structure";
 import { shareDocument, apiFetch, hasTokens } from "@/lib/dms-storage";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Search, Users, Building2, Users2, AlertTriangle, Loader2, X, FileText, Trash2, History, FolderKanban, CheckCircle2, ArrowLeft, Shield, Mail, Send, MessageSquare, CheckCircle } from "lucide-react";
+import { Search, Users, Building2, Users2, AlertTriangle, Loader2, X, FileText, Trash2, History, FolderKanban, CheckCircle2, ArrowLeft, Shield, Mail, Send } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
@@ -73,7 +72,7 @@ export const ShareDocumentDialog = ({
   onShared,
   initialView = 'share',
 }: ShareDocumentDialogProps) => {
-  const { users, directorates, divisions, departments, offices, officeMemberships } = useOrganization();
+  const { users, directorates, divisions, departments, offices, officeMemberships: _officeMemberships } = useOrganization();
   const [note, setNote] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
@@ -103,23 +102,23 @@ export const ShareDocumentDialog = ({
   // Share history and workspaces
   const [shareHistory, setShareHistory] = useState<ActivityLog[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
+  const [_workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
   const [, setIsLoadingWorkspaces] = useState(false);
   const [, setSelectedWorkspaceIds] = useState<Set<string>>(new Set());
-  const [searchWorkspaceQuery, setSearchWorkspaceQuery] = useState("");
+  const [_searchWorkspaceQuery, setSearchWorkspaceQuery] = useState("");
   
   // Correspondence routing state
-  const [correspondenceRecipient, setCorrespondenceRecipient] = useState<string>('');
-  const [correspondenceTargetOfficeId, setCorrespondenceTargetOfficeId] = useState<string>('');
+  const [_correspondenceRecipient, setCorrespondenceRecipient] = useState<string>('');
+  const [_correspondenceTargetOfficeId, setCorrespondenceTargetOfficeId] = useState<string>('');
   const [correspondenceRouteType, setCorrespondenceRouteType] = useState<'person' | 'office'>('person');
-  const [correspondencePersonSearchQuery, setCorrespondencePersonSearchQuery] = useState('');
+  const [_correspondencePersonSearchQuery, setCorrespondencePersonSearchQuery] = useState('');
   const [correspondenceOfficeSearchQuery, setCorrespondenceOfficeSearchQuery] = useState('');
   const [correspondenceOfficeFilterDirectorate, setCorrespondenceOfficeFilterDirectorate] = useState<string>('all');
   const [correspondenceOfficeFilterDivision, setCorrespondenceOfficeFilterDivision] = useState<string>('all');
-  const [correspondencePurpose, setCorrespondencePurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
-  const [correspondenceNotes, setCorrespondenceNotes] = useState<string>('');
+  const [_correspondencePurpose, setCorrespondencePurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
+  const [_correspondenceNotes, setCorrespondenceNotes] = useState<string>('');
   const [correspondenceSubject, setCorrespondenceSubject] = useState<string>('');
-  const [correspondencePriority, setCorrespondencePriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
+  const [_correspondencePriority, setCorrespondencePriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const [directShareSelectedOfficeIds, setDirectShareSelectedOfficeIds] = useState<Set<string>>(new Set());
   const [directSharePersonSearch, setDirectSharePersonSearch] = useState('');
   const [directShareOfficeSearch, setDirectShareOfficeSearch] = useState('');
@@ -394,13 +393,13 @@ export const ShareDocumentDialog = ({
   }, [departments, searchDepartmentQuery, divisions]);
 
   // Filtered divisions for correspondence office filter
-  const correspondenceFilteredDivisions = useMemo(() => {
+  const _correspondenceFilteredDivisions = useMemo(() => {
     if (correspondenceOfficeFilterDirectorate === 'all') return divisions;
     return divisions.filter(d => d.directorateId === correspondenceOfficeFilterDirectorate);
   }, [divisions, correspondenceOfficeFilterDirectorate]);
 
   // Filtered offices for correspondence
-  const correspondenceFilteredOffices = useMemo(() => {
+  const _correspondenceFilteredOffices = useMemo(() => {
     let result = offices.filter(o => o.isActive);
     
     if (correspondenceOfficeFilterDirectorate !== 'all') {
@@ -645,46 +644,8 @@ export const ShareDocumentDialog = ({
       onOpenChange(false);
     } catch (error: unknown) {
       logError('Failed to share document with all users', error);
-      let errorMessage = 'Unable to share document';
-      let errorDescription = 'An unexpected error occurred. Please try again.';
-      
-      if (error && typeof error === 'object' && 'response' in error) {
-        const response = (error as { response?: { data?: unknown; status?: number } }).response;
-        if (response?.status === 403) {
-          errorMessage = 'Permission Denied';
-          errorDescription = 'You do not have permission to share this document with all users.';
-        } else if (response?.status === 404) {
-          errorMessage = 'Document Not Found';
-          errorDescription = 'The document may have been deleted or you may not have access to it.';
-        } else if (response?.status === 400) {
-          errorMessage = 'Invalid Request';
-          if (response?.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            if (data.detail && typeof data.detail === 'string') {
-              errorDescription = data.detail;
-            } else if (data.non_field_errors && Array.isArray(data.non_field_errors)) {
-              errorDescription = (data.non_field_errors as string[]).join(', ');
-            }
-          }
-        } else if (response?.status === 500) {
-          errorMessage = 'Server Error';
-          errorDescription = 'The server encountered an error. Please try again later.';
-        } else if (response?.data && typeof response.data === 'object') {
-          const data = response.data as Record<string, unknown>;
-          if (data.detail && typeof data.detail === 'string') {
-            errorDescription = data.detail;
-          }
-        }
-      } else if (error instanceof Error) {
-        if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('Network') || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('fetch')) {
-          errorMessage = 'Network Error';
-          errorDescription = 'Unable to connect to the server. Please check your internet connection.';
-        } else {
-          errorDescription = (error instanceof Error ? error.message : ERROR_UNKNOWN);
-        }
-      }
-      
-      toast.error(errorMessage, {
+      const errorDescription = error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
+      toast.error('Unable to share document', {
         description: errorDescription,
         duration: 6000,
       });
@@ -854,52 +815,8 @@ export const ShareDocumentDialog = ({
       onOpenChange(false);
     } catch (error: unknown) {
       logError('Failed to share document', error);
-      let errorMessage = 'Unable to share document';
-      let errorDescription = 'An unexpected error occurred. Please try again.';
-      
-      if (error && typeof error === 'object' && 'response' in error) {
-        const response = (error as { response?: { data?: unknown; status?: number } }).response;
-        if (response?.status === 403) {
-          errorMessage = 'Permission Denied';
-          errorDescription = 'You do not have permission to share this document.';
-        } else if (response?.status === 404) {
-          errorMessage = 'Document Not Found';
-          errorDescription = 'The document may have been deleted or you may not have access to it.';
-        } else if (response?.status === 400) {
-          errorMessage = 'Invalid Request';
-          if (response?.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            if (data.detail && typeof data.detail === 'string') {
-              errorDescription = data.detail;
-            } else if (data.non_field_errors && Array.isArray(data.non_field_errors)) {
-              errorDescription = (data.non_field_errors as string[]).join(', ');
-            } else if (data.user_ids && Array.isArray(data.user_ids)) {
-              errorDescription = `Invalid user IDs: ${(data.user_ids as string[]).join(', ')}`;
-            } else if (data.division_ids && Array.isArray(data.division_ids)) {
-              errorDescription = `Invalid division IDs: ${(data.division_ids as string[]).join(', ')}`;
-            } else if (data.department_ids && Array.isArray(data.department_ids)) {
-              errorDescription = `Invalid department IDs: ${(data.department_ids as string[]).join(', ')}`;
-            }
-          }
-        } else if (response?.status === 500) {
-          errorMessage = 'Server Error';
-          errorDescription = 'The server encountered an error. Please try again later.';
-        } else if (response?.data && typeof response.data === 'object') {
-          const data = response.data as Record<string, unknown>;
-          if (data.detail && typeof data.detail === 'string') {
-            errorDescription = data.detail;
-          }
-        }
-      } else if (error instanceof Error) {
-        if ((error instanceof Error ? error.message : ERROR_UNKNOWN).includes('Network') || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('fetch')) {
-          errorMessage = 'Network Error';
-          errorDescription = 'Unable to connect to the server. Please check your internet connection.';
-        } else {
-          errorDescription = (error instanceof Error ? error.message : ERROR_UNKNOWN);
-        }
-      }
-      
-      toast.error(errorMessage, {
+      const errorDescription = error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
+      toast.error('Unable to share document', {
         description: errorDescription,
         duration: 6000,
       });

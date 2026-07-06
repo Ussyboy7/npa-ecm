@@ -181,22 +181,12 @@ export interface EnhancedSLAAnalytics {
   slaTargets: Record<string, number>;
 }
 
-export interface EnhancedDivisionPerformance {
-  metadata: {
-    rangeDays: number;
-    generatedAt: string;
-  };
-  summary: {
-    totalDivisions: number;
-    totalWorkload: number;
-    totalCompleted: number;
-    avgCompletionRate: number;
-    avgSlaCompliance: number;
-  };
-  divisions: {
+export interface DivisionPerformanceRow {
     id: string | null;
     name: string;
     fullName: string;
+    directorateId?: string | null;
+    directorateName?: string | null;
     workload: number;
     completed: number;
     pending: number;
@@ -217,9 +207,23 @@ export interface EnhancedDivisionPerformance {
       medium: number;
       low: number;
     };
-  }[];
-  topPerformers: unknown[];
-  needsAttention: unknown[];
+  }
+
+export interface EnhancedDivisionPerformance {
+  metadata: {
+    rangeDays: number;
+    generatedAt: string;
+  };
+  summary: {
+    totalDivisions: number;
+    totalWorkload: number;
+    totalCompleted: number;
+    avgCompletionRate: number;
+    avgSlaCompliance: number;
+  };
+  divisions: DivisionPerformanceRow[];
+  topPerformers: DivisionPerformanceRow[];
+  needsAttention: DivisionPerformanceRow[];
 }
 
 export interface EfficiencyAnalysis {
@@ -689,8 +693,12 @@ export const fetchEnhancedSLAAnalytics = async (params?: {
 
 export const fetchEnhancedDivisionPerformance = async (params?: {
   range?: number;
+  directorateId?: string;
 }): Promise<EnhancedDivisionPerformance> => {
-  const query = buildQuery({ range: params?.range || 30 });
+  const query = buildQuery({
+    range: params?.range || 30,
+    directorate_id: params?.directorateId && params.directorateId !== 'all' ? params.directorateId : undefined,
+  });
   return apiFetch<EnhancedDivisionPerformance>(`/analytics/division-performance/?${query}`);
 };
 

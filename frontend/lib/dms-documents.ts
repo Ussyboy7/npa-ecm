@@ -100,12 +100,12 @@ export const queryDocuments = async (params: DocumentQueryParams = {}): Promise<
 
   try {
     logInfo('[DMS] Starting apiFetch...');
-    const payload = await Promise.race([
-      apiFetch<Record<string, unknown>>(url),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
-      ),
-    ]) as Record<string, unknown> | { count?: number; next?: string | null; previous?: string | null; results?: unknown[] };
+    const payload = await apiFetch<Record<string, unknown>>(url) as Record<string, unknown> | {
+      count?: number;
+      next?: string | null;
+      previous?: string | null;
+      results?: unknown[];
+    };
 
     logInfo('[DMS] Received payload:', { hasResults: !!payload, isArray: Array.isArray(payload), count: payload?.count });
 

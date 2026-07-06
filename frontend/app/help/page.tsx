@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import DOMPurify from "dompurify";
 import { Building2, CheckCircle2, FileText, HelpCircle, Layers, Mail, ShieldCheck, Users, RefreshCw, AlertCircle } from "lucide-react";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
@@ -318,7 +317,7 @@ export default function HelpAndGuidePage() {
   }, [guides]);
 
   return (
-    <DashboardLayout>
+    <>
       <div className="px-6 py-8 space-y-8 max-w-6xl mx-auto">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
@@ -536,6 +535,6 @@ export default function HelpAndGuidePage() {
           </div>
         </section>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

@@ -19,17 +19,15 @@ const AVAILABLE_PERMISSIONS = [
   { id: 'view', label: 'View Documents' },
   { id: 'draft', label: 'Draft Responses' },
   { id: 'forward', label: 'Forward Documents' },
-  // Note: Calendar and meeting coordination features are not yet implemented in ECM
-  // These permissions are reserved for future functionality
-  // { id: 'schedule', label: 'Manage Calendar (Coming Soon)' },
-  // { id: 'coordinate', label: 'Coordinate Meetings (Coming Soon)' },
+  { id: 'schedule', label: 'Manage Calendar' },
+  { id: 'coordinate', label: 'Coordinate Meetings' },
 ];
 
 const PERMISSION_PRESETS = [
   {
     name: 'Full Access',
     description: 'All available permissions',
-    permissions: ['view', 'draft', 'forward'],
+    permissions: ['view', 'draft', 'forward', 'schedule', 'coordinate'],
   },
   {
     name: 'Read Only',

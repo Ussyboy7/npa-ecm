@@ -72,12 +72,12 @@ export function VerifyForm({
   return (
     <div className={`space-y-2 ${className}`}>
       {showLabel && (
-        <Label htmlFor="serial-input" className="text-sm font-medium text-slate-300">
+        <Label htmlFor="serial-input" className="text-sm font-medium">
           Serial Number
         </Label>
       )}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+        <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
         <Input
           id="serial-input"
           type="text"
@@ -85,7 +85,7 @@ export function VerifyForm({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`pl-10 ${compact ? 'h-10 text-sm' : 'h-12 text-base'} bg-slate-900 border-slate-700 text-white placeholder:text-slate-500 font-mono focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 ${
+          className={`pl-10 ${compact ? 'h-10 text-sm' : 'h-12 text-base'} font-mono ${
             validationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/50' : ''
           }`}
           aria-label="Enter seal serial number"
@@ -94,13 +94,13 @@ export function VerifyForm({
         />
       </div>
       {validationError && (
-        <p id="serial-error" className="text-xs text-red-400 flex items-center gap-1" role="alert">
+        <p id="serial-error" className="text-xs text-red-500 flex items-center gap-1" role="alert">
           <AlertCircle className="h-3 w-3" />
           {validationError}
         </p>
       )}
       {!validationError && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Format: NPA-YYYYMMDD-XXXXXXXX
         </p>
       )}

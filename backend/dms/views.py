@@ -37,6 +37,7 @@ from .models import (
     DocumentDiscussionMessage,
     DocumentEditorSession,
     DocumentPermission,
+    DocumentRightsPolicy,
     DocumentTemplate,
     DocumentVersion,
     DocumentWorkspace,
@@ -48,12 +49,15 @@ from .serializers import (
     DocumentDiscussionMessageSerializer,
     DocumentEditorSessionSerializer,
     DocumentPermissionSerializer,
+    DocumentRightsPolicySerializer,
     DocumentSerializer,
     DocumentTemplateSerializer,
     DocumentVersionSerializer,
     DocumentWorkspaceSerializer,
 )
 from .services import FileUploadService, OCRService, DocumentSummaryService
+from .version_diff import build_version_diff
+from .drm import assert_download_allowed, resolve_document_rights
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +126,9 @@ class DocumentWorkspaceViewSet(viewsets.ModelViewSet):
 
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.none()
-    base_queryset = Document.all_objects.select_related("author", "division", "department", "form_document").prefetch_related(
+    base_queryset = Document.all_objects.select_related(
+        "author", "division", "department", "form_document", "drm_policy"
+    ).prefetch_related(
         "workspaces",
         "versions",
         "permissions",
@@ -410,6 +416,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
         return qs.filter(visibility_filter).distinct()
 
     def perform_create(self, serializer):
+        from organization.permission_utils import require_permission
+
+        require_permission(self.request.user, "can_create_documents")
         author = serializer.validated_data.get("author") or self.request.user
         document = serializer.save(author=author)
         
@@ -424,6 +433,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
         )
     
     def perform_update(self, serializer):
+        from organization.permission_utils import require_permission
+
+        require_permission(self.request.user, "can_edit_documents")
         document = serializer.save()
         
         # Create audit log
@@ -437,6 +449,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
         )
     
     def perform_destroy(self, instance):
+        from organization.permission_utils import require_permission
+
+        require_permission(self.request.user, "can_delete_documents")
         # Create audit log before deletion
         from audit.models import ActivityLog
         AuditService.log_document_activity(
@@ -451,6 +466,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="bulk-archive")
     def bulk_archive(self, request):
         """Archive multiple documents at once."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_edit_documents")
         document_ids = request.data.get("document_ids", [])
         
         if not document_ids:
@@ -503,6 +521,9 @@ class DocumentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="bulk-delete")
     def bulk_delete(self, request):
         """Soft delete multiple documents at once."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_delete_documents")
         document_ids = request.data.get("document_ids", [])
         
         if not document_ids:
@@ -657,6 +678,11 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
         return Response(results)
 
+    @action(detail=True, methods=["get"], url_path="drm-rights")
+    def drm_rights(self, request, pk=None):
+        document = self.get_object()
+        return Response(resolve_document_rights(document, request.user))
+
 
 class DocumentVersionViewSet(viewsets.ModelViewSet):
     queryset = DocumentVersion.objects.select_related("document", "uploaded_by")
@@ -754,6 +780,22 @@ class DocumentVersionViewSet(viewsets.ModelViewSet):
         # Return updated version
         serializer = self.get_serializer(version)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"], url_path="diff")
+    def diff(self, request, pk=None):
+        """Compare this version with another version of the same document."""
+        left = self.get_object()
+        compare_with = request.query_params.get("compare_with")
+        if not compare_with:
+            raise ValidationError({"compare_with": "Query parameter compare_with is required"})
+
+        try:
+            right = DocumentVersion.objects.get(id=compare_with, document_id=left.document_id)
+        except DocumentVersion.DoesNotExist:
+            raise ValidationError({"compare_with": "Version not found on this document"})
+
+        data = build_version_diff(left, right)
+        return Response(data)
 
     @action(detail=True, methods=["post"], url_path="run-ocr")
     def run_ocr(self, request, pk=None):
@@ -866,6 +908,9 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """Create document permission and send notifications."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_share_documents")
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -956,6 +1001,9 @@ class DocumentPermissionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="share-to-all")
     def share_to_all(self, request):
         """Share document with all active users in the system."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_share_documents")
         document_id = request.data.get("document")
         access = request.data.get("access", "read")
         note = request.data.get("note", "")
@@ -1421,3 +1469,32 @@ class DocumentTemplateViewSet(viewsets.ModelViewSet):
             DocumentSerializer(document, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class DocumentRightsPolicyViewSet(viewsets.ModelViewSet):
+    queryset = DocumentRightsPolicy.objects.all()
+    serializer_class = DocumentRightsPolicySerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardPageNumberPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["is_active"]
+    search_fields = ["name", "description"]
+    ordering = ["name"]
+
+    def _ensure_admin(self):
+        from organization.permission_utils import require_permission
+
+        require_permission(self.request.user, "can_manage_drm_policies")
+
+    def perform_create(self, serializer):
+        self._ensure_admin()
+        serializer.save()
+
+    def perform_update(self, serializer):
+        self._ensure_admin()
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._ensure_admin()
+        instance.is_active = False
+        instance.save(update_fields=["is_active", "updated_at"])

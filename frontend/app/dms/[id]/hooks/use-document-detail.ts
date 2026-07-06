@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { logError, logInfo, logWarn } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import {
@@ -18,35 +18,14 @@ import {
   type DocumentRelatedCorrespondenceItem,
 } from '@/lib/dms-storage';
 
-function documentNotFoundMessage(error: unknown): string | null {
-  const errorObj = error && typeof error === 'object' ? (error as Record<string, unknown>) : null;
-  const isNotFound =
-    errorObj?.status === 404 ||
-    errorObj?.isNotFound === true ||
-    (typeof errorObj?.message === 'string' &&
-      (errorObj.message.includes('No Document matches') || errorObj.message.includes('not found')));
-
-  if (!isNotFound) return null;
-
-  let message =
-    'The document you are looking for does not exist, has been deleted, or you do not have permission to view it.';
-  if (errorObj?.response && typeof errorObj.response === 'object') {
-    const response = errorObj.response as Record<string, unknown>;
-    if (response.data && typeof response.data === 'object') {
-      const data = response.data as Record<string, unknown>;
-      message = (data.detail as string) || message;
-    }
-  } else if (typeof errorObj?.message === 'string') {
-    message = errorObj.message;
-  }
-  return message;
-}
+import { isAccessDeniedError } from '@/lib/api-errors';
 
 export function useDocumentDetail(documentId: string | undefined) {
   const { currentUser } = useCurrentUser();
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [formDocumentId, setFormDocumentId] = useState<string | null>(null);
   const [comments, setComments] = useState<DocumentComment[]>([]);
   const [accessLogs, setAccessLogs] = useState<DocumentAccessLog[]>([]);
@@ -76,6 +55,7 @@ export function useDocumentDetail(documentId: string | undefined) {
     const load = async () => {
       setLoading(true);
       setError(null);
+      setAccessDenied(false);
       setFormDocumentId(null);
 
       try {
@@ -135,13 +115,13 @@ export function useDocumentDetail(documentId: string | undefined) {
         });
       } catch (loadError: unknown) {
         if (ignore) return;
-        const notFound = documentNotFoundMessage(loadError);
-        if (notFound) {
-          logInfo('Document not found:', documentId);
-          setError(notFound);
+        if (isAccessDeniedError(loadError)) {
+          setAccessDenied(true);
+          setError(null);
         } else {
           logError('Failed to load document', loadError);
           setError('Failed to load document');
+          setAccessDenied(false);
         }
         setDocument(null);
       } finally {
@@ -161,6 +141,7 @@ export function useDocumentDetail(documentId: string | undefined) {
     setDocument,
     loading,
     error,
+    accessDenied,
     formDocumentId,
     comments,
     setComments,

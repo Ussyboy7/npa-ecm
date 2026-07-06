@@ -1,12 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, forwardRef, useImperativeHandle } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,9 +39,38 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export const RolesManagementTab = () => {
+export type RolesManagementTabHandle = {
+  openCreateRole: () => void;
+};
+
+export const RolesManagementTab = forwardRef<
+  RolesManagementTabHandle,
+  {
+    searchQuery?: string;
+    onSearchQueryChange?: (value: string) => void;
+    hideInlineSearch?: boolean;
+    hideHeaderActions?: boolean;
+    hideCardHeader?: boolean;
+  }
+>(function RolesManagementTab(
+  {
+    searchQuery: controlledSearchQuery,
+    onSearchQueryChange,
+    hideInlineSearch = false,
+    hideHeaderActions = false,
+    hideCardHeader = false,
+  },
+  ref,
+) {
   const { roles, users, refreshOrganizationData, deleteRole } = useOrganization();
-  const [searchQuery, setSearchQuery] = useState("");
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
+  const searchQuery = controlledSearchQuery ?? internalSearchQuery;
+  const setSearchQuery = (value: string) => {
+    onSearchQueryChange?.(value);
+    if (controlledSearchQuery === undefined) {
+      setInternalSearchQuery(value);
+    }
+  };
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -61,6 +89,10 @@ export const RolesManagementTab = () => {
     setSelectedRole(null);
     setFormOpen(true);
   };
+
+  useImperativeHandle(ref, () => ({
+    openCreateRole: handleCreateRole,
+  }), []);
 
   const handleEditRole = (role: Role) => {
     setSelectedRole(role);
@@ -122,9 +154,8 @@ export const RolesManagementTab = () => {
   return (
     <ClientErrorBoundary>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div></div>
-          <div className="flex gap-2">
+        {!hideHeaderActions ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
             <Button 
               onClick={handleCreateRole} 
               size="sm"
@@ -136,30 +167,22 @@ export const RolesManagementTab = () => {
             </Button>
             <ContextualHelp
               title="How to manage roles"
-              description="Create and configure system roles to control user access. Assign permissions to roles, then assign roles to users in User Management."
+              description="Define reusable permission sets for groups of users."
               steps={[
-                'Create a role with a descriptive name and description.',
-                'Select permissions for the role using the permission checkboxes.',
-                'Assign the role to users in User Management.',
-                'Edit or delete roles as needed. Deleting a role removes it from all users.',
+                'Create a role with a clear name and purpose.',
+                'Select permissions that match the role scope.',
+                'Assign roles to users from User Management.',
               ]}
             />
-          </div>
         </div>
-
-        <HelpGuideCard
-          title="Managing System Roles"
-          description="Roles define user permissions and access levels. Create roles to standardize access across your organization. Once created, assign roles to users in User Management. You can rename or delete existing roles here."
-          links={[
-            { label: "User Management", href: "/admin/users-roles?tab=users" },
-            { label: "Help & Guides", href: "/help" },
-          ]}
-        />
+        ) : null}
 
         <Card>
+          {!hideCardHeader ? (
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>System Roles</CardTitle>
+              {!hideInlineSearch ? (
               <div className="relative w-64">
                 <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -170,9 +193,11 @@ export const RolesManagementTab = () => {
                   aria-label="Search roles"
                 />
               </div>
+              ) : null}
             </div>
           </CardHeader>
-          <CardContent>
+          ) : null}
+          <CardContent className={hideCardHeader ? "pt-6" : undefined}>
             {roles.length === 0 ? (
               <RoleTableSkeleton rows={5} />
             ) : filteredRoles.length === 0 ? (
@@ -366,5 +391,5 @@ export const RolesManagementTab = () => {
       </div>
     </ClientErrorBoundary>
   );
-};
+});
 

@@ -52,7 +52,7 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
-import { getForwardingOptions, getSuggestedApprovers } from '@/lib/routing-utils';
+import { getSuggestedApprovers } from '@/lib/routing-utils';
 import { RoutingSection } from './RoutingSection';
 
 
@@ -152,7 +152,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   
   // File upload state - managed locally, FileUploadArea handles UI
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [_isDragActive, setIsDragActive] = useState(false);
+  const [_isDragActive, _setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Request cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -376,7 +376,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       officeMemberships,
       activeUsers,
     });
-  }, [currentUser?.id, correspondence, existingMinutes, offices, officeMemberships, activeUsers]);
+  }, [currentUser, correspondence, existingMinutes, offices, officeMemberships, activeUsers]);
 
   const assistantList: User[] = []; // Not used for treatment responses
   
@@ -436,7 +436,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [showSuggestedNote, setShowSuggestedNote] = useState(false);
   const suggestedCoveringNote = `Please find attached our response to the above correspondence regarding "${correspondence.subject}".`;
 
-  const handleFileSelect = (files: FileList | null) => {
+  const _handleFileSelect = (files: FileList | null) => {
     if (!files) return;
     
     const newFiles: UploadedFile[] = [];

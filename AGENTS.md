@@ -36,6 +36,8 @@ Run from repo root with venv active (`make backend-install`).
 | `make backend-seed` | Load demo data |
 | `make test-backend` | Django tests via `settings_test` (needs Postgres) |
 | `make security-check` | bandit + pip-audit |
+| `python manage.py ensure_dev_login_users` | Bootstrap dev login users (local Docker entrypoint) |
+| `python manage.py setup_role_permissions --force` | Sync role permission presets (deploy/CI) |
 | `cd backend && python manage.py makemigrations --check --dry-run` | Catch missing migrations |
 
 CI uses Postgres service + `ecm_backend.settings_test` with in-memory Channels/Celery.
@@ -67,6 +69,16 @@ make ci-quick                           # compose validation only
 ```
 
 Staging deploy (server only): `scripts/staging/env-manager.sh deploy`
+
+## Documentation map
+
+| Topic | Path |
+|-------|------|
+| Quick start / routes | `docs/guides/QUICK_START.md` |
+| Backlog & Phase 9–11 | `docs/procurement/REMAINING_WORK_BACKLOG.md` |
+| Feature areas | `docs/features/` |
+| Rollout & helpdesk | `docs/rollout/` |
+| WCAG checklist | `docs/guides/WCAG_AUDIT_CHECKLIST.md` |
 
 ## Staging vs local
 

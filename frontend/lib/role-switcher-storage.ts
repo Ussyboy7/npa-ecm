@@ -98,13 +98,6 @@ export function removeFavoriteUser(userId: string): void {
 }
 
 /**
- * Check if a user is favorited
- */
-export function isFavoriteUser(userId: string): boolean {
-  return getFavoriteUsers().includes(userId);
-}
-
-/**
  * Get collapsed groups state
  */
 export function getCollapsedGroups(): Set<string> {
@@ -188,9 +181,6 @@ export function clearSearchHistory(): void {
 
 const GROUP_ORDER_KEY = 'role_switcher_group_order';
 
-/**
- * Get custom group order
- */
 export function getGroupOrder(): string[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -199,18 +189,6 @@ export function getGroupOrder(): string[] {
     return JSON.parse(stored) as string[];
   } catch {
     return [];
-  }
-}
-
-/**
- * Save custom group order
- */
-export function saveGroupOrder(order: string[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(GROUP_ORDER_KEY, JSON.stringify(order));
-  } catch {
-    // Ignore errors
   }
 }
 

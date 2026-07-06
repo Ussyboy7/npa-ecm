@@ -1,6 +1,6 @@
 "use client";
 
-import { logError, logInfo } from '@/lib/client-logger';
+import { logError } from '@/lib/client-logger';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
@@ -159,26 +159,8 @@ export const DocumentCommentsDialog = ({
       toast.success(actualParentId ? 'Reply added' : 'Comment added');
     } catch (error: unknown) {
       logError('Error adding comment:', error);
-      // Check if backend returned a validation error
-      const backendError =
-        error instanceof Error
-          ? error.message
-          : typeof error === 'object' &&
-              error !== null &&
-              'response' in error &&
-              typeof (error as { response?: unknown }).response === 'object' &&
-              (error as { response?: { data?: unknown } }).response?.data &&
-              typeof (error as { response: { data: { detail?: unknown } } }).response.data.detail === 'string'
-            ? (error as { response: { data: { detail: string } } }).response.data.detail
-            : undefined;
-      
-      if (backendError && (backendError.includes('empty') || backendError.includes('required'))) {
-        toast.error(backendError);
-      } else if (backendError) {
-        toast.error(`Failed to add comment: ${backendError}`);
-      } else {
-        toast.error('Failed to add comment. Please try again.');
-      }
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add comment. Please try again.';
+      toast.error(`Failed to add comment: ${errorMessage}`);
       logError('Failed to add comment', error);
     } finally {
       setIsSubmitting(false);

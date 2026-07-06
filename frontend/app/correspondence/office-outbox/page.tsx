@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -342,7 +340,7 @@ const OfficeOutboxPage = () => {
     setIsProcessing(true);
     try {
       // Use withdraw endpoint (similar to recall in minutes)
-      await apiFetch(`/correspondence/items/${selectedItem.id}/withdraw/`, {
+      await apiFetch(`/correspondence/items/${selectedItem.id}/cancel-draft/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -358,20 +356,7 @@ const OfficeOutboxPage = () => {
       // Refresh the list
       pagination.goToFirstPage();
     } catch (err: unknown) {
-      let errorMessage = 'Failed to cancel draft';
-      if (err && typeof err === 'object') {
-        const errorObj = err as Record<string, unknown>;
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (errorMessage === 'Failed to withdraw correspondence') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel draft';
       toast.error(`Failed to withdraw: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
@@ -436,20 +421,7 @@ const OfficeOutboxPage = () => {
       // Refresh the list
       pagination.goToFirstPage();
     } catch (err: unknown) {
-      let errorMessage = 'Failed to delete correspondence';
-      if (err && typeof err === 'object') {
-        const errorObj = err as Record<string, unknown>;
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (errorMessage === 'Failed to delete correspondence') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete correspondence';
       toast.error(`Failed to delete: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
@@ -457,7 +429,7 @@ const OfficeOutboxPage = () => {
   };
 
   return (
-    <DashboardLayout>
+    <>
       {!currentUser ? (
         <div className="container mx-auto p-6">
           <Card>
@@ -508,26 +480,15 @@ const OfficeOutboxPage = () => {
             </Button>
             <ContextualHelp
               title="How to use Office Outbox"
-              description="Review correspondence your office has sent or is preparing to dispatch. Cancel drafts or recall routed minutes."
+              description="Track outbound items before and after dispatch."
               steps={[
-                'Filter by office, status, or priority to find items.',
-                'Open a record to view routing details or continue processing.',
-                'Use Cancel Draft on pending items if you need to fix them before sending.',
+                'Filter by office, status, or priority.',
+                'Open a record to review routing or continue processing.',
+                'Cancel draft or recall when a routed item needs correction.',
               ]}
             />
           </div>
         </div>
-
-
-        <HelpGuideCard
-          title="Office Outbox"
-          description="View all correspondence sent from offices you are a member of. This is different from your personal outbox which shows items you sent individually."
-          links={[
-            { label: 'My Outbox', href: '/correspondence/outbox' },
-            { label: 'Office Inbox', href: '/correspondence/inbox' },
-            { label: 'Help & Guides', href: '/help' },
-          ]}
-        />
 
         {/* Inline Filter Bar */}
         <Card>
@@ -945,7 +906,7 @@ const OfficeOutboxPage = () => {
         </div>
         </ErrorBoundary>
       )}
-    </DashboardLayout>
+    </>
   );
 };
 

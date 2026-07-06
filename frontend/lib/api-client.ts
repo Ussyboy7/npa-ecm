@@ -49,14 +49,17 @@ type FetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob";
 };
 
-let isRefreshing = false;
+export const isAbortError = (error: unknown): boolean => {
+  if (!(error instanceof DOMException || error instanceof Error)) return false;
+  if (error.name === 'AbortError') return true;
+  return /aborted/i.test(error.message);
+};
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function attemptTokenRefresh(): Promise<boolean> {
-  if (isRefreshing && refreshPromise) {
-    return refreshPromise;
-  }
-  isRefreshing = true;
+  if (refreshPromise) return refreshPromise;
+
   refreshPromise = (async () => {
     const refreshToken = getStoredRefreshToken();
     if (!refreshToken) return false;
@@ -77,7 +80,6 @@ async function attemptTokenRefresh(): Promise<boolean> {
       clearTokens();
       return false;
     } finally {
-      isRefreshing = false;
       refreshPromise = null;
     }
   })();
@@ -149,6 +151,7 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
   try {
     return await execute();
   } catch (error: unknown) {
+    if (isAbortError(error)) throw error;
     if ((error as Record<string, unknown>)?.status === 401 && !skipAuth && !path.includes("token/refresh/")) {
       const refreshed = await attemptTokenRefresh();
       if (refreshed) {
@@ -163,10 +166,23 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
 export interface LoginResponse {
   access: string;
   refresh: string;
-  user: unknown;
+  user?: unknown;
 }
 
-export const login = async (username: string, password: string): Promise<LoginResponse> => {
+export interface LoginMFAChallengeResponse {
+  mfa_required: true;
+  challenge_id: string;
+  methods: string[];
+  expires_in: number;
+}
+
+export type LoginStepResponse = LoginResponse | LoginMFAChallengeResponse;
+
+export function isMfaChallenge(data: LoginStepResponse): data is LoginMFAChallengeResponse {
+  return "mfa_required" in data && data.mfa_required === true;
+}
+
+export const login = async (username: string, password: string): Promise<LoginStepResponse> => {
   try {
     const response = await fetch(`${getBaseUrl()}/accounts/auth/token/`, {
       method: "POST",
@@ -184,8 +200,10 @@ export const login = async (username: string, password: string): Promise<LoginRe
       throw new Error("Login failed");
     }
 
-    const data = (await response.json()) as LoginResponse;
-    storeTokens(data.access, data.refresh);
+    const data = (await response.json()) as LoginStepResponse;
+    if (!isMfaChallenge(data)) {
+      storeTokens(data.access, data.refresh);
+    }
     return data;
   } catch (error: unknown) {
     const errorObj = error as Record<string, unknown>;
@@ -196,6 +214,37 @@ export const login = async (username: string, password: string): Promise<LoginRe
     throw error;
   }
 };
+
+export const verifyLoginMFA = async (
+  challengeId: string,
+  code: string,
+  method: "email" | "totp" = "email"
+): Promise<LoginResponse> => {
+  const data = await apiFetch<LoginResponse>("/accounts/auth/token/mfa/", {
+    method: "POST",
+    skipAuth: true,
+    body: JSON.stringify({
+      challenge_id: challengeId,
+      code,
+      method,
+    }),
+  });
+  storeTokens(data.access, data.refresh);
+  return data;
+};
+
+export const requestLoginMFAEmail = async (challengeId: string): Promise<void> => {
+  await apiFetch("/accounts/auth/login-mfa/email/request/", {
+    method: "POST",
+    skipAuth: true,
+    body: JSON.stringify({ challenge_id: challengeId }),
+  });
+};
+
+export const getOidcLoginUrl = (): string => `${getBaseUrl()}/accounts/auth/oidc/login/`;
+
+export const fetchOidcStatus = async (): Promise<{ enabled: boolean }> =>
+  apiFetch<{ enabled: boolean }>("/accounts/auth/oidc/status/");
 
 export const logout = async () => {
   const refresh = getStoredRefreshToken();

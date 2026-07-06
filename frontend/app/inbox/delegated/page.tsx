@@ -4,12 +4,10 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { toast } from 'sonner';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import {
   Users2,
   Search,
@@ -114,7 +112,7 @@ const DelegatedInbox = () => {
   };
 
   return (
-    <DashboardLayout>
+    <>
       {!currentUser?.id ? (
         <div className="container mx-auto p-6 space-y-6">
           <Card>
@@ -125,11 +123,6 @@ const DelegatedInbox = () => {
         </div>
       ) : !currentUser ? (
         <div className="container mx-auto p-6 space-y-6">
-          <HelpGuideCard
-            title="Select a persona"
-            description="Use the Role Switcher to choose a user context before viewing delegated items."
-            links={[{ label: 'Role Switcher', href: '/settings' }]}
-          />
         </div>
       ) : (
         <div className="container mx-auto p-6 space-y-6">
@@ -155,15 +148,6 @@ const DelegatedInbox = () => {
             {delegatedItems.length} Active
           </Badge>
         </div>
-
-        <HelpGuideCard
-          title="Your Delegated Tasks"
-          description="Executives have delegated these correspondence items to you. Review each item, take the required action, and mark as complete when done. The executive will be notified of your progress."
-          links={[
-            { label: 'My Inbox', href: '/inbox' },
-            { label: 'Help & Guides', href: '/help' },
-          ]}
-        />
 
         {/* Search */}
         <div className="relative max-w-xl">
@@ -288,7 +272,7 @@ const DelegatedInbox = () => {
         )}
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 };
 

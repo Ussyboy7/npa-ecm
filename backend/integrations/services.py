@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import logging
 import time
-from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 import requests
-from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
 from integrations.models import IntegrationLog, Webhook, WebhookEvent
+from common.field_encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +296,7 @@ class EmailService:
                 if connector.use_tls:
                     server.starttls()
 
-            server.login(connector.username, connector.password)
+            server.login(connector.username, decrypt_value(connector.password))
             server.send_message(msg)
             server.quit()
 
@@ -332,18 +329,74 @@ class EmailService:
 class ERPConnectorService:
     """Service for ERP system integration."""
 
+    ORACLE_DEFAULT_PATH = "/fscmRestApi/resources/latest/invoices"
+    GENERIC_DEFAULT_PATH = "/documents"
+
     @staticmethod
-    def sync_documents(connector_id: str) -> Dict[str, Any]:
-        """
-        Sync documents from ERP system.
-
-        Args:
-            connector_id: ERP connector ID
-
-        Returns:
-            Sync results dictionary
-        """
+    def _auth_headers(connector) -> dict[str, str]:
+        from integrations.connector_http import build_auth_headers
         from integrations.models import ERPConnector
+
+        extra = {}
+        if connector.erp_type == ERPConnector.ERPType.ORACLE:
+            extra["Accept"] = "application/json"
+        return build_auth_headers(
+            api_key=connector.api_key,
+            username=connector.username,
+            password=connector.password,
+            extra_headers=extra,
+        )
+
+    @staticmethod
+    def _documents_path(connector) -> str:
+        from integrations.models import ERPConnector
+
+        mappings = connector.field_mappings or {}
+        if mappings.get("api_path"):
+            return str(mappings["api_path"])
+        if connector.erp_type == ERPConnector.ERPType.ORACLE:
+            return ERPConnectorService.ORACLE_DEFAULT_PATH
+        return ERPConnectorService.GENERIC_DEFAULT_PATH
+
+    @staticmethod
+    def _extract_documents(payload: Any) -> list[dict[str, Any]]:
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if isinstance(payload, dict):
+            for key in ("documents", "items", "results", "data"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return [item for item in value if isinstance(item, dict)]
+        return []
+
+    @staticmethod
+    def _map_erp_document(item: dict[str, Any], mappings: dict[str, str]) -> dict[str, str]:
+        def pick(key: str, *fallbacks: str) -> str:
+            source = mappings.get(key, key)
+            for candidate in (source, key, *fallbacks):
+                value = item.get(candidate)
+                if value is not None and str(value).strip():
+                    return str(value).strip()
+            return ""
+
+        external_id = pick("external_id", "id", "InvoiceId", "DocumentId", "document_id")
+        title = pick("title", "name", "InvoiceNumber", "subject", "Description")
+        description = pick("description", "summary", "Comments", "body")
+        reference = pick("reference_number", "reference", "InvoiceNumber", "DocumentNumber")
+        doc_type = pick("document_type", "type", "Category")
+        return {
+            "external_id": external_id,
+            "title": title or f"ERP Document {external_id}",
+            "description": description,
+            "reference_number": reference,
+            "document_type": doc_type.lower() if doc_type else "other",
+        }
+
+    @classmethod
+    def sync_documents(cls, connector_id: str) -> Dict[str, Any]:
+        """Fetch ERP records and create/update ECM documents."""
+        from dms.models import Document
+        from integrations.models import ERPConnector, ERPSyncRecord
 
         try:
             connector = ERPConnector.objects.get(id=connector_id, is_active=True)
@@ -351,48 +404,15 @@ class ERPConnectorService:
             return {"success": False, "error": "Connector not found"}
 
         start_time = time.time()
+        path = cls._documents_path(connector)
+        url = f"{connector.base_url.rstrip('/')}/{path.lstrip('/')}"
+        headers = cls._auth_headers(connector)
 
         try:
-            # Make API request to ERP
-            headers = {}
-            if connector.api_key:
-                headers["X-API-Key"] = connector.api_key
-            elif connector.username and connector.password:
-                # Use basic auth
-                import base64
-
-                auth = base64.b64encode(
-                    f"{connector.username}:{connector.password}".encode()
-                ).decode()
-                headers["Authorization"] = f"Basic {auth}"
-
-            response = requests.get(
-                f"{connector.base_url}/documents",
-                headers=headers,
-                timeout=30,
-            )
-
+            response = requests.get(url, headers=headers, timeout=60)
             duration_ms = int((time.time() - start_time) * 1000)
 
-            if response.status_code == 200:
-                data = response.json()
-                # Process and sync documents
-                # This would typically create/update Document records
-
-                IntegrationLog.objects.create(
-                    log_type=IntegrationLog.LogType.ERP,
-                    integration_id=connector.id,
-                    status=IntegrationLog.LogStatus.SUCCESS,
-                    message="ERP sync completed",
-                    details={"documents_synced": len(data.get("documents", []))},
-                    duration_ms=duration_ms,
-                )
-
-                return {
-                    "success": True,
-                    "documents_synced": len(data.get("documents", [])),
-                }
-            else:
+            if response.status_code != 200:
                 IntegrationLog.objects.create(
                     log_type=IntegrationLog.LogType.ERP,
                     integration_id=connector.id,
@@ -401,11 +421,103 @@ class ERPConnectorService:
                     error_message=f"HTTP {response.status_code}",
                     duration_ms=duration_ms,
                 )
+                return {"success": False, "error": f"HTTP {response.status_code}"}
 
-                return {
-                    "success": False,
-                    "error": f"HTTP {response.status_code}",
-                }
+            payload = response.json()
+            rows = cls._extract_documents(payload)
+            mappings = connector.field_mappings or {}
+            created = updated = skipped = 0
+
+            type_map = {
+                "letter": Document.DocumentType.LETTER,
+                "memo": Document.DocumentType.MEMO,
+                "report": Document.DocumentType.REPORT,
+                "policy": Document.DocumentType.POLICY,
+                "form": Document.DocumentType.FORM,
+            }
+
+            for item in rows:
+                mapped = cls._map_erp_document(item, mappings)
+                external_id = mapped["external_id"]
+                if not external_id:
+                    skipped += 1
+                    continue
+
+                sync_record = ERPSyncRecord.objects.filter(
+                    connector=connector,
+                    external_id=external_id,
+                ).select_related("document").first()
+
+                document_type = type_map.get(
+                    mapped["document_type"],
+                    Document.DocumentType.OTHER,
+                )
+
+                if sync_record and sync_record.document_id:
+                    document = sync_record.document
+                    document.title = mapped["title"][:500]
+                    document.description = mapped["description"][:5000]
+                    if mapped["reference_number"]:
+                        document.reference_number = mapped["reference_number"][:100]
+                    document.save(
+                        update_fields=["title", "description", "reference_number", "updated_at"]
+                    )
+                    sync_record.payload_snapshot = item
+                    sync_record.save(update_fields=["payload_snapshot", "last_synced_at", "updated_at"])
+                    updated += 1
+                else:
+                    document = Document.objects.create(
+                        title=mapped["title"][:500],
+                        description=mapped["description"][:5000],
+                        document_type=document_type,
+                        reference_number=(mapped["reference_number"] or external_id)[:100],
+                        status=Document.DocumentStatus.DRAFT,
+                        sensitivity=Document.Sensitivity.INTERNAL,
+                        tags=["erp-sync", connector.erp_type],
+                    )
+                    ERPSyncRecord.objects.update_or_create(
+                        connector=connector,
+                        external_id=external_id,
+                        defaults={
+                            "document": document,
+                            "payload_snapshot": item,
+                        },
+                    )
+                    created += 1
+
+                    try:
+                        WebhookService.trigger_event(
+                            "document.created",
+                            {
+                                "document_id": str(document.id),
+                                "title": document.title,
+                                "source": "erp_sync",
+                                "connector_id": str(connector.id),
+                                "external_id": external_id,
+                            },
+                        )
+                    except Exception as webhook_error:
+                        logger.warning("ERP sync webhook trigger failed: %s", webhook_error)
+
+            connector.last_synced_at = timezone.now()
+            connector.save(update_fields=["last_synced_at", "updated_at"])
+
+            result = {
+                "success": True,
+                "documents_synced": created + updated,
+                "documents_created": created,
+                "documents_updated": updated,
+                "documents_skipped": skipped,
+            }
+            IntegrationLog.objects.create(
+                log_type=IntegrationLog.LogType.ERP,
+                integration_id=connector.id,
+                status=IntegrationLog.LogStatus.SUCCESS,
+                message="ERP sync completed",
+                details=result,
+                duration_ms=duration_ms,
+            )
+            return result
 
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
@@ -421,4 +533,24 @@ class ERPConnectorService:
             )
 
             return {"success": False, "error": error_msg}
+
+    @classmethod
+    def sync_all_enabled(cls) -> dict[str, int]:
+        from datetime import timedelta
+
+        from integrations.models import ERPConnector
+
+        connectors = ERPConnector.objects.filter(is_active=True, sync_enabled=True)
+        synced = skipped = 0
+        now = timezone.now()
+        for connector in connectors:
+            if connector.last_synced_at:
+                due = connector.last_synced_at + timedelta(minutes=connector.sync_interval_minutes)
+                if now < due:
+                    skipped += 1
+                    continue
+            result = cls.sync_documents(str(connector.id))
+            if result.get("success"):
+                synced += 1
+        return {"connectors": connectors.count(), "synced": synced, "skipped": skipped}
 

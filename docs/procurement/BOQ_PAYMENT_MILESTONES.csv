@@ -1,0 +1,10 @@
+Milestone_ID,Milestone,Payment_Pct,Amount_NGN,Users_Covered,Trigger,Target_Month
+M1,Contract award and mobilization,15,52500000,All 3000 NPA staff (no seat fee),Contract signature,1
+M2,Infrastructure setup complete,10,35000000,All 3000 NPA staff,Server and network acceptance,7
+M3,Enterprise hardening complete (SSO retention integrations),20,70000000,All 3000 NPA staff,Technical demo sign-off,6
+M4,UAT sign-off and security clearance,20,70000000,All 3000 NPA staff,UAT certificate plus pen test report,8
+M5,HQ go-live,15,52500000,All 3000 NPA staff,30 days stable production,10
+M6,Pilot ports go-live,10,35000000,All 3000 NPA staff,Apapa Rivers Tin Can accepted,12
+M7,National rollout complete,7,24500000,All 3000 NPA staff,All ports live,15
+M8,Project closure and handover,3,10500000,All 3000 NPA staff,Final acceptance certificate,16
+,TOTAL,100,350000000,Fixed cap — price does not increase with user count,,

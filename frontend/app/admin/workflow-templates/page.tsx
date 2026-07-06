@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { LoadingState } from "@/components/shared/LoadingState";
 
 /**
@@ -17,10 +16,10 @@ export default function Page() {
   }, [router]);
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6">
         <LoadingState message="Opening workflow templates…" />
       </div>
-    </DashboardLayout>
+    </>
   );
 }

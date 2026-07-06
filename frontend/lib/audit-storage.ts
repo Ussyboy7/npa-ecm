@@ -157,3 +157,64 @@ export const getMyActivityLogs = async (params?: {
   return response.results;
 };
 
+export interface ComplianceExportParams {
+  action?: string;
+  module?: string;
+  severity?: string;
+  success?: boolean;
+  search?: string;
+  from_date?: string;
+  to_date?: string;
+  ordering?: string;
+}
+
+/**
+ * Download tamper-evident compliance bundle (ZIP with CSV, manifest, SHA-256).
+ */
+export const downloadComplianceExport = async (
+  params?: ComplianceExportParams,
+): Promise<{ blob: Blob; recordCount?: number; sha256?: string }> => {
+  if (!hasTokens()) throw new Error('Authentication required');
+
+  const queryParams = new URLSearchParams();
+  if (params?.action) queryParams.append('action', params.action);
+  if (params?.module) queryParams.append('module', params.module);
+  if (params?.severity) queryParams.append('severity', params.severity);
+  if (params?.success !== undefined) queryParams.append('success', String(params.success));
+  if (params?.search) queryParams.append('search', params.search);
+  if (params?.from_date) queryParams.append('from_date', params.from_date);
+  if (params?.to_date) queryParams.append('to_date', params.to_date);
+  if (params?.ordering) queryParams.append('ordering', params.ordering);
+
+  const query = queryParams.toString();
+  const { getBaseUrl, getStoredAccessToken } = await import('./api-client');
+  const response = await fetch(
+    `${getBaseUrl()}/audit/logs/compliance-export${query ? `?${query}` : ''}`,
+    {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        Authorization: `Bearer ${getStoredAccessToken()}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    let message = 'Compliance export failed';
+    try {
+      const body = await response.json();
+      if (body?.detail) message = String(body.detail);
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+  return {
+    blob,
+    recordCount: Number(response.headers.get('X-Audit-Record-Count') || '') || undefined,
+    sha256: response.headers.get('X-Audit-SHA256') || undefined,
+  };
+};
+

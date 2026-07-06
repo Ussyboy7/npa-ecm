@@ -60,7 +60,10 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def unread_count(self, request):
         """Get count of unread notifications."""
-        count = self.get_queryset().filter(status=Notification.Status.UNREAD).count()
+        count = Notification.objects.filter(
+            recipient=request.user,
+            status=Notification.Status.UNREAD,
+        ).count()
         return Response({"count": count})
 
 

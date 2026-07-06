@@ -56,7 +56,7 @@ export function LinkCaseDialog({
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
-  const [previewCase, setPreviewCase] = useState<Case | null>(null);
+  const [_previewCase, setPreviewCase] = useState<Case | null>(null);
   const [notes, setNotes] = useState("");
   const [creatingNew, setCreatingNew] = useState(false);
   const [newCaseTitle, setNewCaseTitle] = useState("");

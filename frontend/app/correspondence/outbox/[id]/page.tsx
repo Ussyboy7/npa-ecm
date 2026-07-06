@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -281,20 +280,7 @@ const OutboxDetailPage = () => {
         logError('Failed to load case links:', err);
       }
     } catch (err: unknown) {
-      let errorMessage = 'Failed to load outbox item';
-      if (err && typeof err === 'object') {
-        const errorObj = err as Record<string, unknown>;
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (errorMessage === 'Failed to load outbox item') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load outbox item';
       setError(errorMessage);
       toast.error(`Failed to load outbox item: ${errorMessage}`);
     } finally {
@@ -429,27 +415,8 @@ const OutboxDetailPage = () => {
       setResendCustomMessage('');
       await loadData();
     } catch (err: unknown) {
-      const errorObj = err && typeof err === 'object' ? err as Record<string, unknown> : null;
-      const errorStatus = errorObj && 'status' in errorObj ? errorObj.status : null;
-      const responseStatus = errorObj && errorObj.response && typeof errorObj.response === 'object' && 'status' in errorObj.response ? (errorObj.response as Record<string, unknown>).status : null;
-      if (errorStatus === 404 || responseStatus === 404) {
-        toast.info('Resend functionality is not yet available on the backend');
-      } else {
-        let errorMessage = 'Failed to send reminder';
-        if (errorObj) {
-          if (errorObj.response && typeof errorObj.response === 'object') {
-            const response = errorObj.response as Record<string, unknown>;
-            if (response.data && typeof response.data === 'object') {
-              const data = response.data as Record<string, unknown>;
-              errorMessage = (data.detail as string) || errorMessage;
-            }
-          }
-          if (errorMessage === 'Failed to send reminder') {
-            errorMessage = (errorObj.message as string) || errorMessage;
-          }
-        }
-        toast.error(`Failed to send reminder: ${errorMessage}`);
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send reminder';
+      toast.error(`Failed to send reminder: ${errorMessage}`);
     } finally {
       setResending(false);
     }
@@ -470,7 +437,7 @@ const OutboxDetailPage = () => {
     }
 
     try {
-      await apiFetch(`/correspondence/items/${id}/withdraw/`, {
+      await apiFetch(`/correspondence/items/${id}/cancel-draft/`, {
         method: 'POST',
         body: JSON.stringify({ reason: withdrawReason.trim() }),
         headers: {
@@ -485,27 +452,25 @@ const OutboxDetailPage = () => {
         router.push('/correspondence/outbox');
       }, 1500);
     } catch (err: unknown) {
-      const errorObj3 = err && typeof err === 'object' ? err as Record<string, unknown> : null;
-      const errorStatus3 = errorObj3 && 'status' in errorObj3 ? errorObj3.status : null;
-      const responseStatus3 = errorObj3 && errorObj3.response && typeof errorObj3.response === 'object' && 'status' in errorObj3.response ? (errorObj3.response as Record<string, unknown>).status : null;
-      if (errorStatus3 === 404 || responseStatus3 === 404) {
-        toast.info('Cancel draft functionality is not yet available on the backend');
-      } else {
-        let errorMessage = 'Failed to cancel draft';
-        if (errorObj3) {
-          if (errorObj3.response && typeof errorObj3.response === 'object') {
-            const response = errorObj3.response as Record<string, unknown>;
-            if (response.data && typeof response.data === 'object') {
-              const data = response.data as Record<string, unknown>;
-              errorMessage = (data.detail as string) || errorMessage;
-            }
-          }
-          if (errorMessage === 'Failed to withdraw correspondence') {
-            errorMessage = (errorObj3.message as string) || errorMessage;
-          }
-        }
-        toast.error(`Failed to withdraw: ${errorMessage}`);
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel draft';
+      toast.error(`Failed to cancel draft: ${errorMessage}`);
+    }
+  };
+
+  const handleResendDraft = async () => {
+    if (!correspondence || correspondence.status !== 'withdrawn') {
+      toast.error('Only cancelled drafts can be resent');
+      return;
+    }
+    setResending(true);
+    try {
+      await apiFetch(`/correspondence/items/${id}/resend-draft/`, { method: 'POST' });
+      toast.success('Draft restored to pending. You can edit and dispatch again.');
+      await loadData();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to resend draft');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -561,7 +526,7 @@ const OutboxDetailPage = () => {
   };
 
   return (
-    <DashboardLayout>
+    <>
       {loading ? (
         <div className="p-6 flex items-center justify-center min-h-[400px]">
           <div className="text-center space-y-4">
@@ -1401,7 +1366,17 @@ const OutboxDetailPage = () => {
                   <Route className="h-4 w-4 mr-2" />
                   View Full Details
                 </Button>
-                {correspondence.currentApproverId && (
+                {correspondence.status === 'withdrawn' && (
+                  <Button className="w-full" onClick={handleResendDraft} disabled={resending}>
+                    {resending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 mr-2" />
+                    )}
+                    Resend Draft
+                  </Button>
+                )}
+                {correspondence.currentApproverId && correspondence.status !== 'withdrawn' && (
                   <Button
                     variant="outline"
                     className="w-full"
@@ -1615,7 +1590,7 @@ const OutboxDetailPage = () => {
       </AlertDialog>
       </div>
     )}
-  </DashboardLayout>
+  </>
   );
 };
 

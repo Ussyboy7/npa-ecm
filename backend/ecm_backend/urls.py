@@ -6,12 +6,13 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
-from common.views import health_check, health_live
+from common.views import health_check, health_live, prometheus_metrics
 
 
 api_v1_patterns = [
     path('health/live/', health_live, name='health_live'),
     path('health/', health_check, name='health_check'),
+    path('metrics/', prometheus_metrics, name='prometheus_metrics'),
     path('accounts/', include('accounts.urls')),
     path('organization/', include('organization.urls')),
     path('correspondence/', include('correspondence.urls')),
@@ -25,12 +26,15 @@ api_v1_patterns = [
     path('capture/', include('capture.urls')),
     path('search/', include('search.urls')),
     path('integrations/', include('integrations.urls')),
+    path('records/', include('records.urls')),
+    path('platform/', include('common.urls')),
 ]
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/live/', health_live, name='health_live_short'),
     path('health/', health_check, name='health_check_short'),
+    path('api/metrics/', prometheus_metrics, name='prometheus_metrics_short'),
 
     # OpenAPI schema & docs
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

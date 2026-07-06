@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   Inbox,
 } from "lucide-react";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
@@ -253,7 +251,7 @@ export default function FOIAListPage() {
   ];
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         <div>
           <h1 className="text-3xl font-bold">FOIA Requests</h1>
@@ -261,12 +259,6 @@ export default function FOIAListPage() {
             Manage Freedom of Information Act requests
           </p>
         </div>
-
-        <HelpGuideCard
-          title="FOIA Management"
-          description="Track, process, and respond to FOIA requests from submission through closure."
-          links={[{ label: "Help & Guides", href: "/help" }]}
-        />
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {statCards.map(({ label, value, icon: Icon, bgClass, iconClass }) => (
@@ -392,6 +384,6 @@ export default function FOIAListPage() {
           </>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }

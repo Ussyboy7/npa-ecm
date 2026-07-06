@@ -1,9 +1,8 @@
 "use client";
 import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,9 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { QuillEditor } from "@/components/dms/QuillEditor";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { LoadingState } from "@/components/shared/LoadingState";
+import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ListRowCard } from "@/components/shared/ListRowCard";
 import {
@@ -27,7 +27,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueSearchInputWrapClass,
   registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
   registryQueueStatIconClass,
@@ -53,7 +52,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   loadTemplates,
-  getTemplatesByScope,
   type DocumentTemplate,
   type TemplateScope,
   type TemplateType,
@@ -79,11 +77,13 @@ import {
   PowerOff,
   FileEdit,
   MessageSquare,
+  LayoutTemplate,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { toast as sonnerToast } from "sonner";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 
 // Scope configuration
 const scopeOptions: { value: TemplateScope; label: string }[] = [
@@ -94,7 +94,7 @@ const scopeOptions: { value: TemplateScope; label: string }[] = [
   { value: "user", label: "Personal" },
 ];
 
-type HubTab = "documents" | "workflows" | "forms";
+type HubTab = "documents" | "minutes" | "workflows" | "forms";
 
 function TemplatesHubForm() {
   const router = useRouter();
@@ -102,16 +102,51 @@ function TemplatesHubForm() {
   const { toast } = useToast();
   const { directorates, divisions, departments, users: organizationUsers, isSyncing } = useOrganization();
   const { currentUser, hydrated: userHydrated } = useCurrentUser();
+  const permissions = useUserPermissions(currentUser ?? undefined);
+  const canAccessAdvancedTemplates = useMemo(() => {
+    if (!currentUser) return false;
+    return (
+      currentUser.isSuperuser ||
+      permissions.canAccessAdministration ||
+      permissions.canManageOrgStructure
+    );
+  }, [currentUser, permissions.canAccessAdministration, permissions.canManageOrgStructure]);
+  const allowedTabs = useMemo<HubTab[]>(
+    () => (canAccessAdvancedTemplates
+      ? ["documents", "minutes", "workflows", "forms"]
+      : ["documents", "minutes"]),
+    [canAccessAdvancedTemplates],
+  );
 
   // Main tab state (overridable via ?tab=documents|workflows|forms)
   const [activeTab, setActiveTab] = useState<HubTab>("documents");
 
   useEffect(() => {
     const raw = searchParams.get("tab");
-    if (raw === "workflows" || raw === "forms" || raw === "documents") {
-      setActiveTab(raw);
+    if (raw === "documents" || raw === "minutes" || raw === "workflows" || raw === "forms") {
+      if (allowedTabs.includes(raw)) {
+        setActiveTab(raw);
+      } else {
+        setActiveTab("documents");
+      }
+      return;
     }
-  }, [searchParams]);
+    if (!allowedTabs.includes(activeTab)) {
+      setActiveTab("documents");
+    }
+  }, [searchParams, allowedTabs, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "documents") setActiveTemplateType("document");
+    if (activeTab === "minutes") setActiveTemplateType("minute");
+  }, [activeTab]);
+
+  const handleHubTabChange = (value: string) => {
+    const tab = value as HubTab;
+    if (!allowedTabs.includes(tab)) return;
+    setActiveTab(tab);
+    router.push(`/admin/templates-hub?tab=${tab}`, { scroll: false });
+  };
 
   // ============ DOCUMENT TEMPLATES STATE ============
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
@@ -122,17 +157,21 @@ function TemplatesHubForm() {
   const [description, setDescription] = useState("");
   const [contentHtml, setContentHtml] = useState("");
   const [activeTemplateType, setActiveTemplateType] = useState<TemplateType>("document");
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
+  const [templateListSearch, setTemplateListSearch] = useState("");
 
   // ============ WORKFLOW TEMPLATES STATE ============
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
   const [workflowLoading, setWorkflowLoading] = useState(true);
   const [workflowSearch, setWorkflowSearch] = useState("");
+  const [workflowPreviewId, setWorkflowPreviewId] = useState<string | null>(null);
 
   // ============ FORM TEMPLATES STATE ============
   const [formTemplates, setFormTemplates] = useState<FormTemplate[]>([]);
   const [formLoading, setFormLoading] = useState(true);
   const [formSearch, setFormSearch] = useState("");
   const [formCategoryFilter, setFormCategoryFilter] = useState<string>("all");
+  const [formPreviewId, setFormPreviewId] = useState<string | null>(null);
   const [_deletingFormId, setDeletingFormId] = useState<string | null>(null);
   const [showFormDeleteConfirm, setShowFormDeleteConfirm] = useState(false);
   const [formToDelete, setFormToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -169,30 +208,17 @@ function TemplatesHubForm() {
   }, []);
 
   useEffect(() => {
-    const loadScopedTemplates = async () => {
-      try {
-        const scoped = await getTemplatesByScope(activeScope, selectedScopeId ?? undefined, activeTemplateType);
-        if (scoped.length) {
-          const template = scoped[0];
-          setSelectedTemplateId(template.id);
-          setTitle(template.title);
-          setDescription(template.description ?? "");
-          setContentHtml(template.contentHtml);
-        } else {
-          setSelectedTemplateId(null);
-          setTitle("");
-          setDescription("");
-          setContentHtml("");
-        }
-      } catch (error: unknown) {
-        logError('Failed to load scoped templates:', error);
-      }
-    };
-    loadScopedTemplates();
-  }, [activeScope, selectedScopeId, templates, activeTemplateType]);
+    setSelectedTemplateId(null);
+    setTitle("");
+    setDescription("");
+    setContentHtml("");
+    setTemplateEditorOpen(false);
+    setTemplateListSearch("");
+    setWorkflowPreviewId(null);
+    setFormPreviewId(null);
+  }, [activeScope, selectedScopeId, activeTemplateType, activeTab]);
 
   const scopedTemplates = useMemo(() => {
-    // Filter from loaded templates synchronously for UI
     return templates.filter((template) => {
       if (template.scope !== activeScope) return false;
       if (template.templateType !== activeTemplateType) return false;
@@ -200,6 +226,16 @@ function TemplatesHubForm() {
       return template.scopeId === (selectedScopeId ?? null);
     });
   }, [templates, activeScope, selectedScopeId, activeTemplateType]);
+
+  const filteredScopedTemplates = useMemo(() => {
+    const query = templateListSearch.trim().toLowerCase();
+    if (!query) return scopedTemplates;
+    return scopedTemplates.filter(
+      (template) =>
+        template.title.toLowerCase().includes(query) ||
+        (template.description?.toLowerCase().includes(query) ?? false),
+    );
+  }, [scopedTemplates, templateListSearch]);
 
   const scopeEntityOptions = useMemo(() => {
     switch (activeScope) {
@@ -236,7 +272,20 @@ function TemplatesHubForm() {
     setTitle(template.title);
     setDescription(template.description ?? "");
     setContentHtml(template.contentHtml);
+    setTemplateEditorOpen(true);
   };
+
+  const handleCreateNewDocTemplate = useCallback(() => {
+    setSelectedTemplateId(null);
+    setTitle(`New ${activeTemplateType === "minute" ? "Minute" : "Document"} Template`);
+    setDescription("");
+    if (activeTemplateType === "minute") {
+      setContentHtml("Please review and revert with your feedback at the earliest convenience.");
+    } else {
+      setContentHtml("");
+    }
+    setTemplateEditorOpen(true);
+  }, [activeTemplateType]);
 
   const handleSaveDocTemplate = async () => {
     if (!currentUser) {
@@ -291,22 +340,13 @@ function TemplatesHubForm() {
     }
   };
 
-  const handleCreateNewDocTemplate = () => {
-    setSelectedTemplateId(null);
-    setTitle(`New ${activeTemplateType === "minute" ? "Minute" : "Document"} Template`);
-    setDescription("");
-    if (activeTemplateType === "minute") {
-      setContentHtml("Please review and revert with your feedback at the earliest convenience.");
-    } else {
-      setContentHtml("");
-    }
-  };
-
   const handleDeleteDocTemplate = async () => {
     if (!selectedTemplateId) return;
     try {
       await deleteTemplate(selectedTemplateId);
       await refreshTemplates();
+      setTemplateEditorOpen(false);
+      setSelectedTemplateId(null);
       toast({ title: "Template deleted", description: "Template removed successfully." });
     } catch (error: unknown) {
       logError('Failed to delete template:', error);
@@ -329,11 +369,11 @@ function TemplatesHubForm() {
   };
 
   useEffect(() => {
-    if (activeTab === "workflows") {
+    if (canAccessAdvancedTemplates && activeTab === "workflows") {
       loadWorkflowTemplates();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, canAccessAdvancedTemplates]);
 
   const filteredWorkflowTemplates = useMemo(() => {
     return workflowTemplates.filter((template) => {
@@ -406,18 +446,19 @@ function TemplatesHubForm() {
   };
 
   useEffect(() => {
+    if (!canAccessAdvancedTemplates) return;
     loadFormTemplates();
     // Load once on mount for accurate dashboard stats and whenever switching back to forms.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, canAccessAdvancedTemplates]);
 
   useEffect(() => {
-    if (activeTab === "forms") {
+    if (canAccessAdvancedTemplates && activeTab === "forms") {
       const timeoutId = setTimeout(() => loadFormTemplates(), 300);
       return () => clearTimeout(timeoutId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formSearch, activeTab]);
+  }, [formSearch, activeTab, canAccessAdvancedTemplates]);
 
   const handleDeleteFormClick = (id: string, name: string) => {
     setFormToDelete({ id, name });
@@ -501,348 +542,447 @@ function TemplatesHubForm() {
   const documentCount = templates.filter(t => t.templateType === "document").length;
   const minuteCount = templates.filter(t => t.templateType === "minute").length;
 
+  const workflowPreview = useMemo(
+    () => workflowTemplates.find((template) => template.id === workflowPreviewId) ?? null,
+    [workflowTemplates, workflowPreviewId],
+  );
+
+  const formPreview = useMemo(
+    () => formTemplates.find((template) => template.id === formPreviewId) ?? null,
+    [formTemplates, formPreviewId],
+  );
+
+  const tabSubtitle = useMemo(() => {
+    if (activeTab === "workflows") {
+      return "Preview approval chains here, then open the full editor to change steps.";
+    }
+    if (activeTab === "forms") {
+      return "Preview form templates here, then open the builder to edit fields.";
+    }
+    if (activeTab === "minutes") {
+      return "Choose scope, pick a minute template from the list, or create a new one.";
+    }
+    if (!canAccessAdvancedTemplates) {
+      return "Manage document and minute templates for your scope. Workflow and form templates are managed by executives.";
+    }
+    return "Choose scope, pick a template from the list, or create a new document template.";
+  }, [activeTab, canAccessAdvancedTemplates]);
+
+  const headerActions = useMemo(() => {
+    if (activeTab === "workflows") {
+      return (
+        <>
+          <Button size="sm" className="bg-gradient-primary" onClick={() => router.push("/admin/workflow-templates/new")}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create workflow
+          </Button>
+          <ContextualHelp
+            title="Workflow templates"
+            description="Approval chains for correspondence and documents."
+            steps={[
+              "Create a workflow or open an existing row to edit steps.",
+              "Use row actions to clone, activate, or delete.",
+              "Search by name, slug, or description above the tabs.",
+            ]}
+          />
+        </>
+      );
+    }
+    if (activeTab === "forms") {
+      return (
+        <>
+          <Button size="sm" className="bg-gradient-primary" onClick={() => router.push("/admin/form-templates/new")}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create form
+          </Button>
+          <ContextualHelp
+            title="Form templates"
+            description="Structured data collection with fields and categories."
+            steps={[
+              "Create a form or open a row to edit fields.",
+              "Filter by category in the search bar.",
+              "Use row actions to clone or delete templates.",
+            ]}
+          />
+        </>
+      );
+    }
+    return (
+      <>
+        <Button size="sm" className="bg-gradient-primary" onClick={handleCreateNewDocTemplate}>
+          <Plus className="h-4 w-4 mr-2" />
+          New template
+        </Button>
+        <ContextualHelp
+          title="How to manage templates"
+          description="Use tabs to switch between document, minute, workflow, and form templates."
+          steps={[
+            "Pick scope, then select a template from the list to edit.",
+            "Use New template to create one for the current scope.",
+            "Search by title or description in the bar above the tabs.",
+          ]}
+        />
+      </>
+    );
+  }, [activeTab, router, handleCreateNewDocTemplate]);
+
+  const renderWorkflowPreviewPanel = () => {
+    if (!workflowPreview) return null;
+    const sortedSteps = [...workflowPreview.steps].sort((a, b) => a.order - b.order);
+    return (
+      <Card className="mt-4 border-primary/20">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <CardTitle className="text-base">{workflowPreview.name}</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setWorkflowPreviewId(null)}>
+              Close
+            </Button>
+            <Button
+              size="sm"
+              className="bg-gradient-primary"
+              onClick={() => router.push(`/admin/workflow-templates/${workflowPreview.id}`)}
+            >
+              Open full editor
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {workflowPreview.description ? (
+            <p className="text-sm text-muted-foreground">{workflowPreview.description}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+              {workflowPreview.applies_to === "correspondence" ? "Correspondence" : "Document"}
+            </Badge>
+            <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+              {sortedSteps.length} steps
+            </Badge>
+            <Badge variant={workflowPreview.is_active ? "default" : "secondary"} className={correspondenceQueueBadgeClass}>
+              {workflowPreview.is_active ? "Active" : "Inactive"}
+            </Badge>
+          </div>
+          {sortedSteps.length > 0 ? (
+            <ol className="list-decimal space-y-1 pl-5 text-sm">
+              {sortedSteps.map((step) => (
+                <li key={step.id}>{step.title}</li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-muted-foreground">No steps configured yet.</p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderFormPreviewPanel = () => {
+    if (!formPreview) return null;
+    const styles = getFormCategoryStyles(formPreview.category);
+    const fieldCount = formPreview.structure?.fields?.length || 0;
+    return (
+      <Card className={cn("mt-4 border-primary/20 border-l-4", styles.accent)}>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <CardTitle className="text-base">{formPreview.name}</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setFormPreviewId(null)}>
+              Close
+            </Button>
+            <Button
+              size="sm"
+              className="bg-gradient-primary"
+              onClick={() => router.push(`/admin/form-templates/${formPreview.id}`)}
+            >
+              Open full editor
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {formPreview.description ? (
+            <p className="text-sm text-muted-foreground">{formPreview.description}</p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "capitalize", styles.badge)}>
+              {formPreview.category_display || formPreview.category}
+            </Badge>
+            <Badge variant={formPreview.is_active ? "default" : "outline"} className={correspondenceQueueBadgeClass}>
+              {formPreview.is_active ? "Active" : "Inactive"}
+            </Badge>
+            <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+              {fieldCount} fields
+            </Badge>
+          </div>
+          {fieldCount > 0 ? (
+            <ul className="space-y-1 text-sm">
+              {formPreview.structure?.fields?.slice(0, 8).map((field) => (
+                <li key={field.id} className="text-muted-foreground">
+                  {field.label || field.name}
+                  <span className="ml-2 text-xs uppercase">{field.type}</span>
+                </li>
+              ))}
+              {fieldCount > 8 ? (
+                <li className="text-xs text-muted-foreground">+ {fieldCount - 8} more fields</li>
+              ) : null}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No fields configured yet.</p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderDocumentMinutePanel = (panelType: "document" | "minute") => {
+    const isMinute = panelType === "minute";
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader className="pb-4">
+            <CardDescription>
+              {isMinute ? "Choose scope, then pick a template from the list below." : "Choose scope, then pick a template from the list below."}
+            </CardDescription>
+            <div className="grid gap-4 md:grid-cols-3 pt-2">
+              <div className="space-y-2">
+                <Label>Scope Level</Label>
+                <Select value={activeScope} onValueChange={(v) => setActiveScope(v as TemplateScope)}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {scopeOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {activeScope !== "organization" ? (
+                <div className="space-y-2">
+                  <Label>Select {activeScope.charAt(0).toUpperCase() + activeScope.slice(1)}</Label>
+                  <Select value={selectedScopeId ?? ""} onValueChange={(v) => setSelectedScopeId(v || null)}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {scopeEntityOptions.map((opt) => (
+                        <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {filteredScopedTemplates.length === 0 ? (
+              <EmptyState
+                icon={isMinute ? <MessageSquare className={registryQueueEmptyIconClass} /> : <FileEdit className={registryQueueEmptyIconClass} />}
+                title={templateListSearch.trim() ? "No templates match your search" : `No ${isMinute ? "minute" : "document"} templates yet`}
+                message={
+                  templateListSearch.trim()
+                    ? "Try a different title or description keyword."
+                    : `Create a template for this scope, or switch scope to find existing templates.`
+                }
+                actionLabel={templateListSearch.trim() ? undefined : "New template"}
+                onAction={templateListSearch.trim() ? undefined : handleCreateNewDocTemplate}
+              />
+            ) : (
+              <div className={correspondenceQueueListStackClass}>
+                {filteredScopedTemplates.map((template) => (
+                  <ListRowCard
+                    key={template.id}
+                    density="compact"
+                    className={cn(selectedTemplateId === template.id && templateEditorOpen ? "ring-2 ring-primary" : "")}
+                    onRowClick={() => handleTemplateSelect(template.id)}
+                    leading={(
+                      <div className={cn(correspondenceQueueLeadingBoxClass, isMinute ? "bg-info/10" : "bg-primary/10")}>
+                        {isMinute ? (
+                          <MessageSquare className={cn(correspondenceQueueLeadingIconClass, "text-info")} />
+                        ) : (
+                          <FileEdit className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
+                        )}
+                      </div>
+                    )}
+                  >
+                    <h4 className={correspondenceQueueSubjectClass}>{template.title}</h4>
+                    {template.description ? (
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{template.description}</p>
+                    ) : null}
+                  </ListRowCard>
+                ))}
+              </div>
+            )}
+
+            {templateEditorOpen ? (
+              <Card className="mt-4 border-primary/20">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-base">
+                    {selectedTemplateId ? "Edit template" : "New template"}
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {selectedTemplateId ? (
+                      <Button variant="outline" size="sm" onClick={handleDeleteDocTemplate} className="text-destructive">
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
+                    ) : null}
+                    <Button variant="ghost" size="sm" onClick={() => setTemplateEditorOpen(false)}>
+                      Close
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Title</Label>
+                      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Template title" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description (optional)</Label>
+                      <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Content</Label>
+                    {isMinute ? (
+                      <Textarea
+                        value={contentHtml}
+                        onChange={(e) => setContentHtml(e.target.value)}
+                        rows={5}
+                        placeholder="Enter minute template text..."
+                        className="min-h-[120px]"
+                      />
+                    ) : (
+                      <div className="border rounded-lg bg-background">
+                        <QuillEditor value={contentHtml} onChange={(html) => setContentHtml(html)} showCharacterCount={false} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={refreshTemplates}>Reset</Button>
+                    <Button onClick={handleSaveDocTemplate}>
+                      {selectedTemplateId ? "Update Template" : "Create Template"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   // ============ LOADING STATE ============
   return (
-    <DashboardLayout>
+    <>
       {!userHydrated || isSyncing ? (
         <div className="container mx-auto p-6">
           <LoadingState message="Loading templates hub…" />
         </div>
       ) : !currentUser ? (
         <div className="container mx-auto p-6 space-y-6">
-          <HelpGuideCard
-            title="Select a persona"
-            description="Use the Role Switcher to choose a user context before managing templates."
-            links={[{ label: "Role Switcher", href: "/settings" }]}
-          />
         </div>
       ) : (
         <ClientErrorBoundary>
-          <div className="container mx-auto space-y-6 p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Templates Hub</h1>
-              <p className="mt-1 max-w-2xl text-muted-foreground">
-                Manage document templates, workflow templates, and form templates in one place
-              </p>
-            </div>
-            <ContextualHelp
-              title="How to manage templates"
-              description="Use the overview cards below to switch areas. Documents and minutes share an editor with org scope; workflows and forms open dedicated builders."
-              steps={[
-                "Click a summary card to open Documents, Minutes, Workflows, or Forms.",
-                "For documents/minutes, pick scope and template, then edit and save.",
-                "For workflows and forms, use Create or a row action to open the full editor.",
-              ]}
-            />
-          </div>
-
-          <HelpGuideCard
-            title="Three template families"
-            description="Documents and minutes are rich-text (or plain minute text) per scope. Workflows define approval chains; forms define fields and categories."
-            links={[
-              { label: "Help & Guides", href: "/help" },
-              { label: "Forms (user)", href: "/forms/templates" },
-            ]}
-          />
-
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Choose a section
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Card
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setActiveTab("documents");
-                  setActiveTemplateType("document");
-                }
-              }}
-              className={cn(
-                "cursor-pointer transition-all hover:shadow-md",
-                activeTab === "documents" && activeTemplateType === "document" ? "ring-2 ring-primary" : "",
-              )}
-              onClick={() => {
-                setActiveTab("documents");
-                setActiveTemplateType("document");
-              }}
-            >
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, "bg-primary/10")}>
-                    <FileEdit className={cn(registryQueueStatIconClass, "text-primary")} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>Document templates</p>
-                    <p className={registryQueueStatValueClass}>{documentCount}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setActiveTab("documents");
-                  setActiveTemplateType("minute");
-                }
-              }}
-              className={cn(
-                "cursor-pointer transition-all hover:shadow-md",
-                activeTab === "documents" && activeTemplateType === "minute" ? "ring-2 ring-primary" : "",
-              )}
-              onClick={() => {
-                setActiveTab("documents");
-                setActiveTemplateType("minute");
-              }}
-            >
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, "bg-info/10")}>
-                    <MessageSquare className={cn(registryQueueStatIconClass, "text-info")} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>Minute templates</p>
-                    <p className={registryQueueStatValueClass}>{minuteCount}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setActiveTab("workflows");
-                }
-              }}
-              className={cn(
-                "cursor-pointer transition-all hover:shadow-md",
-                activeTab === "workflows" ? "ring-2 ring-primary" : "",
-              )}
-              onClick={() => setActiveTab("workflows")}
-            >
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, "bg-success/10")}>
-                    <GitBranch className={cn(registryQueueStatIconClass, "text-success")} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>Workflow templates</p>
-                    <p className={registryQueueStatValueClass}>{workflowStats.total}</p>
-                    <p className="text-xs text-muted-foreground">{workflowStats.active} active</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setActiveTab("forms");
-                }
-              }}
-              className={cn(
-                "cursor-pointer transition-all hover:shadow-md",
-                activeTab === "forms" ? "ring-2 ring-primary" : "",
-              )}
-              onClick={() => setActiveTab("forms")}
-            >
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, "bg-warning/10")}>
-                    <FormInput className={cn(registryQueueStatIconClass, "text-warning")} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>Form templates</p>
-                    <p className={registryQueueStatValueClass}>{formTemplates.length}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {activeTab === "documents" ? (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="pb-4">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <AdminPageShell
+            title="Templates"
+            subtitle={tabSubtitle}
+            icon={LayoutTemplate}
+            actions={headerActions}
+          >
+          <div className={cn("grid gap-4", canAccessAdvancedTemplates ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-2")}>
+            {[
+              { label: "Document templates", value: documentCount, icon: FileEdit, bgClass: "bg-primary/10", iconClass: "text-primary" },
+              { label: "Minute templates", value: minuteCount, icon: MessageSquare, bgClass: "bg-info/10", iconClass: "text-info" },
+              ...(canAccessAdvancedTemplates
+                ? [
+                    { label: "Workflow templates", value: workflowStats.total, icon: GitBranch, bgClass: "bg-success/10", iconClass: "text-success" },
+                    { label: "Form templates", value: formTemplates.length, icon: FormInput, bgClass: "bg-warning/10", iconClass: "text-warning" },
+                  ]
+                : []),
+            ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+              <Card key={label}>
+                <CardContent className={registryQueueStatCardContentClass}>
+                  <div className="flex items-center gap-4">
+                    <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                      <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                    </div>
                     <div>
-                      <CardTitle className="text-lg">
-                        {activeTemplateType === "document" ? "Document Templates" : "Minute Templates"}
-                      </CardTitle>
-                      <CardDescription>
-                        {activeTemplateType === "document" 
-                          ? "Manage correspondence and document layouts" 
-                          : "Manage reusable minute instructions"}
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant={activeTemplateType === "document" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setActiveTemplateType("document")}
-                      >
-                        <FileEdit className="h-4 w-4 mr-1" />
-                        Documents
-                      </Button>
-                      <Button
-                        variant={activeTemplateType === "minute" ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setActiveTemplateType("minute")}
-                      >
-                        <MessageSquare className="h-4 w-4 mr-1" />
-                        Minutes
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Scope & Template Selection - Single Row */}
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <div className="space-y-2">
-                      <Label>Scope Level</Label>
-                      <Select value={activeScope} onValueChange={(v) => setActiveScope(v as TemplateScope)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {scopeOptions.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {activeScope !== "organization" && (
-                      <div className="space-y-2">
-                        <Label>Select {activeScope.charAt(0).toUpperCase() + activeScope.slice(1)}</Label>
-                        <Select value={selectedScopeId ?? ""} onValueChange={(v) => setSelectedScopeId(v || null)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {scopeEntityOptions.map((opt) => (
-                              <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <Label>Template</Label>
-                      <Select value={selectedTemplateId ?? ""} onValueChange={handleTemplateSelect}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select template..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {scopedTemplates.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>{t.title}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-end gap-2">
-                      <Button onClick={handleCreateNewDocTemplate} className="flex-1">
-                        <Plus className="h-4 w-4 mr-1" />
-                        New
-                      </Button>
-                      {selectedTemplateId && (
-                        <Button variant="outline" size="icon" onClick={handleDeleteDocTemplate} className="text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Template Editor */}
-                  <div className="border rounded-lg p-4 space-y-4 bg-muted/20">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>Title</Label>
-                        <Input
-                          value={title}
-                          onChange={(e) => setTitle(e.target.value)}
-                          placeholder="Template title"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Description (optional)</Label>
-                        <Input
-                          value={description}
-                          onChange={(e) => setDescription(e.target.value)}
-                          placeholder="Brief description"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Content</Label>
-                      {activeTemplateType === "minute" ? (
-                        <Textarea
-                          value={contentHtml}
-                          onChange={(e) => setContentHtml(e.target.value)}
-                          rows={5}
-                          placeholder="Enter minute template text..."
-                          className="min-h-[120px]"
-                        />
-                      ) : (
-                        <div className="border rounded-lg bg-background">
-                          <QuillEditor value={contentHtml} onChange={(html) => setContentHtml(html)} showCharacterCount={false} />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={refreshTemplates}>Reset</Button>
-                      <Button onClick={handleSaveDocTemplate}>
-                        {selectedTemplateId ? "Update Template" : "Create Template"}
-                      </Button>
+                      <p className={registryQueueStatLabelClass}>{label}</p>
+                      <p className={registryQueueStatValueClass}>{value}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            </div>
-          ) : activeTab === "workflows" ? (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <CardTitle className="text-lg">Workflow templates</CardTitle>
-                      <CardDescription>
-                        Approval chains for correspondence and documents. Open a row to edit steps.
-                      </CardDescription>
-                    </div>
-                    <Button size="sm" onClick={() => router.push("/admin/workflow-templates/new")} className="shrink-0">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create workflow
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className={registryQueueSearchInputWrapClass}>
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search workflows…"
-                      value={workflowSearch}
-                      onChange={(e) => setWorkflowSearch(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
+            ))}
+          </div>
 
+          {(activeTab === "workflows" || activeTab === "forms" || activeTab === "documents" || activeTab === "minutes") ? (
+            <Card>
+              <CardContent className="flex flex-wrap items-center gap-2 p-2">
+                <div className="relative min-w-[200px] flex-1 max-w-sm">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder={
+                      activeTab === "workflows"
+                        ? "Search workflows…"
+                        : activeTab === "forms"
+                          ? "Search form templates…"
+                          : "Search templates by title or description…"
+                    }
+                    value={
+                      activeTab === "workflows"
+                        ? workflowSearch
+                        : activeTab === "forms"
+                          ? formSearch
+                          : templateListSearch
+                    }
+                    onChange={(e) => {
+                      if (activeTab === "workflows") setWorkflowSearch(e.target.value);
+                      else if (activeTab === "forms") setFormSearch(e.target.value);
+                      else setTemplateListSearch(e.target.value);
+                    }}
+                    className="h-8 pl-8 text-xs"
+                  />
+                </div>
+                {activeTab === "forms" ? (
+                  <Select value={formCategoryFilter} onValueChange={setFormCategoryFilter}>
+                    <SelectTrigger className="h-8 w-[140px] text-xs">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {formCategories.map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Tabs value={activeTab} onValueChange={handleHubTabChange}>
+            <TabsList>
+              <TabsTrigger value="documents" className="text-xs px-2.5 py-1">Documents</TabsTrigger>
+              <TabsTrigger value="minutes" className="text-xs px-2.5 py-1">Minutes</TabsTrigger>
+              {canAccessAdvancedTemplates ? (
+                <>
+                  <TabsTrigger value="workflows" className="text-xs px-2.5 py-1">Workflows</TabsTrigger>
+                  <TabsTrigger value="forms" className="text-xs px-2.5 py-1">Forms</TabsTrigger>
+                </>
+              ) : null}
+            </TabsList>
+
+            <TabsContent value="documents" className="mt-6 focus-visible:outline-none">
+              {renderDocumentMinutePanel("document")}
+            </TabsContent>
+
+            <TabsContent value="minutes" className="mt-6 focus-visible:outline-none">
+              {renderDocumentMinutePanel("minute")}
+            </TabsContent>
+
+                        <TabsContent value="workflows" className="mt-6 focus-visible:outline-none">
+            <Card>
+                <CardContent className="space-y-4 pt-6">
                   {workflowLoading ? (
                     <LoadingState message="Loading workflow templates…" />
                   ) : filteredWorkflowTemplates.length === 0 ? (
@@ -863,7 +1003,8 @@ function TemplatesHubForm() {
                         <ListRowCard
                           key={template.id}
                           density="compact"
-                          href={`/admin/workflow-templates/${template.id}`}
+                          className={cn(workflowPreviewId === template.id ? "ring-2 ring-primary" : "")}
+                          onRowClick={() => setWorkflowPreviewId(template.id)}
                           leading={(
                             <div className={cn(correspondenceQueueLeadingBoxClass, "bg-success/10")}>
                               <GitBranch className={cn(correspondenceQueueLeadingIconClass, "text-success")} />
@@ -878,6 +1019,7 @@ function TemplatesHubForm() {
                                   size="icon"
                                   className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                   aria-label="More actions"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
                                   <MoreVertical className="h-4 w-4" />
                                 </Button>
@@ -942,49 +1084,14 @@ function TemplatesHubForm() {
                       ))}
                     </div>
                   )}
+                  {renderWorkflowPreviewPanel()}
                 </CardContent>
               </Card>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <CardTitle className="text-lg">Form templates</CardTitle>
-                      <CardDescription>Structured data collection with fields and categories.</CardDescription>
-                    </div>
-                    <Button size="sm" onClick={() => router.push("/admin/form-templates/new")} className="shrink-0">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create form
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                    <div className={cn(registryQueueSearchInputWrapClass, "sm:max-w-sm sm:flex-1")}>
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Search forms…"
-                        value={formSearch}
-                        onChange={(e) => setFormSearch(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {formCategories.map((cat) => (
-                        <Button
-                          key={cat.value}
-                          variant={formCategoryFilter === cat.value ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setFormCategoryFilter(cat.value)}
-                        >
-                          {cat.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
+            </TabsContent>
 
+            <TabsContent value="forms" className="mt-6 focus-visible:outline-none">
+              <Card>
+                <CardContent className="space-y-4 pt-6">
                   {formLoading ? (
                     <LoadingState message="Loading form templates…" />
                   ) : filteredFormTemplates.length === 0 ? (
@@ -1003,8 +1110,12 @@ function TemplatesHubForm() {
                           <ListRowCard
                             key={template.id}
                             density="compact"
-                            className={cn("border-l-4", styles.accent)}
-                            href={`/admin/form-templates/${template.id}`}
+                            className={cn(
+                              "border-l-4",
+                              styles.accent,
+                              formPreviewId === template.id ? "ring-2 ring-primary" : "",
+                            )}
+                            onRowClick={() => setFormPreviewId(template.id)}
                             leading={(
                               <div className={cn(correspondenceQueueLeadingBoxClass, "bg-muted")}>
                                 <FormInput className={cn(correspondenceQueueLeadingIconClass, "text-muted-foreground")} />
@@ -1019,6 +1130,7 @@ function TemplatesHubForm() {
                                     size="icon"
                                     className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                     aria-label="More actions"
+                                    onClick={(e) => e.stopPropagation()}
                                   >
                                     <MoreVertical className="h-4 w-4" />
                                   </Button>
@@ -1075,11 +1187,12 @@ function TemplatesHubForm() {
                       })}
                     </div>
                   )}
+                  {renderFormPreviewPanel()}
                 </CardContent>
               </Card>
-            </div>
-          )}
-        </div>
+            </TabsContent>
+          </Tabs>
+          </AdminPageShell>
 
         {/* Delete Form Confirmation */}
         <AlertDialog open={showFormDeleteConfirm} onOpenChange={setShowFormDeleteConfirm}>
@@ -1169,7 +1282,7 @@ function TemplatesHubForm() {
         </AlertDialog>
         </ClientErrorBoundary>
       )}
-    </DashboardLayout>
+    </>
   );
 }
 

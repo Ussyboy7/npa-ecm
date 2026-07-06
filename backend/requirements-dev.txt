@@ -1,4 +1,8 @@
--r requirements.txt
-bandit>=1.7.0
-pip-audit>=2.7.0
-coverage>=7.0.0
+# Testing & quality (dev only — not installed in production images)
+pytest>=8.0
+pytest-django>=4.8
+factory-boy>=3.3
+faker>=24.0
+black>=24.8
+isort>=5.13
+flake8>=7.1

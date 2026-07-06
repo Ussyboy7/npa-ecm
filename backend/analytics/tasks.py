@@ -504,26 +504,138 @@ def generate_weekly_staff_snapshots() -> dict[str, Any]:
 @shared_task(name="analytics.send_daily_digest")
 def send_daily_digest() -> dict[str, Any]:
     """
-    Send daily digest email with pending escalations.
+    Send daily digest email with pending escalations marked for digest inclusion.
     Should run once per day (e.g., 8 AM).
     """
+    from collections import defaultdict
+
+    from django.core.mail import send_mail
+    from django.template import Context, Template
+
     from .models import Escalation
-    
+
     results = {"digests_sent": 0, "errors": []}
-    
-    # Get pending escalations marked for digest
+
     pending_escalations = Escalation.objects.filter(
         status__in=[Escalation.Status.PENDING, Escalation.Status.SENT],
         action_details__include_in_digest=True,
-    ).select_related("correspondence", "rule")
-    
+    ).select_related(
+        "correspondence",
+        "correspondence__division",
+        "correspondence__current_approver",
+        "rule",
+    )
+
     if not pending_escalations.exists():
         logger.info("No pending escalations for daily digest")
         return results
-    
-    # Group by user (would need to implement recipient logic)
-    # For now, this is a placeholder for future implementation
-    logger.info(f"Daily digest: {pending_escalations.count()} pending escalations")
-    
+
+    by_recipient: dict[str, list[tuple[dict, str]]] = defaultdict(list)
+
+    for escalation in pending_escalations:
+        correspondence = escalation.correspondence
+        recipients = list(escalation.notified_emails or [])
+
+        if escalation.rule:
+            custom = escalation.rule.action_config.get("recipients", [])
+            recipients.extend(custom)
+
+        division = correspondence.division
+        if division and division.general_manager and division.general_manager.email:
+            recipients.append(division.general_manager.email)
+
+        if correspondence.current_approver and correspondence.current_approver.email:
+            recipients.append(correspondence.current_approver.email)
+
+        recipients = list({email.strip().lower() for email in recipients if email and "@" in email})
+        if not recipients:
+            continue
+
+        days_pending = 0
+        if correspondence.received_date:
+            days_pending = (timezone.now().date() - correspondence.received_date).days
+
+        item = {
+            "reference": correspondence.reference_number,
+            "subject": correspondence.subject,
+            "priority": correspondence.priority,
+            "division": division.name if division else "Unassigned",
+            "days_pending": days_pending,
+            "link": f"{settings.FRONTEND_URL}/correspondence/{correspondence.id}",
+        }
+
+        for email in recipients:
+            by_recipient[email].append((item, str(escalation.id)))
+
+    subject_template = Template("[NPA-ECM] Daily Escalation Digest — {{ count }} item(s)")
+    body_template = Template(
+        """
+        <h2>NPA-ECM Daily Escalation Digest</h2>
+        <p>The following {{ count }} correspondence item(s) require attention:</p>
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;">
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Subject</th>
+              <th>Priority</th>
+              <th>Division</th>
+              <th>Days Pending</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+            <tr>
+              <td><a href="{{ item.link }}">{{ item.reference }}</a></td>
+              <td>{{ item.subject }}</td>
+              <td>{{ item.priority }}</td>
+              <td>{{ item.division }}</td>
+              <td>{{ item.days_pending }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p style="margin-top:16px;"><a href="{{ frontend_url }}/analytics/executive">Open Executive Dashboard</a></p>
+        """
+    )
+
+    sent_escalation_ids: set[str] = set()
+
+    for email, entries in by_recipient.items():
+        items = [entry[0] for entry in entries]
+        context = Context(
+            {
+                "count": len(items),
+                "items": items,
+                "frontend_url": settings.FRONTEND_URL,
+            }
+        )
+        subject = subject_template.render(context)
+        body = body_template.render(context)
+        try:
+            send_mail(
+                subject=subject,
+                message="",
+                html_message=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=False,
+            )
+            results["digests_sent"] += 1
+            sent_escalation_ids.update(entry[1] for entry in entries)
+        except Exception as exc:
+            logger.error("Daily digest failed for %s: %s", email, exc)
+            results["errors"].append({"email": email, "error": str(exc)})
+
+    if sent_escalation_ids:
+        Escalation.objects.filter(id__in=sent_escalation_ids).update(
+            status=Escalation.Status.SENT,
+            action_details={"include_in_digest": True, "digest_sent_at": timezone.now().isoformat()},
+        )
+
+    logger.info(
+        "Daily digest complete: %s emails sent, %s errors",
+        results["digests_sent"],
+        len(results["errors"]),
+    )
     return results
 

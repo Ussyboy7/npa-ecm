@@ -39,21 +39,22 @@ Default accounts created during seeding:
 
 ```bash
 source backend/.venv/bin/activate
-python backend/manage.py runserver 0.0.0.0:8000
+python backend/manage.py runserver 0.0.0.0:8002
 ```
 
-The API is served under `http://localhost:8000/api/`.
+The API is served under `http://localhost:8002/api/v1/` (legacy alias: `/api/`).
 
 Authentication endpoints (JWT):
 
 ```
-POST /api/accounts/auth/token/
-POST /api/accounts/auth/token/refresh/
-GET  /api/accounts/auth/me/
+POST /api/v1/accounts/auth/token/
+POST /api/v1/accounts/auth/token/refresh/
+GET  /api/v1/accounts/auth/me/
 ```
 
 ## 4. Optional helpers
 
+- `python backend/manage.py ensure_dev_login_users` – bootstrap dev login users (Docker entrypoint).
 - `python backend/manage.py seed_demo_data` – re-seed when you reset the database.
 - `python backend/manage.py createsuperuser` – add additional admin accounts.
 - `docker-compose.local.yml` – spin up PostgreSQL/Redis and run the backend in containers.

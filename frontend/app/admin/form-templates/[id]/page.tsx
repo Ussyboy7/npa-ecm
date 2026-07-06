@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,7 +135,7 @@ export default function FormTemplateEditorPage() {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         {loading ? (
           <div className="flex items-center justify-center min-h-[400px]">
@@ -293,7 +292,7 @@ export default function FormTemplateEditorPage() {
           </>
       )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }
 

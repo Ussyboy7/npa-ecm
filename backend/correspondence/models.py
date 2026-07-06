@@ -163,6 +163,15 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
     completion_summary_generated_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
+    is_on_legal_hold = models.BooleanField(default=False, db_index=True)
+    retention_schedule = models.ForeignKey(
+        "records.RetentionSchedule",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="correspondence_items",
+    )
+    disposed_at = models.DateTimeField(null=True, blank=True)
     # Withdrawal tracking (similar to recall in minutes)
     withdrawn_at = models.DateTimeField(null=True, blank=True)
     withdraw_reason = models.TextField(null=True, blank=True)
@@ -1718,6 +1727,37 @@ class PhysicalDocument(UUIDModel, TimeStampedModel, SoftDeleteModel):
     def __str__(self) -> str:
         name = self.description or f"Physical Doc #{self.tracking_number}"
         return f"{name} ({self.get_status_display()})"
+
+
+class ExternalEntity(UUIDModel, TimeStampedModel):
+    """Directory of external ministries, agencies, and organizations for correspondence registration."""
+
+    class EntityType(models.TextChoices):
+        MINISTRY = "ministry", "Ministry"
+        AGENCY = "agency", "Agency / Parastatal"
+        COMPANY = "company", "Private Company"
+        INDIVIDUAL = "individual", "Individual"
+        OTHER = "other", "Other"
+
+    name = models.CharField(max_length=255, unique=True, db_index=True)
+    acronym = models.CharField(max_length=32, blank=True)
+    entity_type = models.CharField(
+        max_length=20,
+        choices=EntityType.choices,
+        default=EntityType.OTHER,
+        db_index=True,
+    )
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=32, blank=True)
+    address = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name_plural = "external entities"
+
+    def __str__(self) -> str:
+        return self.acronym or self.name
 
 
 class CheckOutEvent(UUIDModel, TimeStampedModel):

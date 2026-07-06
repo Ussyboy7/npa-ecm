@@ -87,13 +87,9 @@ export function PasswordDialog({ open, onOpenChange }: PasswordDialogProps) {
       onOpenChange(false);
     } catch (error: unknown) {
       logError('Failed to change password', error);
-      const errorData = (error instanceof Error && 'response' in error && error.response && typeof error.response === 'object' && 'data' in error.response) ? error.response.data as Record<string, string> : {};
-      const errorMessage: string = (typeof errorData === 'object' && errorData && 'current_password' in errorData && errorData.current_password) ||
-                          (typeof errorData === 'object' && errorData && 'new_password' in errorData && errorData.new_password) ||
-                          (typeof errorData === 'object' && errorData && 'detail' in errorData && errorData.detail) ||
-                          'Failed to change password';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to change password';
       toast.error(errorMessage);
-      setPasswordErrors(errorData);
+      setPasswordErrors({});
     } finally {
       setIsChangingPassword(false);
     }

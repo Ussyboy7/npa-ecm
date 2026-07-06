@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOrganization, Role } from "@/contexts/OrganizationContext";
 import { toast } from "@/hooks/use-toast";
 import { AVAILABLE_ROLE_PERMISSIONS, PERMISSION_PRESETS, getPermissionsByCategory } from "@/lib/role-permissions";
+import { usePermissionCatalog } from "@/hooks/use-permission-catalog";
 import { CheckCircle2, XCircle, Users } from "lucide-react";
 
 interface RoleFormModalProps {
@@ -36,6 +37,8 @@ export const RoleFormModal = ({
   onSuccess,
 }: RoleFormModalProps) => {
   const { users, roles, refreshOrganizationData, addRole, updateRole } = useOrganization();
+  const { permissions: catalogPermissions } = usePermissionCatalog();
+  const rolePermissionsCatalog = catalogPermissions.length > 0 ? catalogPermissions : AVAILABLE_ROLE_PERMISSIONS;
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
@@ -82,34 +85,34 @@ export const RoleFormModal = ({
 
   // Get permissions by category
   const permissionsByCategory = useMemo(() => {
-    return getPermissionsByCategory(AVAILABLE_ROLE_PERMISSIONS.filter(p => p.category !== 'sidebar'));
-  }, []);
+    return getPermissionsByCategory(rolePermissionsCatalog.filter(p => p.category !== 'sidebar'));
+  }, [rolePermissionsCatalog]);
 
   const sidebarPermissions = useMemo(() => {
-    return getPermissionsByCategory(AVAILABLE_ROLE_PERMISSIONS.filter(p => p.category === 'sidebar'));
-  }, []);
+    return getPermissionsByCategory(rolePermissionsCatalog.filter(p => p.category === 'sidebar'));
+  }, [rolePermissionsCatalog]);
 
   // Count selected permissions
   const selectedPermissionsCount = useMemo(() => {
     return Object.entries(permissions).filter(([id, enabled]) => {
-      const perm = AVAILABLE_ROLE_PERMISSIONS.find(p => p.id === id);
+      const perm = rolePermissionsCatalog.find(p => p.id === id);
       return enabled && perm?.category !== 'sidebar';
     }).length;
-  }, [permissions]);
+  }, [permissions, rolePermissionsCatalog]);
 
   const selectedSidebarCount = useMemo(() => {
     return Object.entries(permissions).filter(([id, enabled]) => {
-      const perm = AVAILABLE_ROLE_PERMISSIONS.find(p => p.id === id);
+      const perm = rolePermissionsCatalog.find(p => p.id === id);
       return enabled && perm?.category === 'sidebar';
     }).length;
-  }, [permissions]);
+  }, [permissions, rolePermissionsCatalog]);
 
-  const totalPermissionsCount = AVAILABLE_ROLE_PERMISSIONS.filter(p => p.category !== 'sidebar').length;
-  const totalSidebarCount = AVAILABLE_ROLE_PERMISSIONS.filter(p => p.category === 'sidebar').length;
+  const totalPermissionsCount = rolePermissionsCatalog.filter(p => p.category !== 'sidebar').length;
+  const totalSidebarCount = rolePermissionsCatalog.filter(p => p.category === 'sidebar').length;
 
   // Select/Deselect all for a category
   const handleCategoryToggle = (category: string, selectAll: boolean) => {
-    const categoryPerms = AVAILABLE_ROLE_PERMISSIONS.filter(p => p.category === category);
+    const categoryPerms = rolePermissionsCatalog.filter(p => p.category === category);
 
     setPermissions(prev => {
       const newPerms = { ...prev };
@@ -123,8 +126,8 @@ export const RoleFormModal = ({
   // Select/Deselect all permissions
   const handleSelectAll = (selectAll: boolean, isSidebar: boolean = false) => {
     const permsToToggle = isSidebar
-      ? AVAILABLE_ROLE_PERMISSIONS.filter(p => p.category === 'sidebar')
-      : AVAILABLE_ROLE_PERMISSIONS.filter(p => p.category !== 'sidebar');
+      ? rolePermissionsCatalog.filter(p => p.category === 'sidebar')
+      : rolePermissionsCatalog.filter(p => p.category !== 'sidebar');
 
     setPermissions(prev => {
       const newPerms = { ...prev };

@@ -1,5 +1,5 @@
 import type { User } from './npa-structure';
-import { unwrapResults as unwrapResultsUtil } from '@/lib/type-utils';
+import { isRecord, unwrapResults as unwrapResultsUtil } from '@/lib/type-utils';
 
 export type DocumentType = 'letter' | 'memo' | 'circular' | 'policy' | 'report' | 'form' | 'other';
 export type DocumentStatus = 'draft' | 'published' | 'archived';
@@ -77,6 +77,17 @@ export interface DocumentRecord {
   updatedAt: string;
   workspaceIds: string[];
   activeEditors: DocumentCollaborator[];
+  drmRights?: {
+    policy_id?: string | null;
+    policy_name?: string | null;
+    allow_download: boolean;
+    allow_print: boolean;
+    allow_external_share: boolean;
+    view_only: boolean;
+    watermark_text: string;
+    expired: boolean;
+    message: string;
+  };
   form_document?: {
     id: string;
     template?: {
@@ -453,6 +464,19 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
                 completed_signatures: typeof formWorkflow.completed_signatures === 'number' ? formWorkflow.completed_signatures : undefined,
               }
             : undefined,
+        }
+      : undefined,
+    drmRights: isRecord(item.drm_rights)
+      ? {
+          policy_id: item.drm_rights.policy_id ? String(item.drm_rights.policy_id) : null,
+          policy_name: item.drm_rights.policy_name ? String(item.drm_rights.policy_name) : null,
+          allow_download: Boolean(item.drm_rights.allow_download),
+          allow_print: Boolean(item.drm_rights.allow_print),
+          allow_external_share: Boolean(item.drm_rights.allow_external_share),
+          view_only: Boolean(item.drm_rights.view_only),
+          watermark_text: String(item.drm_rights.watermark_text ?? ''),
+          expired: Boolean(item.drm_rights.expired),
+          message: String(item.drm_rights.message ?? ''),
         }
       : undefined,
   };

@@ -3,7 +3,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { fetchSLATargets } from '@/lib/sla-client';
 import { logError } from '@/lib/client-logger';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,59 +13,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import {
-  Inbox,
   Search,
-  AlertCircle,
-  Shield,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { MAX_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
-import { getSharedDocuments, type DocumentRecord } from '@/lib/dms-storage';
+import { getSharedDocuments } from '@/lib/dms-storage';
+import { calculateSLAStatus, slaSortPriority } from '@/lib/inbox-sla';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorState } from '@/components/shared/ErrorState';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
 import { correspondenceQueueListStackClass } from '@/components/shared/registry-queue-styles';
 import { InboxSummaryCards } from './components/InboxSummaryCards';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { InboxItemCard } from './components/InboxItemCard';
 import { InboxApprovalCard } from './components/InboxApprovalCard';
-import { InboxDocumentCard } from './components/InboxDocumentCard';
 
-const calculateDaysPending = (item: Correspondence, _slaTargets?: { urgent: number; high: number; medium: number; low: number }): number => {
+const calculateDaysPending = (item: Correspondence): number => {
   if (!item.receivedDate) return 0;
   const received = new Date(item.receivedDate).getTime();
   return Math.floor((Date.now() - received) / (1000 * 60 * 60 * 24));
-};
-
-const calculateSLAStatus = (
-  item: Correspondence,
-  slaTargets?: { urgent: number; high: number; medium: number; low: number }
-): { status: 'overdue' | 'due-soon' | 'pending'; daysOverdue?: number; daysUntilDue?: number } => {
-  if (!item.receivedDate || !slaTargets) {
-    return { status: 'pending' };
-  }
-  const received = new Date(item.receivedDate).getTime();
-  const now = Date.now();
-  const priority = item.priority?.toLowerCase() || 'medium';
-  const targetHours = slaTargets[priority as keyof typeof slaTargets] || slaTargets.medium;
-  const dueDate = received + (targetHours * 60 * 60 * 1000);
-  const diffHours = (dueDate - now) / (1000 * 60 * 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffDays < 0) {
-    return { status: 'overdue', daysOverdue: Math.abs(diffDays) };
-  } else if (diffDays <= 2) {
-    return { status: 'due-soon', daysUntilDue: diffDays };
-  } else {
-    return { status: 'pending', daysUntilDue: diffDays };
-  }
 };
 
 const calculateTaskStatus = (dueDate: string): { status: 'overdue' | 'due-soon' | 'pending'; daysOverdue?: number; daysUntilDue?: number } => {
@@ -75,11 +47,11 @@ const calculateTaskStatus = (dueDate: string): { status: 'overdue' | 'due-soon' 
   const diffDays = Math.floor((due - now) / (1000 * 60 * 60 * 24));
   if (diffDays < 0) {
     return { status: 'overdue', daysOverdue: Math.abs(diffDays) };
-  } else if (diffDays <= 2) {
-    return { status: 'due-soon', daysUntilDue: diffDays };
-  } else {
-    return { status: 'pending', daysUntilDue: diffDays };
   }
+  if (diffDays <= 2) {
+    return { status: 'due-soon', daysUntilDue: diffDays };
+  }
+  return { status: 'pending', daysUntilDue: diffDays };
 };
 
 interface PendingApproval {
@@ -106,19 +78,18 @@ const ExecutiveInbox = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const [count, setCount] = useState(0);
+  const [_sharedDocumentsCount, setSharedDocumentsCount] = useState(0);
   const pagination = usePagination({
     initialPage: 1,
     totalCount: count,
   });
 
   const [inboxItems, setInboxItems] = useState<Correspondence[]>([]);
-  const [sharedDocuments, setSharedDocuments] = useState<DocumentRecord[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [summary, setSummary] = useState({ total: 0, urgent: 0, overdue: 0, pending: 0, inProgress: 0, dueSoon: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [slaTargets, setSlaTargets] = useState<{ urgent: number; high: number; medium: number; low: number } | null>(null);
-  const [focusOnTasks, setFocusOnTasks] = useState(false);
 
   const hasActiveFilters = useMemo(() => {
     return !!(selectedStatus || selectedPriority || dateFrom || dateTo);
@@ -185,7 +156,8 @@ const ExecutiveInbox = () => {
           apiFetch<Record<string, unknown>>(`/correspondence/items/my-inbox/?${params.toString()}`),
           getSharedDocuments(currentUser.id, {
             search: debouncedSearch || undefined,
-            pageSize: 50,
+            page: 1,
+            pageSize: 1,
           }),
           apiFetch<Record<string, unknown>>(`/correspondence/minutes/pending-approvals/?page_size=${MAX_LIST_PAGE_SIZE}`).catch(() => ({ results: [] })),
         ]);
@@ -194,208 +166,174 @@ const ExecutiveInbox = () => {
         const mappedItems = corrResults.map(mapApiCorrespondence);
         setInboxItems(mappedItems);
 
-        const slaStats = mappedItems.reduce((acc, item) => {
-          const slaStatus = calculateSLAStatus(item, slaTargets || undefined);
-          if (slaStatus.status === 'overdue') acc.overdue++;
-          if (slaStatus.status === 'due-soon') acc.dueSoon++;
-          return acc;
-        }, { overdue: 0, dueSoon: 0 });
-
         const summaryData = corrResponse.summary as Record<string, unknown> | undefined;
         setSummary({
-          total: (summaryData && typeof summaryData.total === 'number') ? summaryData.total : (corrResponse.count as number ?? corrResults.length),
-          urgent: (summaryData && typeof summaryData.urgent === 'number') ? summaryData.urgent : 0,
-          overdue: slaStats.overdue,
-          pending: (summaryData && typeof summaryData.pending === 'number') ? summaryData.pending : 0,
-          inProgress: (summaryData && typeof summaryData.in_progress === 'number') ? summaryData.in_progress : 0,
-          dueSoon: slaStats.dueSoon,
+          total: typeof summaryData?.total === 'number' ? summaryData.total : (corrResponse.count as number ?? corrResults.length),
+          urgent: typeof summaryData?.urgent === 'number' ? summaryData.urgent : 0,
+          overdue: typeof summaryData?.overdue === 'number' ? summaryData.overdue : 0,
+          pending: typeof summaryData?.pending === 'number' ? summaryData.pending : 0,
+          inProgress: typeof summaryData?.in_progress === 'number' ? summaryData.in_progress : 0,
+          dueSoon: typeof summaryData?.due_soon === 'number' ? summaryData.due_soon : 0,
         });
         setCount((corrResponse.count as number) ?? corrResults.length);
 
-        setSharedDocuments(docsResponse.results || []);
+        setSharedDocumentsCount(docsResponse.count ?? 0);
 
         const approvals = Array.isArray(approvalsResponse.results) ? approvalsResponse.results : [];
         setPendingApprovals(approvals);
       } catch {
         setError('Failed to load inbox. Please try again.');
         setInboxItems([]);
-        setSharedDocuments([]);
         setPendingApprovals([]);
         setSummary({ total: 0, urgent: 0, overdue: 0, pending: 0, inProgress: 0, dueSoon: 0 });
         setCount(0);
+        setSharedDocumentsCount(0);
       } finally {
         setLoading(false);
       }
     };
 
     void fetchInbox();
-  }, [currentUser?.id, debouncedSearch, selectedStatus, selectedPriority, dateFrom, dateTo, sortBy, sortOrder, pagination.page, pagination.pageSize]);
-
-  const slaPriority = (s: 'overdue' | 'due-soon' | 'pending') =>
-    s === 'overdue' ? 0 : s === 'due-soon' ? 1 : 2;
+  }, [
+    currentUser?.id,
+    debouncedSearch,
+    selectedStatus,
+    selectedPriority,
+    dateFrom,
+    dateTo,
+    sortBy,
+    sortOrder,
+    pagination.page,
+    pagination.pageSize,
+  ]);
 
   const sortedItems = useMemo(() => {
     return [...inboxItems].sort((a, b) => {
-      const aStatus = calculateSLAStatus(a, slaTargets || undefined).status;
-      const bStatus = calculateSLAStatus(b, slaTargets || undefined).status;
-      return slaPriority(aStatus) - slaPriority(bStatus);
+      const aStatus = calculateSLAStatus(a, slaTargets).status;
+      const bStatus = calculateSLAStatus(b, slaTargets).status;
+      return slaSortPriority(aStatus) - slaSortPriority(bStatus);
     });
   }, [inboxItems, slaTargets]);
 
-  const shouldShowDocuments = !focusOnTasks && sharedDocuments.length > 0;
-  const totalDisplayCount = sortedItems.length + (shouldShowDocuments ? sharedDocuments.length : 0);
+  if (!currentUser) {
+    return (
+      <QueuePageShell
+        title="My Inbox"
+        subtitle="Correspondence and documents shared with you"
+      >
+        <EmptyState
+          icon="inbox"
+          title="Sign in required"
+          message="Use the Role Switcher in Settings to choose a user context before viewing your inbox."
+          actionLabel="Open Settings"
+          onAction={() => { window.location.href = '/settings'; }}
+          variant="dashed"
+        />
+      </QueuePageShell>
+    );
+  }
 
   return (
-    <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
-        {!currentUser ? (
-          <HelpGuideCard
-            title="Select a persona"
-            description="Use the Role Switcher to choose a user context before viewing your inbox."
-            links={[{ label: 'Role Switcher', href: '/settings' }]}
-          />
-        ) : (
-          <>
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold">My Inbox</h1>
-            <p className="text-muted-foreground mt-1">
-              {focusOnTasks ? 'Tasks requiring your attention' : 'Correspondence and documents shared with you'}
-            </p>
+    <QueuePageShell
+      title="My Inbox"
+      subtitle="Correspondence and documents that need your action"
+    >
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          <div className="relative min-w-[200px] flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant={focusOnTasks ? "default" : "outline"}
-              size="sm"
-              onClick={() => setFocusOnTasks(!focusOnTasks)}
-            >
-              {focusOnTasks ? (
-                <><Inbox className="h-4 w-4 mr-2" /> Show All</>
-              ) : (
-                <><AlertCircle className="h-4 w-4 mr-2" /> Focus on Tasks</>
-              )}
-            </Button>
-          </div>
-        </div>
+          <Select value={selectedStatus || 'all'} onValueChange={(v) => { setSelectedStatus(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="in-progress">In Progress</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="urgent">Urgent</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+            </SelectContent>
+          </Select>
+          <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+          <Select value={`${sortBy}-${sortOrder}`} onValueChange={handleSortChange}>
+            <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+              <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>
+              <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
+              <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
+              <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
+            </SelectContent>
+          </Select>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>
+          )}
+        </CardContent>
+      </Card>
 
-        <HelpGuideCard
-          title="Your Personal Inbox"
-          description="Items requiring your attention: correspondence routed to you and documents shared with you. Click any item to view details and take action."
-          links={[{ label: 'My Documents', href: '/documents' }, { label: 'Help & Guides', href: '/help' }]}
+      <InboxSummaryCards summary={summary} />
+
+      {error && <ErrorState message={error} variant="inline" />}
+
+      {loading ? (
+        <LoadingState message="Loading inbox…" />
+      ) : sortedItems.length === 0 && pendingApprovals.length === 0 ? (
+        <EmptyState
+          icon="inbox"
+          title="No correspondence"
+          message={debouncedSearch || hasActiveFilters
+            ? 'No correspondence matches your filters.'
+            : 'No correspondence is waiting on you right now.'}
+          actionLabel={debouncedSearch || hasActiveFilters ? 'Clear Filters' : undefined}
+          onAction={debouncedSearch || hasActiveFilters ? clearFilters : undefined}
         />
-
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
-            <div className="relative min-w-[200px] flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
+      ) : (
+        <div className="space-y-6">
+          {pendingApprovals.length > 0 && (
+            <div className={correspondenceQueueListStackClass}>
+              {pendingApprovals.map((approval) => (
+                <InboxApprovalCard
+                  key={approval.id}
+                  approval={approval}
+                  taskStatus={approval.due_date ? calculateTaskStatus(approval.due_date) : { status: 'pending' }}
+                />
+              ))}
             </div>
-            <Select value={selectedStatus || 'all'} onValueChange={(v) => { setSelectedStatus(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in-progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-              </SelectContent>
-            </Select>
-            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={handleSortChange}>
-              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>
-                <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
-                <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
-                <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
-              </SelectContent>
-            </Select>
-            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
-          </CardContent>
-        </Card>
-
-        <InboxSummaryCards summary={summary} />
-
-        {error && <ErrorState message={error} variant="inline" />}
-
-        {loading ? (
-          <LoadingState message="Loading inbox…" />
-        ) : inboxItems.length === 0 && sharedDocuments.length === 0 && pendingApprovals.length === 0 ? (
-          <EmptyState
-            icon="inbox"
-            title="No items in your inbox"
-            message={debouncedSearch || hasActiveFilters
-              ? 'No items match your current filters. Try adjusting your search or filter criteria.'
-              : 'All caught up! No correspondence or documents require your attention.'}
-            actionLabel={debouncedSearch || hasActiveFilters ? 'Clear Filters' : undefined}
-            onAction={debouncedSearch || hasActiveFilters ? clearFilters : undefined}
-          />
-        ) : (
-          <div className="space-y-6">
-            {pendingApprovals.length > 0 && (
+          )}
+          {sortedItems.length > 0 && (
+            <>
               <div className={correspondenceQueueListStackClass}>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                  <h2 className="text-lg font-semibold text-amber-600 dark:text-amber-400">
-                    Pending Approvals ({pendingApprovals.length})
-                  </h2>
-                </div>
-                {pendingApprovals.map((approval) => (
-                  <InboxApprovalCard
-                    key={approval.id}
-                    approval={approval}
-                    taskStatus={approval.due_date ? calculateTaskStatus(approval.due_date) : { status: 'pending' }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {(sortedItems.length > 0 || shouldShowDocuments) && (
-              <div className={correspondenceQueueListStackClass}>
-                <div className="flex items-center gap-2">
-                  <Inbox className="h-5 w-5 text-muted-foreground" />
-                  <h2 className="text-lg font-semibold">
-                    {focusOnTasks ? 'Pending Items' : 'All Items'} ({totalDisplayCount})
-                  </h2>
-                </div>
                 {sortedItems.map((corr) => (
                   <InboxItemCard
                     key={corr.id}
                     corr={corr}
-                    slaStatus={calculateSLAStatus(corr, slaTargets || undefined)}
-                    daysPending={calculateDaysPending(corr, slaTargets || undefined)}
+                    slaStatus={calculateSLAStatus(corr, slaTargets)}
+                    daysPending={calculateDaysPending(corr)}
                   />
                 ))}
-                {shouldShowDocuments && sharedDocuments.map((doc) => (
-                  <InboxDocumentCard key={doc.id} doc={doc} />
-                ))}
               </div>
-            )}
-          </div>
-        )}
-
-        {count > 0 && (
-          <PaginationControls
-            pagination={pagination}
-            showPageSizeSelector={true}
-            showGoToPage={true}
-            className="border-t border-border/60 pt-4"
-          />
-        )}
-        </>
+              {count > 0 && (
+                <PaginationControls
+                  pagination={pagination}
+                  showPageSizeSelector
+                  showGoToPage
+                  className="border-t border-border/60 pt-4"
+                />
+              )}
+            </>
+          )}
+        </div>
       )}
-      </div>
-    </DashboardLayout>
+    </QueuePageShell>
   );
 };
 

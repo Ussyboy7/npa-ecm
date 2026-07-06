@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,7 @@ import { LinkFormDialog } from "@/components/cases/LinkFormDialog";
 import { CaseHeader } from "./components/CaseHeader";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getCaseById, updateCaseStatus, updateCase, generateCaseCompletionPackage, unlinkCorrespondenceFromCase, unlinkDocumentFromCase, unlinkFormFromCase, exportCase, importCases, getCaseSLAStatus } from "@/lib/api/cases";
+import { getCaseById, updateCaseStatus, generateCaseCompletionPackage, unlinkCorrespondenceFromCase, unlinkDocumentFromCase, unlinkFormFromCase, exportCase, importCases, getCaseSLAStatus } from "@/lib/api/cases";
 import type { CaseDetail } from "@/lib/npa-structure";
 import { logError } from "@/lib/client-logger";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
@@ -33,9 +32,7 @@ import {
   FileCheck,
   Mail,
 } from "lucide-react";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { toast } from "sonner";
-
 
 import {
   AlertDialog,
@@ -56,8 +53,6 @@ import {
   registryQueueEmptyIconClass,
 } from "@/components/shared/registry-queue-styles";
 import { cn } from "@/lib/utils";
-
-
 
 const CaseDetailPage = () => {
   const params = useParams();
@@ -276,7 +271,7 @@ const CaseDetailPage = () => {
   const createdBy = caseData ? users.find((u) => u.id === caseData.createdById) : undefined;
 
   return (
-    <DashboardLayout>
+    <>
       {loading ? (
         <div className="container mx-auto p-6">
           <LoadingState message="Loading case…" />
@@ -308,14 +303,6 @@ const CaseDetailPage = () => {
         <div className="container mx-auto p-6 space-y-6">
 
         {/* Help Guide */}
-        <HelpGuideCard
-          title="Case Details"
-          description="Review case information and manage related correspondence, documents, and forms. Update status and generate completion packages when the case is closed."
-          links={[
-            { label: 'Case Management', href: '/cases/my' },
-            { label: 'Help & Guides', href: '/help' },
-          ]}
-        />
 
         {/* Case Description Card - Only show if description exists */}
         {caseData.description && (
@@ -693,7 +680,7 @@ const CaseDetailPage = () => {
       </div>
       </ErrorBoundary>
       )}
-    </DashboardLayout>
+    </>
   );
 };
 

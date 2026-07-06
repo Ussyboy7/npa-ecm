@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 
@@ -15,7 +14,7 @@ export default function DepartmentFilesRedirectPage() {
   }, [router]);
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6">
         <Card>
           <CardContent className="py-12 text-center">
@@ -24,6 +23,6 @@ export default function DepartmentFilesRedirectPage() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

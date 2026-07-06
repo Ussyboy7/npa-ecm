@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { FormDocumentEditor } from "@/components/dms/FormDocumentEditor";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { fetchDocumentById } from "@/lib/dms-storage";
 import { apiFetch } from "@/lib/api-client";
 import { logError } from "@/lib/client-logger";
@@ -64,7 +62,7 @@ const FormDetailPage = () => {
   }, [loadFormDocument]);
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between gap-2">
           <Button variant="outline" size="sm" onClick={() => router.push("/forms")}>
@@ -76,12 +74,6 @@ const FormDetailPage = () => {
             Open in DMS
           </Button>
         </div>
-
-        <HelpGuideCard
-          title="Form Workspace"
-          description="Complete, route, sign, and track this form in the dedicated forms workflow."
-          links={[{ label: "Forms Library", href: "/forms" }, { label: "Help & Guides", href: "/help" }]}
-        />
 
         {loading ? (
           <Card>
@@ -100,7 +92,7 @@ const FormDetailPage = () => {
           <FormDocumentEditor documentId={params.id} formDocumentId={formDocumentId} />
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 };
 

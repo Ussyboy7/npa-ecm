@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Search, Save, History, FileText, Mail, Loader2, Calendar, User, Shield, FolderTree } from 'lucide-react';
 import {
@@ -48,6 +50,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
   const [searchType, setSearchType] = useState<'documents' | 'correspondence' | 'cases' | 'all'>(
     context === 'all' || !context ? 'all' : context
   );
+  const [searchMode, setSearchMode] = useState<'keyword' | 'semantic'>('keyword');
   const [results, setResults] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -200,6 +203,10 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
         limit: pageSize,
         offset: currentPage * pageSize,
         search_type: searchType,
+        search_mode:
+          searchMode === 'semantic' && (searchType === 'documents' || searchType === 'all')
+            ? 'semantic'
+            : 'keyword',
       };
 
       const result: SearchResponse = await search(searchRequest, controller.signal);
@@ -358,7 +365,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
             Advanced Search
           </CardTitle>
           <CardDescription>
-            Search documents and correspondence with full-text search and filters
+            Search documents, correspondence, and cases with full-text search and filters
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -409,6 +416,20 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
                   <SelectItem value="cases">Cases</SelectItem>
                 </SelectContent>
               </Select>
+
+              {(searchType === 'documents' || searchType === 'all') && (
+                <div className="flex items-center gap-2 h-8 px-2 border rounded-md">
+                  <Switch
+                    id="semantic-search"
+                    checked={searchMode === 'semantic'}
+                    onCheckedChange={(checked) => setSearchMode(checked ? 'semantic' : 'keyword')}
+                    aria-label="Enable semantic search for documents"
+                  />
+                  <Label htmlFor="semantic-search" className="text-xs cursor-pointer">
+                    Semantic
+                  </Label>
+                </div>
+              )}
 
               <Select
                 value={filters?.document_type || 'all'}

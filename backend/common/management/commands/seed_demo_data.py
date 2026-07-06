@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
@@ -809,6 +809,55 @@ class Command(BaseCommand):
                 "active": True,
             },
         )
+
+        edfa = users.get("edfa") or users.get("user-ed-fa")
+        edfa_office = offices.get("office-dir-edfa")
+        edfa_division = divisions.get("div-edfa-direct")
+        gm = users.get("gmict") or users.get("user-gm-ict")
+
+        if edfa:
+            edfa_correspondence, _ = Correspondence.objects.update_or_create(
+                reference_number="NPA/CORR/2025/016",
+                defaults={
+                    "subject": "FY2025 Capital Expenditure Review — Finance & Administration",
+                    "body_html": (
+                        "<p><strong>ED F&amp;A approval required</strong></p>"
+                        "<p>Please review the proposed capital expenditure allocations for Q3–Q4 "
+                        "before submission to the Managing Director.</p>"
+                    ),
+                    "source": Correspondence.Source.INTERNAL,
+                    "priority": Correspondence.Priority.URGENT,
+                    "direction": Correspondence.Direction.UPWARD,
+                    "status": Correspondence.Status.IN_PROGRESS,
+                    "division": edfa_division,
+                    "department": department,
+                    "tags": ["capex", "finance", "approval"],
+                    "created_by": gm,
+                    "current_approver": edfa,
+                    "owning_office": edfa_office or owning_office,
+                    "current_office": edfa_office or owning_office,
+                    "received_date": date.today() - timedelta(days=5),
+                },
+            )
+
+            Minute.objects.update_or_create(
+                correspondence=edfa_correspondence,
+                user=gm,
+                step_number=1,
+                defaults={
+                    "minute_text": (
+                        "Please review and approve the capex allocation before board submission."
+                    ),
+                    "action_type": Minute.ActionType.FORWARD,
+                    "direction": Minute.Direction.UPWARD,
+                    "grade_level": "MSS1",
+                    "to_user": edfa,
+                    "purpose": "approval",
+                    "requires_response": True,
+                    "response_deadline": timezone.now() + timedelta(days=2),
+                    "from_office": offices.get("office-gm-ict") or owning_office,
+                },
+            )
 
         self.stdout.write(self.style.SUCCESS("Correspondence records ensured."))
         return {"primary": correspondence}
@@ -2340,6 +2389,6 @@ class Command(BaseCommand):
             from organization.management.commands.setup_role_permissions import Command as SetupCommand
             setup_cmd = SetupCommand()
             setup_cmd.stdout = self.stdout
-            setup_cmd.handle()
+            setup_cmd.handle(force=True)
         except ImportError:
             self.stdout.write(self.style.WARNING("setup_role_permissions command not available; skipping."))

@@ -6,6 +6,7 @@ import { OrganizationProvider } from "@/contexts/OrganizationContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { BootstrapData } from "@/lib/server-bootstrap";
 import { seedSidebarCounts } from "@/hooks/use-sidebar-counts";
+import { seedCurrentUserFromApi } from "@/hooks/use-current-user";
 
 type ProvidersProps = {
   children: React.ReactNode;
@@ -19,9 +20,14 @@ export function Providers({
   initialSidebarCounts = null,
 }: ProvidersProps) {
   const sidebarSeededRef = useRef(false);
+  const userSeededRef = useRef(false);
   if (initialSidebarCounts && !sidebarSeededRef.current) {
     seedSidebarCounts(initialSidebarCounts);
     sidebarSeededRef.current = true;
+  }
+  if (initialOrgData?.user && !userSeededRef.current) {
+    seedCurrentUserFromApi(initialOrgData.user);
+    userSeededRef.current = true;
   }
 
   return (

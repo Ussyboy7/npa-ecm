@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -16,7 +15,7 @@ export default function CreateDocumentPage() {
   };
 
   return (
-    <DashboardLayout>
+    <>
       {!hydrated ? (
         <div className="container mx-auto p-6">
           <Card>
@@ -52,6 +51,6 @@ export default function CreateDocumentPage() {
           />
         </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }

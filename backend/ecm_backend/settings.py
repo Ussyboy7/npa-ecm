@@ -112,6 +112,7 @@ LOCAL_APPS = [
     "capture",
     "search",
     "integrations",
+    "records",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -124,6 +125,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "common.middleware.InternalHostMiddleware",  # Handle internal Docker hostnames for metrics
+    "common.middleware.SecurityHeadersMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -286,6 +288,17 @@ CORS_ALLOW_CREDENTIALS = True
 # Allow iframe embedding for same-origin (needed for PDF previews)
 X_FRAME_OPTIONS = "SAMEORIGIN"
 
+if IS_STRICT_ENV:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "true").lower() == "true"
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = os.getenv("SECURE_HSTS_PRELOAD", "false").lower() == "true"
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
 
 # ---------------------------------------------------------------------------
 # JWT
@@ -316,10 +329,8 @@ CHANNEL_LAYERS = {
                 {
                     "host": os.getenv("REDIS_HOST", "localhost"),
                     "port": int(os.getenv("REDIS_PORT", "6379")),
-                    "db": 0,
-                    # channels_redis uses blocking BZPOPMIN; redis-py 8+ defaults
-                    # socket_timeout=5 which raises TimeoutError on idle connections.
-                    "socket_timeout": None,
+                    "db": int(os.getenv("REDIS_CHANNELS_DB", "3")),
+                    "socket_timeout": int(os.getenv("REDIS_CHANNELS_SOCKET_TIMEOUT", "60")),
                     "socket_connect_timeout": 5,
                 }
             ],
@@ -340,7 +351,7 @@ CACHES = {
             "SOCKET_CONNECT_TIMEOUT": 5,
             "SOCKET_TIMEOUT": 5,
             "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
-            "IGNORE_EXCEPTIONS": True,
+            "IGNORE_EXCEPTIONS": False,
         },
         "KEY_PREFIX": "ecm",
         "TIMEOUT": 300,  # 5 minutes default
@@ -353,6 +364,9 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+
+from ecm_backend.beat_schedules import CELERY_BEAT_SCHEDULE  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -411,3 +425,25 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Application URLs
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3002")
+
+# ---------------------------------------------------------------------------
+# Login MFA & OIDC SSO (Phase 1)
+# ---------------------------------------------------------------------------
+
+LOGIN_MFA_REQUIRED = os.getenv("LOGIN_MFA_REQUIRED", "false").lower() == "true"
+
+OIDC_ENABLED = os.getenv("OIDC_ENABLED", "false").lower() == "true"
+OIDC_ISSUER_URL = os.getenv("OIDC_ISSUER_URL", "")
+OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID", "")
+OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET", "")
+OIDC_REDIRECT_URI = os.getenv(
+    "OIDC_REDIRECT_URI",
+    "http://localhost:8000/api/accounts/auth/oidc/callback/",
+)
+OIDC_SCOPES = os.getenv("OIDC_SCOPES", "openid profile email")
+OIDC_AUTHORIZATION_ENDPOINT = os.getenv("OIDC_AUTHORIZATION_ENDPOINT", "")
+OIDC_TOKEN_ENDPOINT = os.getenv("OIDC_TOKEN_ENDPOINT", "")
+OIDC_USERINFO_ENDPOINT = os.getenv("OIDC_USERINFO_ENDPOINT", "")
+
+# Fernet key (url-safe base64 32-byte); derived from SECRET_KEY if unset
+INTEGRATION_ENCRYPTION_KEY = os.getenv("INTEGRATION_ENCRYPTION_KEY", "")

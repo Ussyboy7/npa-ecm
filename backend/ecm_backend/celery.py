@@ -12,7 +12,3 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
 
-@app.task(bind=True)
-def debug_task(self):  # pragma: no cover - utility task for quick checks
-    print(f"Request: {self.request!r}")
-

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/shared/Providers';
+import { AppShell } from '@/components/AppShell';
 import { fetchBootstrap } from '@/lib/server-bootstrap';
 import './globals.css';
 
@@ -27,7 +28,7 @@ export default async function RootLayout({
           initialOrgData={bootstrap}
           initialSidebarCounts={bootstrap?.sidebarCounts ?? null}
         >
-          {children}
+          <AppShell>{children}</AppShell>
         </Providers>
       </body>
     </html>

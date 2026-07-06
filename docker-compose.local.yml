@@ -50,6 +50,7 @@ services:
       - static-data:/app/staticfiles
     command: >
       sh -c "python manage.py migrate &&
+             python manage.py ensure_dev_login_users &&
              daphne -b 0.0.0.0 -p 8002 ecm_backend.asgi:application"
     ports:
       - "8002:8002"

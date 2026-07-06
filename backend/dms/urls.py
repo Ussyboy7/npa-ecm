@@ -9,6 +9,7 @@ from .views import (
     DocumentDiscussionMessageViewSet,
     DocumentEditorSessionViewSet,
     DocumentPermissionViewSet,
+    DocumentRightsPolicyViewSet,
     DocumentTemplateViewSet,
     DocumentVersionViewSet,
     DocumentViewSet,
@@ -29,6 +30,7 @@ router.register(r"discussions", DocumentDiscussionMessageViewSet, basename="docu
 router.register(r"access-logs", DocumentAccessLogViewSet, basename="document-access-log")
 router.register(r"editor-sessions", DocumentEditorSessionViewSet, basename="document-editor-session")
 router.register(r"templates", DocumentTemplateViewSet, basename="document-template")
+router.register(r"drm-policies", DocumentRightsPolicyViewSet, basename="document-rights-policy")
 
 
 urlpatterns = router.urls

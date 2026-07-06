@@ -343,11 +343,11 @@ export const CorrespondenceHeader = ({
             )}
             <ContextualHelp
               title="Need help on this correspondence?"
-              description="The document is shown in the workspace below. Use fullscreen for a larger view, print preview for hard copies, and the routing panel to minute, treat, delegate, or archive."
+              description="Review the document, then complete routing actions."
               steps={[
-                'Read the document in the left panel (or Document tab on mobile).',
-                'Use Fullscreen or Print Preview from here when you need a larger or printable view.',
-                'Use the routing panel on the right to minute, treat, delegate, or complete.',
+                'Read the document in the preview panel (or Document tab on mobile).',
+                'Use Fullscreen or Print Preview when needed.',
+                'Use the routing panel to minute, treat, delegate, archive, or complete.',
               ]}
             />
           </div>

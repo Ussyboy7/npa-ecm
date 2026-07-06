@@ -4,12 +4,10 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 import { logError } from '@/lib/client-logger';
 import { useMemo, useRef, useReducer, useEffect, useCallback, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api-client';
 import { AlertCircle, ArrowLeft, FileText, Users, ArrowRight, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
@@ -20,7 +18,9 @@ import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { useApiRetry } from '@/hooks/use-api-retry';
 import { useRoleChecks } from '@/hooks/use-role-checks';
 import { handleAuthenticationError } from '@/lib/auth-errors';
+import { PermissionDeniedCard } from '@/components/shared/PermissionDeniedCard';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { usePermissionCheck } from '@/hooks/use-permission-check';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,6 +69,10 @@ const CorrespondenceRegisterForm = () => {
   const { syncFromApi } = useCorrespondence();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser);
+  const { result: registerPermission, loading: registerPermissionLoading } = usePermissionCheck(
+    "can_register_correspondence",
+    Boolean(currentUser)
+  );
   const { fetchWithRetry } = useApiRetry();
   const roleChecks = useRoleChecks();
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -181,21 +185,7 @@ const CorrespondenceRegisterForm = () => {
       }
       logError('Failed to load correspondence for editing', error);
       logError('Error loading correspondence:', error);
-      let errorMessage = ERROR_UNKNOWN;
-      if (error && typeof error === 'object') {
-        const errorObj = error as Record<string, unknown>;
-        if (errorObj.message && typeof errorObj.message === 'string') {
-          errorMessage = errorObj.message;
-        } else if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        } else if (errorObj.statusText && typeof errorObj.statusText === 'string') {
-          errorMessage = errorObj.statusText;
-        }
-      }
+      const errorMessage = error instanceof Error && error.message ? error.message : ERROR_UNKNOWN;
       setLoadError(errorMessage);
       toast.error(`Failed to load correspondence: ${errorMessage}`, {
         description: editId ? `Could not load correspondence ${editId}` : 'Please try again or contact support',
@@ -261,7 +251,7 @@ const CorrespondenceRegisterForm = () => {
   );
 
   // Memoized computations
-  const executives = useMemo(() => {
+  const _executives = useMemo(() => {
     if (!Array.isArray(organizationUsers)) return [];
     const eligibleGrades = new Set(REGISTER_CONSTANTS.ELIGIBLE_GRADES);
     return organizationUsers.filter(
@@ -585,11 +575,10 @@ const CorrespondenceRegisterForm = () => {
 
   const shouldAllowAccess =
     isSuperAdminFallback ||
-    permissions.canRegisterCorrespondence ||
-    (process.env.NODE_ENV === 'development' && currentUser);
+    permissions.canRegisterCorrespondence;
 
   return (
-    <DashboardLayout>
+    <>
       {!mounted ? (
         <div className="container mx-auto p-6">
           <div className="space-y-6">
@@ -615,24 +604,14 @@ const CorrespondenceRegisterForm = () => {
         </div>
       ) : !shouldAllowAccess ? (
         <div className="container mx-auto p-6">
-          <Card className="max-w-xl mx-auto">
-            <CardHeader className="text-center">
-              <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-                <AlertCircle className="h-6 w-6 text-destructive" />
-              </div>
-              <CardTitle>Registration Restricted</CardTitle>
-              <CardDescription>
-                Only records staff up to Senior Officer (Level 10) or delegates with drafting
-                permissions can register new correspondence.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-center">
-              <Button variant="outline" onClick={() => router.push('/correspondence/inbox')}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Inbox
-              </Button>
-            </CardContent>
-          </Card>
+          <PermissionDeniedCard
+            title="Registration Restricted"
+            check={registerPermission}
+            loading={registerPermissionLoading}
+            fallbackMessage="You do not have permission to register correspondence."
+            onBack={() => router.push('/correspondence/inbox')}
+            backLabel="Back to Inbox"
+          />
         </div>
       ) : (
         <ErrorBoundary>
@@ -648,16 +627,6 @@ const CorrespondenceRegisterForm = () => {
               : 'Capture and initiate inward or outward correspondence from your office'}
           </p>
         </div>
-
-
-        <HelpGuideCard
-          title="Office-based Registration"
-          description="Each executive office retains its own registry workspace. Choose your office, register inward correspondence, or capture drafts before dispatching outward."
-          links={[
-            { label: "Correspondence Inbox", href: "/correspondence/inbox" },
-            { label: "Help & Guides", href: "/help" },
-          ]}
-        />
 
         <div className="grid gap-6 lg:grid-cols-3 min-w-0">
           {/* Main Form */}
@@ -860,7 +829,7 @@ const CorrespondenceRegisterForm = () => {
         </AlertDialog>
       </ErrorBoundary>
     )}
-  </DashboardLayout>
+  </>
   );
 };
 

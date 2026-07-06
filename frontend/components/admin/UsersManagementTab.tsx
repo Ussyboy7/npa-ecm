@@ -1,16 +1,17 @@
 "use client";
 import { ERROR_UNKNOWN } from '@/lib/constants';
 
-import { useMemo, useState, useEffect, useCallback } from "react";
+import { useMemo, useState, useEffect, useLayoutEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { cn } from "@/lib/utils";
 import {
+  registryQueueSearchStatsShellContentClass,
   registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
   registryQueueStatIconClass,
@@ -114,7 +115,34 @@ const parseStoredSort = (raw: string | null): SortState | null => {
   }
 };
 
-export const UsersManagementTab = () => {
+export type UsersManagementTabHandle = {
+  openCreateUser: () => void;
+  exportUsers: () => void;
+};
+
+export const UsersManagementTab = forwardRef<
+  UsersManagementTabHandle,
+  {
+    omitStats?: boolean;
+    hideSearchInput?: boolean;
+    hideFilterActions?: boolean;
+    filterPortalId?: string;
+    searchQuery?: string;
+    onSearchQueryChange?: (value: string) => void;
+    onTotalCountChange?: (totalCount: number) => void;
+  }
+>(function UsersManagementTab(
+  {
+    omitStats = false,
+    hideSearchInput = false,
+    hideFilterActions = false,
+    filterPortalId,
+    searchQuery: controlledSearchQuery,
+    onSearchQueryChange,
+    onTotalCountChange,
+  },
+  ref,
+) {
   const { divisions, departments, roles } = useOrganization();
   const searchParams = useSearchParams();
   
@@ -126,16 +154,23 @@ export const UsersManagementTab = () => {
   const [loading, setLoading] = useState(true);
   
   // Load from URL params or localStorage
-  const [searchQuery, setSearchQuery] = useState('');
+  const [internalSearchQuery, setInternalSearchQuery] = useState('');
+  const searchQuery = controlledSearchQuery ?? internalSearchQuery;
+  const setSearchQuery = useCallback((value: string) => {
+    onSearchQueryChange?.(value);
+    if (controlledSearchQuery === undefined) {
+      setInternalSearchQuery(value);
+    }
+  }, [onSearchQueryChange, controlledSearchQuery]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [filters, setFilters] = useState<ActiveFilter[]>([DEFAULT_ACTIVE_FILTER]);
   const [sortState, setSortState] = useState<SortState | null>(null);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
-  const [isBulkActionMode, setIsBulkActionMode] = useState(false);
+  const [_isBulkActionMode, setIsBulkActionMode] = useState(false);
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
-  const [mounted, setMounted] = useState(false);
+  const [_mounted, _setMounted] = useState(false);
   const [showBulkDeactivateConfirm, setShowBulkDeactivateConfirm] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [showBulkArchiveConfirm, setShowBulkArchiveConfirm] = useState(false);
@@ -157,11 +192,12 @@ export const UsersManagementTab = () => {
   
   // Ensure client-side only rendering for localStorage-dependent UI
   useEffect(() => {
-    setMounted(true);
+    _setMounted(true);
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!searchParams) return;
     const urlQuery = searchParams.get('search');
     if (urlQuery) {
       setSearchQuery(urlQuery);
@@ -173,7 +209,7 @@ export const UsersManagementTab = () => {
     if (storedFilters) setFilters(parseStoredFilters(storedFilters));
     const storedSort = localStorage.getItem('admin_users_sort');
     if (storedSort) setSortState(parseStoredSort(storedSort));
-  }, []);
+  }, [searchParams, setSearchQuery]);
 
   // Normalize legacy role filters (name-based) to UUID-based filters expected by backend.
   useEffect(() => {
@@ -311,6 +347,40 @@ export const UsersManagementTab = () => {
       isSuperuser: apiUser.is_superuser,
     }));
   }, [users]);
+  
+  useEffect(() => {
+    onTotalCountChange?.(totalCount);
+  }, [totalCount, onTotalCountChange]);
+  
+  const handleExportUsers = useCallback(() => {
+    const columns = [
+      { key: 'name' as keyof User, label: 'Name' },
+      { key: 'email' as keyof User, label: 'Email' },
+      { key: 'systemRole' as keyof User, label: 'Role' },
+      { key: 'gradeLevel' as keyof User, label: 'Grade' },
+      { key: 'division' as keyof User, label: 'Division' },
+      { key: 'department' as keyof User, label: 'Department' },
+      { key: 'active' as keyof User, label: 'Status' },
+    ];
+    exportToCSV(mappedUsers, columns, { filename: `users-export-${new Date().toISOString().split('T')[0]}.csv` });
+  }, [mappedUsers]);
+
+  useImperativeHandle(ref, () => ({
+    openCreateUser: () => {
+      setSelectedUser(null);
+      setEditOpen(true);
+    },
+    exportUsers: handleExportUsers,
+  }), [handleExportUsers]);
+
+  const [filterPortalTarget, setFilterPortalTarget] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (!filterPortalId) {
+      setFilterPortalTarget(null);
+      return;
+    }
+    setFilterPortalTarget(document.getElementById(filterPortalId));
+  }, [filterPortalId]);
   
   // Load users with pagination
   useEffect(() => {
@@ -558,177 +628,10 @@ export const UsersManagementTab = () => {
     return <ArrowDown className="h-3.5 w-3.5" />;
   };
 
-  return (
-    <ClientErrorBoundary>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          {selectedUserIds.size > 0 && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">
-                {selectedUserIds.size} selected
-              </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBulkActivate}
-                disabled={isBulkProcessing}
-              >
-                {isBulkProcessing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "Activate"
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBulkDeactivate}
-                disabled={isBulkProcessing}
-              >
-                Deactivate
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBulkArchive}
-                disabled={isBulkProcessing}
-              >
-                Archive
-              </Button>
-              {roles.length > 0 && (
-                <Select
-                  value={showBulkRoleAssign ? "assign" : ""}
-                  onValueChange={(value) => {
-                    if (value && value !== "assign") {
-                      handleBulkAssignRole(value);
-                    } else {
-                      setShowBulkRoleAssign(true);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="w-40 h-9">
-                    <SelectValue placeholder="Assign Role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBulkDelete}
-                disabled={isBulkProcessing}
-              >
-                Delete
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedUserIds(new Set());
-                  setIsBulkActionMode(false);
-                }}
-                disabled={isBulkProcessing}
-              >
-                Clear
-              </Button>
-            </div>
-          )}
-          <div className="flex gap-2">
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const columns = [
-                  { key: 'name' as keyof User, label: 'Name' },
-                  { key: 'email' as keyof User, label: 'Email' },
-                  { key: 'systemRole' as keyof User, label: 'Role' },
-                  { key: 'gradeLevel' as keyof User, label: 'Grade' },
-                  { key: 'division' as keyof User, label: 'Division' },
-                  { key: 'department' as keyof User, label: 'Department' },
-                  { key: 'active' as keyof User, label: 'Status' },
-                ];
-                exportToCSV(mappedUsers, columns, { filename: `users-export-${new Date().toISOString().split('T')[0]}.csv` });
-              }}
-              aria-label="Export users to CSV"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export CSV
-            </Button>
-            <Button 
-              onClick={() => {
-                setSelectedUser(null);
-                setEditOpen(true);
-              }} 
-              size="sm"
-              className="bg-gradient-primary"
-              aria-label="Create new user"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create User
-            </Button>
-            <ContextualHelp
-              title="How to manage users"
-              description="Search, filter, and manage users across the organization. Assign roles, grade levels, and organizational hierarchy to control access and permissions."
-              steps={[
-                'Search by name, email, role, or employee ID to find users quickly.',
-                'Use filters to narrow down by role, grade, division, or status.',
-                'Click badges to quickly filter by that value.',
-                'Select multiple users for bulk actions like activate/deactivate.',
-                'Edit individual users to update their assignments and permissions.',
-              ]}
-            />
-          </div>
-        </div>
-
-        <HelpGuideCard
-          title="Keep the Directory Accurate"
-          description="Search by name, email, role, or employee ID to locate personnel. Review grade levels, divisions, and departments before adjusting assignments or permissions."
-          links={[
-            { label: "Divisions", href: "/admin/divisions" },
-            { label: "Help & Guides", href: "/help" },
-          ]}
-        />
-
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            { label: 'Total Users', value: totalCount, icon: Users, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-            { label: 'Management Level', icon: Shield, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
-            { label: 'Divisions Covered', icon: Building2, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>
-                      {value ?? (
-                        label === 'Management Level'
-                          ? mappedUsers.filter((user) => ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(user.gradeLevel)).length
-                          : Array.from(new Set(mappedUsers.map((user) => user.division).filter(Boolean))).length
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
+  const usersFilterBar = (
       <Card>
         <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          {!hideSearchInput ? (
           <div className="relative min-w-[200px] flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
@@ -814,6 +717,7 @@ export const UsersManagementTab = () => {
               </div>
             )}
           </div>
+          ) : null}
 
           <Select
             value={getFilterValue("role")}
@@ -915,9 +819,171 @@ export const UsersManagementTab = () => {
               Clear
             </Button>
           )}
+
+          {!hideFilterActions ? (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportUsers}
+              aria-label="Export users to CSV"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+            <Button
+              onClick={() => {
+                setSelectedUser(null);
+                setEditOpen(true);
+              }}
+              size="sm"
+              className="bg-gradient-primary"
+              aria-label="Create new user"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create User
+            </Button>
+            <ContextualHelp
+              title="How to manage users"
+              description="Manage access by assigning roles and organizational context."
+              steps={[
+                'Search by name, email, role, or employee ID.',
+                'Use filters for role, grade, division, and status.',
+                'Edit users or run bulk activate/deactivate actions.',
+              ]}
+            />
+          </div>
+          ) : null}
         </CardContent>
       </Card>
+  );
 
+  const renderedFilterBar = filterPortalTarget
+    ? createPortal(usersFilterBar, filterPortalTarget)
+    : filterPortalId
+      ? null
+      : usersFilterBar;
+
+  return (
+    <ClientErrorBoundary>
+      <div className="space-y-6">
+        {renderedFilterBar}
+        {selectedUserIds.size > 0 ? (
+          <Card>
+            <CardContent className="flex flex-wrap items-center gap-2 p-2">
+              <Badge variant="secondary">
+                {selectedUserIds.size} selected
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkActivate}
+                disabled={isBulkProcessing}
+              >
+                {isBulkProcessing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  "Activate"
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkDeactivate}
+                disabled={isBulkProcessing}
+              >
+                Deactivate
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBulkArchive}
+                disabled={isBulkProcessing}
+              >
+                Archive
+              </Button>
+              {roles.length > 0 && (
+                <Select
+                  value={showBulkRoleAssign ? "assign" : ""}
+                  onValueChange={(value) => {
+                    if (value && value !== "assign") {
+                      handleBulkAssignRole(value);
+                    } else {
+                      setShowBulkRoleAssign(true);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-40 h-9">
+                    <SelectValue placeholder="Assign Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={isBulkProcessing}
+              >
+                Delete
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedUserIds(new Set());
+                  setIsBulkActionMode(false);
+                }}
+                disabled={isBulkProcessing}
+              >
+                Clear
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {!omitStats ? (
+        <Card>
+          <CardContent className={registryQueueSearchStatsShellContentClass}>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            { label: 'Total Users', value: totalCount, icon: Users, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+            { label: 'Management Level', icon: Shield, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Divisions Covered', icon: Building2, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>
+                      {value ?? (
+                        label === 'Management Level'
+                          ? mappedUsers.filter((user) => ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(user.gradeLevel)).length
+                          : Array.from(new Set(mappedUsers.map((user) => user.division).filter(Boolean))).length
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+          </CardContent>
+        </Card>
+        ) : null}
 
       <Card>
         <CardHeader>
@@ -1356,4 +1422,4 @@ export const UsersManagementTab = () => {
       </div>
     </ClientErrorBoundary>
   );
-};
+});

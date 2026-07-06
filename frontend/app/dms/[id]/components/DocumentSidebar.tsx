@@ -13,7 +13,10 @@ import type {
 } from "@/lib/dms-storage";
 import type { Correspondence, Minute, User } from "@/lib/npa-structure";
 import { DocumentMetadataCard } from "./DocumentMetadataCard";
+import { DocumentSummaryCard } from "@/components/dms/DocumentSummaryCard";
+import { RelatedItemsPanel } from "@/components/search/RelatedItemsPanel";
 import { DocumentVersionsPanel } from "./DocumentVersionsPanel";
+import { DocumentDrmBanner } from "@/components/dms/DocumentDrmBanner";
 import type { DocumentVersion } from "@/lib/dms-storage";
 import type { OCRState } from "@/app/dms/[id]/hooks/use-document-ocr";
 
@@ -75,6 +78,9 @@ export function DocumentSidebar({
   return (
     <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4 bg-muted/10">
       <DocumentMetadataCard document={document} />
+      <DocumentDrmBanner rights={document.drmRights ?? null} />
+      <DocumentSummaryCard document={document} />
+      <RelatedItemsPanel type="document" id={document.id} />
 
       {relatedCorrespondence.length > 0 && (
         <RelatedCorrespondenceCard

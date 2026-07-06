@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +16,6 @@ import type { Case } from "@/lib/npa-structure";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Loader2, FileText } from "lucide-react";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { Separator } from "@/components/ui/separator";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import {
@@ -45,7 +43,7 @@ const priorityOptions = PRIORITY_OPTIONS;
 
 const NewCasePage = () => {
   const router = useRouter();
-  const {currentUser, hydrated } = useCurrentUser();
+  const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, departments, offices } = useOrganization();
   const abortControllerRef = useRef<AbortController | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -291,7 +289,7 @@ const NewCasePage = () => {
 
   return (
     <ErrorBoundary>
-      <DashboardLayout>
+      <>
         <div className="container mx-auto p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -356,14 +354,6 @@ const NewCasePage = () => {
         </div>
 
         {/* Help Guide */}
-        <HelpGuideCard
-          title="Create New Case"
-          description="Create a case to track complaints, requests, inquiries, or other matters. You can link related correspondence, documents, and forms after creation."
-          links={[
-            { label: 'Case Management', href: '/cases/my' },
-            { label: 'Help & Guides', href: '/help' },
-          ]}
-        />
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
@@ -605,7 +595,7 @@ const NewCasePage = () => {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </DashboardLayout>
+    </>
     </ErrorBoundary>
   );
 };

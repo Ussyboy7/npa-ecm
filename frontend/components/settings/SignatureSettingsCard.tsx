@@ -274,28 +274,15 @@ export const SignatureSettingsCard = () => {
       const status =
         typeof error === 'object' &&
         error !== null &&
-        'response' in error &&
-        typeof (error as { response?: unknown }).response === 'object' &&
-        (error as { response?: { status?: unknown } }).response !== null &&
-        typeof (error as { response?: { status?: unknown } }).response?.status === 'number'
-          ? (error as { response?: { status?: number } }).response?.status
-          : undefined;
-      const detail =
-        typeof error === 'object' &&
-        error !== null &&
-        'response' in error &&
-        typeof (error as { response?: unknown }).response === 'object' &&
-        (error as { response?: { data?: unknown } }).response !== null &&
-        typeof (error as { response?: { data?: { detail?: unknown } } }).response?.data === 'object' &&
-        (error as { response?: { data?: { detail?: unknown } } }).response?.data !== null &&
-        typeof (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail === 'string'
-          ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        'status' in error &&
+        typeof (error as { status?: unknown }).status === 'number'
+          ? (error as { status?: number }).status
           : undefined;
 
       if (status === 413) {
         errorMessage = 'File is too large. Please use a smaller image file.';
       } else if (status === 400) {
-        errorMessage = detail || 'Invalid file format. Please check your file and try again.';
+        errorMessage = 'Invalid file format. Please check your file and try again.';
       } else if (error instanceof Error && error.message) {
         errorMessage = error.message;
       }

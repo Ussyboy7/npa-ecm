@@ -41,6 +41,24 @@ from .serializers import (
 from .services import AnalyticsService
 
 
+class WorkflowAdminMixin:
+    """SLA and escalation rule administration."""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_manage_org_structure")
+
+
+class AnalyticsReadMixin:
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_analytics")
+
+
 class ReportSnapshotViewSet(viewsets.ModelViewSet):
     queryset = ReportSnapshot.objects.select_related("generated_for")
     serializer_class = ReportSnapshotSerializer
@@ -73,7 +91,7 @@ class UsageMetricViewSet(viewsets.ModelViewSet):
 # =============================================================================
 
 
-class SLAConfigurationViewSet(viewsets.ModelViewSet):
+class SLAConfigurationViewSet(WorkflowAdminMixin, viewsets.ModelViewSet):
     """
     API endpoint for managing SLA configurations.
     """
@@ -147,7 +165,7 @@ class SLAConfigurationViewSet(viewsets.ModelViewSet):
 # =============================================================================
 
 
-class EscalationRuleViewSet(viewsets.ModelViewSet):
+class EscalationRuleViewSet(WorkflowAdminMixin, viewsets.ModelViewSet):
     """
     API endpoint for managing escalation rules.
     """
@@ -314,7 +332,7 @@ class EscalationViewSet(viewsets.ModelViewSet):
 # =============================================================================
 
 
-class DivisionPerformanceSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
+class DivisionPerformanceSnapshotViewSet(AnalyticsReadMixin, viewsets.ReadOnlyModelViewSet):
     """Read-only viewset for division performance snapshots."""
 
     queryset = DivisionPerformanceSnapshot.objects.select_related("division").order_by(
@@ -399,6 +417,9 @@ class StaffPerformanceSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def leaderboard(self, request):
         """Get top performers for the current week."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_analytics")
         from django.db.models import F
         
         # Get the most recent week
@@ -422,6 +443,9 @@ class PerformanceAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_analytics")
         range_days = int(request.query_params.get("range", 30))
         data = AnalyticsService.build_performance_payload(range_days=range_days)
         return Response(data)
@@ -431,6 +455,9 @@ class ExecutiveAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_executive_dashboard")
         range_days = int(request.query_params.get("range", 30))
         data = AnalyticsService.build_executive_payload(range_days=range_days)
         return Response(data)
@@ -440,6 +467,9 @@ class ExecutivePortfolioView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_executive_dashboard")
         range_days = int(request.query_params.get("range", 30))
         records_limit = int(request.query_params.get("records", 8))
         records_query = request.query_params.get("records_query")
@@ -456,6 +486,9 @@ class ExecutiveRecordsSearchView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_executive_dashboard")
         query = (request.query_params.get("query") or "").strip()
         limit = int(request.query_params.get("limit", 20))
         data = AnalyticsService.search_executive_records(
@@ -470,6 +503,9 @@ class ReportsAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_reports")
         range_days = int(request.query_params.get("range", 30))
         division_id = request.query_params.get("divisionId")
         data = AnalyticsService.build_reports_payload(range_days=range_days, division_id=division_id)
@@ -489,9 +525,12 @@ class EnhancedSLAAnalyticsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
         range_days = int(request.query_params.get("range", 30))
         division_id = request.query_params.get("division_id")
         
+        require_permission(request.user, "can_access_analytics")
         data = AnalyticsService.build_enhanced_sla_payload(
             range_days=range_days,
             division_id=division_id,
@@ -507,10 +546,15 @@ class EnhancedDivisionPerformanceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_analytics")
         range_days = int(request.query_params.get("range", 30))
+        directorate_id = request.query_params.get("directorate_id")
         
         data = AnalyticsService.build_enhanced_division_performance(
             range_days=range_days,
+            directorate_id=directorate_id,
         )
         return Response(data)
 
@@ -523,6 +567,9 @@ class CaseStatisticsView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_analytics")
         from correspondence.models import Case
         from django.db.models import Count, Q, Avg
         from django.utils import timezone
@@ -660,6 +707,9 @@ class EfficiencyAnalysisView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_analytics")
         range_days = int(request.query_params.get("range", 30))
         division_id = request.query_params.get("division_id")
         
@@ -679,10 +729,21 @@ class AnalyticsExportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from organization.permission_utils import require_permission
+
         export_type = request.query_params.get("type", "executive").lower()
         export_format = request.query_params.get("format", "csv").lower()
         range_days = int(request.query_params.get("range", 30))
         division_id = request.query_params.get("divisionId")
+
+        if export_type in {"performance", "sla"}:
+            require_permission(request.user, "can_access_analytics")
+        elif export_type == "reports":
+            require_permission(request.user, "can_access_reports")
+        elif export_type == "executive":
+            require_permission(request.user, "can_access_executive_dashboard")
+        else:
+            require_permission(request.user, "can_access_reports")
 
         dataset = self._build_dataset(export_type, range_days, division_id)
         filename = f"analytics-{export_type}-{range_days}d"

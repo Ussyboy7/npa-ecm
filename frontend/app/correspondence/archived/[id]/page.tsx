@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Archive, Calendar, User as UserIcon, FileText, Shield } from 'lucide-react';
+import { ArrowLeft, Archive } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -21,8 +20,8 @@ export default function ArchivedCorrespondenceDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
-  const { currentUser, hydrated } = useCurrentUser();
-  const { users } = useOrganization();
+  const { currentUser: _currentUser, hydrated } = useCurrentUser();
+  const { users: _users } = useOrganization();
 
   const [item, setItem] = useState<Correspondence | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,22 +58,22 @@ export default function ArchivedCorrespondenceDetailPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <>
         <LoadingState message="Loading archived correspondence..." />
-      </DashboardLayout>
+      </>
     );
   }
 
   if (error || !item) {
     return (
-      <DashboardLayout>
+      <>
         <ErrorState message={error ?? 'Correspondence not found'} onRetry={() => router.refresh()} />
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto max-w-4xl p-4 sm:p-6 space-y-6">
         <Button variant="ghost" onClick={() => router.push('/correspondence/archived')} className="w-fit">
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -138,6 +137,6 @@ export default function ArchivedCorrespondenceDetailPage() {
           </CardContent>
         </Card>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

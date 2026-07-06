@@ -61,6 +61,11 @@ class SearchRequestSerializer(serializers.Serializer):
         choices=["documents", "correspondence", "cases", "all"],
         default="documents",
     )
+    search_mode = serializers.ChoiceField(
+        choices=["keyword", "semantic"],
+        default="keyword",
+        required=False,
+    )
 
 
 class SearchSuggestionRequestSerializer(serializers.Serializer):

@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { Download, FileText, Loader2, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useDocumentPreview } from "@/hooks/use-document-preview";
 import { sanitizeRichText } from "@/lib/sanitize-html";
 import type { DocumentVersion } from "@/lib/dms-storage";

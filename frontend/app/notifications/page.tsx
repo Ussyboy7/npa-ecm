@@ -2,7 +2,6 @@
 
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useState } from 'react';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -131,7 +130,7 @@ export default function NotificationsPage() {
   const unreadInList = notifications.filter((n) => n.status === 'unread').length;
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -297,6 +296,6 @@ export default function NotificationsPage() {
       </div>
 
       <NotificationPreferencesDialog open={preferencesOpen} onOpenChange={setPreferencesOpen} />
-    </DashboardLayout>
+    </>
   );
 }

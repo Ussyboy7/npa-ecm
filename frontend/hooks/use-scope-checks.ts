@@ -64,6 +64,6 @@ export function useScopeChecks(): ScopeChecks {
       userDivisionIds,
       userDirectorateIds,
     };
-  }, [currentUser?.id, isMD, isED, isGM, isAGM]);
+  }, [currentUser, isMD, isED, isGM, isAGM]);
 }
 

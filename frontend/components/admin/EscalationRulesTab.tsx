@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useCallback } from 'react';
 import { logError } from '@/lib/client-logger';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -107,7 +107,27 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
   daily_digest: <Clock className="h-4 w-4" />,
 };
 
-export const EscalationRulesTab = () => {
+export type EscalationRulesTabHandle = {
+  openAddRule: () => void;
+};
+
+export const EscalationRulesTab = forwardRef<
+  EscalationRulesTabHandle,
+  {
+    searchQuery?: string;
+    hideActivityOverview?: boolean;
+    hideAddRuleButton?: boolean;
+    onDataChange?: () => void;
+  }
+>(function EscalationRulesTab(
+  {
+    searchQuery = '',
+    hideActivityOverview = false,
+    hideAddRuleButton = false,
+    onDataChange,
+  },
+  ref,
+) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rules, setRules] = useState<EscalationRule[]>([]);
@@ -135,11 +155,7 @@ export const EscalationRulesTab = () => {
     divisions: [],
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [rulesData, choicesData, escalationsData, summaryData] = await Promise.all([
@@ -152,12 +168,17 @@ export const EscalationRulesTab = () => {
       setChoices(choicesData);
       setEscalations(escalationsData);
       setSummary(summaryData);
+      onDataChange?.();
     } catch (error: unknown) {
       logError('Failed to load escalation data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [onDataChange]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleOpenDialog = (rule?: EscalationRule) => {
     if (rule) {
@@ -263,6 +284,36 @@ export const EscalationRulesTab = () => {
   const activeRules = rules.filter((r) => r.isActive);
   const inactiveRules = rules.filter((r) => !r.isActive);
 
+  useImperativeHandle(ref, () => ({
+    openAddRule: () => handleOpenDialog(),
+  }), []);
+
+  const filteredRules = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return rules;
+    return rules.filter((rule) => {
+      return (
+        rule.name.toLowerCase().includes(query)
+        || rule.triggerTypeDisplay.toLowerCase().includes(query)
+        || rule.actionTypeDisplay.toLowerCase().includes(query)
+        || (rule.description?.toLowerCase().includes(query) ?? false)
+      );
+    });
+  }, [rules, searchQuery]);
+
+  const filteredEscalations = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return escalations;
+    return escalations.filter((esc) => {
+      return (
+        esc.correspondenceReference.toLowerCase().includes(query)
+        || esc.correspondenceSubject.toLowerCase().includes(query)
+        || (esc.triggerReason?.toLowerCase().includes(query) ?? false)
+        || (esc.ruleName?.toLowerCase().includes(query) ?? false)
+      );
+    });
+  }, [escalations, searchQuery]);
+
   if (loading) {
     return <LoadingState message="Loading escalation rules…" />;
   }
@@ -270,6 +321,7 @@ export const EscalationRulesTab = () => {
   return (
     <ClientErrorBoundary>
       <div className="space-y-8">
+        {!hideActivityOverview ? (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Activity overview</CardTitle>
@@ -331,34 +383,42 @@ export const EscalationRulesTab = () => {
             </div>
           </CardContent>
         </Card>
+        ) : null}
 
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle className="text-lg">Escalation rules ({rules.length})</CardTitle>
-                <CardDescription>
-                  When a trigger matches, the action runs. Lower priority order runs first. Use Test before going live.
-                </CardDescription>
-              </div>
+        <section className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">Escalation rules ({filteredRules.length})</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                When a trigger matches, the action runs. Lower priority order runs first. Use Test before going live.
+              </p>
+            </div>
+            {!hideAddRuleButton ? (
               <Button size="sm" onClick={() => handleOpenDialog()} className="shrink-0">
                 <Plus className="h-4 w-4 mr-2" />
                 Add rule
               </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
+            ) : null}
+          </div>
             {rules.length === 0 ? (
               <EmptyState
                 icon={<Zap className={registryQueueEmptyIconClass} />}
                 title="No escalation rules yet"
                 message="Create a rule to notify assignees, managers, or division heads when SLAs slip or other triggers fire."
-                actionLabel="Add rule"
-                onAction={() => handleOpenDialog()}
+                actionLabel={hideAddRuleButton ? undefined : "Add rule"}
+                onAction={hideAddRuleButton ? undefined : () => handleOpenDialog()}
+                variant="dashed"
+              />
+            ) : filteredRules.length === 0 ? (
+              <EmptyState
+                icon={<Zap className={registryQueueEmptyIconClass} />}
+                title="No rules match your search"
+                message="Try a different name, trigger type, or action keyword."
+                variant="dashed"
               />
             ) : (
               <div className={correspondenceQueueListStackClass}>
-                {rules.map((rule) => (
+                {filteredRules.map((rule) => (
                   <div key={rule.id} className={cn(!rule.isActive && 'opacity-60')}>
                     <ListRowCard
                       density="compact"
@@ -485,26 +545,32 @@ export const EscalationRulesTab = () => {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+        </section>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Pending escalations ({escalations.length})</CardTitle>
-            <CardDescription>
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold">Pending escalations ({filteredEscalations.length})</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
               Items waiting for acknowledgement or resolution.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+            </p>
+          </div>
             {escalations.length === 0 ? (
               <EmptyState
                 icon={<CheckCircle className={registryQueueEmptyIconClass} />}
                 title="No pending escalations"
                 message="When rules fire, open items appear here for your team to acknowledge or resolve."
+                variant="dashed"
+              />
+            ) : filteredEscalations.length === 0 ? (
+              <EmptyState
+                icon={<CheckCircle className={registryQueueEmptyIconClass} />}
+                title="No pending escalations match your search"
+                message="Try a different reference, subject, or rule name."
+                variant="dashed"
               />
             ) : (
               <div className={correspondenceQueueListStackClass}>
-                {escalations.map((esc) => (
+                {filteredEscalations.map((esc) => (
                   <ListRowCard
                     key={esc.id}
                     density="compact"
@@ -554,8 +620,7 @@ export const EscalationRulesTab = () => {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+        </section>
 
         {/* Add/Edit Rule Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -758,5 +823,5 @@ export const EscalationRulesTab = () => {
       </div>
     </ClientErrorBoundary>
   );
-};
+});
 

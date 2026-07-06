@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -263,15 +262,6 @@ const SecretaryDashboardContent = () => {
 
   return (
     <div className="space-y-6">
-      <HelpGuideCard
-        title="Secretary workspace"
-        description="Your metrics cover correspondence from the executive support inbox. Use the quick links below to jump into the inbox, cases, or forms."
-        links={[
-          { label: 'Executive Support Inbox', href: '/inbox?tab=executive-support' },
-          { label: 'Manage Cases', href: '/cases' },
-          { label: 'Manage Forms', href: '/forms' },
-        ]}
-      />
 
       <Card>
         <CardHeader className="pb-2">

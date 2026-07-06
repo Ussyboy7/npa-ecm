@@ -1,70 +1,46 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from 'react';
-import { DashboardLayout } from '@/components/DashboardLayout';
+import { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
-import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from '@/hooks/use-role-checks';
 import { apiFetch } from '@/lib/api-client';
-import { MAX_LIST_PAGE_SIZE, PREVIEW_PAGE_SIZE } from '@/lib/pagination-constants';
+import { PREVIEW_PAGE_SIZE } from '@/lib/pagination-constants';
 import { ExecutivePortfolio, fetchExecutivePortfolio } from '@/lib/analytics-client';
 import { logError } from '@/lib/client-logger';
-import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
-import { Layers, AlertTriangle, AlertCircle, TrendingUp } from 'lucide-react';
-import type { Correspondence } from '@/lib/npa-structure';
-import dynamic from 'next/dynamic';
-import { WorkloadStats } from '@/components/dashboard/WorkloadStats';
-import { RecentCorrespondence } from '@/components/dashboard/RecentCorrespondence';
-import { ExecutiveOverview } from '@/components/dashboard/ExecutiveOverview';
-import { EscalationsApprovals } from '@/components/dashboard/EscalationsApprovals';
-import { CombinedOfficeInbox } from '@/components/dashboard/CombinedOfficeInbox';
-import { OfficeQueues } from '@/components/dashboard/OfficeQueues';
-import { DelegationSnapshot } from '@/components/dashboard/DelegationSnapshot';
-
-const SecretaryDashboardContent = dynamic(
-  () => import('./components/SecretaryDashboardContent'),
-  {
-    loading: () => <div className="p-6 text-center text-muted-foreground">Loading secretary dashboard...</div>,
-    ssr: false,
-  }
-);
+import { shouldUseWorkspaceHomeForUser } from '@/lib/home-route';
+import { WorkspaceCountsPanel } from '@/components/dashboard/WorkspaceCountsPanel';
+import { ExecutiveWorkspace } from '@/components/dashboard/ExecutiveWorkspace';
+import { WorkspaceQuickLinks } from '@/components/dashboard/WorkspaceQuickLinks';
+import SecretaryDashboardContent from './components/SecretaryDashboardContent';
 
 const Dashboard = () => {
-  const { currentUser, refresh } = useCurrentUser();
+  const router = useRouter();
+  const { currentUser, hydrated } = useCurrentUser();
   const { divisions, officeMemberships, offices } = useOrganization();
-  const [executiveRange, setExecutiveRange] = useState<string>('30');
+  const [executiveRange] = useState<string>('30');
   const [executivePortfolio, setExecutivePortfolio] = useState<ExecutivePortfolio | null>(null);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [portfolioError, setPortfolioError] = useState<string | null>(null);
   const isFetchingRef = useRef(false);
-  
-  const [pendingCorrespondence, setPendingCorrespondence] = useState<Correspondence[]>([]);
+  const hasLoadedCountsRef = useRef(false);
+  const hasLoadedPortfolioRef = useRef(false);
+
+  const [inboxTotal, setInboxTotal] = useState(0);
   const [stats, setStats] = useState({
-    pending: 0,
+    needsAction: 0,
     inProgress: 0,
-    completedToday: 0,
+    overdue: 0,
     urgent: 0,
+    sentToday: 0,
   });
   const [dashboardLoading, setDashboardLoading] = useState(true);
 
   const { isSecretary } = useRoleChecks();
-
-  useEffect(() => {
-    if (!currentUser) {
-      const attemptRefresh = async () => {
-        try {
-          await refresh();
-        } catch (err) {
-          logError('Failed to refresh user after login', err);
-        }
-      };
-      
-      attemptRefresh();
-    }
-  }, [currentUser?.id, refresh]);
 
   const division = useMemo(() => {
     if (!currentUser?.division) return undefined;
@@ -76,72 +52,11 @@ const Dashboard = () => {
     if (typeof currentUser.systemRole === 'string') return currentUser.systemRole;
     const o = currentUser.systemRole as Record<string, unknown> | undefined;
     return o && typeof o.name === 'string' ? o.name : 'User';
-  }, [currentUser?.id]);
+  }, [currentUser]);
 
   const userId = useMemo(() => {
     return currentUser?.id ? String(currentUser.id) : null;
   }, [currentUser?.id]);
-
-  const fetchDashboardData = async () => {
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
-    setDashboardLoading(true);
-    try {
-      type InboxResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>>; summary?: Record<string, unknown> };
-      const inboxResponse = await apiFetch<InboxResponse>(`/correspondence/items/my-inbox/?page_size=${PREVIEW_PAGE_SIZE}`);
-      const inboxDataArray = Array.isArray(inboxResponse) ? inboxResponse : (inboxResponse?.results || []);
-      const summary = (inboxResponse && typeof inboxResponse === 'object' && 'summary' in inboxResponse) ? inboxResponse.summary as Record<string, unknown> : {};
-      const pending = inboxDataArray
-        .map(mapApiCorrespondence)
-        .filter((item) => item.status as string !== 'completed')
-        .sort((a, b) => new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime())
-        .slice(0, 10);
-
-      setPendingCorrespondence(pending);
-
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      const completedTodayResponse = await apiFetch<Record<string, unknown>>(
-        `/correspondence/items/?status=completed&page_size=${MAX_LIST_PAGE_SIZE}`
-      );
-      type CompletedResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
-      const completedTodayResponseTyped = completedTodayResponse as CompletedResponse;
-      const completedItems = Array.isArray(completedTodayResponseTyped) 
-        ? completedTodayResponseTyped 
-        : (completedTodayResponseTyped?.results || []);
-      const completedToday = completedItems.filter((item) => {
-        const referenceDate = (item.updated_at && typeof item.updated_at === 'string') ? item.updated_at : ((item.received_date && typeof item.received_date === 'string') ? item.received_date : null);
-        return referenceDate && new Date(referenceDate).getTime() >= startOfToday.getTime();
-      }).length;
-
-      setStats({
-        pending: (summary && typeof summary.pending === 'number') ? summary.pending : pending.length,
-        inProgress: (summary && typeof summary.in_progress === 'number') ? summary.in_progress : 0,
-        completedToday,
-        urgent: (summary && typeof summary.urgent === 'number') ? summary.urgent : 0,
-      });
-    } catch (error: unknown) {
-      logError('Failed to load dashboard data:', error);
-      setPendingCorrespondence([]);
-      setStats({ pending: 0, inProgress: 0, completedToday: 0, urgent: 0 });
-    } finally {
-      isFetchingRef.current = false;
-      setDashboardLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!userId) {
-      setPendingCorrespondence([]);
-      setStats({ pending: 0, inProgress: 0, completedToday: 0, urgent: 0 });
-      return;
-    }
-
-    fetchDashboardData();
-
-    const interval = setInterval(fetchDashboardData, 30000);
-    return () => clearInterval(interval);
-  }, [userId]);
 
   const userOfficeMemberships = useMemo(() => {
     if (!currentUser) return [];
@@ -165,180 +80,180 @@ const Dashboard = () => {
     executiveOfficeTypes.has(assignment.office.officeType),
   );
 
+  const officeTypes = useMemo(
+    () => officeAssignments.map((a) => a.office.officeType),
+    [officeAssignments],
+  );
+
+  const canUseWorkspace = useMemo(
+    () => shouldUseWorkspaceHomeForUser(currentUser, officeTypes),
+    [currentUser, officeTypes],
+  );
+
+  useLayoutEffect(() => {
+    if (!hydrated || !currentUser) return;
+    if (!canUseWorkspace) {
+      router.replace('/inbox');
+    }
+  }, [hydrated, currentUser, canUseWorkspace, router]);
+
+  const fetchDashboardData = useCallback(async (options?: { showLoading?: boolean }) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    const showLoading = options?.showLoading ?? !hasLoadedCountsRef.current;
+    if (showLoading) {
+      setDashboardLoading(true);
+    }
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const [inboxResponse, sentTodayResponse] = await Promise.all([
+        apiFetch<{
+          count?: number;
+          summary?: {
+            total?: number;
+            pending?: number;
+            in_progress?: number;
+            urgent?: number;
+            overdue?: number;
+          };
+        }>(`/correspondence/items/my-inbox/?page_size=${PREVIEW_PAGE_SIZE}&sort_by=priority&sort_order=desc`),
+        apiFetch<{ count?: number }>(
+          `/correspondence/items/my-sent/?date_from=${today}&date_to=${today}&date_field=dispatch_date&page_size=1`,
+        ).catch(() => ({ count: 0 })),
+      ]);
+
+      const summary = inboxResponse.summary ?? {};
+      setInboxTotal(inboxResponse.count ?? summary.total ?? 0);
+      setStats({
+        needsAction: summary.total ?? inboxResponse.count ?? 0,
+        inProgress: summary.in_progress ?? 0,
+        overdue: summary.overdue ?? 0,
+        urgent: summary.urgent ?? 0,
+        sentToday: sentTodayResponse.count ?? 0,
+      });
+      hasLoadedCountsRef.current = true;
+    } catch (error: unknown) {
+      logError('Failed to load dashboard data:', error);
+      if (!hasLoadedCountsRef.current) {
+        setInboxTotal(0);
+        setStats({ needsAction: 0, inProgress: 0, overdue: 0, urgent: 0, sentToday: 0 });
+      }
+    } finally {
+      isFetchingRef.current = false;
+      if (showLoading) {
+        setDashboardLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!userId || !canUseWorkspace || isSecretary) {
+      if (!isSecretary) {
+        setDashboardLoading(false);
+      }
+      return;
+    }
+
+    void fetchDashboardData({ showLoading: true });
+    const interval = setInterval(() => {
+      void fetchDashboardData({ showLoading: false });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [userId, canUseWorkspace, isSecretary, fetchDashboardData]);
+
   useEffect(() => {
     if (!isExecutive) {
       setExecutivePortfolio(null);
       setPortfolioError(null);
+      hasLoadedPortfolioRef.current = false;
       return;
     }
+
     let ignore = false;
-    setPortfolioLoading(true);
+    const showLoading = !hasLoadedPortfolioRef.current;
+    if (showLoading) {
+      setPortfolioLoading(true);
+    }
     setPortfolioError(null);
-    fetchExecutivePortfolio({ range: executiveRange, records: 8 })
+
+    fetchExecutivePortfolio({ range: executiveRange, records: 5 })
       .then((data) => {
         if (ignore) return;
         setExecutivePortfolio(data);
+        hasLoadedPortfolioRef.current = true;
       })
       .catch((error) => {
         if (ignore) return;
         setPortfolioError(error instanceof Error ? error.message : 'Unable to load executive overview');
       })
       .finally(() => {
-        if (!ignore) {
+        if (!ignore && showLoading) {
           setPortfolioLoading(false);
         }
       });
+
     return () => {
       ignore = true;
     };
   }, [isExecutive, executiveRange]);
 
-  const officeWorkload = useMemo(() => {
-    if (!isExecutive || !executivePortfolio) return [];
-    return executivePortfolio.offices.map((office) => ({
-      id: office.id,
-      name: office.name,
-      officeType: office.officeType,
-      total: office.total,
-      urgent: office.urgent,
-      overdue: office.slaBreaches,
-      approaching: office.approachingSLA,
-    }));
-  }, [isExecutive, executivePortfolio]);
+  const workspaceSubtitle = useMemo(() => {
+    const parts = [roleDisplay, division?.name].filter(Boolean);
+    return `Welcome back, ${currentUser?.name ?? 'User'}${parts.length ? ` · ${parts.join(' · ')}` : ''}`;
+  }, [currentUser?.name, roleDisplay, division?.name]);
 
-  const escalationItems = useMemo(() => {
-    if (!isExecutive || !executivePortfolio) return [];
-    return executivePortfolio.escalations;
-  }, [executivePortfolio, isExecutive]);
+  if (!hydrated) {
+    return <LoadingState message="Loading workspace…" />;
+  }
 
-  const executiveStats = useMemo(() => {
-    if (!isExecutive || !executivePortfolio) return [];
-    const summary = executivePortfolio.summary;
-    return [
-      {
-        title: 'Office Workload',
-        value: summary.totalQueue.toString(),
-        icon: Layers,
-        description: 'Total items in queue',
-      },
-      {
-        title: 'Urgent Items',
-        value: summary.urgent.toString(),
-        icon: AlertTriangle,
-        description: 'High priority items',
-      },
-      {
-        title: 'SLA Breaches',
-        value: summary.slaBreaches.toString(),
-        icon: AlertCircle,
-        description: 'Items past deadline',
-      },
-      {
-        title: 'Completion Rate',
-        value: `${summary.completionRate ?? 0}%`,
-        icon: TrendingUp,
-        description: 'Items completed',
-      },
-    ];
-  }, [executivePortfolio, isExecutive]);
+  if (!currentUser) {
+    return (
+      <div className="container mx-auto p-6">
+        <p className="text-sm text-muted-foreground">
+          Use the Role Switcher in Settings to choose a user context after signing in.
+        </p>
+      </div>
+    );
+  }
 
-  const inboxPreview = executivePortfolio?.inboxPreview ?? [];
-  const approvalsList = executivePortfolio?.approvals ?? [];
-  const delegationSnapshot = executivePortfolio?.delegations ?? [];
+  if (!canUseWorkspace) {
+    return null;
+  }
 
   return (
-    <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6">
-        {!currentUser ? (
-          <HelpGuideCard
-            title="Select a persona"
-            description="Use the Role Switcher to choose a user context after signing in."
-            links={[{ label: 'Role Switcher', href: '/settings' }]}
+    <QueuePageShell
+      title="My Workspace"
+      subtitle={workspaceSubtitle}
+      actions={(
+        <Badge variant="secondary" className="px-3 py-1.5 font-mono text-xs">
+          {currentUser.employeeId}
+        </Badge>
+      )}
+    >
+      <WorkspaceQuickLinks showOfficeInbox={isExecutive || isSecretary} />
+
+      {isSecretary ? (
+        <SecretaryDashboardContent />
+      ) : (
+        <>
+          <WorkspaceCountsPanel
+            inboxTotal={inboxTotal}
+            overdue={stats.overdue}
+            urgent={stats.urgent}
+            sentToday={stats.sentToday}
+            loading={dashboardLoading}
           />
-        ) : (
-          <>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Welcome back, {currentUser.name}</h1>
-            <p className="mt-1 max-w-2xl text-muted-foreground">
-              <span className="font-medium text-foreground">{roleDisplay}</span>
-              {division ? ` · ${division.name}` : ''}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <ContextualHelp
-              title="How to use the dashboard"
-              description="Switch persona with the Role Switcher to change metrics and queues. Your workload card reflects your inbox; executives also see portfolio-wide sections below."
-              steps={[
-                'Use the Role Switcher in the header to view as MD, ED, GM, or department roles.',
-                'Start with My workload and recent items, then open the inbox or a row to act.',
-                'Executives: review escalations and combined office inbox before office-level queue totals.',
-              ]}
+
+          {isExecutive ? (
+            <ExecutiveWorkspace
+              portfolio={executivePortfolio}
+              loading={portfolioLoading}
+              error={portfolioError}
             />
-            <Badge variant="secondary" className="px-3 py-1.5 font-mono text-xs">
-              {currentUser.employeeId}
-            </Badge>
-          </div>
-        </div>
-
-        {isSecretary ? (
-          <SecretaryDashboardContent />
-        ) : (
-          <>
-            <HelpGuideCard
-              title="Workspace guide"
-              description="Metrics follow your current persona. MD/ED/GM views add portfolio KPIs, escalations, and delegation—switch roles to compare."
-              links={[
-                { label: 'Role Switcher', href: '/settings' },
-                { label: 'Help & Guides', href: '/help' },
-              ]}
-            />
-
-            <WorkloadStats stats={stats} loading={dashboardLoading} isExecutive={isExecutive} />
-
-            <RecentCorrespondence items={pendingCorrespondence} loading={dashboardLoading} />
-
-            {isExecutive ? (
-              <>
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Executive portfolio
-                </p>
-
-                <ExecutiveOverview
-                  executiveStats={executiveStats}
-                  portfolioError={portfolioError}
-                  portfolioLoading={portfolioLoading}
-                  executiveRange={executiveRange}
-                  onRangeChange={setExecutiveRange}
-                />
-
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <EscalationsApprovals
-                    escalations={escalationItems}
-                    approvals={approvalsList}
-                    portfolioLoading={portfolioLoading}
-                  />
-
-                  <CombinedOfficeInbox
-                    inboxPreview={inboxPreview}
-                    portfolioLoading={portfolioLoading}
-                  />
-                </div>
-
-                <OfficeQueues
-                  officeWorkload={officeWorkload}
-                  portfolioLoading={portfolioLoading}
-                />
-
-                <DelegationSnapshot delegationSnapshot={delegationSnapshot} />
-              </>
-            ) : null}
-          </>
-        )}
+          ) : null}
         </>
       )}
-      </div>
-    </DashboardLayout>
+    </QueuePageShell>
   );
 };
 

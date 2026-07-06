@@ -10,6 +10,7 @@ from .views import (
     OfficeViewSet,
     RoleViewSet,
 )
+from .calendar_views import ExecutiveCalendarEventViewSet
 
 
 router = DefaultRouter()
@@ -19,6 +20,7 @@ router.register(r"departments", DepartmentViewSet, basename="department")
 router.register(r"roles", RoleViewSet, basename="role")
 router.register(r"offices", OfficeViewSet, basename="office")
 router.register(r"office-memberships", OfficeMembershipViewSet, basename="office-membership")
+router.register(r"calendar-events", ExecutiveCalendarEventViewSet, basename="calendar-event")
 
 
 urlpatterns = router.urls

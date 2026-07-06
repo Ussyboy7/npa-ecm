@@ -88,39 +88,52 @@ class WebSocketManager {
     this.isConnecting = true;
 
     try {
-      let url = this.getWebSocketUrl();
-      const token = getStoredAccessToken();
-      if (token) {
-        const separator = url.includes('?') ? '&' : '?';
-        url = `${url}${separator}token=${encodeURIComponent(token)}`;
-      }
-
-      const maskedUrl = url.replace(/token=[^&]+/, 'token=***');
-      logInfo('Attempting WebSocket connection', { url: maskedUrl, hasToken: !!token });
+      const url = this.getWebSocketUrl();
+      logInfo('Attempting WebSocket connection', { url, hasToken: !!getStoredAccessToken() });
 
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
         logInfo('WebSocket connected for notifications');
-        this.isConnected = true;
-        this.reconnectAttempts = 0;
-        this.maxAttemptsReached = false;
         this.isConnecting = false;
 
-        // Request initial unread count
-        ws.send(JSON.stringify({ type: 'get_unread_count' }));
-
-        // Start ping interval to keep connection alive
-        this.pingInterval = setInterval(() => {
-          if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, NOTIFICATION_WS_PING_INTERVAL_MS);
+        // Send authentication token as first message after connect
+        const token = getStoredAccessToken();
+        if (token) {
+          ws.send(JSON.stringify({ type: 'authenticate', token }));
+        } else {
+          logWarn('No token available for WebSocket authentication');
+        }
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          
+          if (data.type === 'authenticated') {
+            this.isConnected = true;
+            this.reconnectAttempts = 0;
+            this.maxAttemptsReached = false;
+
+            // Request initial unread count
+            ws.send(JSON.stringify({ type: 'get_unread_count' }));
+
+            // Start ping interval to keep connection alive
+            this.pingInterval = setInterval(() => {
+              if (this.ws?.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ type: 'ping' }));
+              }
+            }, NOTIFICATION_WS_PING_INTERVAL_MS);
+            return;
+          }
+
+          if (data.type === 'auth_error') {
+            logWarn('WebSocket authentication failed', data);
+            this.isConnected = false;
+            this.isConnecting = false;
+            ws.close();
+            return;
+          }
           
           if (data.type === 'unread_count') {
             this.unreadCount = typeof data.count === 'number' ? data.count : 0;
@@ -286,41 +299,27 @@ export const useNotificationWebSocket = (options: UseNotificationWebSocketOption
     } else {
       wsManager.disconnect();
     }
-  }, [isWsEnabled, currentUser?.id]);
+  }, [isWsEnabled, currentUser]);
 
-  // Poll for connection state updates (less frequent than before)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const newConnected = wsManager.getIsConnected();
-      const newCount = wsManager.getUnreadCount();
-      if (newConnected !== isConnected) {
-        setIsConnected(newConnected);
-      }
-      if (newCount !== unreadCount) {
-        setUnreadCount(newCount);
-      }
-    }, 2000); // Check every 2 seconds instead of 1
-
-    return () => clearInterval(interval);
-  }, [isConnected, unreadCount]);
+  // Connection state updates are handled by the subscriber callback above
 
   const connect = useCallback(() => {
     if (currentUser) {
       wsManager.connect(currentUser);
     }
-  }, [currentUser?.id]);
+  }, [currentUser]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = () => {
     wsManager.disconnect();
-  }, []);
+  };
 
-  const sendMessage = useCallback((message: Record<string, unknown>) => {
+  const sendMessage = (message: Record<string, unknown>) => {
     wsManager.sendMessage(message);
-  }, []);
+  };
 
-  const markAsRead = useCallback((notificationId: string) => {
+  const markAsRead = (notificationId: string) => {
     wsManager.sendMessage({ type: 'mark_read', notification_id: notificationId });
-  }, []);
+  };
 
   return {
     isConnected,

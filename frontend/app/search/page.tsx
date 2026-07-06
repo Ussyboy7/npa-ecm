@@ -1,6 +1,5 @@
 "use client";
 
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { AdvancedSearch } from '@/components/search/AdvancedSearch';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -36,12 +35,12 @@ function SearchForm() {
 
   return (
     <ErrorBoundary>
-      <DashboardLayout>
+      <>
         <div className="container mx-auto p-6">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold">Search Documents</h1>
+            <h1 className="text-3xl font-bold">Search</h1>
             <p className="text-muted-foreground mt-1">
-              Search across all documents, correspondence, and cases with full-text search and advanced filters
+              Find the exact document, correspondence, or case you need using filters and full-text search.
             </p>
           </div>
 
@@ -96,7 +95,7 @@ function SearchForm() {
             </TabsContent>
           </Tabs>
         </div>
-      </DashboardLayout>
+      </>
     </ErrorBoundary>
   );
 }

@@ -38,10 +38,18 @@ export const useUserPermissions = (user?: User | null): PermissionProfile => {
       enhancedProfile.canRegisterCorrespondence = true;
     }
 
-    // Note: "coordinate" and "schedule" permissions are deprecated (calendar/meeting features not implemented)
-    // Only "view", "draft", and "forward" are currently active
     if (assignmentsForUser.some((assignment) => assignment.permissions.includes("view"))) {
       enhancedProfile.canAccessDocumentManagement = true;
+    }
+
+    if (
+      assignmentsForUser.some(
+        (assignment) =>
+          assignment.permissions.includes("schedule") ||
+          assignment.permissions.includes("coordinate"),
+      )
+    ) {
+      enhancedProfile.canAccessAssistantCalendar = true;
     }
 
     // Ensure superadmin permissions are always preserved

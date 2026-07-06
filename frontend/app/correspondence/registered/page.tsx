@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Search } from "lucide-react";
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useCurrentUser } from "@/hooks/use-current-user";
@@ -164,7 +162,7 @@ const RegisteredCorrespondencePage = () => {
   }
 
   return (
-    <DashboardLayout>
+    <>
       {!canViewRegistry ? (
         <div className="p-6">
           <Card>
@@ -193,15 +191,6 @@ const RegisteredCorrespondencePage = () => {
               </p>
             </div>
           </div>
-
-          <HelpGuideCard
-            title="Executive Correspondence Registry"
-            description="Review every correspondence entry captured by registry officers. Track who registered it, the receiving division, and the current workflow owner."
-            links={[
-              { label: "Correspondence Inbox", href: "/correspondence/inbox" },
-              { label: "Archived", href: "/correspondence/archived" },
-            ]}
-          />
         </div>
 
         {/* Filter bar */}
@@ -340,7 +329,7 @@ const RegisteredCorrespondencePage = () => {
         )}
       </div>
       )}
-    </DashboardLayout>
+    </>
   );
 };
 

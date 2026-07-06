@@ -7,9 +7,9 @@ A modern, full-featured electronic content management system (ECM) built with Dj
 ### Core Features
 - **Document Upload & Management** - Upload, organize, and manage documents with version control
 - **Category Organization** - Hierarchical folder structure for document organization
-- **Advanced Search** - Full-text search with filters and tags
-- **Version Control** - Track document versions and changes
-- **Access Control** - Role-based permissions and document sharing
+- **Advanced Search** - Full-text search with optional semantic re-rank (MVP)
+- **Version Control** - Track document versions, diff viewer
+- **Access Control** - Role-based permissions, DRM policy layer, document sharing
 - **Approval Workflows** - Customizable document approval processes
 - **Audit Trail** - Comprehensive logging of all document activities
 - **Document Preview** - Built-in preview for various file types
@@ -75,6 +75,8 @@ scripts/local/env-manager.sh start
 ```bash
 scripts/local/env-manager.sh seed
 ```
+
+Dev login users (`superadmin`, `md`, `edfa`, `gmict`, `pamd` / `ChangeMe123!`) are created automatically on backend start via `ensure_dev_login_users`.
 
 5. **Access the applications**
 - Frontend: http://localhost:3002
@@ -145,27 +147,22 @@ PORT=3002
 
 ### Key Endpoints
 
+All routes use the `/api/v1/` prefix. See [API Reference](./docs/api/API_REFERENCE.md) and Swagger UI for the full list.
+
 #### Authentication
-- `POST /api/auth/login/` - Login
-- `POST /api/auth/refresh/` - Refresh token
+- `POST /api/v1/accounts/auth/token/` - Login (JWT)
+- `POST /api/v1/accounts/auth/token/refresh/` - Refresh token
 
-#### Documents
-- `GET /api/documents/` - List documents
-- `POST /api/documents/` - Create document
-- `GET /api/documents/{id}/` - Get document
-- `PATCH /api/documents/{id}/` - Update document
-- `DELETE /api/documents/{id}/` - Delete document
-- `POST /api/documents/{id}/approve/` - Approve document
-- `POST /api/documents/{id}/reject/` - Reject document
-- `POST /api/documents/{id}/download/` - Download document
+#### Documents (DMS)
+- `GET /api/v1/dms/documents/` - List documents
+- `GET /api/v1/dms/document-versions/{id}/diff/` - Version diff
 
-#### Categories
-- `GET /api/categories/` - List categories
-- `POST /api/categories/` - Create category
+#### Search
+- `GET /api/v1/search/` - Unified search (`search_mode=semantic` for MVP re-rank)
 
-#### Users
-- `GET /api/users/` - List users
-- `POST /api/users/` - Create user
+#### Audit & records
+- `GET /api/v1/audit/activity-logs/compliance-export/` - Tamper-evident audit bundle
+- `GET /api/v1/records/legal-holds/{id}/ediscovery-export/` - Legal hold ZIP
 
 ## 🚢 Deployment
 
@@ -261,29 +258,11 @@ pre-commit install
 Complete documentation is available in the `docs/` directory:
 
 - **[📖 Documentation Home](./docs/README.md)**: Overview and navigation guide
+- **[📋 Remaining Work Backlog](./docs/procurement/REMAINING_WORK_BACKLOG.md)**: P0/P1/P2 status (Phase 9–11 MVPs, AI deferred)
 - **[🧩 Component Reference](./docs/components/COMPONENTS_REFERENCE.md)**: Technical documentation for all components
 - **[👤 User Guides](./docs/user-guides/USER_GUIDES.md)**: Step-by-step guides for end users
 - **[🔌 API Reference](./docs/api/API_REFERENCE.md)**: Complete API documentation and examples
-
-### Key Features Recently Added
-
-#### Completion Summary Modal
-- View comprehensive completion details for correspondence
-- Document preview with full content rendering
-- Process timeline and statistics
-- Export and sharing capabilities
-
-#### Actions Panel
-- Dynamic, context-aware action buttons
-- Permission-based UI customization
-- Delegation management and tracking
-- Status indicators and workflow guidance
-
-#### Document Upload System
-- Advanced file upload with validation
-- Version control and management
-- Progress tracking and error recovery
-- Support for multiple file formats (PDF, Word, Excel, etc.)
+- **[🚀 Quick Start](./docs/guides/QUICK_START.md)**: Docker stack, routes, dev login
 
 ## 📄 License
 

@@ -197,11 +197,11 @@ export const CaseHeader = ({
         <div className="hidden md:flex items-center gap-2 flex-shrink-0">
           <ContextualHelp
             title="Case details"
-            description="View and manage this case. Link correspondence, documents, and forms. Update status and generate completion packages when closed."
+            description="Manage this case and keep related records together."
             steps={[
-              'Use the tabs to view linked correspondence, documents, forms, comments, and timeline.',
-              'Click Link Correspondence, Link Document, or Link Form to add items to this case.',
-              'Update status as the case progresses; generate a completion package when it is closed.',
+              'Use tabs to review linked records, comments, and timeline.',
+              'Use Link actions to attach correspondence, documents, or forms.',
+              'Update status as work progresses and generate a completion package at closure.',
             ]}
           />
           <Select
@@ -325,11 +325,11 @@ export const CaseHeader = ({
         <div className="md:hidden flex items-center gap-1 flex-shrink-0">
           <ContextualHelp
             title="Case details"
-            description="View and manage this case. Link correspondence, documents, and forms. Update status and generate completion packages when closed."
+            description="Manage this case and keep related records together."
             steps={[
-              'Use the tabs to view linked correspondence, documents, forms, comments, and timeline.',
-              'Click Link Correspondence, Link Document, or Link Form to add items to this case.',
-              'Update status as the case progresses; generate a completion package when it is closed.',
+              'Use tabs to review linked records, comments, and timeline.',
+              'Use Link actions to attach correspondence, documents, or forms.',
+              'Update status as work progresses and generate a completion package at closure.',
             ]}
           />
           <DropdownMenu>

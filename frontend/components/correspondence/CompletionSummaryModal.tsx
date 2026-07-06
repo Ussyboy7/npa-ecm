@@ -1,11 +1,13 @@
 "use client";
 
+import { useCallback } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, FileText, Calendar, User, Clock } from "lucide-react";
+import { CheckCircle, FileText, Calendar, User, Clock, Download, Printer } from "lucide-react";
+import { toast } from "sonner";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { Correspondence, Minute } from "@/lib/npa-structure";
 
@@ -25,10 +27,54 @@ export function CompletionSummaryModal({
   minutes = [],
   documentContentHtml
 }: CompletionSummaryModalProps) {
+  const finalMinute = minutes[minutes.length - 1];
+  const completionDate = finalMinute?.timestamp || correspondence?.updatedAt;
+
+  const buildExportHtml = useCallback(() => {
+    if (!correspondence) return "";
+    const rows = minutes
+      .map(
+        (m) =>
+          `<tr><td>${m.actionType}</td><td>${m.userName || m.userEmail || "—"}</td><td>${formatDateTime(m.timestamp)}</td></tr>`,
+      )
+      .join("");
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Completion Summary — ${correspondence.referenceNumber}</title>
+<style>body{font-family:system-ui,sans-serif;padding:24px;max-width:800px;margin:0 auto}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:8px;text-align:left}h1{font-size:1.25rem}</style></head><body>
+<h1>Correspondence Completion Summary</h1>
+<p><strong>Reference:</strong> ${correspondence.referenceNumber}</p>
+<p><strong>Subject:</strong> ${correspondence.subject}</p>
+<p><strong>Completed:</strong> ${completionDate ? formatDateTime(completionDate) : "Unknown"}</p>
+<h2>Minute Trail (${minutes.length})</h2>
+<table><thead><tr><th>Action</th><th>User</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>
+</body></html>`;
+  }, [correspondence, minutes, completionDate]);
+
+  const handlePrint = () => {
+    const html = buildExportHtml();
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error("Allow pop-ups to print the completion summary");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
   if (!correspondence) return null;
 
-  const finalMinute = minutes[minutes.length - 1]; // Last minute is typically the final one
-  const completionDate = finalMinute?.timestamp || correspondence.updatedAt;
+  const handleDownload = () => {
+    const html = buildExportHtml();
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `completion-${correspondence.referenceNumber || correspondence.id}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Completion summary downloaded");
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -156,6 +202,14 @@ export function CompletionSummaryModal({
           <Separator />
 
           <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={handlePrint}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print
+            </Button>
+            <Button variant="outline" onClick={handleDownload}>
+              <Download className="h-4 w-4 mr-2" />
+              Export HTML
+            </Button>
             <Button variant="outline" onClick={() => onOpenChange?.(false)}>
               Close
             </Button>

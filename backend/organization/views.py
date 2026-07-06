@@ -1,12 +1,11 @@
 """Viewsets for organizational hierarchy resources."""
 
-from datetime import datetime
 
 from django.db.models import Count
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError, PermissionDenied
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -23,7 +22,18 @@ from .serializers import (
 )
 
 
-class DirectorateViewSet(viewsets.ModelViewSet):
+class OrgStructureAdminMixin:
+    """Writes to org hierarchy require can_manage_org_structure."""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            from organization.permission_utils import require_permission
+
+            require_permission(request.user, "can_manage_org_structure")
+
+
+class DirectorateViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
     queryset = Directorate.objects.all().select_related("executive_director")
     serializer_class = DirectorateSerializer
     permission_classes = [IsAuthenticated]
@@ -76,7 +86,7 @@ class DirectorateViewSet(viewsets.ModelViewSet):
         super().perform_destroy(instance)
 
 
-class DivisionViewSet(viewsets.ModelViewSet):
+class DivisionViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
     queryset = Division.objects.select_related("directorate", "general_manager")
     serializer_class = DivisionSerializer
     permission_classes = [IsAuthenticated]
@@ -98,7 +108,7 @@ class DivisionViewSet(viewsets.ModelViewSet):
         return queryset
 
 
-class DepartmentViewSet(viewsets.ModelViewSet):
+class DepartmentViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
     queryset = Department.objects.select_related("division", "division__directorate", "head_of_department")
     serializer_class = DepartmentSerializer
     permission_classes = [IsAuthenticated]
@@ -135,12 +145,13 @@ class RoleViewSet(viewsets.ModelViewSet):
     search_fields = ["name", "description"]
     ordering_fields = ["name", "created_at"]
 
-    def _ensure_super_admin(self):
-        if not self.request.user.is_superuser:
-            raise PermissionDenied("Only super administrators may modify roles.")
+    def _ensure_can_manage_roles(self):
+        from organization.permission_utils import require_permission
+
+        require_permission(self.request.user, "can_manage_roles")
 
     def perform_create(self, serializer):
-        self._ensure_super_admin()
+        self._ensure_can_manage_roles()
         instance = serializer.save()
         
         # Audit log
@@ -157,7 +168,7 @@ class RoleViewSet(viewsets.ModelViewSet):
         )
 
     def perform_update(self, serializer):
-        self._ensure_super_admin()
+        self._ensure_can_manage_roles()
         instance = serializer.save()
         
         # Audit log
@@ -175,7 +186,7 @@ class RoleViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
-        self._ensure_super_admin()
+        self._ensure_can_manage_roles()
         
         # Audit log
         from audit.models import ActivityLog
@@ -192,10 +203,17 @@ class RoleViewSet(viewsets.ModelViewSet):
         
         super().perform_destroy(instance)
 
+    @action(detail=False, methods=["get"], url_path="permission-catalog")
+    def permission_catalog(self, request):
+        """Return canonical permission keys for the role admin matrix."""
+        from organization.permissions_catalog import get_permission_catalog
+
+        return Response({"permissions": get_permission_catalog()})
+
     @action(detail=False, methods=["post"], url_path="bulk-assign")
     def bulk_assign(self, request):
         """Assign a role to multiple users at once."""
-        self._ensure_super_admin()
+        self._ensure_can_manage_roles()
         
         role_id = request.data.get("role_id")
         user_ids = request.data.get("user_ids", [])
@@ -390,7 +408,7 @@ class RoleViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class OfficeViewSet(viewsets.ModelViewSet):
+class OfficeViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
     queryset = Office.objects.select_related("directorate", "division", "department", "parent")
     serializer_class = OfficeSerializer
     permission_classes = [IsAuthenticated]
@@ -419,18 +437,23 @@ class OfficeMembershipViewSet(viewsets.ModelViewSet):
     search_fields = ["user__username", "user__first_name", "user__last_name", "office__name", "office__code"]
     ordering_fields = ["created_at", "starts_at", "ends_at"]
 
-    def _ensure_super_admin(self):
-        if not self.request.user.is_superuser:
-            raise PermissionDenied("Only super administrators may modify office memberships.")
+    def _ensure_membership_admin(self):
+        from organization.permission_utils import require_any_permission
+
+        require_any_permission(
+            self.request.user,
+            "can_manage_org_structure",
+            "can_manage_users",
+        )
 
     def perform_create(self, serializer):
-        self._ensure_super_admin()
+        self._ensure_membership_admin()
         serializer.save()
 
     def perform_update(self, serializer):
-        self._ensure_super_admin()
+        self._ensure_membership_admin()
         serializer.save()
 
     def perform_destroy(self, instance):
-        self._ensure_super_admin()
+        self._ensure_membership_admin()
         super().perform_destroy(instance)

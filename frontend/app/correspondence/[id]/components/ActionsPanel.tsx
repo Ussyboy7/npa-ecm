@@ -1,5 +1,6 @@
 "use client";
 
+import { logError } from "@/lib/client-logger";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -134,7 +135,7 @@ export function ActionsPanel({
                   });
                   _onSyncFromApi?.();
                 } catch (error) {
-                  console.error('Failed to archive', error);
+                  logError('Failed to archive', error);
                 }
               }}
             >

@@ -1,10 +1,8 @@
 "use client";
 
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Card, CardContent } from '@/components/ui/card';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { CaseAnalyticsTab } from '@/components/analytics/CaseAnalyticsTab';
@@ -12,7 +10,7 @@ import { CaseAnalyticsTab } from '@/components/analytics/CaseAnalyticsTab';
 export default function CaseAnalyticsPage() {
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   return (
-    <DashboardLayout>
+    <>
       {!currentUser ? (
         <div className="container mx-auto p-6 space-y-6">
           <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading case analytics…</CardContent></Card>
@@ -30,26 +28,15 @@ export default function CaseAnalyticsPage() {
               <div className="flex gap-2">
                 <ContextualHelp
                   title="How to use Case Analytics"
-                  description="Monitor case management performance, track case resolution times, and analyze case trends."
+                  description="Track case volume, resolution speed, and trend patterns."
                   steps={[
-                    'Review case metrics and resolution statistics.',
-                    'Analyze case types and priority distribution.',
-                    'Track case lifecycle and status trends.',
-                    'Export case analytics for reporting and analysis.',
+                    'Review volume, resolution, and aging metrics.',
+                    'Analyze case type, priority, and status mix.',
+                    'Export views for reporting.',
                   ]}
                 />
               </div>
             </div>
-
-            <HelpGuideCard
-              title="Case Analytics Overview"
-              description="Comprehensive analytics and insights for case management, including resolution times, case types, and performance metrics."
-              links={[
-                { label: 'My Cases', href: '/cases/my' },
-                { label: 'All Cases', href: '/cases/all' },
-                { label: 'Help & Guides', href: '/help' }
-              ]}
-            />
 
             {/* Analytics Content */}
             <CaseAnalyticsTab />
@@ -57,7 +44,7 @@ export default function CaseAnalyticsPage() {
         </ClientErrorBoundary>
       </ErrorBoundary>
     )}
-  </DashboardLayout>
+  </>
   );
 }
 

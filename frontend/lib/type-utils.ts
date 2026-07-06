@@ -7,6 +7,9 @@ export const asString = (value: unknown, fallback = ''): string => {
   return String(value);
 };
 
+export const asBoolean = (value: unknown, fallback = false): boolean =>
+  typeof value === 'boolean' ? value : fallback;
+
 export const unwrapResults = <T = unknown>(payload: unknown): T[] => {
   if (Array.isArray(payload)) return payload as T[];
   if (isRecord(payload) && 'results' in payload) {

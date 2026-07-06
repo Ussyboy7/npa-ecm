@@ -59,12 +59,11 @@ import { ModalErrorHandler } from '@/lib/modal-errors';
 import { getSuggestedApprovers, filterUsersBySearch } from '@/lib/routing-utils';
 import { DistributionSelector } from './DistributionSelector';
 import { RoutingSection } from './RoutingSection';
-import { type SignatureTemplate, type UserSignaturePreferences } from '@/lib/signature-storage';
+import { type SignatureTemplate } from '@/lib/signature-storage';
 import { useSignature } from '@/hooks/use-signature';
 import {
   getTemplatesForUser,
   createTemplate as createDocumentTemplate,
-  deleteTemplate,
   type DocumentTemplate,
 } from '@/lib/template-storage';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -147,7 +146,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         return { assignment, assistant } as { assignment: AssistantAssignment; assistant: User };
       })
       .filter((entry): entry is { assignment: AssistantAssignment; assistant: User } => entry !== null);
-  }, [assistantAssignments, activeDirectoryUsers, currentUser?.id]);
+  }, [assistantAssignments, activeDirectoryUsers, currentUser]);
 
   const assistantAssignmentsById = useMemo(() => {
     const map = new Map<string, AssistantAssignment>();
@@ -220,7 +219,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             (membership) => membership.userId === currentUser.id && membership.isPrimary && membership.isActive,
           )
         : undefined,
-    [officeMemberships, currentUser?.id],
+    [officeMemberships, currentUser],
   );
 
   // Fetch SLA targets on mount
@@ -280,7 +279,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         setMinuteTemplates([]);
       }
     },
-    [currentUser?.id],
+    [currentUser],
   );
 
   const getTemplatePlainText = (template: DocumentTemplate) => {
@@ -366,7 +365,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         logError('Failed to load draft', error);
       });
     }
-  }, [isOpen, correspondence.id, initialDirection, refreshMinuteTemplates, currentUser?.id]);
+  }, [isOpen, correspondence.id, initialDirection, refreshMinuteTemplates, currentUser]);
 
   // Signature loading is now handled by useSignature hook
 
@@ -508,7 +507,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     [minuteTemplates, selectedMinuteTemplateId],
   );
 
-  const canDeleteSelectedTemplate =
+  const _canDeleteSelectedTemplate =
     !!selectedMinuteTemplate &&
     selectedMinuteTemplate.scope === 'user' &&
     selectedMinuteTemplate.createdBy === currentUser?.id;
@@ -559,7 +558,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       activeUsers: activeDirectoryUsers,
       excludeUsers: usersWhoAlreadyActed,
     });
-  }, [currentUser?.id, isMD, canChooseDirection, selectedDirection, initialDirection, correspondence, existingMinutes, offices, officeMemberships, activeDirectoryUsers, usersWhoAlreadyActed]);
+  }, [currentUser, isMD, canChooseDirection, selectedDirection, initialDirection, correspondence, existingMinutes, offices, officeMemberships, activeDirectoryUsers, usersWhoAlreadyActed]);
   
   const suggestedNext = suggestedApprovers[0]; // Immediate next in hierarchy
   
@@ -1001,7 +1000,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               const actionUsers = newDistributionEntries.filter(
                 (r) => r.type === 'user' && r.purpose === 'action'
               );
-              const otherDistribution = newDistributionEntries.filter(
+              const _otherDistribution = newDistributionEntries.filter(
                 (r) => !(r.type === 'user' && r.purpose === 'action')
               );
 
@@ -1010,7 +1009,9 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
               
               // Create parallel minutes for "For Action" users
               const parallelMinuteIds: string[] = [];
-              if (actionUsers.length > 0) {
+              if (actionUsers.length === 1) {
+                toast.error('Parallel routing requires at least two recipients marked For Action.');
+              } else if (actionUsers.length > 0) {
                 logInfo('[MinuteModal] Creating parallel minutes for action users', actionUsers);
                 
                 // Generate parallel group ID for grouping parallel branches (UUID format)
@@ -1164,14 +1165,10 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           }
         } catch (error: unknown) {
           logError('[MinuteModal] Failed to create distribution/parallel routing', error);
-          const errorMessage = (error instanceof Error ? error.message : null) || 
-                               (typeof error === 'object' && error !== null && 'detail' in error ? String(error.detail) : null) || 
-                               ERROR_UNKNOWN;
-          const errorResponse = typeof error === 'object' && error !== null && 'response' in error ? error.response : undefined;
+          const errorMessage = error instanceof Error ? error.message : ERROR_UNKNOWN;
           logError('[MinuteModal] Distribution error details', {
             error,
             message: errorMessage,
-            response: errorResponse,
           });
           // Don't fail the entire minute creation if distribution fails
           toast.error(`Minute created, but failed to add distribution recipients: ${errorMessage}. Please add them manually.`, {
@@ -1225,7 +1222,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       });
     } catch (error: unknown) {
       // Don't show error if request was cancelled
-      if (error instanceof Error && (error.name === 'AbortError' || (error instanceof Error ? error.message : ERROR_UNKNOWN).includes('aborted'))) {
+      if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
         return;
       }
       logError('Failed to record minute', error);

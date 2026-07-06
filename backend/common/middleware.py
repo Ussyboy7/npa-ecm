@@ -1,5 +1,6 @@
 """Custom middleware for the ECM application."""
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from django.core.exceptions import DisallowedHost
 from django.utils import timezone
@@ -69,4 +70,20 @@ class UserActivityMiddleware:
                 pass
 
         return self.get_response(request)
+
+
+class SecurityHeadersMiddleware:
+    """Add baseline security headers for API responses."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        response = self.get_response(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if not settings.DEBUG:
+            response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+        return response
 

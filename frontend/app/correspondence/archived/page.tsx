@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,7 +20,6 @@ import {
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { formatDateShort } from '@/lib/correspondence-helpers';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
@@ -151,7 +149,7 @@ const ArchivedCorrespondence = () => {
   if (!currentUser) return null;
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex justify-between items-start">
@@ -163,12 +161,6 @@ const ArchivedCorrespondence = () => {
             <Badge variant="secondary" className="text-lg px-4 py-2">{summary.total} records</Badge>
           </div>
         </div>
-
-        <HelpGuideCard
-          title="Work with Archived Records"
-          description="Use search, filters, and date range to locate historical correspondence quickly."
-          links={[{ label: 'Archive Policy', href: '/help#archive-policy' }, { label: 'Help & Guides', href: '/help' }]}
-        />
 
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-2">
@@ -291,7 +283,7 @@ const ArchivedCorrespondence = () => {
           />
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 };
 

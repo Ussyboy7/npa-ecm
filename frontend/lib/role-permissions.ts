@@ -89,6 +89,24 @@ export const AVAILABLE_ROLE_PERMISSIONS: RolePermission[] = [
     category: 'correspondence',
   },
   {
+    id: 'can_archive_department',
+    label: 'Archive at Department Level',
+    description: 'Can archive to department records',
+    category: 'correspondence',
+  },
+  {
+    id: 'can_archive_division',
+    label: 'Archive at Division Level',
+    description: 'Can archive to division records',
+    category: 'correspondence',
+  },
+  {
+    id: 'can_archive_directorate',
+    label: 'Archive at Directorate Level',
+    description: 'Can archive to directorate records',
+    category: 'correspondence',
+  },
+  {
     id: 'can_view_all_correspondence',
     label: 'View All Correspondence',
     description: 'Can view all correspondence regardless of assignment',
@@ -176,6 +194,36 @@ export const AVAILABLE_ROLE_PERMISSIONS: RolePermission[] = [
     id: 'can_manage_org_structure',
     label: 'Manage Organization Structure',
     description: 'Can manage directorates, divisions, and departments',
+    category: 'administration',
+  },
+  {
+    id: 'can_access_system_health',
+    label: 'Access System Health (ICT)',
+    description: 'Can view ICT system health dashboard and helpdesk queue',
+    category: 'administration',
+  },
+  {
+    id: 'can_manage_drm_policies',
+    label: 'Manage DRM Policies',
+    description: 'Can configure document rights management policies',
+    category: 'administration',
+  },
+  {
+    id: 'can_access_records_governance',
+    label: 'Access Records Governance',
+    description: 'Can manage retention schedules, legal holds, and disposal',
+    category: 'administration',
+  },
+  {
+    id: 'can_access_audit_compliance',
+    label: 'Access Audit & Compliance Export',
+    description: 'Can export tamper-evident audit compliance bundles',
+    category: 'administration',
+  },
+  {
+    id: 'can_manage_integration',
+    label: 'Manage Integration Hub',
+    description: 'Can configure and monitor integration connectors',
     category: 'administration',
   },
   
@@ -316,8 +364,11 @@ export const PERMISSION_PRESETS = [
       can_register_correspondence: true,
       can_minute_correspondence: true,
       can_treat_correspondence: true,
-      can_distribute: true, // ✅ Updated: Can add distribution lists when acting on behalf of executives
-      can_archive: true, // ✅ Updated: Can archive completed correspondence on behalf of executives
+      can_distribute: true,
+      can_archive: true,
+      can_archive_department: true,
+      can_archive_division: true,
+      can_archive_directorate: true,
       can_view_all_correspondence: true,
       can_view_registry: true,
       can_access_document_management: true,

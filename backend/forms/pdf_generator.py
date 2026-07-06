@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import inch, cm
+from reportlab.lib.units import cm
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
+from reportlab.lib.enums import TA_CENTER
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
-from reportlab.pdfgen import canvas
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 
 
 def generate_project_monitoring_report_pdf(submission_data: Dict[str, Any]) -> bytes:

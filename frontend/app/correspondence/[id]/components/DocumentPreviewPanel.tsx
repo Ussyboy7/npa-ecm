@@ -22,7 +22,7 @@ import {
   FileCode,
   ExternalLink,
 } from 'lucide-react';
-import type { Correspondence, DistributionRecipient } from '@/lib/npa-structure';
+import type { Correspondence } from '@/lib/npa-structure';
 import { logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
 import { buildDownloadUrl } from '@/lib/correspondence-url-utils';
 import { getCorrespondencePreviewContext, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
@@ -161,20 +161,7 @@ export const DocumentPreviewPanel = ({
       await onSyncFromApi();
     } catch (error: unknown) {
       logError('Failed to upload attachments', error);
-      let errorMessage = 'Please try again.';
-      if (error && typeof error === 'object') {
-        const errorObj = error as Record<string, unknown>;
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (errorMessage === 'Please try again.') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
+      const errorMessage = error instanceof Error && error.message ? error.message : 'Please try again.';
       toast.error('Unable to upload files', {
         description: errorMessage,
       });

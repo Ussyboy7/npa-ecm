@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { FileText, Upload, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatFileSize, getFileTypeIcon, getFileTypeLabel, validateFileSize, validateFileType } from "@/lib/file-utils";
+import { formatFileSize, getFileTypeLabel, validateFileSize, validateFileType } from "@/lib/file-utils";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 

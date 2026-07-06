@@ -25,6 +25,7 @@ export interface SearchRequest {
   limit?: number;
   offset?: number;
   search_type?: 'documents' | 'correspondence' | 'cases' | 'all';
+  search_mode?: 'keyword' | 'semantic';
 }
 
 export interface SearchResult {
@@ -133,6 +134,31 @@ export const searchWithin = async (
     logError('Failed to search within documents', error);
     throw error;
   }
+};
+
+export interface RelatedSearchItem {
+  type: 'document' | 'correspondence' | 'case';
+  id: string;
+  title: string;
+  reference?: string;
+  reason: string;
+}
+
+export interface RelatedSearchResponse {
+  related: RelatedSearchItem[];
+  duplicates: RelatedSearchItem[];
+  total_count: number;
+}
+
+export const fetchRelatedItems = async (
+  type: 'document' | 'correspondence' | 'case',
+  id: string,
+  limit = 8,
+): Promise<RelatedSearchResponse> => {
+  return apiFetch<RelatedSearchResponse>('/search/operations/related/', {
+    method: 'POST',
+    body: JSON.stringify({ type, id, limit }),
+  });
 };
 
 /**

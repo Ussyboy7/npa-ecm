@@ -1,14 +1,15 @@
 import { ERROR_UNKNOWN } from '@/lib/constants';
 import { logError, logInfo } from '@/lib/client-logger';
-import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef, useMemo } from 'react';
-import { useCurrentUser } from '@/hooks/use-current-user';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef, useMemo, useSyncExternalStore } from 'react';
+import { subscribeToStore, getCurrentUserSnapshot } from '@/hooks/use-current-user';
 import { apiFetch, hasTokens } from '@/lib/api-client';
-import { isRecord, unwrapResults } from '@/lib/type-utils';
+import { isRecord } from '@/lib/type-utils';
 import { DEFAULT_CATALOG_PAGE_SIZE } from '@/lib/pagination-constants';
 import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
 import { updateOrganizationCache } from '@/lib/npa-structure';
 import type { User } from '@/lib/npa-structure';
 import type { BootstrapData } from '@/lib/server-bootstrap';
+import { parseBootstrapOrgState } from '@/lib/bootstrap-org-state';
 import type {
   Directorate, Division, Department, Office, OfficeMembership,
   AssistantAssignment, Role, OrganizationContextType,
@@ -78,18 +79,23 @@ export const OrganizationProvider: React.FC<{
   children: ReactNode;
   initialData?: BootstrapData | null;
 }> = ({ children, initialData }) => {
-  const [directorates, setDirectorates] = useState<Directorate[]>([]);
-  const [divisions, setDivisions] = useState<Division[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>([]);
-  const [offices, setOffices] = useState<Office[]>([]);
-  const [officeMemberships, setOfficeMemberships] = useState<OfficeMembership[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
+  const bootstrapState = useMemo(() => parseBootstrapOrgState(initialData), [initialData]);
+  const [directorates, setDirectorates] = useState<Directorate[]>(bootstrapState.directorates);
+  const [divisions, setDivisions] = useState<Division[]>(bootstrapState.divisions);
+  const [departments, setDepartments] = useState<Department[]>(bootstrapState.departments);
+  const [assistantAssignments, setAssistantAssignments] = useState<AssistantAssignment[]>(
+    bootstrapState.assistantAssignments,
+  );
+  const [offices, setOffices] = useState<Office[]>(bootstrapState.offices);
+  const [officeMemberships, setOfficeMemberships] = useState<OfficeMembership[]>(
+    bootstrapState.officeMemberships,
+  );
+  const [users, setUsers] = useState<User[]>(bootstrapState.users);
+  const [roles, setRoles] = useState<Role[]>(bootstrapState.roles);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [hasSynced, setHasSynced] = useState(false);
-  const { currentUser } = useCurrentUser();
-  const appliedInitialRef = useRef(false);
+  const [_hasSynced, setHasSynced] = useState(Boolean(initialData));
+  const currentUser = useSyncExternalStore(subscribeToStore, getCurrentUserSnapshot);
+  const appliedInitialRef = useRef(Boolean(initialData));
   const organizationRefreshPromiseRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {

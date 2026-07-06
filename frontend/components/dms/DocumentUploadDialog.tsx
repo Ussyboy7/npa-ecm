@@ -1,5 +1,5 @@
 "use client";
-import { ERROR_UNKNOWN, SENSITIVITY_OPTIONS } from '@/lib/constants';
+import { SENSITIVITY_OPTIONS } from '@/lib/constants';
 
 import { logError, logWarn } from '@/lib/client-logger';
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
@@ -617,25 +617,7 @@ export const DocumentUploadDialog = ({
       }
     } catch (error: unknown) {
       logError('Document upload error:', error);
-      
-      // Parse structured error response
-      let errorMessage = 'Failed to process document. Please try again.';
-      if (error && typeof error === 'object' && 'response' in error) {
-        const response = (error as { response?: { data?: unknown } }).response;
-        if (response?.data && typeof response.data === 'object') {
-          const data = response.data as Record<string, unknown>;
-          // Check for field-specific errors
-          if (data.title && Array.isArray(data.title)) {
-            errorMessage = `Title: ${(data.title as string[]).join(', ')}`;
-          } else if (data.detail && typeof data.detail === 'string') {
-            errorMessage = data.detail;
-          } else if (data.non_field_errors && Array.isArray(data.non_field_errors)) {
-            errorMessage = (data.non_field_errors as string[]).join(', ');
-          }
-        }
-      } else if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process document. Please try again.';
       
       toast.error('Failed to process document', {
         description: errorMessage,

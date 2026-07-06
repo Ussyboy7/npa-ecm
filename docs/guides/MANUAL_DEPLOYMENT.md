@@ -70,11 +70,21 @@ git pull origin main
 ### 4. Run Deployment Script
 
 ```bash
-# Make script executable (first time only)
-chmod +x scripts/deploy-staging.sh
+# Preferred (staging server)
+scripts/staging/env-manager.sh deploy
+```
 
-# Run deployment
-./scripts/deploy-staging.sh
+Legacy shim (still works):
+
+```bash
+chmod +x scripts/production/deploy-staging.sh
+./scripts/production/deploy-staging.sh
+```
+
+Deploy runs `migrate`, `setup_role_permissions`, and health checks via `docker-entrypoint.sh`. For manual verification after deploy:
+
+```bash
+docker exec <backend_container> python manage.py check_environment_parity --strict
 ```
 
 ### Alternative: Direct Docker Commands

@@ -2,12 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import {
   Select,
@@ -208,7 +206,6 @@ const CorrespondenceInboxContent = () => {
     if (selectedOfficeId && selectedOfficeId !== 'all') count++;
     return count;
   }, [selectedStatus, selectedPriority, assignedOnly, dateFrom, dateTo, selectedOfficeId]);
-
 
   const clearFilters = () => {
     setSelectedStatus('');
@@ -481,7 +478,7 @@ const CorrespondenceInboxContent = () => {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         {!currentUser ? (
           <LoadingState message="Loading office inbox…" />
@@ -501,17 +498,11 @@ const CorrespondenceInboxContent = () => {
             </Button>
             <ContextualHelp
               title="How to triage correspondence"
-              description="Pick one of your offices, tackle urgent/SLA breaches first, and then work through the remaining approvals."
-              steps={['Select the office you are acting for.', 'Use search to find specific references or senders.', 'Open a record to minute, approve, delegate, or archive.']}
+              description="Work urgent and overdue items first, then clear the rest of the queue."
+              steps={['Select the office you are acting for.', 'Use filters/search to find priority or SLA-risk items.', 'Open a record to minute, approve, delegate, or archive.']}
             />
           </div>
         </div>
-
-        <HelpGuideCard
-          title="Office Queue Basics"
-          description="Department files, archives, and outgoing dispatch now live in their dedicated sections. This view is focused solely on items currently sitting with your office."
-          links={[{ label: 'Department Files', href: '/correspondence/department-files' }, { label: 'Outbox', href: '/correspondence/outbox' }]}
-        />
 
         {/* Search + filters bar */}
         <Card>
@@ -626,7 +617,7 @@ const CorrespondenceInboxContent = () => {
         </>
       )}
       </div>
-    </DashboardLayout>
+    </>
   );
 };
 

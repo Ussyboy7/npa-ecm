@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
+from threading import Lock
 from typing import Any, Iterable, Sequence
 
 from django.db import models
@@ -122,6 +123,7 @@ class AnalyticsService:
     # Cache for SLA targets (refreshed periodically)
     _sla_cache: dict[str, int] | None = None
     _sla_cache_time: datetime | None = None
+    _sla_cache_lock: Lock = Lock()
     _SLA_CACHE_TTL = timedelta(minutes=5)
     
     @classmethod
@@ -129,18 +131,19 @@ class AnalyticsService:
         """Get SLA targets from database, with fallback to defaults."""
         now = timezone.now()
         
-        # Check if cache is valid
-        if cls._sla_cache and cls._sla_cache_time and (now - cls._sla_cache_time) < cls._SLA_CACHE_TTL:
-            return cls._sla_cache
+        # Check if cache is valid (read lock)
+        with cls._sla_cache_lock:
+            if cls._sla_cache and cls._sla_cache_time and (now - cls._sla_cache_time) < cls._SLA_CACHE_TTL:
+                return cls._sla_cache
         
         try:
             from .models import SLAConfiguration
             targets = SLAConfiguration.get_default_sla_targets()
-            cls._sla_cache = targets
-            cls._sla_cache_time = now
+            with cls._sla_cache_lock:
+                cls._sla_cache = targets
+                cls._sla_cache_time = now
             return targets
         except Exception:
-            # Fallback to defaults if database not available
             return cls.DEFAULT_SLA_TARGETS
     
     @classmethod
@@ -342,6 +345,15 @@ class AnalyticsService:
                 and item.current_approver.grade_level in LEADERSHIP_GRADES
             ):
                 approvals.append(item)
+
+        escalation_ids = {item.id for item in escalations}
+        approvals = [item for item in approvals if item.id not in escalation_ids]
+        approval_ids = {item.id for item in approvals}
+        preview_candidates = [
+            item
+            for item in preview_candidates
+            if item.id not in escalation_ids and item.id not in approval_ids
+        ]
 
         owned_counts = Counter(item.owning_office_id for item in owned_items if item.owning_office_id)
         for office_id, count in owned_counts.items():
@@ -1179,8 +1191,23 @@ class AnalyticsService:
         }
 
     @classmethod
-    def build_enhanced_division_performance(cls, *, range_days: int = 30) -> dict[str, Any]:
+    def build_enhanced_division_performance(
+        cls,
+        *,
+        range_days: int = 30,
+        directorate_id: str | None = None,
+    ) -> dict[str, Any]:
         """Build enhanced division performance analytics with SLA and trending."""
+        from organization.models import Division
+
+        division_lookup = {
+            str(d.id): {
+                "directorate_id": str(d.directorate_id),
+                "directorate_name": d.directorate.name,
+            }
+            for d in Division.objects.select_related("directorate").filter(is_active=True)
+        }
+
         correspondences = list(cls._fetch_correspondence(range_days=range_days))
         now = timezone.now()
         sla_targets = cls.get_sla_targets()
@@ -1194,12 +1221,20 @@ class AnalyticsService:
             if div_id is None and div_name == "Directorate Level":
                 continue
             div_id_str = str(div_id) if div_id else "unassigned"
+
+            if directorate_id and div_id_str != "unassigned":
+                meta = division_lookup.get(div_id_str)
+                if not meta or meta["directorate_id"] != str(directorate_id):
+                    continue
             
             if div_id_str not in division_data:
+                meta = division_lookup.get(div_id_str, {})
                 division_data[div_id_str] = {
                     "id": div_id if div_id_str != "unassigned" else None,
                     "name": div_name,
                     "fullName": full_name,
+                    "directorateId": meta.get("directorate_id"),
+                    "directorateName": meta.get("directorate_name"),
                     "workload": 0,
                     "completed": 0,
                     "pending": 0,
@@ -1274,6 +1309,8 @@ class AnalyticsService:
                 "id": div["id"],
                 "name": div["name"],
                 "fullName": div["fullName"],
+                "directorateId": div.get("directorateId"),
+                "directorateName": div.get("directorateName"),
                 "workload": div["workload"],
                 "completed": div["completed"],
                 "pending": div["pending"],

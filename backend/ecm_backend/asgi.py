@@ -11,7 +11,6 @@ import os
 
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
-from channels.auth import AuthMiddlewareStack
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ecm_backend.settings')
 
@@ -21,7 +20,7 @@ django_asgi_app = get_asgi_application()
 # Import WebSocket routing and custom JWT middleware
 from notifications.routing import websocket_urlpatterns as notification_websocket_urlpatterns
 from dms.routing import websocket_urlpatterns as dms_websocket_urlpatterns
-from notifications.middleware import JWTAuthMiddlewareStack
+from notifications.middleware import JWTAuthMiddleware
 
 # Combine all WebSocket URL patterns
 websocket_urlpatterns = notification_websocket_urlpatterns + dms_websocket_urlpatterns
@@ -31,7 +30,7 @@ websocket_urlpatterns = notification_websocket_urlpatterns + dms_websocket_urlpa
 # Falls back to session auth if no token provided
 application = ProtocolTypeRouter({
     "http": django_asgi_app,
-    "websocket": JWTAuthMiddlewareStack(
+    "websocket": JWTAuthMiddleware(
         URLRouter(websocket_urlpatterns)
     ),
 })

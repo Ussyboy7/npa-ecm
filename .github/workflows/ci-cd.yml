@@ -70,6 +70,14 @@ jobs:
         working-directory: backend
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Environment parity (roles & beat schedules)
+        working-directory: backend
+        run: |
+          python manage.py migrate --noinput
+          python manage.py setup_role_permissions --force
+          python manage.py setup_celery_beat
+          python manage.py check_environment_parity --strict --skip-env
+
       - name: Run Django tests
         run: bash scripts/ci/run-backend-tests.sh
 
@@ -102,6 +110,17 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: ${{ env.NEXT_PUBLIC_API_URL }}
         run: npm run build
+
+      - name: Install Playwright
+        working-directory: frontend
+        run: npx playwright install chromium
+
+      - name: E2E SSR smoke
+        working-directory: frontend
+        env:
+          CI: true
+          NEXT_PUBLIC_API_URL: ${{ env.NEXT_PUBLIC_API_URL }}
+        run: npx playwright test e2e/smoke.spec.ts
 
   security-scan:
     name: Security scan

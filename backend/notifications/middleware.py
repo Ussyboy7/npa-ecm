@@ -7,9 +7,11 @@ from channels.middleware import BaseMiddleware
 from channels.db import database_sync_to_async
 from rest_framework_simplejwt.tokens import UntypedToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+import logging
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 @database_sync_to_async
@@ -32,6 +34,7 @@ def get_user_from_token(token_string):
             except User.DoesNotExist:
                 return AnonymousUser()
     except Exception:
+        logger.exception("Failed to get user from token")
         return AnonymousUser()
     
     return AnonymousUser()
@@ -64,7 +67,5 @@ class JWTAuthMiddleware(BaseMiddleware):
         return await super().__call__(scope, receive, send)
 
 
-def JWTAuthMiddlewareStack(inner):
-    """Stack JWT auth middleware on top of the inner application."""
-    return JWTAuthMiddleware(inner)
+
 

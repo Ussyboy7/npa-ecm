@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
 
 from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 

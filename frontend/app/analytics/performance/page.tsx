@@ -1,70 +1,44 @@
 "use client";
 
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { Card, CardContent } from '@/components/ui/card';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
+import { PermissionGate } from '@/components/shared/PermissionGate';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
-import { useCurrentUser } from '@/hooks/use-current-user';
-import { useUserPermissions } from '@/hooks/use-user-permissions';
 import { PerformanceAnalyticsTab } from '@/components/analytics/PerformanceAnalyticsTab';
 
 export default function PerformanceAnalyticsPage() {
-  const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const permissions = useUserPermissions(currentUser ?? undefined);
-
   return (
-    <DashboardLayout>
-      {!currentUser ? (
-        <div className="container mx-auto p-6 space-y-6">
-          <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Loading performance analytics…</CardContent></Card>
-        </div>
-      ) : !permissions.canAccessAnalytics ? (
-        <div className="container mx-auto p-6 space-y-6">
-          <Card><CardContent className="py-12 text-center"><p className="text-lg font-semibold">Access Denied</p><p className="text-sm text-muted-foreground mt-2">You don't have permission to access Performance Analytics.</p></CardContent></Card>
-        </div>
-      ) : (
+    <div className="container mx-auto p-6 space-y-6">
+      <PermissionGate
+        permission="can_access_analytics"
+        title="Performance Analytics Access Required"
+        loadingMessage="Loading performance analytics…"
+      >
         <ErrorBoundary>
           <ClientErrorBoundary>
-            <div className="container mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-3xl font-bold">Performance Analytics</h1>
-                <p className="text-muted-foreground mt-1">SLA compliance, turnaround times, and efficiency metrics powered by real-time backend analytics</p>
-              </div>
-              <div className="flex gap-2">
+            <div className="space-y-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h1 className="text-3xl font-bold">Performance Analytics</h1>
+                  <p className="text-muted-foreground mt-1">
+                    SLA compliance, turnaround times, and efficiency metrics powered by real-time backend analytics
+                  </p>
+                </div>
                 <ContextualHelp
                   title="How to use Performance Analytics"
-                  description="Monitor operational performance with SLA compliance, turnaround times, and efficiency metrics."
+                  description="Monitor SLA compliance and operational efficiency."
                   steps={[
-                    'Select a time period to view metrics for that range.',
-                    'Review SLA compliance rates and identify areas needing attention.',
-                    'Analyze division performance to see which teams are most efficient.',
-                    'Use role performance metrics to understand workload distribution.',
+                    'Select the reporting period.',
+                    'Review SLA compliance and turnaround metrics.',
+                    'Compare division and role-level performance.',
                   ]}
                 />
               </div>
+              <PerformanceAnalyticsTab />
             </div>
-
-            <HelpGuideCard
-              title="Performance Analytics Overview"
-              description="Track SLA compliance, turnaround times, and operational efficiency across divisions and roles."
-              links={[
-                { label: 'Executive Dashboard', href: '/analytics/executive' },
-                { label: 'Reports', href: '/analytics/reports' },
-                { label: 'Help & Guides', href: '/help' }
-              ]}
-            />
-
-            {/* Analytics Content */}
-            <PerformanceAnalyticsTab />
-          </div>
-        </ClientErrorBoundary>
-      </ErrorBoundary>
-    )}
-  </DashboardLayout>
+          </ClientErrorBoundary>
+        </ErrorBoundary>
+      </PermissionGate>
+    </div>
   );
 }
-

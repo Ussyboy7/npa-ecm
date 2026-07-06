@@ -18,7 +18,6 @@ import { logError, logWarn } from "@/lib/client-logger";
 import { exportToCSV } from "@/lib/admin-export";
 import { apiFetch } from "@/lib/api-client";
 import { Search, Plus, FileText, Loader2, Briefcase, Building2, Download, ChevronRight } from "lucide-react";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import {
@@ -246,7 +245,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           params.scope = "office";
         } else if (scope === "all") {
           // Use the scope from scopeChecks (department/division/directorate/organization)
-          params.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
+          params.scope = scopeChecks.caseScope === "personal" ? "my" : scopeChecks.caseScope;
         }
 
         const response = await getCases({ ...params, signal });
@@ -339,7 +338,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
       } else if (scope === "office" && (userOfficeIds.length > 0 || isSuperAdmin)) {
         baseParams.scope = "office";
       } else if (scope === "all") {
-        baseParams.scope = scopeChecks.caseScope === "personal" ? "all" : scopeChecks.caseScope;
+        baseParams.scope = scopeChecks.caseScope === "personal" ? "my" : scopeChecks.caseScope;
       }
 
       const allCases = await fetchAllPaginatedResults((page, pageSize) =>
@@ -422,19 +421,11 @@ export function CasesListContent({ scope, title, description }: CasesListContent
           </Button>
           <ContextualHelp
             title="How to manage cases"
-            description="Track and manage cases throughout their lifecycle. Use filters to find specific cases, link related items, and monitor progress."
-            steps={['Use filters to find cases by status, type, priority, or division.', 'Click on a case to view details and link correspondence, documents, or forms.', 'Create new cases to track complaints, requests, inquiries, or projects.']}
+            description="Track cases from intake to closure."
+            steps={['Filter by status, type, priority, or division.', 'Open a case to link correspondence, documents, and forms.', 'Create a case for new complaints, requests, inquiries, or projects.']}
           />
         </div>
       </div>
-
-      <HelpGuideCard
-        title="Case Management"
-        description="Track and manage cases, complaints, requests, and inquiries throughout their lifecycle. Link related correspondence, documents, and forms to build a complete case file."
-        links={[
-          { label: 'Help & Guides', href: '/help' },
-        ]}
-      />
 
       {/* Inline Filter Bar */}
       <Card>

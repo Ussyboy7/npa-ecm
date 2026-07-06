@@ -3,6 +3,7 @@ import { useCurrentUser } from './use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from './use-role-checks';
 import { useScopeChecks } from './use-scope-checks';
+import { shouldUseWorkspaceHomeForUser } from '@/lib/home-route';
 
 export interface SidebarVisibility {
   // My Workspace
@@ -16,6 +17,7 @@ export interface SidebarVisibility {
   showOfficeInbox: boolean;
   showRegisterCorrespondence: boolean;
   showOfficeOutbox: boolean;
+  showOfficeDispatched: boolean;
 
   // Case Management
   showMyCases: boolean;
@@ -28,6 +30,8 @@ export interface SidebarVisibility {
   showFormsLibrary: boolean;
   showVerifySeal: boolean;
   showRecordsArchives: boolean;
+  showPhysicalRecords: boolean;
+  showAssistantCalendar: boolean;
 
   // Analytics & Reports
   showAnalyticsReports: boolean;
@@ -40,8 +44,12 @@ export interface SidebarVisibility {
   showOrganizationOffices: boolean;
   showUsersRoles: boolean;
   showWorkflowSLA: boolean;
+  showRecordsGovernance: boolean;
   showTemplates: boolean;
   showAuditCompliance: boolean;
+  showSystemHealth: boolean;
+  showExternalEntities: boolean;
+  showDivisionAnalytics: boolean;
 
   // Integration
   showIntegration: boolean;
@@ -50,6 +58,10 @@ export interface SidebarVisibility {
   // System
   showSettings: boolean;
   showHelpGuides: boolean;
+  showHelpdeskSubmit: boolean;
+  showHelpdeskQueue: boolean;
+  showDrmPolicies: boolean;
+  showLegacyImport: boolean;
 }
 
 /**
@@ -57,7 +69,7 @@ export interface SidebarVisibility {
  */
 export function useSidebarVisibility(): SidebarVisibility {
   const { currentUser } = useCurrentUser();
-  const { officeMemberships, assistantAssignments, roles } = useOrganization();
+  const { officeMemberships, assistantAssignments, roles, offices } = useOrganization();
   const roleChecks = useRoleChecks();
   const scopeChecks = useScopeChecks();
 
@@ -72,6 +84,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showOfficeInbox: false,
         showRegisterCorrespondence: false,
         showOfficeOutbox: false,
+        showOfficeDispatched: false,
         showMyCases: false,
         showOfficeCases: false,
         showAllCases: false,
@@ -80,6 +93,8 @@ export function useSidebarVisibility(): SidebarVisibility {
         showFormsLibrary: false,
         showVerifySeal: false,
         showRecordsArchives: false,
+        showPhysicalRecords: false,
+        showAssistantCalendar: false,
         showAnalyticsReports: false,
         showExecutiveDashboard: false,
         showPerformanceAnalytics: false,
@@ -88,12 +103,20 @@ export function useSidebarVisibility(): SidebarVisibility {
         showOrganizationOffices: false,
         showUsersRoles: false,
         showWorkflowSLA: false,
+        showRecordsGovernance: false,
         showTemplates: false,
         showAuditCompliance: false,
+        showSystemHealth: false,
+        showExternalEntities: false,
+        showDivisionAnalytics: false,
         showIntegration: false,
         showIntegrationHub: false,
         showSettings: false,
         showHelpGuides: false,
+        showHelpdeskSubmit: false,
+        showHelpdeskQueue: false,
+        showDrmPolicies: false,
+        showLegacyImport: false,
       };
     }
 
@@ -110,6 +133,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showOfficeInbox: true,
         showRegisterCorrespondence: true,
         showOfficeOutbox: true,
+        showOfficeDispatched: true,
         showMyCases: true,
         showOfficeCases: true,
         showAllCases: true,
@@ -118,6 +142,8 @@ export function useSidebarVisibility(): SidebarVisibility {
         showFormsLibrary: true,
         showVerifySeal: true,
         showRecordsArchives: true,
+        showPhysicalRecords: true,
+        showAssistantCalendar: true,
         showAnalyticsReports: true,
         showExecutiveDashboard: true,
         showPerformanceAnalytics: true,
@@ -126,143 +152,136 @@ export function useSidebarVisibility(): SidebarVisibility {
         showOrganizationOffices: true,
         showUsersRoles: true,
         showWorkflowSLA: true,
+        showRecordsGovernance: true,
         showTemplates: true,
         showAuditCompliance: true,
+        showSystemHealth: true,
+        showExternalEntities: true,
+        showDivisionAnalytics: true,
         showIntegration: true,
         showIntegrationHub: true,
         showSettings: true,
         showHelpGuides: true,
+        showHelpdeskSubmit: true,
+        showHelpdeskQueue: true,
+        showDrmPolicies: true,
+        showLegacyImport: true,
       };
     }
 
-    // Check if user's role has custom sidebar visibility configuration
-    const userRole = roles.find(r => r.id === currentUser.systemRole || r.name === currentUser.systemRole);
-    const rolePermissions = userRole?.permissions || {};
-    const hasSidebarPermissions = Object.keys(rolePermissions).some(key => key.startsWith('sidebar_show_'));
-    
-    // Continue with default logic first, then override with role permissions if they exist
+    const perms: Record<string, boolean> = {
+      ...(roles.find((r) => r.id === currentUser.systemRole || r.name === currentUser.systemRole)?.permissions ?? {}),
+      ...(currentUser.rolePermissions ?? {}),
+    };
+    const has = (key: string) => Boolean(perms[key]);
+    const section = (sidebarKey: string, defaultOn: boolean) =>
+      sidebarKey in perms ? Boolean(perms[sidebarKey]) : defaultOn;
 
-    // Get user's office IDs
     const userOfficeIds = officeMemberships
       .filter((m) => m.userId === currentUser.id && m.isActive)
       .map((m) => m.officeId);
-
     const hasOfficeMembership = userOfficeIds.length > 0;
-
-    // Check if secretary has executive assignment
     const hasExecutiveAssignment =
       roleChecks.isSecretary &&
       assistantAssignments.some((a) => String(a.assistantId) === String(currentUser.id));
-
-    // Check if user has division/department (for Records & Archives)
     const hasOrgUnit = Boolean(
-      currentUser.division || currentUser.department || currentUser.directorate
+      currentUser.division || currentUser.department || currentUser.directorate,
     );
+    const userOfficeTypes = userOfficeIds
+      .map((officeId) => offices.find((office) => office.id === officeId)?.officeType)
+      .filter((officeType): officeType is string => Boolean(officeType));
 
-    // My Workspace - All users can see
-    const showDashboard = true;
-    const showMyInbox = true;
-    const showMyOutbox = true;
-    const showMyTasksAlerts = true;
+    const workspaceOn = section("sidebar_show_my_workspace", true);
+    const registryOn = section("sidebar_show_offices_registry", true);
+    const casesOn = section("sidebar_show_case_management", true);
+    const documentsOn = section("sidebar_show_documents_records", true);
+    const analyticsOn = section("sidebar_show_analytics_reports", has("can_access_analytics"));
+    const adminOn = section("sidebar_show_administration", has("can_access_administration"));
+    const integrationOn = section("sidebar_show_integration", has("can_manage_integration"));
 
-    // Executive Approvals - Management grades + Secretary (when assigned)
+    const showDashboard =
+      workspaceOn && shouldUseWorkspaceHomeForUser(currentUser, userOfficeTypes);
+    const showMyInbox = workspaceOn;
+    const showMyOutbox = workspaceOn;
+    const showMyTasksAlerts = workspaceOn;
     const showExecutiveApprovals =
-      roleChecks.isManagement ||
-      (roleChecks.isSecretary && hasExecutiveAssignment);
+      workspaceOn &&
+      (has("can_access_approvals") || (roleChecks.isSecretary && hasExecutiveAssignment));
 
-    // Offices & Registry
-    const showOfficeInbox = hasOfficeMembership;
-    const showOfficeOutbox = hasOfficeMembership;
-    
-    // Register Correspondence - Management + Secretary + Registry
+    const showOfficeInbox = registryOn && hasOfficeMembership;
+    const showOfficeOutbox = registryOn && hasOfficeMembership;
+    const showOfficeDispatched = registryOn && hasOfficeMembership;
     const showRegisterCorrespondence =
-      roleChecks.isManagement ||
-      roleChecks.isSecretary ||
-      roleChecks.isRegistry;
+      registryOn &&
+      has("can_register_correspondence") &&
+      (hasOfficeMembership || has("can_view_registry") || roleChecks.isRegistry);
 
-    // Case Management
-    const showMyCases = true; // All users
-    const showOfficeCases = hasOfficeMembership;
-    // All Cases - Based on scope (AGM→GM→ED→MD) + Secretary (when assigned)
+    const showMyCases = casesOn;
+    const showOfficeCases = casesOn && hasOfficeMembership;
     const showAllCases =
-      scopeChecks.caseScope !== 'personal' ||
-      (roleChecks.isSecretary && hasExecutiveAssignment);
+      casesOn &&
+      (scopeChecks.caseScope !== "personal" ||
+        (roleChecks.isSecretary && hasExecutiveAssignment) ||
+        has("can_view_all_correspondence"));
 
-    // Documents & Records - All users can see
-    const showSearchDocuments = true;
-    const showContentCapture = true;
-    const showFormsLibrary = true;
-    const showVerifySeal = true;
-    // Records & Archives - Office membership or org unit membership
-    const showRecordsArchives = hasOfficeMembership || hasOrgUnit;
+    const showSearchDocuments = documentsOn && has("can_access_document_management");
+    const showContentCapture = documentsOn && has("can_access_document_management");
+    const showFormsLibrary = documentsOn;
+    const showVerifySeal = documentsOn;
+    const showRecordsArchives = documentsOn && (hasOfficeMembership || hasOrgUnit);
+    const showPhysicalRecords =
+      documentsOn && (has("can_archive") || showRecordsArchives || showRegisterCorrespondence);
 
-    // Analytics & Reports
-    const showAnalyticsReports =
-      roleChecks.isMD ||
-      roleChecks.isED ||
-      roleChecks.isGM ||
-      roleChecks.isAGM ||
-      (roleChecks.isSecretary && hasExecutiveAssignment);
+    const isAssistantWithCalendar = assistantAssignments.some(
+      (assignment) =>
+        assignment.assistantId === currentUser.id &&
+        (assignment.permissions.includes("schedule") ||
+          assignment.permissions.includes("coordinate")),
+    );
+    const showAssistantCalendar =
+      isAssistantWithCalendar || has("can_access_executive_dashboard");
 
-    // Executive Dashboard - MD, ED only
-    const showExecutiveDashboard = roleChecks.isMD || roleChecks.isED;
-
-    // Performance Analytics & Reports - Management + Secretary (when assigned)
+    const showAnalyticsReports = analyticsOn && has("can_access_analytics");
+    const showExecutiveDashboard = analyticsOn && has("can_access_executive_dashboard");
     const showPerformanceAnalytics = showAnalyticsReports;
-    const showReportsIntelligence = showAnalyticsReports;
+    const showReportsIntelligence = analyticsOn && has("can_access_reports");
+    const showDivisionAnalytics = showAnalyticsReports;
 
-    // Administration
-    const showAdministration =
-      roleChecks.isMD ||
-      roleChecks.isED ||
-      roleChecks.isGM ||
-      roleChecks.isAGM;
-
-    // Organization & Offices - MD, ED, GM only
-    const showOrganizationOffices =
-      roleChecks.isMD ||
-      roleChecks.isED ||
-      roleChecks.isGM;
-
-    // Users & Roles - MD, ED, GM, AGM (department scope)
+    const showOrganizationOffices = adminOn && has("can_manage_org_structure");
     const showUsersRoles =
-      roleChecks.isMD ||
-      roleChecks.isED ||
-      roleChecks.isGM ||
-      roleChecks.isAGM;
+      adminOn && (has("can_manage_users") || has("can_manage_roles"));
+    const showWorkflowSLA = adminOn && has("can_manage_org_structure");
+    const showRecordsGovernance = adminOn && has("can_access_records_governance");
+    const showTemplates = adminOn && has("can_access_administration");
+    const showAuditCompliance = adminOn && has("can_access_audit_compliance");
+    const showSystemHealth = has("can_access_system_health");
+    const showDrmPolicies = has("can_manage_drm_policies");
+    const showLegacyImport = has("can_access_system_health");
+    const showHelpdeskQueue = has("can_access_system_health");
+    const showExternalEntities =
+      adminOn && (has("can_access_administration") || showRegisterCorrespondence);
+    const showIntegration = integrationOn;
+    const showIntegrationHub = integrationOn;
 
-    // Workflow & SLA - MD, ED, GM only
-    const showWorkflowSLA =
-      roleChecks.isMD ||
-      roleChecks.isED ||
-      roleChecks.isGM;
-
-    // Templates - All users
-    const showTemplates = true;
-
-    // Audit & Compliance - MD, ED, GM, AGM (department scope)
-    const showAuditCompliance =
-      roleChecks.isMD ||
-      roleChecks.isED ||
-      roleChecks.isGM ||
-      roleChecks.isAGM;
-
-    // Integration
-    const showIntegration =
-      roleChecks.isMD ||
-      roleChecks.isED ||
-      roleChecks.isGM ||
-      roleChecks.isAGM ||
-      roleChecks.isSystemAdmin;
-
-    const showIntegrationHub = showIntegration;
-
-    // System - All users
     const showSettings = true;
     const showHelpGuides = true;
+    const showHelpdeskSubmit = true;
 
-    // Build default visibility
-    const defaultVisibility: SidebarVisibility = {
+    const showAdministration =
+      showOrganizationOffices ||
+      showUsersRoles ||
+      showWorkflowSLA ||
+      showRecordsGovernance ||
+      showTemplates ||
+      showAuditCompliance ||
+      showSystemHealth ||
+      showExternalEntities ||
+      showDrmPolicies ||
+      showLegacyImport ||
+      showHelpdeskQueue ||
+      showIntegrationHub;
+
+    return {
       showDashboard,
       showMyInbox,
       showMyOutbox,
@@ -271,6 +290,7 @@ export function useSidebarVisibility(): SidebarVisibility {
       showOfficeInbox,
       showRegisterCorrespondence,
       showOfficeOutbox,
+      showOfficeDispatched,
       showMyCases,
       showOfficeCases,
       showAllCases,
@@ -279,6 +299,8 @@ export function useSidebarVisibility(): SidebarVisibility {
       showFormsLibrary,
       showVerifySeal,
       showRecordsArchives,
+      showPhysicalRecords,
+      showAssistantCalendar,
       showAnalyticsReports,
       showExecutiveDashboard,
       showPerformanceAnalytics,
@@ -287,103 +309,29 @@ export function useSidebarVisibility(): SidebarVisibility {
       showOrganizationOffices,
       showUsersRoles,
       showWorkflowSLA,
+      showRecordsGovernance,
       showTemplates,
       showAuditCompliance,
+      showSystemHealth,
+      showExternalEntities,
+      showDivisionAnalytics,
       showIntegration,
       showIntegrationHub,
       showSettings,
       showHelpGuides,
+      showHelpdeskSubmit,
+      showHelpdeskQueue,
+      showDrmPolicies,
+      showLegacyImport,
     };
-
-    // If role has sidebar permissions configured, override defaults
-    if (hasSidebarPermissions) {
-      // Override with role-based sidebar visibility
-      if (rolePermissions.sidebar_show_my_workspace === true) {
-        defaultVisibility.showDashboard = true;
-        defaultVisibility.showMyInbox = true;
-        defaultVisibility.showMyOutbox = true;
-        defaultVisibility.showExecutiveApprovals = true;
-        defaultVisibility.showMyTasksAlerts = true;
-      } else if (rolePermissions.sidebar_show_my_workspace === false) {
-        defaultVisibility.showDashboard = false;
-        defaultVisibility.showMyInbox = false;
-        defaultVisibility.showMyOutbox = false;
-        defaultVisibility.showExecutiveApprovals = false;
-        defaultVisibility.showMyTasksAlerts = false;
-      }
-
-      if (rolePermissions.sidebar_show_offices_registry === true) {
-        defaultVisibility.showOfficeInbox = hasOfficeMembership; // Still need office membership
-        defaultVisibility.showRegisterCorrespondence = true;
-        defaultVisibility.showOfficeOutbox = hasOfficeMembership; // Still need office membership
-      } else if (rolePermissions.sidebar_show_offices_registry === false) {
-        defaultVisibility.showOfficeInbox = false;
-        defaultVisibility.showRegisterCorrespondence = false;
-        defaultVisibility.showOfficeOutbox = false;
-      }
-
-      if (rolePermissions.sidebar_show_case_management === true) {
-        defaultVisibility.showMyCases = true;
-        defaultVisibility.showOfficeCases = hasOfficeMembership; // Still need office membership
-        defaultVisibility.showAllCases = true;
-      } else if (rolePermissions.sidebar_show_case_management === false) {
-        defaultVisibility.showMyCases = false;
-        defaultVisibility.showOfficeCases = false;
-        defaultVisibility.showAllCases = false;
-      }
-
-      if (rolePermissions.sidebar_show_documents_records === true) {
-        defaultVisibility.showSearchDocuments = true;
-        defaultVisibility.showContentCapture = true;
-        defaultVisibility.showFormsLibrary = true;
-        defaultVisibility.showVerifySeal = true;
-        defaultVisibility.showRecordsArchives = true;
-      } else if (rolePermissions.sidebar_show_documents_records === false) {
-        defaultVisibility.showSearchDocuments = false;
-        defaultVisibility.showContentCapture = false;
-        defaultVisibility.showFormsLibrary = false;
-        defaultVisibility.showVerifySeal = false;
-        defaultVisibility.showRecordsArchives = false;
-      }
-
-      if (rolePermissions.sidebar_show_analytics_reports === true) {
-        defaultVisibility.showAnalyticsReports = true;
-        defaultVisibility.showExecutiveDashboard = true;
-        defaultVisibility.showPerformanceAnalytics = true;
-        defaultVisibility.showReportsIntelligence = true;
-      } else if (rolePermissions.sidebar_show_analytics_reports === false) {
-        defaultVisibility.showAnalyticsReports = false;
-        defaultVisibility.showExecutiveDashboard = false;
-        defaultVisibility.showPerformanceAnalytics = false;
-        defaultVisibility.showReportsIntelligence = false;
-      }
-
-      if (rolePermissions.sidebar_show_administration === true) {
-        defaultVisibility.showAdministration = true;
-        defaultVisibility.showOrganizationOffices = true;
-        defaultVisibility.showUsersRoles = true;
-        defaultVisibility.showWorkflowSLA = true;
-        defaultVisibility.showTemplates = true;
-        defaultVisibility.showAuditCompliance = true;
-      } else if (rolePermissions.sidebar_show_administration === false) {
-        defaultVisibility.showAdministration = false;
-        defaultVisibility.showOrganizationOffices = false;
-        defaultVisibility.showUsersRoles = false;
-        defaultVisibility.showWorkflowSLA = false;
-        defaultVisibility.showTemplates = false;
-        defaultVisibility.showAuditCompliance = false;
-      }
-
-      if (rolePermissions.sidebar_show_integration === true) {
-        defaultVisibility.showIntegration = true;
-        defaultVisibility.showIntegrationHub = true;
-      } else if (rolePermissions.sidebar_show_integration === false) {
-        defaultVisibility.showIntegration = false;
-        defaultVisibility.showIntegrationHub = false;
-      }
-    }
-
-    return defaultVisibility;
-  }, [currentUser?.id, officeMemberships, assistantAssignments, roleChecks, scopeChecks, roles]);
+  }, [
+    currentUser,
+    officeMemberships,
+    assistantAssignments,
+    roleChecks,
+    scopeChecks,
+    roles,
+    offices,
+  ]);
 }
 

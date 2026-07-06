@@ -2,7 +2,6 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
@@ -170,7 +169,7 @@ function WorkflowTemplateEditorPageContent() {
   };
 
   return (
-    <DashboardLayout>
+    <>
       {loading ? (
         <div className="flex-1 overflow-y-auto">
           <div className="container mx-auto p-6 space-y-6">
@@ -345,7 +344,7 @@ function WorkflowTemplateEditorPageContent() {
           )}
       </div>
       )}
-    </DashboardLayout>
+    </>
   );
 }
 
@@ -353,13 +352,13 @@ function WorkflowTemplateEditorPageContent() {
 export default function WorkflowTemplateEditorPage() {
   return (
     <Suspense fallback={
-      <DashboardLayout>
+      <>
         <div className="container mx-auto p-6">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         </div>
-      </DashboardLayout>
+      </>
     }>
       <WorkflowTemplateEditorPageContent />
     </Suspense>

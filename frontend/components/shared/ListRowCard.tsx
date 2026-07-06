@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   correspondenceQueueInnerGapClass,
@@ -16,6 +16,8 @@ type ListRowCardProps = {
   children: ReactNode;
   className?: string;
   href?: string;
+  /** Select row without navigation (e.g. preview panel). Avoid wrapping the card in `<button>`. */
+  onRowClick?: () => void;
   /** Right column (e.g. View); not part of the main link. */
   actions?: ReactNode;
   /** Full-width row below main content (e.g. outbox actions). */
@@ -31,6 +33,7 @@ export function ListRowCard({
   leading,
   children,
   href,
+  onRowClick,
   actions,
   footer,
   className,
@@ -49,7 +52,25 @@ export function ListRowCard({
       ? "mt-2 border-t border-border/80 pt-2"
       : "mt-3 border-t border-border pt-3";
 
-  if (href && !actions && !footer) {
+  const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!onRowClick) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onRowClick();
+    }
+  };
+
+  const rowClickableProps = onRowClick
+    ? {
+        role: "button" as const,
+        tabIndex: 0,
+        className: "min-w-0 flex-1 cursor-pointer text-left",
+        onClick: onRowClick,
+        onKeyDown: handleRowKeyDown,
+      }
+    : { className: "min-w-0 flex-1" };
+
+  if (href && !actions && !footer && !onRowClick) {
     return (
       <Link
         href={href}
@@ -77,6 +98,23 @@ export function ListRowCard({
     );
   }
 
+  if (onRowClick && !href && !actions && !footer) {
+    return (
+      <div
+        className={cn(shell, "cursor-pointer", className)}
+        role="button"
+        tabIndex={0}
+        onClick={onRowClick}
+        onKeyDown={handleRowKeyDown}
+      >
+        <div className={cn("flex items-start", rowGap)}>
+          {leading}
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn(shell, className)}>
       <div className={cn("flex items-start", rowGap)}>
@@ -86,6 +124,8 @@ export function ListRowCard({
             <Link href={href} className="min-w-0 flex-1 cursor-pointer">
               {children}
             </Link>
+          ) : onRowClick ? (
+            <div {...rowClickableProps}>{children}</div>
           ) : (
             <div className="min-w-0 flex-1">{children}</div>
           )}

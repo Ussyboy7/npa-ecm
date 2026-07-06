@@ -25,15 +25,15 @@ const features = [
     icon: BarChart3,
   },
   {
-    title: "Real-Time Collaboration",
+    title: "Real-Time Updates",
     description:
-      "WebSocket notifications, live updates, and instant routing ensure MD, ED, GM, and AGM offices stay synchronized across all actions.",
+      "WebSocket notifications and live routing status keep MD, ED, GM, and AGM offices aligned. Document collaboration uses comments and presence—not live multi-user editing.",
     icon: Workflow,
   },
   {
     title: "Enterprise-Grade Security",
     description:
-      "File validation, virus scanning, granular permissions, DRM policies, and tamper-evident signatures protect sensitive records at every level.",
+      "File validation, optional ClamAV scanning, role-based access, JWT authentication, executive seal TOTP, tamper-evident audit exports, and DRM download policies.",
     icon: ShieldCheck,
   },
 ];
@@ -53,7 +53,7 @@ const modules = [
   {
     title: "Document Management",
     description:
-      "Draft, upload, version, and classify official documents with instant linkage to correspondence, approvals, and hierarchical workspace organization.",
+      "Upload, version, and compare documents in the DMS library. Link records to correspondence, apply sensitivity labels, and enforce DRM download policies.",
   },
   {
     title: "Workflow & Approvals",
@@ -73,7 +73,17 @@ const modules = [
   {
     title: "Audit & Compliance",
     description:
-      "Complete activity logs, tamper-evident records, and hierarchical archives ensure every action is traceable and compliant with policy.",
+      "Activity logs, tamper-evident compliance exports, retention schedules, legal holds, and eDiscovery bundles support governance and records teams.",
+  },
+  {
+    title: "Search & Discovery",
+    description:
+      "Cross-module full-text search with permission-aware results. Optional semantic re-ranking improves relevance without requiring a separate AI server.",
+  },
+  {
+    title: "Helpdesk & Support",
+    description:
+      "In-app support tickets for all staff and an ICT support queue—aligned with national rollout and hypercare operations.",
   },
 ];
 
@@ -103,11 +113,19 @@ const deliveryPhases = [
     status: "completed",
   },
   {
-    phase: "Phase 4+",
-    title: "Collaboration & AI",
-    date: "DEC 2025",
+    phase: "Phase 4",
+    title: "Governance & Quality",
+    date: "JUN 2026",
     description:
-      "Live co-authoring, OCR, AI summarization, and backend-integrated correspondence services extend the ECM into daily collaboration tools.",
+      "Audit compliance exports, document version diff, records governance (retention, legal hold, eDiscovery), DRM policies, helpdesk, WCAG accessibility prep, and legacy import tooling.",
+    status: "completed",
+  },
+  {
+    phase: "Phase 5+",
+    title: "Enterprise Hardening",
+    date: "2026–2027",
+    description:
+      "SSO/Active Directory, login MFA rollout, integration connectors (email, ERP, HRMS), capture hub production scanners, E2E/load testing, and national port deployment.",
     status: "in-flight",
   },
 ];
@@ -235,7 +253,7 @@ export default function LandingPage() {
         <div className="mb-12 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Delivery Phases</h2>
           <p className="mt-4 max-w-3xl mx-auto text-base text-muted-foreground sm:text-lg">
-            From digitizing registry operations to completion intelligence, each phase builds on the last and prepares the platform for collaboration, OCR, AI, and backend service integrations.
+            From digitizing registry operations through governance and quality—each phase builds on the last, with enterprise identity and national rollout next.
           </p>
         </div>
         <div className="grid gap-6 md:grid-cols-2">
@@ -281,11 +299,10 @@ export default function LandingPage() {
         <div className="mb-12 text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">ECM Modules</h2>
           <p className="mt-4 max-w-3xl mx-auto text-base text-muted-foreground sm:text-lg">
-            Six integrated modules span correspondence management, document workflows, approvals, digital signatures, analytics, and compliance,
-            ensuring every directorate can work in lockstep.
+            Eight integrated areas span correspondence, documents, workflows, signatures, analytics, compliance, search, and helpdesk—built for NPA&apos;s office-based structure.
           </p>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {modules.map((module) => (
             <Card key={module.title} className="group border-border/60 bg-background/70 shadow-sm transition hover:border-primary/40 hover:shadow-lg">
               <CardContent className="flex flex-col gap-3 p-6">

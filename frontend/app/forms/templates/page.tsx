@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +11,6 @@ import { FileCheck, Loader2, Plus, Search, Eye } from "lucide-react";
 import { getFormTemplates, type FormTemplate } from "@/lib/api/forms";
 import { CreateFormDocumentDialog } from "@/components/dms/CreateFormDocumentDialog";
 import { logError } from "@/lib/client-logger";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 
 const FormsTemplatesPage = () => {
   const router = useRouter();
@@ -115,7 +113,7 @@ const FormsTemplatesPage = () => {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -126,12 +124,6 @@ const FormsTemplatesPage = () => {
             Back to Forms
           </Button>
         </div>
-
-        <HelpGuideCard
-          title="Template Library"
-          description="Templates are predesigned across the organization. Start a form to create your own editable form instance."
-          links={[{ label: "Forms Library", href: "/forms" }, { label: "Help & Guides", href: "/help" }]}
-        />
 
         <div className="relative max-w-xl">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -333,7 +325,7 @@ const FormsTemplatesPage = () => {
           initialTemplate={selectedTemplate}
         />
       </div>
-    </DashboardLayout>
+    </>
   );
 };
 

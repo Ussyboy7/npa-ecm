@@ -2,12 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import {
   Select,
   SelectContent,
@@ -33,7 +31,7 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import type { Correspondence } from '@/lib/npa-structure';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, isAbortError } from '@/lib/api-client';
 import { CorrespondenceProvider, mapApiCorrespondence, mapApiMinute, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import type { Minute } from '@/lib/npa-structure';
 import { RecallMinuteModal } from '@/components/correspondence/RecallMinuteModal';
@@ -200,6 +198,9 @@ const OutboxPageContent = () => {
         setSharedDocuments(docsResponse.results || []);
         setDocumentCount(docsResponse.count || 0);
       } catch (err: unknown) {
+        if (isAbortError(err)) {
+          return;
+        }
         // Handle backend errors gracefully, especially for unsupported params
         const errorMessage = (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') ? err.message : 'Failed to load outbox items.';
         if (errorMessage.includes('date_from') || errorMessage.includes('date_to')) {
@@ -213,7 +214,9 @@ const OutboxPageContent = () => {
         setCount(0);
         setDocumentCount(0);
       } finally {
-        setLoading(false);
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -238,7 +241,7 @@ const OutboxPageContent = () => {
     }
     setIsProcessing(true);
     try {
-      await apiFetch(`/correspondence/items/${selectedItem.id}/withdraw/`, {
+      await apiFetch(`/correspondence/items/${selectedItem.id}/cancel-draft/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason: withdrawReason.trim() }),
@@ -249,21 +252,26 @@ const OutboxPageContent = () => {
       setSelectedItem(null);
       setRefreshKey((k) => k + 1);
     } catch (err: unknown) {
-      let errorMessage = 'Failed to cancel draft';
-      if (err && typeof err === 'object') {
-        const errorObj = err as Record<string, unknown>;
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (errorMessage === 'Failed to withdraw correspondence') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
-      toast.error(`Failed to withdraw: ${errorMessage}`);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel draft';
+      toast.error(`Failed to cancel draft: ${errorMessage}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleResendDraft = async (item: Correspondence) => {
+    if ((item.status as string) !== 'withdrawn') {
+      toast.error('Only cancelled drafts can be resent');
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      await apiFetch(`/correspondence/items/${item.id}/resend-draft/`, { method: 'POST' });
+      toast.success('Draft restored. You can edit and dispatch it again.');
+      setRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to resend draft';
+      toast.error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -320,20 +328,7 @@ const OutboxPageContent = () => {
       setSelectedItem(null);
       setRefreshKey((k) => k + 1);
     } catch (err: unknown) {
-      let errorMessage = 'Failed to delete correspondence';
-      if (err && typeof err === 'object') {
-        const errorObj = err as Record<string, unknown>;
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (errorMessage === 'Failed to delete correspondence') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete correspondence';
       toast.error(`Failed to delete: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
@@ -393,7 +388,7 @@ const OutboxPageContent = () => {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         {!currentUser ? (
           <LoadingState message="Loading outbox…" />
@@ -409,12 +404,6 @@ const OutboxPageContent = () => {
             <Button size="sm" asChild><Link href="/correspondence/register"><Mail className="h-4 w-4 mr-2" />Register New</Link></Button>
           </div>
         </div>
-
-        <HelpGuideCard
-          title="Your Outbox"
-          description="Items you've sent or shared: correspondence you created and documents you've shared with others. Track their status and follow up as needed."
-          links={[{ label: 'My Documents', href: '/documents' }, { label: 'Help & Guides', href: '/help' }]}
-        />
 
         {/* Inline Filter Bar */}
         <Card>
@@ -540,6 +529,28 @@ const OutboxPageContent = () => {
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent side="left">Edit draft</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {item.status as string === 'withdrawn' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                              aria-label="Resend draft"
+                              disabled={isProcessing}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                void handleResendDraft(item);
+                              }}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="left">Restore and resend draft</TooltipContent>
                         </Tooltip>
                       )}
                       <Tooltip>
@@ -787,7 +798,7 @@ const OutboxPageContent = () => {
           }}
         />
       </div>
-    </DashboardLayout>
+    </>
   );
 };
 

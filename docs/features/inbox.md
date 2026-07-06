@@ -6,10 +6,13 @@ Multi-tab inbox system for correspondence and case management with role-based vi
 ## Inbox Types
 | Inbox | Path | Users | Description |
 |-------|------|-------|-------------|
-| My Inbox | `/inbox` | All | Personal correspondence |
+| My Work | `/tasks` | All | Priority queue — SLA overdue, urgent items, executive approvals (`counts.myWork`) |
+| My Inbox | `/inbox` | All | Personal correspondence (`counts.myInbox`) |
 | Office Inbox | `/correspondence/inbox` | Registry/Secretary | Office-level incoming |
 | Delegated Inbox | `/inbox/delegated` | Delegates | Delegated items |
 | Executive Approvals | `/approvals` | MD/ED/GM | Sealed executive approvals |
+
+Sidebar labels and visibility are configured in `AppSidebar.tsx` and `use-sidebar-visibility.ts`.
 
 ## Key Components
 - `InboxFiltersPanel` - Status, priority, date filters

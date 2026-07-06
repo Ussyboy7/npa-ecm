@@ -3,7 +3,6 @@
 import hashlib
 import logging
 import uuid
-from datetime import datetime
 from typing import Optional, Tuple
 
 from django.conf import settings

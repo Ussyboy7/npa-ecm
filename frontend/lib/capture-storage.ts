@@ -87,6 +87,55 @@ export interface BatchUpload {
   updated_at: string;
 }
 
+function unwrapList<T>(response: T[] | { results?: T[] } | unknown): T[] {
+  if (Array.isArray(response)) return response;
+  if (response && typeof response === 'object' && 'results' in response) {
+    const results = (response as { results?: T[] }).results;
+    return Array.isArray(results) ? results : [];
+  }
+  return [];
+}
+
+/**
+ * List capture jobs for the current user.
+ */
+export const listCaptureJobs = async (): Promise<CaptureJob[]> => {
+  try {
+    const response = await apiFetch<CaptureJob[] | { results?: CaptureJob[] }>('/capture/jobs/');
+    return unwrapList(response);
+  } catch (error: unknown) {
+    logError('Failed to list capture jobs', error);
+    throw error;
+  }
+};
+
+/**
+ * Retry a failed or stuck capture job.
+ */
+export const retryCaptureJob = async (jobId: string): Promise<CaptureJob> => {
+  try {
+    return await apiFetch<CaptureJob>(`/capture/jobs/${jobId}/retry/`, { method: 'POST' });
+  } catch (error: unknown) {
+    logError('Failed to retry capture job', error);
+    throw error;
+  }
+};
+
+/**
+ * List batch uploads for the current user.
+ */
+export const listBatchUploads = async (): Promise<BatchUpload[]> => {
+  try {
+    const response = await apiFetch<BatchUpload[] | { results?: BatchUpload[] }>(
+      '/capture/batch-uploads/',
+    );
+    return unwrapList(response);
+  } catch (error: unknown) {
+    logError('Failed to list batch uploads', error);
+    throw error;
+  }
+};
+
 /**
  * Process OCR for a document.
  */
@@ -135,9 +184,11 @@ export const getCaptureJob = async (jobId: string): Promise<CaptureJob> => {
  */
 export const getOCRResult = async (documentId: string): Promise<OCRResult | null> => {
   try {
-    const response = await apiFetch<OCRResult[]>(`/capture/ocr-results/?document=${documentId}`);
-    // Return the most recent result
-    return response && response.length > 0 ? response[0] : null;
+    const response = await apiFetch<OCRResult[] | { results?: OCRResult[] }>(
+      `/capture/ocr-results/?document=${documentId}`,
+    );
+    const results = unwrapList<OCRResult>(response);
+    return results.length > 0 ? results[0] : null;
   } catch (error: unknown) {
     logError('Failed to get OCR result', error);
     return null;

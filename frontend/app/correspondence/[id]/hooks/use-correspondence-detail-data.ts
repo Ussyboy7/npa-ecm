@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { handleAuthenticationError } from '@/lib/auth-errors';
+import { isAccessDeniedError } from '@/lib/api-errors';
 import { apiFetch } from '@/lib/api-client';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
@@ -26,6 +27,7 @@ interface UseCorrespondenceDetailDataOptions {
   setDetailLoading: (loading: boolean) => void;
   setBackendDelegation: (del: BackendDelegation) => void;
   setLinkedDocuments: (docs: DocumentRecord[]) => void;
+  setAccessDenied: (denied: boolean) => void;
 }
 
 export function useCorrespondenceDetailData({
@@ -43,6 +45,7 @@ export function useCorrespondenceDetailData({
   setDetailLoading,
   setBackendDelegation,
   setLinkedDocuments,
+  setAccessDenied,
 }: UseCorrespondenceDetailDataOptions) {
   const markedAsOpenedRef = useRef<Set<string>>(new Set());
 
@@ -92,6 +95,7 @@ export function useCorrespondenceDetailData({
 
     const hydrateFromApi = async () => {
       setDetailLoading(true);
+      setAccessDenied(false);
       try {
         type MinutesResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
         const [corrResponse, minutesResponse, delegationResponse] = await Promise.all([
@@ -156,7 +160,12 @@ export function useCorrespondenceDetailData({
       } catch (error: unknown) {
         if (handleAuthenticationError(error)) return;
         if (!ignore && !abortController.signal.aborted) {
-          logWarn('Failed to refresh correspondence detail', error);
+          if (isAccessDeniedError(error)) {
+            setAccessDenied(true);
+            setRemoteCorrespondence(null);
+          } else {
+            logWarn('Failed to refresh correspondence detail', error);
+          }
         }
       } finally {
         if (!ignore && !abortController.signal.aborted) {

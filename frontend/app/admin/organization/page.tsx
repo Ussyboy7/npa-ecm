@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
+import { LoadingState } from "@/components/shared/LoadingState";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import {
   Building2,
   ChevronRight,
@@ -30,6 +32,7 @@ import {
   registryQueueStatIconClass,
   registryQueueStatLabelClass,
   registryQueueStatValueClass,
+  registryQueueEmptyIconClass,
 } from "@/components/shared/registry-queue-styles";
 import { DirectorateFormModal } from "@/components/admin/DirectorateFormModal";
 import { DirectorateLeadershipDialog } from "@/components/admin/DirectorateLeadershipDialog";
@@ -52,10 +55,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-
 import { cn } from "@/lib/utils";
 
 type EntityType = "directorate" | "division" | "department";
+type OrganizationTab = "structure" | "offices" | "memberships";
 
 interface DeactivateTarget {
   type: EntityType;
@@ -68,7 +71,10 @@ const OrganizationStructurePage = () => {
     directorates,
     divisions,
     departments,
+    offices,
+    officeMemberships,
     users,
+    isSyncing,
     deleteDirectorate,
     deleteDivision,
     deleteDepartment,
@@ -76,6 +82,7 @@ const OrganizationStructurePage = () => {
 
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<OrganizationTab>("structure");
   
   // Expanded state for tree nodes
   const [expandedDirectorates, setExpandedDirectorates] = useState<Set<string>>(new Set());
@@ -195,6 +202,32 @@ const OrganizationStructurePage = () => {
     withLeadership: directorates.filter(d => d.isActive && d.executiveDirectorId).length,
   }), [directorates, divisions, departments]);
 
+  const filteredOffices = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const activeOnly = offices.filter((office) => office.isActive);
+    if (!query) return activeOnly;
+    return activeOnly.filter((office) =>
+      office.name.toLowerCase().includes(query) ||
+      office.code.toLowerCase().includes(query) ||
+      office.officeType.toLowerCase().includes(query),
+    );
+  }, [offices, searchQuery]);
+
+  const filteredMemberships = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const activeOnly = officeMemberships.filter((membership) => membership.isActive);
+    if (!query) return activeOnly;
+    return activeOnly.filter((membership) => {
+      const officeName = offices.find((office) => office.id === membership.officeId)?.name ?? membership.officeName ?? "";
+      const userName = users.find((user) => user.id === membership.userId)?.name ?? "";
+      return (
+        officeName.toLowerCase().includes(query) ||
+        userName.toLowerCase().includes(query) ||
+        membership.assignmentRole.toLowerCase().includes(query)
+      );
+    });
+  }, [officeMemberships, offices, users, searchQuery]);
+
   // Helper functions
   const getExecutive = (directorateId: string) => {
     const dir = directorates.find(d => d.id === directorateId);
@@ -313,55 +346,69 @@ const OrganizationStructurePage = () => {
     setExpandedDivisions(new Set());
   };
 
+  const isBootstrapping =
+    isSyncing &&
+    directorates.length === 0 &&
+    divisions.length === 0 &&
+    departments.length === 0 &&
+    offices.length === 0 &&
+    officeMemberships.length === 0;
+
+  const searchPlaceholder = useMemo(() => {
+    if (activeTab === "offices") return "Search offices by name, code, or type...";
+    if (activeTab === "memberships") return "Search memberships by office, user, or role...";
+    return "Search directorates, divisions, or departments...";
+  }, [activeTab]);
+
+  const tabSubtitle = useMemo(() => {
+    if (activeTab === "offices") {
+      return "Office records route correspondence to the right teams. Add or edit offices from registry workflows.";
+    }
+    if (activeTab === "memberships") {
+      return "Link users to offices with register, route, and approve permissions.";
+    }
+    return "Build the hierarchy from directorates down to departments, then assign leadership.";
+  }, [activeTab]);
+
+  const orgStatCards = [
+    { label: "Directorates", value: stats.directorates, icon: Building2, bgClass: "bg-primary/10", iconClass: "text-primary" },
+    { label: "Divisions", value: stats.divisions, icon: Network, bgClass: "bg-emerald-500/10", iconClass: "text-emerald-600 dark:text-emerald-400" },
+    { label: "Departments", value: stats.departments, icon: Layers, bgClass: "bg-blue-500/10", iconClass: "text-blue-600 dark:text-blue-400" },
+    { label: "With Leadership", value: stats.withLeadership, icon: UserCircle2, bgClass: "bg-amber-500/10", iconClass: "text-amber-600 dark:text-amber-400" },
+  ] as const;
+
   return (
     <ClientErrorBoundary>
-      <DashboardLayout>
-        <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-                <FolderTree className="h-8 w-8 text-primary" />
-                Organization Structure
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Manage directorates, divisions, and departments in a unified tree view
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
+      <>
+        {isBootstrapping ? (
+          <div className="container mx-auto p-6">
+            <LoadingState message="Loading organization & offices…" />
+          </div>
+        ) : (
+        <AdminPageShell
+          title="Organization & Offices"
+          subtitle={tabSubtitle}
+          icon={FolderTree}
+          actions={
+            <>
               <Button onClick={handleCreateDirectorate} className="bg-gradient-primary">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Directorate
               </Button>
               <ContextualHelp
                 title="Organization Structure"
-                description="View and manage your entire organizational hierarchy in one place. Expand nodes to see child units, and use inline actions to edit or add new entries."
+                description="Manage the organization hierarchy from directorate down to department."
                 steps={[
-                  "Click on a directorate to expand and see its divisions",
-                  "Click on a division to see its departments",
-                  "Use the action buttons to edit, add children, or deactivate units",
+                  "Expand directorates to see divisions and departments.",
+                  "Use inline actions to add, edit, or deactivate units.",
+                  "Keep leadership assignments current as structures change.",
                 ]}
               />
-            </div>
-          </div>
-
-          <HelpGuideCard
-            title="Unified Organization Management"
-            description="This tree view consolidates Directorates, Divisions, and Departments into a single interface. Expand/collapse nodes, search across all levels, and manage leadership assignments."
-            links={[
-              { label: "User Management", href: "/admin/users-roles?tab=users" },
-              { label: "Help & Guides", href: "/help" },
-            ]}
-          />
-
-          {/* Stats */}
-          <div className="grid gap-4 md:grid-cols-4">
-            {[
-              { label: 'Directorates', value: stats.directorates, icon: Building2, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-              { label: 'Divisions', value: stats.divisions, icon: Network, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
-              { label: 'Departments', value: stats.departments, icon: Layers, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-              { label: 'With Leadership', value: stats.withLeadership, icon: UserCircle2, bgClass: 'bg-amber-500/10', iconClass: 'text-amber-600 dark:text-amber-400' },
-            ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            </>
+          }
+        >
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {orgStatCards.map(({ label, value, icon: Icon, bgClass, iconClass }) => (
               <Card key={label}>
                 <CardContent className={registryQueueStatCardContentClass}>
                   <div className="flex items-center gap-4">
@@ -378,26 +425,38 @@ const OrganizationStructurePage = () => {
             ))}
           </div>
 
-          {/* Search & Controls */}
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-xl">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search directorates, divisions, or departments..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Button variant="outline" size="sm" onClick={expandAll}>
-              Expand All
-            </Button>
-            <Button variant="outline" size="sm" onClick={collapseAll}>
-              Collapse All
-            </Button>
-          </div>
+          <Card>
+            <CardContent className="flex flex-wrap items-center gap-2 p-2">
+              <div className="relative min-w-[200px] flex-1 max-w-sm">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder={searchPlaceholder}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-8 pl-8 text-xs"
+                />
+              </div>
+              {activeTab === "structure" ? (
+                <>
+                  <Button variant="outline" size="sm" onClick={expandAll} className="h-8 text-xs">
+                    Expand All
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={collapseAll} className="h-8 text-xs">
+                    Collapse All
+                  </Button>
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
 
-          {/* Tree View */}
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as OrganizationTab)}>
+            <TabsList>
+              <TabsTrigger value="structure" className="text-xs px-2.5 py-1">Structure</TabsTrigger>
+              <TabsTrigger value="offices" className="text-xs px-2.5 py-1">Offices</TabsTrigger>
+              <TabsTrigger value="memberships" className="text-xs px-2.5 py-1">Memberships</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="structure" className="mt-6 focus-visible:outline-none">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -702,7 +761,87 @@ const OrganizationStructurePage = () => {
               )}
             </CardContent>
           </Card>
-        </div>
+            </TabsContent>
+
+            <TabsContent value="offices" className="mt-6 focus-visible:outline-none">
+              <Card>
+                <CardContent className="pt-6">
+                  {filteredOffices.length === 0 ? (
+                    <EmptyState
+                      icon={<Building2 className={registryQueueEmptyIconClass} />}
+                      title={searchQuery.trim() ? "No offices match your search" : "No offices configured yet"}
+                      message={
+                        searchQuery.trim()
+                          ? "Try a different name, code, or office type. Clear search to see all offices."
+                          : "Offices connect users to correspondence routing. Create offices from the registry or ask your administrator to add them here."
+                      }
+                      actionLabel={searchQuery.trim() ? "Clear search" : undefined}
+                      onAction={searchQuery.trim() ? () => setSearchQuery("") : undefined}
+                      variant="dashed"
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredOffices.map((office) => (
+                        <div key={office.id} className="rounded-lg border border-border p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{office.name}</span>
+                            <Badge variant="outline" className="text-xs">{office.code}</Badge>
+                            <Badge variant="secondary" className="text-xs">{office.officeType}</Badge>
+                          </div>
+                          {office.description ? (
+                            <p className="mt-1 text-xs text-muted-foreground">{office.description}</p>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="memberships" className="mt-6 focus-visible:outline-none">
+              <Card>
+                <CardContent className="pt-6">
+                  {filteredMemberships.length === 0 ? (
+                    <EmptyState
+                      icon={<Users className={registryQueueEmptyIconClass} />}
+                      title={searchQuery.trim() ? "No memberships match your search" : "No office memberships yet"}
+                      message={
+                        searchQuery.trim()
+                          ? "Try a different office name, user, or assignment role."
+                          : "Memberships grant users access to an office inbox. Assign members when onboarding staff to a registry office."
+                      }
+                      actionLabel={searchQuery.trim() ? "Clear search" : undefined}
+                      onAction={searchQuery.trim() ? () => setSearchQuery("") : undefined}
+                      variant="dashed"
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredMemberships.map((membership) => {
+                        const officeName = offices.find((office) => office.id === membership.officeId)?.name ?? membership.officeName ?? "Unknown office";
+                        const userName = users.find((user) => user.id === membership.userId)?.name ?? "Unknown user";
+                        return (
+                          <div key={membership.id} className="rounded-lg border border-border p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium">{userName}</span>
+                              <Badge variant="outline" className="text-xs">{officeName}</Badge>
+                              <Badge variant="secondary" className="text-xs">{membership.assignmentRole}</Badge>
+                              {membership.isPrimary ? <Badge className="text-xs">Primary</Badge> : null}
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Permissions: {membership.canRegister ? "Register " : ""}{membership.canRoute ? "Route " : ""}{membership.canApprove ? "Approve" : ""}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </AdminPageShell>
+        )}
 
         {/* Modals */}
         <DirectorateFormModal
@@ -780,7 +919,7 @@ const OrganizationStructurePage = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </DashboardLayout>
+      </>
     </ClientErrorBoundary>
   );
 };

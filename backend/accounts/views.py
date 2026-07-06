@@ -21,6 +21,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from audit.services import AuditService
+from .login_mfa import (
+    create_mfa_challenge,
+    get_or_create_login_security,
+    user_requires_login_mfa,
+)
 from common.throttles import LoginRateThrottle, OTPRateThrottle, PasswordChangeRateThrottle
 from .models import User, ExecutiveSignature, DocumentSeal, SealOTP, SignatureTemplate, UserSignaturePreferences
 from .serializers import (
@@ -93,25 +98,9 @@ class UserViewSet(viewsets.ModelViewSet):
     ordering = ["username"]
 
     def _ensure_can_manage_users(self):
-        user = self.request.user
-        if getattr(user, "is_superuser", False):
-            return
+        from organization.permission_utils import require_permission
 
-        role = getattr(user, "system_role", None)
-        permissions = getattr(role, "permissions", None)
-        if isinstance(permissions, dict) and permissions.get("can_manage_users"):
-            return
-
-        role_name = getattr(role, "name", "") or ""
-        if role_name in {
-            "Managing Director",
-            "Executive Director",
-            "General Manager",
-            "Assistant General Manager",
-        }:
-            return
-
-        raise PermissionDenied("You do not have permission to manage users.")
+        require_permission(self.request.user, "can_manage_users")
 
     def _ensure_super_admin(self):
         if not self.request.user.is_superuser:
@@ -575,7 +564,7 @@ class AuthTokenObtainPairSerializer(TokenObtainPairSerializer):
         except (AttributeError, ValueError):
             token["system_role"] = ""
         try:
-            token["grade_level"] = getattr(user, "grade_level", "") or ""
+            token["grade_level"] = getattr(user, "grade_level", "")
         except (AttributeError, ValueError):
             token["grade_level"] = ""
         return token
@@ -586,43 +575,61 @@ class AuthTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [LoginRateThrottle]
 
     def post(self, request, *args, **kwargs):
-        """Handle login and create audit log."""
-        # Get username from request to look up user for audit log
-        username = request.data.get('username')
+        """Handle login; return MFA challenge when required."""
+        serializer = self.get_serializer(data=request.data)
+        username = request.data.get("username")
         user = None
         if username:
             try:
                 user = User.objects.get(username=username)
             except User.DoesNotExist:
                 pass
-        
+
         try:
-            response = super().post(request, *args, **kwargs)
+            serializer.is_valid(raise_exception=True)
         except Exception as e:
-            # Log the error for debugging
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Login authentication error: {str(e)}", exc_info=True)
-            # Re-raise to return proper error response
             raise
-        
-        if response.status_code == 200 and user:
-            # Login successful - create audit log
+
+        authenticated_user = serializer.user
+        security = get_or_create_login_security(authenticated_user)
+
+        if user_requires_login_mfa(authenticated_user, security):
+            challenge = create_mfa_challenge(authenticated_user)
+            return Response(
+                {
+                    "mfa_required": True,
+                    "challenge_id": challenge["challenge_id"],
+                    "methods": challenge["methods"],
+                    "expires_in": challenge["expires_in"],
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        refresh = serializer.validated_data["refresh"]
+        access = serializer.validated_data["access"]
+        response = Response(
+            {"refresh": str(refresh), "access": str(access)},
+            status=status.HTTP_200_OK,
+        )
+
+        if user:
             try:
                 from audit.models import ActivityLog
                 AuditService.log_user_activity(
-                    user=user,
+                    user=authenticated_user,
                     action=ActivityLog.ActionType.USER_LOGIN,
                     target_user=None,
                     request=request,
                     description="User logged in successfully",
                 )
             except Exception as e:
-                # Log audit error but don't fail the login
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to create audit log for login: {str(e)}", exc_info=True)
-        
+
         return response
 
 

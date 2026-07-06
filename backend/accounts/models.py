@@ -51,6 +51,18 @@ class User(AbstractUser):
         blank=True,
         help_text="Last time the user was active in the system",
     )
+    auth_provider = models.CharField(
+        max_length=32,
+        blank=True,
+        default="local",
+        help_text="Authentication provider: local, oidc, etc.",
+    )
+    external_auth_subject = models.CharField(
+        max_length=255,
+        blank=True,
+        db_index=True,
+        help_text="Stable subject identifier from external IdP (OIDC sub)",
+    )
 
     class Meta(AbstractUser.Meta):
         ordering = ["username"]
@@ -71,6 +83,41 @@ class User(AbstractUser):
         if self.grade_level:
             parts.append(self.grade_level)
         return " - ".join(filter(None, parts))
+
+
+class LoginSecuritySettings(UUIDModel, TimeStampedModel):
+    """Login MFA and security preferences (separate from executive seal 2FA)."""
+
+    class PreferredMethod(models.TextChoices):
+        EMAIL = "email", "Email OTP"
+        TOTP = "totp", "Authenticator App"
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="login_security",
+    )
+    mfa_enabled = models.BooleanField(
+        default=False,
+        help_text="When enabled, user must verify MFA after password at login",
+    )
+    mfa_required = models.BooleanField(
+        default=False,
+        help_text="Administrator-forced MFA for this user",
+    )
+    totp_secret = models.CharField(max_length=32, blank=True)
+    totp_confirmed = models.BooleanField(default=False)
+    preferred_method = models.CharField(
+        max_length=10,
+        choices=PreferredMethod.choices,
+        default=PreferredMethod.EMAIL,
+    )
+
+    class Meta:
+        verbose_name_plural = "Login security settings"
+
+    def __str__(self) -> str:
+        return f"Login security for {self.user.username}"
 
 
 def signature_upload_path(instance, filename):

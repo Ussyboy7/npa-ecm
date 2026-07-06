@@ -495,7 +495,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   const [minutes, setMinutes] = useState<Minute[]>([]);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
   const [dataVersion, setDataVersion] = useState(0);
-  const {currentUser, hydrated } = useCurrentUser();
+  const {currentUser: _currentUser, hydrated: _hydrated } = useCurrentUser();
 
   const syncFromApi = useCallback(async () => {
     // Only requirement: authenticated (has token)

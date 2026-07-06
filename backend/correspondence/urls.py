@@ -1,5 +1,6 @@
 """URL routes for the correspondence app."""
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
@@ -21,6 +22,7 @@ from .views import (
     MinuteViewSet,
     ParallelRoutingGroupViewSet,
 )
+from .external_entity_views import ExternalEntityViewSet
 from .physical_views import (
     LocationViewSet,
     PhysicalDocumentViewSet,
@@ -51,6 +53,7 @@ router.register(r"case-correspondence-links", CaseCorrespondenceLinkViewSet, bas
 router.register(r"case-workflow-rules", CaseWorkflowRuleViewSet, basename="case-workflow-rule")
 router.register(r"case-slas", CaseSLAViewSet, basename="case-sla")
 router.register(r"dispatch-records", DispatchRecordViewSet, basename="dispatch-record")
+router.register(r"external-entities", ExternalEntityViewSet, basename="external-entity")
 router.register(r"locations", LocationViewSet, basename="location")
 router.register(r"physical-documents", PhysicalDocumentViewSet, basename="physical-document")
 router.register(r"checkout-events", CheckOutEventViewSet, basename="checkout-event")
@@ -58,6 +61,19 @@ router.register(r"foia-requests", FOIARequestViewSet, basename="foia-request")
 router.register(r"foia-documents", FOIARequestDocumentViewSet, basename="foia-document")
 router.register(r"foia-notes", FOIANoteViewSet, basename="foia-note")
 
-
-urlpatterns = router.urls
+# Queue list routes are registered explicitly so they are not captured by the
+# items/<pk>/ detail route (e.g. pk="my-sent" → 404).
+urlpatterns = [
+    path(
+        "items/my-sent/",
+        CorrespondenceViewSet.as_view({"get": "my_sent"}),
+        name="correspondence-my-sent",
+    ),
+    path(
+        "items/office-dispatched/",
+        CorrespondenceViewSet.as_view({"get": "office_dispatched"}),
+        name="correspondence-office-dispatched",
+    ),
+    *router.urls,
+]
 

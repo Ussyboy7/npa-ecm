@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from "react";
+import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +52,6 @@ import { formatDateShort, formatDateTime } from "@/lib/correspondence-helpers";
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { exportToCSV } from "@/lib/admin-export";
 import { toast } from "sonner";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 
 interface ExecutiveApproval {
@@ -103,7 +101,7 @@ function ApprovalsForm() {
 
   // Restore filters from localStorage after mount
   useEffect(() => {
-    const restore = (key: string, setter: (v: string) => void, defaultValue: string) => {
+    const restore = (key: string, setter: (v: string) => void, _defaultValue: string) => {
       const urlParam = searchParams.get(key);
       if (urlParam) { setter(urlParam); return; }
       const saved = localStorage.getItem(`approvals_filter_${key}`);
@@ -243,20 +241,7 @@ function ApprovalsForm() {
         : executiveApprovals.length;
       setCount(count);
     } catch (err: unknown) {
-      let errorMessage = 'Failed to load executive approvals';
-      if (err && typeof err === 'object') {
-        const errorObj = err as Record<string, unknown>;
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (!errorMessage || errorMessage === 'Failed to load executive approvals') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load executive approvals';
       setError(errorMessage);
       logError("Failed to load approvals", err);
       setApprovals([]);
@@ -397,7 +382,6 @@ function ApprovalsForm() {
     setDateFrom("");
     setDateTo("");
   };
-
 
   // With server-side pagination, filteredApprovals already contains the current page
   // Client-side filtering is applied to the current page's data only
@@ -567,7 +551,7 @@ function ApprovalsForm() {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header - Match My Inbox/Outbox style */}
         <div className="flex justify-between items-start">
@@ -596,12 +580,6 @@ function ApprovalsForm() {
             </DropdownMenu>
           </div>
         </div>
-
-        <HelpGuideCard
-          title="Executive Approvals"
-          description="Manage and verify executive approvals with digital seals"
-          links={[{ label: 'Verify Seal', href: '/verify' }, { label: 'Help & Guides', href: '/help' }]}
-        />
 
         {/* Inline filter bar */}
         <Card>
@@ -704,7 +682,7 @@ function ApprovalsForm() {
           />
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
 }
 

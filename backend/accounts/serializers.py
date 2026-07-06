@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from organization.models import Department, Directorate, Division, Role
+from organization.permission_utils import get_role_permissions
 
 from .models import User, ExecutiveSignature, DocumentSeal, SignatureTemplate, UserSignaturePreferences
 
@@ -56,30 +57,8 @@ class UserSerializer(serializers.ModelSerializer):
             return ""
 
     def get_permissions(self, obj):
-        """
-        Return a dict of role-driven permissions for the user.
-
-        This is intentionally simple: the UI can manage `Role.permissions` and the frontend
-        should rely on this server-provided payload instead of hardcoding grade-based rules.
-        """
-        role_perms = {}
-        try:
-            role = getattr(obj, "system_role", None)
-            candidate = getattr(role, "permissions", None) if role else None
-            if isinstance(candidate, dict):
-                role_perms = candidate
-        except (AttributeError, TypeError):
-            role_perms = {}
-
-        # Ensure booleans are booleans and enforce superuser override.
-        can_register = bool(role_perms.get("can_register_correspondence", False)) or bool(
-            getattr(obj, "is_superuser", False)
-        )
-
-        # Return the full role permissions dict, but normalize the key we care about.
-        merged = dict(role_perms)
-        merged["can_register_correspondence"] = can_register
-        return merged
+        """Return normalized role permissions from the backend (single source of truth)."""
+        return get_role_permissions(obj)
 
     class Meta:
         model = User

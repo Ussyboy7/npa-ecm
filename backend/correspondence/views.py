@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from uuid import UUID
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
@@ -86,6 +87,37 @@ from .services import CompletionPackageService
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+
+def _sla_overdue_filter() -> Q:
+    """Correspondence past configured SLA target hours (aligned with frontend inbox badges)."""
+    from analytics.models import SLAConfiguration
+
+    targets = SLAConfiguration.get_default_sla_targets()
+    now = timezone.now()
+    overdue_filter = Q()
+    for priority, target_hours in targets.items():
+        cutoff = now - timedelta(hours=target_hours)
+        overdue_filter |= Q(priority=priority, received_date__lt=cutoff.date())
+    return overdue_filter & ~Q(status=Correspondence.Status.COMPLETED)
+
+
+def _sla_due_soon_filter() -> Q:
+    """Correspondence approaching SLA breach within 2 days (not yet overdue)."""
+    from analytics.models import SLAConfiguration
+
+    targets = SLAConfiguration.get_default_sla_targets()
+    now = timezone.now()
+    due_soon_filter = Q()
+    for priority, target_hours in targets.items():
+        overdue_cutoff = now - timedelta(hours=target_hours)
+        warn_cutoff = overdue_cutoff - timedelta(days=2)
+        due_soon_filter |= Q(
+            priority=priority,
+            received_date__gt=warn_cutoff.date(),
+            received_date__gte=overdue_cutoff.date(),
+        )
+    return due_soon_filter & ~Q(status=Correspondence.Status.COMPLETED)
 
 
 class CorrespondenceViewSet(viewsets.ModelViewSet):
@@ -219,9 +251,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         user = request.user
         try:
             from organization.models import OfficeMembership
-            role = getattr(user, "system_role", None)
-            role_perms = getattr(role, "permissions", None) if role else None
-            role_allows = bool(role_perms.get("can_register_correspondence", False)) if isinstance(role_perms, dict) else False
+            from organization.permission_utils import user_has_permission
+
+            role_allows = user_has_permission(user, "can_register_correspondence")
             membership_allows = OfficeMembership.objects.filter(user=user, is_active=True, can_register=True).exists()
             if not (getattr(user, "is_superuser", False) or role_allows or membership_allows):
                 raise PermissionDenied(
@@ -715,6 +747,136 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(correspondence)
         return Response(serializer.data)
 
+    def _user_can_manage_outbox_draft(self, user, correspondence) -> bool:
+        if user.is_superuser:
+            return True
+        if correspondence.created_by_id == user.id:
+            return True
+        if correspondence.owning_office_id:
+            from organization.models import OfficeMembership
+
+            return OfficeMembership.objects.filter(
+                user=user,
+                office_id=correspondence.owning_office_id,
+                is_active=True,
+            ).exists()
+        return False
+
+    @action(detail=True, methods=["post"], url_path="cancel-draft")
+    def cancel_draft(self, request, pk=None):
+        """Cancel a pending outbox draft so it can be edited and resent later."""
+        correspondence = self.get_object()
+        user = request.user
+
+        if correspondence.status != Correspondence.Status.PENDING:
+            raise ValidationError({"detail": "Only pending drafts can be cancelled."})
+
+        if not self._user_can_manage_outbox_draft(user, correspondence):
+            raise PermissionDenied(
+                {"detail": "Only the creator or office members can cancel this draft."}
+            )
+
+        withdraw_reason = (request.data.get("reason") or "").strip()
+        correspondence.status = Correspondence.Status.WITHDRAWN
+        correspondence.withdrawn_at = timezone.now()
+        correspondence.withdrawn_by = user
+        correspondence.withdraw_reason = withdraw_reason
+        correspondence.save(
+            update_fields=["status", "withdrawn_at", "withdrawn_by", "withdraw_reason", "updated_at"]
+        )
+
+        from audit.models import ActivityLog
+
+        AuditService.log_correspondence_activity(
+            user=user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Cancelled draft: {correspondence.reference_number} - {correspondence.subject}",
+            metadata={"withdraw_reason": withdraw_reason, "action": "cancel_draft"},
+        )
+
+        if correspondence.current_approver and correspondence.current_approver != user:
+            NotificationService.create_notification(
+                recipient=correspondence.current_approver,
+                title=f"Draft Cancelled - {correspondence.reference_number}",
+                message=(
+                    f"{user.get_full_name() or user.username} cancelled the draft: "
+                    f"{correspondence.subject}. Reason: {withdraw_reason or 'No reason provided'}"
+                ),
+                notification_type=Notification.NotificationType.CORRESPONDENCE,
+                priority=Notification.Priority.NORMAL,
+                sender=user,
+                module="correspondence",
+                related_object_type="correspondence",
+                related_object_id=str(correspondence.id),
+                action_url=f"/correspondence/{correspondence.id}",
+            )
+
+        serializer = self.get_serializer(correspondence)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="resend-draft")
+    def resend_draft(self, request, pk=None):
+        """Restore a cancelled (withdrawn) draft to pending for editing and re-dispatch."""
+        correspondence = self.get_object()
+        user = request.user
+
+        if correspondence.status != Correspondence.Status.WITHDRAWN:
+            raise ValidationError({"detail": "Only cancelled drafts can be resent."})
+
+        if not self._user_can_manage_outbox_draft(user, correspondence):
+            raise PermissionDenied(
+                {"detail": "Only the creator or office members can resend this draft."}
+            )
+
+        correspondence.status = Correspondence.Status.PENDING
+        correspondence.withdrawn_at = None
+        correspondence.withdrawn_by = None
+        correspondence.withdraw_reason = ""
+        correspondence.save(
+            update_fields=[
+                "status",
+                "withdrawn_at",
+                "withdrawn_by",
+                "withdraw_reason",
+                "updated_at",
+            ]
+        )
+
+        from audit.models import ActivityLog
+
+        AuditService.log_correspondence_activity(
+            user=user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Resent draft: {correspondence.reference_number} - {correspondence.subject}",
+            metadata={"action": "resend_draft"},
+        )
+
+        if correspondence.current_approver:
+            ref = correspondence.reference_number or str(correspondence.id)
+            NotificationService.create_notification(
+                recipient=correspondence.current_approver,
+                title=f"Draft Resubmitted - {ref}",
+                message=(
+                    f"{user.get_full_name() or user.username} resubmitted the draft: "
+                    f"{correspondence.subject} ({ref})."
+                ),
+                notification_type=Notification.NotificationType.CORRESPONDENCE,
+                priority=Notification.Priority.NORMAL,
+                sender=user,
+                module="correspondence",
+                related_object_type="correspondence",
+                related_object_id=str(correspondence.id),
+                action_url=f"/correspondence/{correspondence.id}",
+                action_required=True,
+            )
+
+        serializer = self.get_serializer(correspondence)
+        return Response(serializer.data)
+
     @action(detail=True, methods=["post"], url_path="withdraw")
     def withdraw(self, request, pk=None):
         """Withdraw a pending correspondence (similar to recall in minutes)."""
@@ -793,6 +955,101 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(correspondence)
         return Response(serializer.data)
 
+    @action(detail=True, methods=["post"], url_path="resend-reminder")
+    def resend_reminder(self, request, pk=None):
+        """Send a reminder to the current approver for pending correspondence."""
+        correspondence = self.get_object()
+        user = request.user
+
+        if correspondence.status not in (
+            Correspondence.Status.PENDING,
+            Correspondence.Status.IN_PROGRESS,
+        ):
+            raise ValidationError(
+                {"detail": "Reminders can only be sent for pending or in-progress correspondence."}
+            )
+
+        if not correspondence.current_approver:
+            raise ValidationError({"detail": "No current approver assigned for this correspondence."})
+
+        can_remind = (
+            correspondence.created_by_id == user.id
+            or user.is_superuser
+        )
+        if not can_remind and correspondence.owning_office_id:
+            from organization.models import OfficeMembership
+
+            can_remind = OfficeMembership.objects.filter(
+                user=user,
+                office_id=correspondence.owning_office_id,
+                is_active=True,
+            ).exists()
+
+        if not can_remind:
+            raise PermissionDenied(
+                {"detail": "Only the creator or office members can send reminders."}
+            )
+
+        custom_message = (request.data.get("custom_message") or "").strip()
+        approver = correspondence.current_approver
+        ref = correspondence.reference_number or str(correspondence.id)
+        base_message = (
+            f"Reminder: {correspondence.subject} ({ref}) is awaiting your action."
+        )
+        message = f"{base_message}\n\n{custom_message}" if custom_message else base_message
+
+        NotificationService.create_notification(
+            recipient=approver,
+            title=f"Reminder — {ref}",
+            message=message,
+            notification_type=Notification.NotificationType.CORRESPONDENCE,
+            priority=Notification.Priority.HIGH
+            if correspondence.priority == Correspondence.Priority.URGENT
+            else Notification.Priority.NORMAL,
+            sender=user,
+            module="correspondence",
+            related_object_type="correspondence",
+            related_object_id=str(correspondence.id),
+            action_url=f"/correspondence/{correspondence.id}",
+            action_required=True,
+        )
+
+        if approver.email:
+            try:
+                from django.core.mail import send_mail
+
+                send_mail(
+                    subject=f"NPA ECM Reminder — {ref}",
+                    message=message,
+                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@npa.gov.ng"),
+                    recipient_list=[approver.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
+
+        from audit.models import ActivityLog
+
+        AuditService.log_correspondence_activity(
+            user=user,
+            action=ActivityLog.ActionType.CORRESPONDENCE_UPDATED,
+            correspondence=correspondence,
+            request=request,
+            description=f"Sent reminder for correspondence: {ref}",
+            metadata={
+                "approver_id": str(approver.id),
+                "custom_message": custom_message or None,
+            },
+        )
+
+        return Response(
+            {
+                "detail": "Reminder sent successfully.",
+                "approver_id": str(approver.id),
+                "approver_name": approver.get_full_name() or approver.username,
+            }
+        )
+
     @action(detail=True, methods=["post"], url_path="dispatch", url_name="dispatch")
     def create_dispatch(self, request, pk=None):
         """Mark correspondence as dispatched with tracking details."""
@@ -861,6 +1118,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="archive")
     def archive_single(self, request, pk=None):
         """Archive a single correspondence item."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_archive")
         correspondence = self.get_object()
 
         if correspondence.status == Correspondence.Status.ARCHIVED:
@@ -891,6 +1151,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"], url_path="bulk-archive")
     def bulk_archive(self, request):
         """Archive multiple correspondence items at once."""
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_archive")
         correspondence_ids = request.data.get("correspondence_ids", [])
         
         if not correspondence_ids:
@@ -1113,12 +1376,29 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             Q(is_deleted=False) &
             (Q(current_approver=user) | Exists(my_parallel_subquery))
         ).exclude(status=Correspondence.Status.COMPLETED).count()
+
+        my_inbox_queryset = Correspondence.objects.filter(
+            Q(is_deleted=False) &
+            (Q(current_approver=user) | Exists(my_parallel_subquery))
+        ).exclude(status=Correspondence.Status.COMPLETED)
+
+        my_work_attention_count = my_inbox_queryset.filter(
+            Q(priority=Correspondence.Priority.URGENT)
+            | _sla_overdue_filter()
+            | _sla_due_soon_filter()
+        ).count()
         
         # === Outbox Count (Optimized) ===
+        outbox_minute_ids = Minute.objects.filter(
+            user=user,
+            is_recalled=False,
+            action_type__in=['minute', 'forward', 'approve', 'treat'],
+        ).values_list('correspondence_id', flat=True).distinct()
         outbox_count = Correspondence.objects.filter(
             is_deleted=False,
-            created_by=user,
-            status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
+            status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS],
+        ).filter(
+            Q(created_by=user) | Q(id__in=outbox_minute_ids)
         ).count()
         
         # === Delegated Count (Optimized) ===
@@ -1179,11 +1459,36 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             author=user,
         ).count()
 
+        # === Office Dispatched Count (matches Office Dispatched page scope) ===
+        office_dispatched_count = 0
+        if office_ids or user.is_superuser:
+            dispatched_filter = Q(is_deleted=False) & Q(
+                status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED]
+            )
+            if user.is_superuser and not office_ids:
+                office_dispatched_count = Correspondence.objects.filter(dispatched_filter).count()
+            else:
+                office_user_ids = OfficeMembership.objects.filter(
+                    office_id__in=office_ids,
+                    is_active=True,
+                ).values_list("user_id", flat=True)
+                office_dispatched_count = (
+                    Correspondence.objects.filter(dispatched_filter)
+                    .filter(
+                        Q(owning_office_id__in=office_ids)
+                        | Q(dispatch_records__dispatched_by_id__in=office_user_ids)
+                    )
+                    .distinct()
+                    .count()
+                )
+
         result = {
             "officeInbox": office_inbox_count,
             "myInbox": my_inbox_count,
+            "myWork": my_work_attention_count + executive_approvals_count,
             "outbox": outbox_count,
             "officeOutbox": office_outbox_count,
+            "officeDispatched": office_dispatched_count,
             "delegated": delegated_count,
             "secretaryInbox": secretary_inbox_count,
             "myCases": my_cases_count,
@@ -1391,15 +1696,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         total_count = queryset.count()
         urgent_count = queryset.filter(priority=Correspondence.Priority.URGENT).count()
 
-        today = timezone.now().date()
-        overdue_filter = (
-            Q(priority=Correspondence.Priority.URGENT, received_date__lt=today - timedelta(days=2))
-            | Q(priority=Correspondence.Priority.HIGH, received_date__lt=today - timedelta(days=5))
-            | Q(priority=Correspondence.Priority.MEDIUM, received_date__lt=today - timedelta(days=10))
-            | Q(priority=Correspondence.Priority.LOW, received_date__lt=today - timedelta(days=14))
-        ) & ~Q(status=Correspondence.Status.COMPLETED)
-
-        overdue_count = queryset.filter(overdue_filter).count()
+        overdue_count = queryset.filter(_sla_overdue_filter()).count()
         assigned_count = queryset.filter(current_approver=user).count()
 
         paginator = StandardPageNumberPagination()
@@ -1500,15 +1797,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         total_count = queryset.count()
         urgent_count = queryset.filter(priority=Correspondence.Priority.URGENT).count()
         
-        today = timezone.now().date()
-        overdue_filter = (
-            Q(priority=Correspondence.Priority.URGENT, received_date__lt=today - timedelta(days=2))
-            | Q(priority=Correspondence.Priority.HIGH, received_date__lt=today - timedelta(days=5))
-            | Q(priority=Correspondence.Priority.MEDIUM, received_date__lt=today - timedelta(days=10))
-            | Q(priority=Correspondence.Priority.LOW, received_date__lt=today - timedelta(days=14))
-        ) & ~Q(status=Correspondence.Status.COMPLETED)
-        
-        overdue_count = queryset.filter(overdue_filter).count()
+        overdue_count = queryset.filter(_sla_overdue_filter()).count()
         
         # Pagination
         paginator = StandardPageNumberPagination()
@@ -1611,15 +1900,8 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         total_count = queryset.count()
         urgent_count = queryset.filter(priority=Correspondence.Priority.URGENT).count()
         
-        today = timezone.now().date()
-        overdue_filter = (
-            Q(priority=Correspondence.Priority.URGENT, received_date__lt=today - timedelta(days=2))
-            | Q(priority=Correspondence.Priority.HIGH, received_date__lt=today - timedelta(days=5))
-            | Q(priority=Correspondence.Priority.MEDIUM, received_date__lt=today - timedelta(days=10))
-            | Q(priority=Correspondence.Priority.LOW, received_date__lt=today - timedelta(days=14))
-        ) & ~Q(status=Correspondence.Status.COMPLETED)
-        
-        overdue_count = queryset.filter(overdue_filter).count()
+        overdue_count = queryset.filter(_sla_overdue_filter()).count()
+        due_soon_count = queryset.filter(_sla_due_soon_filter()).count()
         
         # Pagination
         paginator = StandardPageNumberPagination()
@@ -1631,6 +1913,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             "total": total_count,
             "urgent": urgent_count,
             "overdue": overdue_count,
+            "due_soon": due_soon_count,
             "pending": queryset.filter(status=Correspondence.Status.PENDING).count(),
             "in_progress": queryset.filter(status=Correspondence.Status.IN_PROGRESS).count(),
         }
@@ -1769,6 +2052,249 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         response.data["summary"] = summary
         return response
 
+    def _apply_correspondence_queue_filters(self, queryset, request, *, default_sort_by="updated"):
+        """Shared search, filter, sort for queue list endpoints."""
+        statuses = request.query_params.getlist("status")
+        if statuses:
+            queryset = queryset.filter(status__in=statuses)
+
+        priorities = request.query_params.getlist("priority")
+        if priorities:
+            queryset = queryset.filter(priority__in=priorities)
+
+        search_term = request.query_params.get("search")
+        if search_term:
+            queryset = queryset.filter(
+                Q(reference_number__icontains=search_term)
+                | Q(subject__icontains=search_term)
+                | Q(sender_name__icontains=search_term)
+                | Q(sender_organization__icontains=search_term)
+                | Q(current_office__name__icontains=search_term)
+                | Q(division__name__icontains=search_term)
+                | Q(current_approver__first_name__icontains=search_term)
+                | Q(current_approver__last_name__icontains=search_term)
+            )
+
+        date_from = request.query_params.get("date_from")
+        date_to = request.query_params.get("date_to")
+        date_field = request.query_params.get("date_field", "created_at")
+        allowed_date_fields = {"created_at", "updated_at", "dispatch_date", "received_date"}
+        if date_field not in allowed_date_fields:
+            date_field = "created_at"
+        if date_from:
+            queryset = queryset.filter(**{f"{date_field}__gte": date_from})
+        if date_to:
+            queryset = queryset.filter(**{f"{date_field}__lte": date_to})
+
+        sort_by = request.query_params.get("sort_by", default_sort_by)
+        sort_order = request.query_params.get("sort_order", "desc")
+        order_prefix = "-" if sort_order == "desc" else ""
+
+        if sort_by == "priority":
+            from django.db.models import Case, When, IntegerField
+            queryset = queryset.annotate(
+                priority_order=Case(
+                    When(priority=Correspondence.Priority.URGENT, then=0),
+                    When(priority=Correspondence.Priority.HIGH, then=1),
+                    When(priority=Correspondence.Priority.MEDIUM, then=2),
+                    When(priority=Correspondence.Priority.LOW, then=3),
+                    default=99,
+                    output_field=IntegerField(),
+                )
+            ).order_by(f"{order_prefix}priority_order", "-created_at")
+        elif sort_by == "created":
+            queryset = queryset.order_by(f"{order_prefix}created_at")
+        elif sort_by == "updated":
+            queryset = queryset.order_by(f"{order_prefix}updated_at")
+        elif sort_by == "dispatch_date":
+            queryset = queryset.order_by(f"{order_prefix}dispatch_date", "-updated_at")
+        elif sort_by == "subject":
+            queryset = queryset.order_by(f"{'' if sort_order == 'asc' else '-'}subject")
+        elif sort_by == "reference":
+            queryset = queryset.order_by(f"{order_prefix}reference_number")
+        else:
+            queryset = queryset.order_by("-updated_at")
+
+        return queryset
+
+    def _paginate_correspondence_queue(self, request, queryset, summary):
+        paginator = StandardPageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        serializer = self.get_serializer(page, many=True)
+        response = paginator.get_paginated_response(serializer.data)
+        response.data["summary"] = summary
+        return response
+
+    def my_sent(self, request):
+        """Correspondence the current user has routed or formally dispatched."""
+        user = request.user
+        sent_type = request.query_params.get("sent_type", "all").lower()
+
+        routed_ids = Minute.objects.filter(
+            user=user,
+            is_recalled=False,
+            action_type__in=["minute", "forward", "approve", "treat"],
+            dispatched_at__isnull=False,
+        ).values_list("correspondence_id", flat=True).distinct()
+
+        external_dispatch_ids = DispatchRecord.objects.filter(
+            dispatched_by=user
+        ).values_list("correspondence_id", flat=True).distinct()
+
+        acted_ids = Minute.objects.filter(
+            user=user,
+            is_recalled=False,
+            action_type__in=["minute", "forward", "approve", "treat"],
+        ).values_list("correspondence_id", flat=True).distinct()
+
+        ownership = Q(created_by=user) | Q(id__in=acted_ids) | Q(id__in=external_dispatch_ids)
+
+        sent_statuses = [
+            Correspondence.Status.COMPLETED,
+            Correspondence.Status.DISPATCHED,
+            Correspondence.Status.ACKNOWLEDGED,
+            Correspondence.Status.ARCHIVED,
+        ]
+        sent_filter = Q(id__in=routed_ids) | Q(status__in=sent_statuses)
+
+        queryset = self.base_queryset.filter(is_deleted=False).filter(ownership & sent_filter).exclude(
+            status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
+        )
+
+        if sent_type == "internal":
+            queryset = queryset.filter(id__in=routed_ids).exclude(
+                status__in=[
+                    Correspondence.Status.DISPATCHED,
+                    Correspondence.Status.ACKNOWLEDGED,
+                    Correspondence.Status.PENDING,
+                    Correspondence.Status.IN_PROGRESS,
+                ]
+            )
+        elif sent_type == "external":
+            queryset = queryset.filter(
+                Q(status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED])
+                | Q(id__in=external_dispatch_ids)
+            )
+
+        queryset = self._apply_correspondence_queue_filters(
+            queryset, request, default_sort_by="dispatch_date"
+        )
+
+        total_count = queryset.count()
+        internal_count = (
+            self.base_queryset.filter(is_deleted=False)
+            .filter(ownership)
+            .filter(id__in=routed_ids)
+            .exclude(status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED,
+                                 Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS])
+            .count()
+        )
+        external_count = (
+            self.base_queryset.filter(is_deleted=False)
+            .filter(ownership)
+            .filter(
+                Q(status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED])
+                | Q(id__in=external_dispatch_ids)
+            )
+            .count()
+        )
+
+        summary = {
+            "total": total_count,
+            "internal": internal_count,
+            "external": external_count,
+        }
+        return self._paginate_correspondence_queue(request, queryset, summary)
+
+    def office_dispatched(self, request):
+        """Formal dispatch log for the user's office(s)."""
+        user = request.user
+        requested_offices = request.query_params.getlist("office")
+        office_ids = [office_id for office_id in requested_offices if office_id and office_id.lower() != "all"]
+
+        if not office_ids:
+            office_ids = self._get_user_office_ids(user)
+
+        if office_ids:
+            user_office_ids = list(
+                OfficeMembership.objects.filter(
+                    user=user,
+                    is_active=True,
+                    office_id__in=office_ids,
+                ).values_list("office_id", flat=True)
+            )
+            if not user_office_ids and not user.is_superuser:
+                return Response(
+                    {"detail": "You don't have access to the requested office(s)."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            scope_office_ids = user_office_ids if user_office_ids else office_ids
+        elif user.is_superuser:
+            scope_office_ids = []
+        else:
+            return Response(
+                {
+                    "count": 0,
+                    "next": None,
+                    "previous": None,
+                    "results": [],
+                    "summary": {"total": 0, "dispatched": 0, "acknowledged": 0, "internal": 0, "external": 0},
+                }
+            )
+
+        dispatch_type = request.query_params.get("dispatch_type", "all").lower()
+        include_archived = request.query_params.get("include_archived", "").lower() in {"true", "1", "yes"}
+
+        statuses = [Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED]
+        if include_archived:
+            statuses.append(Correspondence.Status.ARCHIVED)
+
+        queryset = self.base_queryset.filter(is_deleted=False, status__in=statuses)
+
+        if scope_office_ids:
+            office_user_ids = OfficeMembership.objects.filter(
+                office_id__in=scope_office_ids,
+                is_active=True,
+            ).values_list("user_id", flat=True)
+            queryset = queryset.filter(
+                Q(owning_office_id__in=scope_office_ids)
+                | Q(dispatch_records__dispatched_by_id__in=office_user_ids)
+            ).distinct()
+        else:
+            queryset = queryset.filter(dispatch_records__isnull=False).distinct()
+
+        if dispatch_type == "internal":
+            queryset = queryset.filter(
+                dispatch_records__dispatch_mode=DispatchRecord.DispatchMode.INTERNAL
+            ).distinct()
+        elif dispatch_type == "external":
+            queryset = queryset.exclude(
+                dispatch_records__dispatch_mode=DispatchRecord.DispatchMode.INTERNAL
+            ).distinct()
+
+        queryset = self._apply_correspondence_queue_filters(
+            queryset, request, default_sort_by="dispatch_date"
+        )
+
+        total_count = queryset.count()
+        dispatched_count = queryset.filter(status=Correspondence.Status.DISPATCHED).count()
+        acknowledged_count = queryset.filter(status=Correspondence.Status.ACKNOWLEDGED).count()
+        internal_count = queryset.filter(
+            dispatch_records__dispatch_mode=DispatchRecord.DispatchMode.INTERNAL
+        ).distinct().count()
+        external_count = queryset.exclude(
+            dispatch_records__dispatch_mode=DispatchRecord.DispatchMode.INTERNAL
+        ).distinct().count()
+
+        summary = {
+            "total": total_count,
+            "dispatched": dispatched_count,
+            "acknowledged": acknowledged_count,
+            "internal": internal_count,
+            "external": external_count,
+        }
+        return self._paginate_correspondence_queue(request, queryset, summary)
+
     @action(detail=False, methods=["get"], url_path="archive-records", filter_backends=[])
     def archive_records(self, request):
         user = request.user
@@ -1841,12 +2367,20 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             base_queryset = base_queryset.filter(completed_at__lte=completed_to)
 
         division_id = request.query_params.get("division")
-        if division_id:
-            base_queryset = base_queryset.filter(division_id=division_id)
+        if division_id and division_id.lower() != "all":
+            try:
+                UUID(division_id)
+                base_queryset = base_queryset.filter(division_id=division_id)
+            except (TypeError, ValueError):
+                logger.warning("Ignoring invalid division filter in archive_records: %s", division_id)
 
         department_id = request.query_params.get("department")
-        if department_id:
-            base_queryset = base_queryset.filter(department_id=department_id)
+        if department_id and department_id.lower() != "all":
+            try:
+                UUID(department_id)
+                base_queryset = base_queryset.filter(department_id=department_id)
+            except (TypeError, ValueError):
+                logger.warning("Ignoring invalid department filter in archive_records: %s", department_id)
 
         summary_queryset = base_queryset
 
@@ -2192,10 +2726,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         division_id = getattr(user, "division_id", None)
         directorate_id = getattr(user, "directorate_id", None)
 
-        # Debug logging
-        print(f"DEBUG: User {user.username} - allowed_levels: {allowed_levels}")
-        print(f"DEBUG: User {user.username} - department_id: {department_id}, division_id: {division_id}, directorate_id: {directorate_id}")
-
         # For users with archive access, also include correspondence that doesn't have organizational associations
         # but has been completed/archived (for backward compatibility)
         base_filters = Q()
@@ -2204,13 +2734,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         org_filters = Q()
         if Correspondence.ArchiveLevel.DEPARTMENT in allowed_levels and department_id:
             org_filters |= Q(department_id=department_id)
-            print(f"DEBUG: Added department filter: {department_id}")
         if Correspondence.ArchiveLevel.DIVISION in allowed_levels and division_id:
             org_filters |= Q(division_id=division_id)
-            print(f"DEBUG: Added division filter: {division_id}")
         if Correspondence.ArchiveLevel.DIRECTORATE in allowed_levels and directorate_id:
             org_filters |= Q(division__directorate_id=directorate_id)
-            print(f"DEBUG: Added directorate filter: {directorate_id}")
 
         # Include correspondence that either:
         # 1. Has proper organizational associations, OR
@@ -2235,19 +2762,9 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
         if base_filters or backward_compat_filters or user_added_filters:
             combined_filters = base_filters | backward_compat_filters | user_added_filters
         else:
-            print(f"DEBUG: No filters applied for user {user.username}")
             return queryset.none()
 
         filtered_queryset = queryset.filter(combined_filters).distinct()
-        count = filtered_queryset.count()
-        print(f"DEBUG: Filtered queryset count for user {user.username}: {count}")
-
-        # Additional debug: show a few examples
-        if count > 0:
-            sample_items = filtered_queryset[:3]
-            for item in sample_items:
-                print(f"DEBUG: Sample item - {item.reference_number}: division={item.division_id}, department={item.department_id}, archive_level={item.archive_level}")
-
         return filtered_queryset
 
     def _parse_date_param(self, value: str | None):
@@ -2340,6 +2857,9 @@ class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
     filterset_fields = ["correspondence", "recipient_type", "purpose"]
 
     def perform_create(self, serializer):
+        from organization.permission_utils import require_permission
+
+        require_permission(self.request.user, "can_distribute")
         serializer.save(added_by=self.request.user)
 
     @action(detail=False, methods=["post"])
@@ -2350,6 +2870,9 @@ class CorrespondenceDistributionViewSet(viewsets.ModelViewSet):
         Creates distribution entries for all active department members when
         office holder clicks "Share with Department".
         """
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_distribute")
         from organization.models import OfficeMembership, Department
         
         correspondence_id = request.data.get('correspondence_id')
@@ -2496,6 +3019,9 @@ class MinuteViewSet(viewsets.ModelViewSet):
 
         Frontend expects: { results: [...] }
         """
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_access_approvals")
         user = request.user
         qs = (
             Minute.objects.select_related("correspondence")
@@ -2650,6 +3176,20 @@ class MinuteViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
+        from organization.permission_utils import require_permission
+
+        action_type = serializer.validated_data.get("action_type", "minute")
+        action_permission_map = {
+            "minute": "can_minute_correspondence",
+            "forward": "can_minute_correspondence",
+            "treat": "can_treat_correspondence",
+            "approve": "can_approve",
+            "reject": "can_reject",
+        }
+        permission = action_permission_map.get(action_type)
+        if permission:
+            require_permission(self.request.user, permission)
+
         # Import early to use throughout the function
         from correspondence.models import ParallelRoutingGroup, Minute as MinuteModel, CorrespondenceDelegation
         
@@ -2684,10 +3224,12 @@ class MinuteViewSet(viewsets.ModelViewSet):
                 f"Delegation action: {self.request.user.get_full_name()} performed minute "
                 f"on behalf of {principal.get_full_name()} for correspondence {correspondence.reference_number}"
             )
-            # Debug: Log routing info
-            print(
-                f"[DELEGATION DEBUG] Minute created - to_office: {minute.to_office}, to_office_id: {minute.to_office_id}, "
-                f"to_user: {minute.to_user}, action_type: {minute.action_type}"
+            logger.debug(
+                "Delegation minute created: to_office=%s to_office_id=%s to_user=%s action_type=%s",
+                minute.to_office,
+                minute.to_office_id,
+                minute.to_user,
+                minute.action_type,
             )
         else:
             # Normal action - user acting as themselves
@@ -2966,16 +3508,20 @@ class MinuteViewSet(viewsets.ModelViewSet):
             if approver_updated:
                 update_fields.append("current_approver")
             correspondence.save(update_fields=update_fields)
-            print(
-                f"[ROUTING SUCCESS] Updated correspondence {correspondence.id} - current_office: {correspondence.current_office_id}, "
-                f"current_approver: {correspondence.current_approver_id}"
+            logger.info(
+                "Routing updated correspondence %s: current_office=%s current_approver=%s",
+                correspondence.id,
+                correspondence.current_office_id,
+                correspondence.current_approver_id,
             )
         else:
-            # Debug: Log why routing didn't happen
-            print(
-                f"[ROUTING DEBUG] No routing update - office_updated: {office_updated}, approver_updated: {approver_updated}, "
-                f"recipient_user: {recipient_user}, minute.to_office: {minute.to_office}, "
-                f"is_completing_parallel_branch: {is_completing_parallel_branch}"
+            logger.debug(
+                "No routing update: office_updated=%s approver_updated=%s recipient_user=%s to_office=%s completing_parallel=%s",
+                office_updated,
+                approver_updated,
+                recipient_user,
+                minute.to_office,
+                is_completing_parallel_branch,
             )
         
         # Create audit log
@@ -3050,14 +3596,21 @@ class MinuteViewSet(viewsets.ModelViewSet):
                         },
                     )
                     
-                    print(f"[SEAL] Applied digital seal {seal.serial_number} for executive approval on correspondence {correspondence.reference_number}")
+                    logger.info(
+                        "Applied digital seal %s for executive approval on correspondence %s",
+                        seal.serial_number,
+                        correspondence.reference_number,
+                    )
                     
                 except ExecutiveSignature.DoesNotExist:
                     # User doesn't have an active signature - log but don't fail
-                    print(f"[SEAL] Executive {self.request.user.username} attempted approval without digital signature")
+                    logger.warning(
+                        "Executive %s attempted approval without digital signature",
+                        self.request.user.username,
+                    )
                 except Exception as e:
                     # Don't fail the approval if seal generation fails
-                    print(f"[SEAL ERROR] Failed to apply seal: {e}")
+                    logger.error("Failed to apply digital seal: %s", e, exc_info=True)
         
         # Send notification to current approver if different from minute author
         # (Skip if parallel group just completed - notification already sent or will be sent separately)
@@ -4047,13 +4600,38 @@ class CaseViewSet(viewsets.ModelViewSet):
             ).values_list('office_id', flat=True)
             if user_office_ids:
                 queryset = queryset.filter(
-                    Q(owning_office_id__in=user_office_ids) | 
+                    Q(owning_office_id__in=user_office_ids) |
                     Q(current_office_id__in=user_office_ids)
                 )
+            else:
+                queryset = queryset.none()
         elif scope == "my":
             # My cases: Assigned to user
             queryset = queryset.filter(assigned_to=user)
-        # "personal" scope (default): My cases + Office cases (handled by frontend)
+        elif scope == "all":
+            # Safety guard: non-superusers cannot use all as unrestricted scope.
+            from organization.models import OfficeMembership
+            user_office_ids = OfficeMembership.objects.filter(
+                user=user,
+                is_active=True
+            ).values_list('office_id', flat=True)
+            queryset = queryset.filter(
+                Q(assigned_to=user)
+                | Q(owning_office_id__in=user_office_ids)
+                | Q(current_office_id__in=user_office_ids)
+            )
+        else:
+            # Personal fallback: user + office scope only
+            from organization.models import OfficeMembership
+            user_office_ids = OfficeMembership.objects.filter(
+                user=user,
+                is_active=True
+            ).values_list('office_id', flat=True)
+            queryset = queryset.filter(
+                Q(assigned_to=user)
+                | Q(owning_office_id__in=user_office_ids)
+                | Q(current_office_id__in=user_office_ids)
+            )
         
         # Executive filtering for secretaries
         executive_id = self.request.query_params.get("executive")
@@ -4703,6 +5281,13 @@ class CaseWorkflowRuleViewSet(viewsets.ModelViewSet):
     ordering_fields = ["priority_order", "name", "created_at"]
     ordering = ["priority_order", "name"]
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            from organization.permission_utils import require_permission
+
+            require_permission(request.user, "can_manage_org_structure")
+
 
 class CaseSLAViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for viewing case SLA information."""
@@ -4756,6 +5341,11 @@ class CorrespondenceTemplateViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Set the creator and updater when creating a template."""
+        scope = serializer.validated_data.get("scope")
+        if scope == "organization":
+            from organization.permission_utils import require_permission
+
+            require_permission(self.request.user, "can_access_administration")
         serializer.save(
             created_by=self.request.user,
             updated_by=self.request.user
@@ -4763,6 +5353,11 @@ class CorrespondenceTemplateViewSet(viewsets.ModelViewSet):
     
     def perform_update(self, serializer):
         """Set the updater when updating a template."""
+        scope = serializer.validated_data.get("scope", serializer.instance.scope)
+        if scope == "organization":
+            from organization.permission_utils import require_permission
+
+            require_permission(self.request.user, "can_access_administration")
         serializer.save(updated_by=self.request.user)
 
 

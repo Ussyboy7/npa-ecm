@@ -1,457 +1,237 @@
-# NPA Electronic Content Management System - Setup Guide
+# NPA Electronic Content Management System — Setup Guide
+
+**Last updated:** June 2026
+
+> **Fastest path:** [QUICK_START.md](./QUICK_START.md) — Docker stack, ports 8002/3002, dev login users.
 
 ## Overview
-Complete setup guide for the NPA ECM system with the official organizational structure.
+
+Setup and orientation for NPA ECM: local development, organizational structure, access levels, and smoke testing. For API details see [API_REFERENCE.md](../api/API_REFERENCE.md); for deployment see [MANUAL_DEPLOYMENT.md](./MANUAL_DEPLOYMENT.md).
 
 ---
 
-## 📋 Prerequisites
+## Prerequisites
 
-### Backend Requirements
-- Python 3.13+
-- PostgreSQL 14+ (or SQLite for testing)
-- Redis (for caching and WebSockets)
-- Tesseract OCR
+| Layer | Requirement |
+|-------|-------------|
+| Backend | Python 3.11+, PostgreSQL 16+ (**required**), Redis 7+, optional Tesseract |
+| Frontend | Node.js 20+, npm |
+| Ops | Docker & Docker Compose (recommended) |
 
-### Frontend Requirements
-- Node.js 18+
-- npm or yarn
+SQLite is **not** supported (`DB_ENGINE=sqlite` is rejected in settings).
 
 ---
 
-## 🚀 Quick Start (Development)
-
-### 1. Backend Setup
+## Quick Start (Docker — recommended)
 
 ```bash
-cd npa-ecm/backend
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run migrations
-python manage.py makemigrations
-python manage.py migrate
-
-# Populate NPA organizational structure
-python manage.py shell < populate_npa_structure.py
-
-# Create superuser (optional)
-python manage.py createsuperuser
-
-# Start development server
-python manage.py runserver
+cd npa-ecm
+cp backend/env/local.env.example backend/env/local.env
+scripts/local/env-manager.sh start
 ```
 
-Backend will run at: `http://localhost:8000`
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3002 |
+| API | http://localhost:8002/api/v1 |
+| Swagger | http://localhost:8002/api/docs |
+| Admin | http://localhost:8002/admin |
 
-### 2. Frontend Setup
+**Dev login** (auto via `ensure_dev_login_users`): `superadmin`, `md`, `edfa`, `gmict`, `pamd` / `ChangeMe123!`
+
+**Full demo org:** `scripts/local/env-manager.sh seed`
+
+---
+
+## Quick Start (manual)
 
 ```bash
-cd npa-ecm/frontend
+# Backend
+make backend-install
+cp backend/env/local.env.example backend/env/local.env
+# DB_HOST=localhost DB_PORT=5433 when using Docker Postgres only
+make backend-migrate
+python backend/manage.py ensure_dev_login_users
+make backend-seed          # optional
+make backend-run           # :8002
 
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev -- -p 3002
+# Frontend
+cd frontend && npm install
+cp .env.example .env.local # NEXT_PUBLIC_API_URL=http://localhost:8002/api/v1
+npm run dev                # :3002
 ```
 
-Frontend will run at: `http://localhost:3002`
+Celery (separate terminals):
+
+```bash
+backend/.venv/bin/celery -A ecm_backend worker -l info
+backend/.venv/bin/celery -A ecm_backend beat -l info
+```
 
 ---
 
-## 🏢 NPA Organizational Structure
+## Organizational structure (after `seed_demo_data`)
 
-### Populated Data
+### Ports (8)
+Lagos (LPC), Onne, Lekki, Tin Can (TCIPC), Port Harcourt, Warri, Calabar, Headquarters.
 
-After running `populate_npa_structure.py`, the system will have:
+### Divisions (23+)
+HR, Finance, Procurement, Administration, Medical, Superannuation, Marine & Operations, Security, HSE, Regulatory, PPP, Engineering & Technical, ICT, Lands & Assets, Corporate Planning, Communications, Audit, Legal, Tariff & Billing, Monitoring, SERVICOM, ERM, Admin Support & Liaison, Special Duties.
 
-#### ✅ 8 Ports
-- Lagos Port Complex (LPC)
-- Onne Port
-- Lekki Deep Sea Port
-- Tin Can Island Port Complex (TCIPC)
-- Port Harcourt Port
-- Warri Port
-- Calabar Port
-- Headquarters (HQ)
+### Sample accounts
 
-#### ✅ 23 Main Divisions
-1. Human Resources
-2. Finance
-3. Procurement
-4. Administration
-5. Medical Services
-6. Superannuation
-7. Marine & Operations
-8. Security
-9. Health, Safety & Environment
-10. Regulatory Services
-11. Public-Private Partnership
-12. Engineering & Technical Services
-13. Information & Communication Technology
-14. Lands & Assets Administration
-15. Corporate & Strategic Planning
-16. Corporate & Strategic Communications
-17. Audit
-18. Legal Services
-19. Tariff & Billing
-20. Monitoring
-21. SERVICOM
-22. Enterprise Risk Management
-23. Administrative Support & Liaison
-24. Special Duties
+| Username | Password | Role |
+|----------|----------|------|
+| `superadmin` | `ChangeMe123!` | System administrator |
+| `md` | `ChangeMe123!` | Managing Director |
+| `edfa` | `ChangeMe123!` | Executive Director |
+| `gmict` | `ChangeMe123!` | GM ICT |
+| `pamd` | `ChangeMe123!` | PA to MD |
 
-#### ✅ 60+ Departments/Units
-All subdepartments are created with proper parent-child relationships.
+`seed_demo_data` creates the full hierarchy and additional port/division users.
 
-#### ✅ Sample User Accounts
-Default credentials (Change in production!):
-- **MD** - `md` / `password123` (Managing Director)
-- **GM ICT** - `gm.ict` / `password123`
-- **AGM Software** - `agm.software` / `password123`
-- **GM HR** - `gm.hr` / `password123`
-- **GM Finance** - `gm.finance` / `password123`
-- **Port Manager LPC** - `pm.lpc` / `password123`
-- **Admin** - `admin` / `password123`
-
----
-
-## 📊 Organizational Hierarchy
+### Hierarchy (summary)
 
 ```
 Managing Director (MD)
-│
 ├── Executive Director, Finance & Administration
-│   ├── Human Resources (GM, HR)
-│   │   ├── HR Operations (AGM)
-│   │   ├── Employee & Labour Relations (AGM)
-│   │   └── Training & Capacity Development (AGM)
-│   ├── Finance (GM, Finance)
-│   │   ├── Finance Operations (AGM)
-│   │   ├── Accounts (AGM)
-│   │   ├── Tax (AGM)
-│   │   └── Investment (AGM)
-│   ├── Procurement (GM, Procurement)
-│   ├── Administration (GM, Administration)
-│   ├── Medical Services (GM, Medical)
-│   └── Superannuation (GM, Superannuation)
-│
+│   ├── HR, Finance, Procurement, Administration, Medical, Superannuation
 ├── Executive Director, Marine & Operations
-│   ├── Marine & Operations (GM, Marine & GM, Operations)
-│   │   ├── Marine Operations (AGM)
-│   │   ├── Vessel Management (AGM)
-│   │   ├── Hydrographic (AGM)
-│   │   └── Port Operations (AGM)
-│   │       ├── Port Manager, LPC
-│   │       ├── Port Manager, Onne
-│   │       ├── Port Manager, Lekki
-│   │       ├── Port Manager, TCIPC
-│   │       ├── Port Manager, Port Harcourt
-│   │       ├── Port Manager, Warri
-│   │       └── Port Manager, Calabar
-│   ├── Security (GM, Security)
-│   ├── Health, Safety & Environment (GM, HSE)
-│   ├── Regulatory Services (GM, Regulatory)
-│   └── Public-Private Partnership (GM, PPP)
-│
+│   ├── Marine & Operations (+ port managers), Security, HSE, Regulatory, PPP
 ├── Executive Director, Engineering & Technical Services
-│   ├── Engineering & Technical Services (GM, Engineering)
-│   │   ├── Ports Engineering (AGM)
-│   │   ├── Electrical & Corrosion (AGM)
-│   │   └── Civil Engineering (AGM)
-│   ├── Information & Communication Technology (GM, ICT)
-│   │   ├── Software Applications & DB Management (AGM)
-│   │   ├── Hardware, Infrastructure & Support (AGM)
-│   │   ├── Networks & Communication (AGM)
-│   │   └── Research & Special Projects (AGM)
-│   └── Lands & Assets Administration (GM, Lands)
-│
-└── Corporate Services (Direct to MD)
-    ├── Corporate & Strategic Planning (GM, C&SP)
-    ├── Corporate & Strategic Communications (GM, C&SC)
-    ├── Audit (GM, Audit)
-    ├── Legal Services (GM, Legal)
-    ├── Tariff & Billing (GM, Tariff)
-    ├── Monitoring (GM, Monitoring)
-    ├── SERVICOM (GM, SERVICOM)
-    ├── Enterprise Risk Management (AGM, ERM)
-    ├── Administrative Support & Liaison (GM, Liaison)
-    └── Special Duties (GM, Special Duties)
+│   ├── Engineering, ICT, Lands & Assets
+└── Corporate Services (direct to MD)
+    ├── Planning, Communications, Audit, Legal, Tariff, Monitoring, SERVICOM, ERM, …
 ```
 
----
-
-## 🔐 Access Control Levels
-
-### Document Access Hierarchy
-
-1. **Level 1 - Confidential** (MD, EDs only)
-   - Board documents
-   - Strategic plans
-   - Executive decisions
-
-2. **Level 2 - Restricted** (GMs and above)
-   - Divisional reports
-   - Budget proposals
-   - Cross-divisional memos
-
-3. **Level 3 - Internal** (AGMs and above)
-   - Department reports
-   - Operational documents
-   - Standard memos
-
-4. **Level 4 - General** (All staff)
-   - Circulars
-   - Announcements
-   - Public documents
+See `docs/architecture/org-hierarchy.md` for routing implications.
 
 ---
 
-## 📁 Document Types
+## Access control & sensitivity
 
-The system supports:
-- Official Memos
-- Circulars
-- Policy Documents
-- Reports
-- Contracts
-- Correspondence
-- Meeting Minutes
-- Budget Documents
-- Financial Reports
-- Technical Documents
-- Operational Documents
-- Legal Documents
-- HR Documents
-- Audit Reports
-- Board Papers
+Document sensitivity maps to grade levels (see `common/grade_utils.py`):
+
+| Level | Typical audience | Examples |
+|-------|------------------|----------|
+| Confidential | MD, EDs | Board papers, strategic plans |
+| Restricted | GMs+ | Divisional reports, budgets |
+| Internal | AGMs+ | Department reports, operational memos |
+| General | All staff | Circulars, announcements |
+
+Office-based routing means queues attach to **offices** (MD, ED, GM, AGM), not individuals — acting officers inherit backlog.
 
 ---
 
-## 🔄 Workflow Routing
+## Development workflow
 
-### Approval Hierarchy Examples
-
-#### Financial Documents (>₦10M)
-1. Initiating Officer
-2. AGM, Finance
-3. GM, Finance
-4. ED, Finance & Admin
-5. MD
-
-#### Policy Documents
-1. Department AGM
-2. Division GM
-3. Legal Review (AGM, Legal)
-4. Relevant ED
-5. MD
-
-#### Contract Documents
-1. AGM, Procurement
-2. GM, Procurement
-3. AGM, Legal (Review)
-4. GM, Legal (Approval)
-5. Relevant ED
-6. MD
-
-#### Port-Specific Documents
-1. Port Manager
-2. AGM, Port Operations
-3. GM, Marine/Operations
-4. ED, Marine & Operations
-
----
-
-## 🛠️ Development Workflow
-
-### Adding New Users
+### Adding a user (Django admin or API)
 
 ```bash
-python manage.py shell
+python backend/manage.py createsuperuser   # break-glass admin
+# or use /admin/users-roles in the app (ICT)
 ```
 
+Programmatic example:
+
 ```python
-from ecm_core.models import User, Department
+from accounts.models import User
+from organization.models import Department
 
-# Get department
-dept = Department.objects.get(code='ICT')
-
-# Create user
+dept = Department.objects.filter(code="ICT").first()
 user = User.objects.create_user(
-    username='john.doe',
-    email='john.doe@npa.gov.ng',
-    password='password123',
-    first_name='John',
-    last_name='Doe',
-    role='user',
-    department=dept
+    username="john.doe",
+    email="john.doe@npa.gov.ng",
+    password="ChangeMe123!",  # force change in production
+    first_name="John",
+    last_name="Doe",
 )
+# Assign office membership and role via organization APIs or admin UI
 ```
 
-### Creating Document Types
+### Role permissions after deploy
 
-```python
-from ecm_core.models import DocumentType, Department
-
-# Get department
-dept = Department.objects.get(code='ICT')
-
-# Create document type
-doc_type = DocumentType.objects.create(
-    name='IT Policy',
-    code='IT-POLICY',
-    description='Information Technology policies',
-    department=dept,
-    requires_approval=True,
-    retention_period=7
-)
-```
-
-### Creating Workflow Templates
-
-```python
-from ecm_core.models import WorkflowTemplate, DocumentType
-
-# Get document type
-doc_type = DocumentType.objects.get(code='IT-POLICY')
-
-# Create workflow template
-workflow = WorkflowTemplate.objects.create(
-    name='IT Policy Approval',
-    document_type=doc_type,
-    steps=[
-        {'order': 1, 'role': 'AGM', 'name': 'Technical Review'},
-        {'order': 2, 'role': 'GM', 'name': 'Management Approval'},
-        {'order': 3, 'role': 'ED', 'name': 'Executive Approval'},
-    ]
-)
-```
-
----
-
-## 📡 API Endpoints
-
-### Authentication
-- `POST /api/auth/login/` - Login and get JWT token
-- `POST /api/auth/refresh/` - Refresh JWT token
-
-### Documents
-- `GET /api/documents/` - List documents
-- `POST /api/documents/` - Upload document
-- `GET /api/documents/{id}/` - Get document details
-- `POST /api/documents/{id}/approve/` - Approve document
-- `POST /api/documents/{id}/reject/` - Reject document
-
-### Workflows
-- `GET /api/workflow-instances/` - List workflows
-- `POST /api/workflow-instances/` - Create workflow
-- `GET /api/workflow-instances/{id}/` - Get workflow details
-
-### Admin
-- `GET /api/users/` - List users
-- `POST /api/users/` - Create user
-- `GET /api/departments/` - List departments
-- `GET /api/ports/` - List ports
-
----
-
-## 🎯 Testing the System
-
-### 1. Upload a Document
-1. Login as `gm.ict` / `password123`
-2. Go to Documents → Upload Document
-3. Fill in details and upload
-4. Select document type and access level
-
-### 2. Start a Workflow
-1. Go to Workflows → Start Workflow
-2. Select uploaded document
-3. Choose workflow template
-4. Set priority and due date
-
-### 3. Approve Document
-1. Login as approver
-2. Go to Approvals
-3. Click on pending approval
-4. Click Approve and add comments
-
-### 4. View Audit Trail
-1. Login as admin
-2. Go to Admin → Audit Logs
-3. View all system activities
-
----
-
-## 🔧 Troubleshooting
-
-### Database Connection Error
 ```bash
-# Check PostgreSQL is running
-pg_ctl status
-
-# Or use SQLite (temporary)
-# In settings.py, use SQLite configuration
+python manage.py setup_role_permissions --force
+python manage.py check_environment_parity --strict
 ```
 
-### Port Already in Use
-```bash
-# Backend (port 8000)
-lsof -ti:8000 | xargs kill -9
+CI and `docker-entrypoint.sh` run `setup_role_permissions` on promote.
 
-# Frontend (port 3002)
-lsof -ti:3002 | xargs kill -9
-```
+### Key Django apps
 
-### Migration Issues
-```bash
-# Reset migrations (development only!)
-python manage.py migrate ecm_core zero
-rm ecm_core/migrations/0*.py
-python manage.py makemigrations ecm_core
-python manage.py migrate
-```
+| App | Purpose |
+|-----|---------|
+| `accounts` | Users, JWT, seals, login MFA settings |
+| `organization` | Hierarchy, roles, office membership |
+| `correspondence` | Letters, minutes, routing, cases |
+| `dms` | Documents, versions, DRM, workspaces |
+| `records` | Retention, legal hold, eDiscovery export |
+| `audit` | Activity log, compliance export |
+| `search` | FTS + semantic MVP re-rank |
+| `support` | Helpdesk tickets |
+| `integrations` | Webhooks, email/ERP/HRMS connectors |
 
 ---
 
-## 📚 Additional Resources
+## API endpoints (canonical `/api/v1/`)
 
-- **Backend API Docs**: `http://localhost:8000/api/docs/`
-- **Admin Interface**: `http://localhost:8000/admin/`
-- **Frontend**: `http://localhost:3002`
+| Area | Method | Path |
+|------|--------|------|
+| Login | POST | `/api/v1/accounts/auth/token/` |
+| Refresh | POST | `/api/v1/accounts/auth/token/refresh/` |
+| Profile | GET | `/api/v1/accounts/auth/me/` |
+| Documents | GET/POST | `/api/v1/dms/documents/` |
+| Version diff | GET | `/api/v1/dms/document-versions/{id}/diff/?compare_with={id}` |
+| Search | GET | `/api/v1/search/?q=…&search_mode=semantic` |
+| Compliance export | GET | `/api/v1/audit/activity-logs/compliance-export/` |
+| eDiscovery | GET | `/api/v1/records/legal-holds/{id}/ediscovery-export/` |
+| Helpdesk | POST | `/api/v1/support/tickets/` |
 
----
-
-## 🎉 Next Steps
-
-1. ✅ Populate organizational structure
-2. ✅ Create sample users
-3. ⬜ Create workflow templates
-4. ⬜ Set up document types
-5. ⬜ Configure retention policies
-6. ⬜ Test complete workflows
-7. ⬜ Set up production environment
-8. ⬜ Configure backups
-9. ⬜ Deploy to servers
+Full schema: http://localhost:8002/api/docs/
 
 ---
 
-## 📞 Support
+## Smoke test checklist
 
-For issues or questions:
-1. Check backend logs: `npa-ecm/backend/logs/ecm.log`
-2. Check browser console for frontend errors
-3. Review API documentation
-4. Contact ICT division
+1. **Login** — `md` / `ChangeMe123!` at `/login`
+2. **Upload** — `/dms` → upload PDF, set sensitivity
+3. **Register** — `/correspondence/register` → create memo
+4. **Route** — minute/approve from `/inbox` or `/tasks`
+5. **Search** — `/search` with semantic toggle
+6. **Audit** — `/audit` as `superadmin`; optional compliance export
+7. **Helpdesk** — `/helpdesk` → submit ticket
+8. **Health** — `curl http://localhost:8002/api/v1/health/`
 
 ---
 
-**Last Updated:** December 16, 2024  
-**Version:** 1.0.0  
-**Status:** ✅ Structure Implemented
+## Troubleshooting
 
+| Issue | Fix |
+|-------|-----|
+| DB connection | Ensure Postgres on `:5433` (Docker) or update `backend/env/local.env` |
+| Login fails (empty DB) | Check backend logs for `ensure_dev_login_users`; run `make backend-migrate` |
+| Port in use | `lsof -ti:8002 \| xargs kill -9` or `lsof -ti:3002 \| xargs kill -9` |
+| Migration drift | `python manage.py makemigrations --check --dry-run` |
+| Missing role presets | `python manage.py setup_role_permissions --force` |
+
+---
+
+## Production checklist
+
+1. Set `DJANGO_DEBUG=False`, strong `DJANGO_SECRET_KEY`, `ALLOWED_HOSTS`
+2. Configure production `backend/env/prod.env` and secrets (never commit)
+3. Run deploy via `scripts/production/env-manager.sh deploy`
+4. Mandatory post-deploy: `migrate`, `setup_role_permissions`, `check_environment_parity --strict`
+5. Configure backups (`scripts/backup/`) and monitoring
+6. See [NATIONAL_ROLLOUT_RUNBOOK.md](../rollout/NATIONAL_ROLLOUT_RUNBOOK.md) for port cutover
+
+---
+
+## Related documentation
+
+- [QUICK_START.md](./QUICK_START.md)
+- [API_REFERENCE.md](../api/API_REFERENCE.md)
+- [REMAINING_WORK_BACKLOG.md](../procurement/REMAINING_WORK_BACKLOG.md)
+- [Feature docs](../features/)
+- [WCAG_AUDIT_CHECKLIST.md](./WCAG_AUDIT_CHECKLIST.md)

@@ -1,319 +1,177 @@
-# NPA ECM Component Documentation
+# NPA ECM Component Reference
 
-This document provides detailed documentation for the frontend components in the NPA Electronic Content Management System.
+**Last updated:** June 2026
 
-## Table of Contents
+Living reference for notable frontend components. For feature-level docs see `docs/features/`. Props below reflect current TypeScript interfaces — verify in source when upgrading.
 
-- [CompletionSummaryModal](#completionsummarymodal)
-- [ActionsPanel](#actionspanel)
-- [DocumentUploadDialog](#documentuploaddialog)
+## Component index
+
+| Component | Path | Area |
+|-----------|------|------|
+| CompletionSummaryModal | `components/correspondence/CompletionSummaryModal.tsx` | Correspondence |
+| ActionsPanel | `app/correspondence/[id]/components/ActionsPanel.tsx` | Correspondence |
+| DocumentUploadDialog | `components/dms/DocumentUploadDialog.tsx` | DMS |
+| DocumentVersionDiffDialog | `components/dms/DocumentVersionDiffDialog.tsx` | DMS (Phase 9) |
+| DocumentDrmBanner | `components/dms/DocumentDrmBanner.tsx` | DMS / DRM (Phase 11) |
+| DocumentSummaryCard | `components/dms/DocumentSummaryCard.tsx` | DMS (extractive summary) |
+| RelatedItemsPanel | `components/search/RelatedItemsPanel.tsx` | Search |
+| AdvancedSearch | `components/search/AdvancedSearch.tsx` | Search |
+| SkipToContent | `components/shared/SkipToContent.tsx` | Accessibility (WCAG) |
+| ListRowCard | `components/shared/ListRowCard.tsx` | Shared lists |
+| ErrorBoundary | `components/shared/ErrorBoundary.tsx` | Error handling |
+| IntegrationLogsViewer | `components/integrations/IntegrationLogsViewer.tsx` | Integrations |
+| NotificationBell | `components/notifications/NotificationBell.tsx` | Notifications |
+| AppSidebar | `components/AppSidebar.tsx` | Navigation |
+
+### Removed / consolidated (do not reference)
+
+- `DelegatedInboxContent`, `ExecutiveSupportInboxContent`, `OfficeInboxContent` — removed; use `/inbox`, `/correspondence/inbox`, `/tasks`
+- Duplicate inbox filter constants — use `lib/constants.ts`
 
 ---
 
 ## CompletionSummaryModal
 
-A comprehensive modal component that displays the completion summary for correspondence items, including final actions, document content, and process statistics.
+**Path:** `frontend/components/correspondence/CompletionSummaryModal.tsx`
 
-### Location
-`frontend/components/correspondence/CompletionSummaryModal.tsx`
-
-### Props
+Displays completion summary for finished correspondence: final action, document preview, process stats.
 
 ```typescript
 interface CompletionSummaryModalProps {
-  open?: boolean;                    // Controls modal visibility
-  onOpenChange?: (open: boolean) => void; // Callback when modal state changes
-  correspondence?: Correspondence;   // Correspondence object data
-  minutes?: Minute[];               // Array of minute objects
-  documentContentHtml?: string;     // HTML content of the final document
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  correspondence?: Correspondence;
+  minutes?: Minute[];
+  documentContentHtml?: string;
 }
 ```
-
-### Features
-
-- **Correspondence Overview**: Displays reference number, status, subject, and completion date
-- **Final Action Details**: Shows the last action taken, timestamp, and responsible user
-- **Document Preview**: Renders the final document content in a scrollable container
-- **Process Statistics**: Shows total minutes count and completion metrics
-
-### Usage Example
-
-```typescript
-import { CompletionSummaryModal } from '@/components/correspondence/CompletionSummaryModal';
-
-function CorrespondenceView({ correspondence, minutes }) {
-  const [showSummary, setShowSummary] = useState(false);
-
-  return (
-    <>
-      <Button onClick={() => setShowSummary(true)}>
-        View Completion Summary
-      </Button>
-
-      <CompletionSummaryModal
-        open={showSummary}
-        onOpenChange={setShowSummary}
-        correspondence={correspondence}
-        minutes={minutes}
-        documentContentHtml={documentContent}
-      />
-    </>
-  );
-}
-```
-
-### Dependencies
-
-- `Dialog` components from `@/components/ui/dialog`
-- `Badge` component from `@/components/ui/badge`
-- `Card` components from `@/components/ui/card`
-- `formatDateTime` utility from `@/lib/correspondence-helpers`
 
 ---
 
 ## ActionsPanel
 
-A dynamic actions panel component that provides context-aware actions for correspondence management based on the current state and user permissions.
+**Path:** `frontend/app/correspondence/[id]/components/ActionsPanel.tsx`
 
-### Location
-`frontend/app/correspondence/[id]/components/ActionsPanel.tsx`
+Context-aware correspondence actions (minute, treat, delegate, completion package) based on permissions and turn.
 
-### Props
-
-```typescript
-interface ActionsPanelProps {
-  correspondence?: Correspondence;
-  minutes?: Minute[];
-  activeUser?: any;
-  isCompleted?: boolean;
-  isCurrentUserTurn?: boolean;
-  isForInformationOnly?: boolean;
-  isExecutive?: boolean;
-  turnRestrictedDisabled?: boolean;
-  completionPackageUrl?: string | null;
-  completionGeneratedAt?: string | null;
-  activeDelegation?: any;
-  onOpenMinuteModal?: () => void;
-  onOpenTreatmentModal?: () => void;
-  onOpenCompletionModal?: () => void;
-  onOpenDelegateModal?: () => void;
-  onDownloadCompletionPackage?: (url: string, filename: string) => Promise<void>;
-  onSyncFromApi?: () => Promise<any>;
-}
-```
-
-### Features
-
-- **Status Display**: Shows current correspondence status with appropriate badges
-- **Primary Actions**: Add minutes, process correspondence, complete items (context-aware)
-- **Delegation Support**: Delegate correspondence to other users
-- **Completion Package**: Download final completion packages for completed items
-- **Activity Statistics**: Shows minute counts and last activity timestamps
-- **Sync Functionality**: Refresh data from the API
-
-### Action States
-
-The panel adapts its actions based on:
-
-- **User Permissions**: Shows appropriate actions based on user role and permissions
-- **Correspondence State**: Different actions for active vs completed correspondence
-- **User Turn**: Only shows relevant actions when it's the user's turn
-- **Delegation Status**: Shows delegation information when applicable
-
-### Usage Example
-
-```typescript
-import { ActionsPanel } from './ActionsPanel';
-
-function CorrespondenceDetail({ correspondence, minutes, activeUser }) {
-  return (
-    <ActionsPanel
-      correspondence={correspondence}
-      minutes={minutes}
-      activeUser={activeUser}
-      isCompleted={correspondence.status === 'completed'}
-      isCurrentUserTurn={isCurrentUserTurn}
-      onOpenMinuteModal={() => setShowMinuteModal(true)}
-      onOpenTreatmentModal={() => setShowTreatmentModal(true)}
-      onDownloadCompletionPackage={handleDownload}
-      onSyncFromApi={handleSync}
-    />
-  );
-}
-```
-
-### Dependencies
-
-- UI components from `@/components/ui/*`
-- `cn` utility from `@/lib/utils`
-- `formatDateTime` from `@/lib/correspondence-helpers`
+Key props: `correspondence`, `minutes`, `activeUser`, `isCompleted`, `isCurrentUserTurn`, `onOpenMinuteModal`, `onSyncFromApi`.
 
 ---
 
 ## DocumentUploadDialog
 
-An advanced document upload dialog that supports multiple upload modes with comprehensive file validation, progress tracking, and error handling.
+**Path:** `frontend/components/dms/DocumentUploadDialog.tsx`
 
-### Location
-`frontend/components/dms/DocumentUploadDialog.tsx`
-
-### Props
+Upload new documents or versions with validation and progress.
 
 ```typescript
 interface DocumentUploadDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  mode?: "document" | "version" | "create";  // Upload mode
-  currentUser?: any;                        // Current user object
-  document?: DocumentRecord;                // Document for version uploads
-  onComplete?: (document: DocumentRecord) => void; // Success callback
-  onCancel?: () => void;                    // Cancel callback
-  asPage?: boolean;                         // Render as full page instead of modal
+  mode?: "document" | "version" | "create";
+  currentUser?: User;
+  document?: DocumentRecord;
+  onComplete?: (document: DocumentRecord) => void;
+  onCancel?: () => void;
+  asPage?: boolean;
 }
 ```
-
-### Features
-
-- **Multiple Upload Modes**:
-  - `document`: Upload new documents
-  - `version`: Upload new versions of existing documents
-  - `create`: Create new documents (alias for document mode)
-
-- **File Validation**:
-  - Supported formats: PDF, Word, Excel, PowerPoint, Text, CSV, Images
-  - Size limit: 50MB maximum
-  - Type checking and user-friendly error messages
-
-- **Upload Progress**: Real-time progress tracking during upload
-- **Metadata Collection**: Title, description, and document type selection
-- **Drag & Drop**: Intuitive file selection with drag-and-drop support
-- **Error Handling**: Comprehensive error states with retry options
-
-### Supported File Types
-
-```typescript
-const ALLOWED_FILE_TYPES = [
-  // Documents
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  // Spreadsheets
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  // Presentations
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  // Text files
-  'text/plain',
-  'text/csv',
-  // Images
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-];
-```
-
-### Usage Examples
-
-#### Modal Mode (Default)
-```typescript
-import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
-
-function DocumentManager() {
-  const [showUpload, setShowUpload] = useState(false);
-
-  return (
-    <DocumentUploadDialog
-      open={showUpload}
-      onOpenChange={setShowUpload}
-      mode="document"
-      currentUser={currentUser}
-      onComplete={(doc) => {
-        console.log('Document uploaded:', doc);
-        setShowUpload(false);
-      }}
-    />
-  );
-}
-```
-
-#### Version Upload
-```typescript
-<DocumentUploadDialog
-  open={showVersionUpload}
-  onOpenChange={setShowVersionUpload}
-  mode="version"
-  document={selectedDocument}
-  currentUser={currentUser}
-  onComplete={handleVersionComplete}
-/>
-```
-
-#### Page Mode
-```typescript
-<DocumentUploadDialog
-  asPage={true}
-  mode="create"
-  currentUser={currentUser}
-  onComplete={handleComplete}
-/>
-```
-
-### Error Handling
-
-The component provides comprehensive error handling for:
-
-- Invalid file types
-- File size exceeded
-- Network errors during upload
-- API validation errors
-- Authentication issues
-
-### Dependencies
-
-- Dialog components from `@/components/ui/dialog`
-- Form components from `@/components/ui/*`
-- `apiFetch` from `@/lib/api-client`
-- File validation utilities
 
 ---
 
-## Common Patterns
+## DocumentVersionDiffDialog
 
-### Modal State Management
-
-```typescript
-const [modalState, setModalState] = useState({
-  completionSummary: false,
-  uploadDialog: false,
-  // ... other modals
-});
-
-const openModal = (modalName: string) => {
-  setModalState(prev => ({ ...prev, [modalName]: true }));
-};
-
-const closeModal = (modalName: string) => {
-  setModalState(prev => ({ ...prev, [modalName]: false }));
-};
-```
-
-### Loading States
+**Path:** `frontend/components/dms/DocumentVersionDiffDialog.tsx`  
+**API:** `lib/dms-version-diff.ts` → `GET /api/v1/dms/document-versions/{id}/diff/`
 
 ```typescript
-const [loading, setLoading] = useState(false);
-
-const handleAction = async () => {
-  setLoading(true);
-  try {
-    await performAction();
-  } finally {
-    setLoading(false);
-  }
-};
+interface DocumentVersionDiffDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  diff: DocumentVersionDiff | null;
+  loading?: boolean;
+}
 ```
 
-### Error Boundaries
+Used from `DocumentVersionsPanel` on the DMS detail page. Best for text-extractable formats.
+
+---
+
+## DocumentDrmBanner
+
+**Path:** `frontend/components/dms/DocumentDrmBanner.tsx`
+
+Shows effective DRM policy on document detail when `drm_rights.policy_name` is set.
+
+```typescript
+{ rights?: DocumentDrmRights | null }
+```
+
+Policy admin: `/admin/drm-policies`. Enforcement is download-level (not byte-level PDF watermark).
+
+---
+
+## DocumentSummaryCard
+
+**Path:** `frontend/components/dms/DocumentSummaryCard.tsx`
+
+Extractive document summary in DMS sidebar. Optional remote LLM when configured; default is extractive fallback.
+
+---
+
+## RelatedItemsPanel
+
+**Path:** `frontend/components/search/RelatedItemsPanel.tsx`
+
+Related items and duplicate hints on document/correspondence/case detail views.
+
+```typescript
+interface RelatedItemsPanelProps {
+  type: "document" | "correspondence" | "case";
+  id: string;
+  title?: string;
+}
+```
+
+---
+
+## AdvancedSearch
+
+**Path:** `frontend/components/search/AdvancedSearch.tsx`
+
+Unified search UI with facets and **semantic** toggle (`search_mode=semantic` — MVP re-rank, not vector DB).
+
+---
+
+## SkipToContent
+
+**Path:** `frontend/components/shared/SkipToContent.tsx`
+
+WCAG bypass link targeting `#main-content` in `DashboardLayout`.
+
+---
+
+## ListRowCard
+
+**Path:** `frontend/components/shared/ListRowCard.tsx`
+
+Accessible list row with optional `onRowClick` (avoids nested interactive elements). Used in templates hub and admin lists.
+
+---
+
+## IntegrationLogsViewer
+
+**Path:** `frontend/components/integrations/IntegrationLogsViewer.tsx`
+
+Integration Hub → Logs tab (`/integrations`). Connector CRUD UIs exist; backend ingestion/sync for email/ERP may still be partial — see backlog.
+
+---
+
+## ErrorBoundary
+
+**Path:** `frontend/components/shared/ErrorBoundary.tsx`
+
+Wrap feature sections to catch render errors. Also: `ModalErrorBoundary`, `error-boundaries/FeatureErrorBoundary`.
 
 ```typescript
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
@@ -325,24 +183,48 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 
 ---
 
+## Navigation (AppSidebar)
+
+**Path:** `frontend/components/AppSidebar.tsx`
+
+Role-aware nav with sections: Dashboard, My Workspace (My Work, My Inbox), Cases, Correspondence, DMS, Administration sub-groups. Counts from `use-sidebar-counts` (`myWork`, `myInbox`).
+
+Visibility rules: `hooks/use-sidebar-visibility.ts`.
+
+---
+
+## Common patterns
+
+### Modal state
+
+```typescript
+const [open, setOpen] = useState(false);
+<CompletionSummaryModal open={open} onOpenChange={setOpen} correspondence={item} />
+```
+
+### API client
+
+Use `apiFetch` from `lib/api-client.ts` with `hasTokens()` — do not duplicate auth logic.
+
+### Pagination
+
+`use-pagination` hook + `fetchAllPaginated` for list pages.
+
+---
+
 ## Accessibility
 
-All components follow accessibility best practices:
-
-- Proper ARIA labels and roles
-- Keyboard navigation support
-- Screen reader compatibility
-- Focus management in modals
-- Color contrast compliance
+- `SkipToContent` + `#main-content` landmark
+- `:focus-visible` rings in `globals.css`
+- Audit checklist: `docs/guides/WCAG_AUDIT_CHECKLIST.md`
+- Prefer `ListRowCard` `onRowClick` over wrapping rows in `<button>`
 
 ---
 
 ## Testing
 
-Components include comprehensive error boundaries and validation:
+- Unit: Vitest (`npm test` in `frontend/`)
+- Type-check: `npm run type-check`
+- E2E: Playwright (planned in backlog — not yet in CI)
 
-- Type-safe prop interfaces
-- Runtime prop validation
-- Error boundary fallbacks
-- Loading state handling
-- Network error recovery
+Components should use typed props; wrap risky trees in `ErrorBoundary`.

@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
-from typing import Any, Dict
 
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
 
 from common.models import TimeStampedModel, UUIDModel
 
@@ -168,6 +165,13 @@ class EmailConnector(UUIDModel, TimeStampedModel):
     )
     default_division_id = models.UUIDField(null=True, blank=True)
     default_department_id = models.UUIDField(null=True, blank=True)
+    imap_folder = models.CharField(max_length=128, default="INBOX", blank=True)
+    last_synced_uid = models.PositiveIntegerField(default=0)
+    sync_state = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Tracks processed Message-IDs and last poll metadata",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -218,12 +222,83 @@ class ERPConnector(UUIDModel, TimeStampedModel):
         blank=True,
         help_text="Field mappings between ECM and ERP",
     )
+    last_synced_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["name"]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_erp_type_display()})"
+
+
+class HRMSConnector(UUIDModel, TimeStampedModel):
+    """NPA HRMS integration for staff and org structure sync."""
+
+    name = models.CharField(max_length=255)
+    base_url = models.URLField(help_text="HRMS API base URL")
+    api_key = models.CharField(max_length=255, blank=True)
+    username = models.CharField(max_length=255, blank=True)
+    password = models.CharField(max_length=255, blank=True)
+    staff_endpoint = models.CharField(
+        max_length=255,
+        default="/api/staff",
+        help_text="Relative path for staff roster",
+    )
+    org_endpoint = models.CharField(
+        max_length=255,
+        default="/api/organization",
+        blank=True,
+        help_text="Optional path for directorate/division/department sync",
+    )
+    is_active = models.BooleanField(default=True)
+    sync_enabled = models.BooleanField(default=False)
+    sync_interval_minutes = models.IntegerField(default=360)
+    deactivate_exited_staff = models.BooleanField(
+        default=True,
+        help_text="Set is_active=False when HRMS reports exited/terminated staff",
+    )
+    field_mappings = models.JSONField(default=dict, blank=True)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ERPSyncRecord(UUIDModel, TimeStampedModel):
+    """Tracks ERP objects synced into ECM."""
+
+    connector = models.ForeignKey(
+        ERPConnector,
+        on_delete=models.CASCADE,
+        related_name="sync_records",
+    )
+    external_id = models.CharField(max_length=255, db_index=True)
+    document = models.ForeignKey(
+        "dms.Document",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="erp_sync_records",
+    )
+    correspondence = models.ForeignKey(
+        "correspondence.Correspondence",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="erp_sync_records",
+    )
+    payload_snapshot = models.JSONField(default=dict, blank=True)
+    last_synced_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("connector", "external_id")
+        ordering = ["-last_synced_at"]
+
+    def __str__(self) -> str:
+        return f"{self.connector.name} — {self.external_id}"
 
 
 class IntegrationLog(UUIDModel, TimeStampedModel):
@@ -233,6 +308,7 @@ class IntegrationLog(UUIDModel, TimeStampedModel):
         WEBHOOK = "webhook", "Webhook"
         EMAIL = "email", "Email"
         ERP = "erp", "ERP"
+        HRMS = "hrms", "HRMS"
         SSO = "sso", "SSO"
 
     class LogStatus(models.TextChoices):

@@ -8,11 +8,10 @@ import { cookies, headers } from "next/headers";
 // Server-side fetch: use INTERNAL_API_URL in Docker (backend hostname), else NEXT_PUBLIC_API_URL
 const BASE_URL = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8002/api/v1";
 
+import { isPublicAppPath } from "./app-shell-paths";
+
 function isPublicPath(pathname: string): boolean {
-  if (pathname === "/") return true;
-  if (pathname.startsWith("/login")) return true;
-  if (pathname.startsWith("/verify")) return true;
-  return false;
+  return isPublicAppPath(pathname);
 }
 
 async function fetchWithToken(

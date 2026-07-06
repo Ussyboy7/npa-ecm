@@ -10,6 +10,7 @@ System analytics for correspondence, cases, SLA performance, and division perfor
 | Executive Dashboard | `/analytics/executive` | High-level KPIs for leadership |
 | Performance | `/analytics/performance` | SLA compliance, turnaround times |
 | Reports | `/analytics/reports` | Custom report builder |
+| PA / Executive Calendar | `/assistant/calendar` | PA schedule and executive meetings (Phase 10) |
 
 ## Key Models
 - `analytics/` - `ReportSnapshot`, `UsageMetric`, `DivisionPerformanceSnapshot`, `StaffPerformanceSnapshot`

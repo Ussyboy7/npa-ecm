@@ -6,8 +6,10 @@ import { apiFetch } from '@/lib/api-client';
 export interface SidebarCounts {
   officeInbox: number;
   myInbox: number;
+  myWork: number;
   outbox: number;
   officeOutbox: number;
+  officeDispatched: number;
   delegated: number;
   secretaryInbox: number;
   myCases: number;
@@ -18,7 +20,7 @@ export interface SidebarCounts {
 }
 
 const INITIAL_COUNTS: SidebarCounts = {
-  officeInbox: 0, myInbox: 0, outbox: 0, officeOutbox: 0,
+  officeInbox: 0, myInbox: 0, myWork: 0, outbox: 0, officeOutbox: 0, officeDispatched: 0,
   delegated: 0, secretaryInbox: 0, myCases: 0, officeCases: 0,
   allCases: 0, executiveApprovals: 0, myDocuments: 0,
 };
@@ -36,8 +38,10 @@ const notifyListeners = (): void => {
 const normalizeCounts = (raw: Partial<SidebarCounts> | Record<string, number>): SidebarCounts => ({
   officeInbox: Number(raw.officeInbox ?? 0),
   myInbox: Number(raw.myInbox ?? 0),
+  myWork: Number(raw.myWork ?? 0),
   outbox: Number(raw.outbox ?? 0),
   officeOutbox: Number(raw.officeOutbox ?? 0),
+  officeDispatched: Number(raw.officeDispatched ?? 0),
   delegated: Number(raw.delegated ?? 0),
   secretaryInbox: Number(raw.secretaryInbox ?? 0),
   myCases: Number(raw.myCases ?? 0),

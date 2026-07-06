@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -10,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileCheck, Plus, Search, FileText, Clock, CheckCircle2, Users, Send, FileDown, Inbox, MoreHorizontal } from 'lucide-react';
-import { getFormDocuments, listFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
+import { listFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
 import { getFormTemplates, type FormTemplate } from '@/lib/api/forms';
 import { getSignatures } from '@/lib/api/forms';
 import { apiFetch } from '@/lib/api-client';
@@ -24,7 +23,6 @@ import { logError } from '@/lib/client-logger';
 import { exportToCSV } from '@/lib/admin-export';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -109,7 +107,7 @@ const FormsPage = () => {
       : (currentUser.systemRole as Record<string, unknown>).name as string;
     return role?.toLowerCase() === 'secretary';
   }, [currentUser?.systemRole]);
-  const [selectedTemplate, setSelectedTemplate] = useState<FormTemplate | null>(null);
+  const [selectedTemplate, _setSelectedTemplate] = useState<FormTemplate | null>(null);
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [selectedForm, setSelectedForm] = useState<FormDocument | null>(null);
   const [pendingSignatures, setPendingSignatures] = useState<Set<string>>(new Set());
@@ -426,23 +424,23 @@ const FormsPage = () => {
 
   return (
     <ClientErrorBoundary>
-        <DashboardLayout>
+        <>
           <div className="container mx-auto p-6 space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-foreground">Forms Library</h1>
                 <p className="mt-1 max-w-2xl text-muted-foreground">
-                  Create, manage, and track form documents
+                  Start forms from templates, track completion, and follow pending signature actions.
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <ContextualHelp
                   title="Using the forms library"
-                  description="Start a form from a template, track drafts and signatures, then export when complete. Use filters to narrow by status or template."
+                  description="Start forms from templates and track completion through signatures."
                   steps={[
-                    'Click Start Form or pick a template from the Template Library.',
-                    'Use search and filters to find specific forms in My Forms.',
-                    'Pending Actions lists forms that need your signature.',
+                    'Start a form from Start Form or the Template Library.',
+                    'Use search and filters to find forms quickly.',
+                    'Review Pending Actions for forms awaiting your signature.',
                   ]}
                 />
                 <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
@@ -467,15 +465,6 @@ const FormsPage = () => {
                 </DropdownMenu>
               </div>
             </div>
-
-            <HelpGuideCard
-              title="Workspace guide"
-              description="Work queue for in-progress forms and pending signature actions. Templates live in the Template Library."
-              links={[
-                { label: 'Template Library', href: '/forms/templates' },
-                { label: 'Help & Guides', href: '/help' },
-              ]}
-            />
 
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="space-y-6">
@@ -689,7 +678,7 @@ const FormsPage = () => {
             }}
           />
 
-      </DashboardLayout>
+      </>
       </ClientErrorBoundary>
   );
 };

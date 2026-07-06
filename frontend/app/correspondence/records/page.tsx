@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +37,6 @@ import {
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { formatDateShort } from '@/lib/correspondence-helpers';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { apiFetch } from '@/lib/api-client';
 import { CorrespondenceProvider, mapApiCorrespondence, useCorrespondence } from '@/contexts/CorrespondenceContext';
@@ -100,7 +98,7 @@ const RecordsArchiveForm = () => {
   const searchParams = useSearchParams();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const {directorates, divisions, departments, offices: _offices, officeMemberships } = useOrganization();
-  const { dataVersion } = useCorrespondence();
+  const { dataVersion: _dataVersion } = useCorrespondence();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Initialize filters from URL params or localStorage
@@ -113,10 +111,10 @@ const RecordsArchiveForm = () => {
       }
     });
     if (typeof window === 'undefined') return;
-    const readFilter = (key: string, setter: (v: any) => void, defaultValue: any, isArray?: boolean) => {
+    const readFilter = (key: string, setter: (v: string) => void, defaultValue: string, isArray?: boolean) => {
       const urlParam = searchParams.get(key);
       if (urlParam) {
-        setter(isArray ? urlParam.split(',').filter(Boolean) : urlParam);
+        (setter as (v: string | string[]) => void)(isArray ? urlParam.split(',') : urlParam);
         return;
       }
       const saved = localStorage.getItem(`records_filter_${key}`);
@@ -134,8 +132,8 @@ const RecordsArchiveForm = () => {
     readFilter('department', setSelectedDepartment, 'all');
     readFilter('priority', setSelectedPriority, '');
     readFilter('sortBy', setSortBy, 'completed');
-    readFilter('sortOrder', setSortOrder, 'desc');
-  }, []);
+    readFilter('sortOrder', (v) => setSortOrder(v as 'asc' | 'desc'), 'desc');
+  }, [searchParams]);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -392,7 +390,6 @@ const RecordsArchiveForm = () => {
   const fetchRecords = useCallback(async () => {
     if (!currentUser?.id) return;
 
-
     // Cancel previous request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -410,8 +407,7 @@ const RecordsArchiveForm = () => {
       params.append('sort_by', sortBy);
       params.append('sort_order', sortOrder);
 
-      // FIX: Correct endpoint name
-      const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/archive-records/?${params.toString()}`, {
+      const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/records-archive/?${params.toString()}`, {
         signal: controller.signal,
       });
       
@@ -439,20 +435,10 @@ const RecordsArchiveForm = () => {
       if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
         return;
       }
-      let errorMessage = 'Unable to load records. Please try again.';
-      if (err && typeof err === 'object') {
-        const errorObj = err as Record<string, unknown>;
-        if (errorObj.response && typeof errorObj.response === 'object') {
-          const response = errorObj.response as Record<string, unknown>;
-          if (response.data && typeof response.data === 'object') {
-            const data = response.data as Record<string, unknown>;
-            errorMessage = (data.detail as string) || errorMessage;
-          }
-        }
-        if (errorMessage === 'Unable to load records. Please try again.') {
-          errorMessage = (errorObj.message as string) || errorMessage;
-        }
-      }
+      const errorMessage =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Unable to load records. Please try again.';
       setError(errorMessage);
       setRecords([]);
       setCount(0);
@@ -463,7 +449,7 @@ const RecordsArchiveForm = () => {
         setRefreshing(false);
       }
     }
-  }, [currentUser?.id, getFilterParams, pagination.page, pagination.pageSize, sortBy, sortOrder, dataVersion]);
+  }, [currentUser?.id, getFilterParams, pagination.page, pagination.pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchRecords();
@@ -493,7 +479,7 @@ const RecordsArchiveForm = () => {
           params.set('page', String(page));
           params.set('page_size', String(pageSize));
           const response = await apiFetch<Record<string, unknown>>(
-            `/correspondence/items/archive-records/?${params.toString()}`,
+            `/correspondence/items/records-archive/?${params.toString()}`,
           );
           const results = Array.isArray(response.results) ? response.results : [];
           return {
@@ -545,7 +531,6 @@ const RecordsArchiveForm = () => {
       setExporting(false);
     }
   };
-
 
   const getPriorityBadgeVariant = (priority: string) => {
     switch (priority) {
@@ -734,7 +719,7 @@ const RecordsArchiveForm = () => {
 
   return (
     <ErrorBoundary>
-      <DashboardLayout>
+      <>
         <div className="container mx-auto p-6 space-y-6">
           {!currentUser ? (
             <LoadingState message="Loading records…" />
@@ -745,7 +730,7 @@ const RecordsArchiveForm = () => {
             <div>
               <h1 className="text-3xl font-bold">Records & Archives</h1>
               <p className="text-muted-foreground mt-1">
-                Completed correspondence within your {getScopeLabel().toLowerCase()} scope
+                Review completed and archived correspondence in your {getScopeLabel().toLowerCase()} scope.
               </p>
             </div>
           <div className="flex gap-2">
@@ -769,17 +754,6 @@ const RecordsArchiveForm = () => {
             </DropdownMenu>
           </div>
         </div>
-
-        <HelpGuideCard
-          title={`${getScopeLabel()} Records`}
-          description={`Browse completed and archived correspondence. ${
-            userScope.level === 'directorate' ? 'As an executive, you can see all records across your directorate and filter by division or department.' :
-            userScope.level === 'division' ? 'As a GM, you can see all records across your division and filter by department.' :
-            userScope.level === 'department' ? 'As an AGM, you can see all records within your department.' :
-            'You can see records from your assigned offices.'
-          }`}
-          links={[{ label: 'Help & Guides', href: '/help' }]}
-        />
 
         {/* Inline filter bar */}
         <Card>
@@ -932,7 +906,7 @@ const RecordsArchiveForm = () => {
         </>
       )}
       </div>
-    </DashboardLayout>
+    </>
     </ErrorBoundary>
   );
 };

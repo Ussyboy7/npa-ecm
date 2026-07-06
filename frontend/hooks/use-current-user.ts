@@ -68,7 +68,39 @@ const globalUserState: {
 };
 
 let globalFetchPromise: Promise<User | null> | null = null;
-const globalSubscribers = new Set<(user: User | null, hydrated: boolean) => void>();
+const globalSubscribers = new Set<() => void>();
+
+function notifySubscribers(): void {
+  globalSubscribers.forEach((sub) => sub());
+}
+
+export function subscribeToStore(onStoreChange: () => void): () => void {
+  globalSubscribers.add(onStoreChange);
+  return () => {
+    globalSubscribers.delete(onStoreChange);
+  };
+}
+
+export function getCurrentUserSnapshot(): User | null {
+  return globalUserState.user;
+}
+
+export function getHydratedSnapshot(): boolean {
+  return globalUserState.hydrated;
+}
+
+export function getLoadingSnapshot(): boolean {
+  return globalUserState.loading;
+}
+
+export function seedCurrentUserFromApi(data: unknown): void {
+  if (!isRecord(data)) return;
+  const user = mapApiUserToUser(data);
+  globalUserState.user = user;
+  globalUserState.hydrated = true;
+  globalUserState.loading = false;
+  notifySubscribers();
+}
 
 export const useCurrentUser = () => {
   const organization = useContext(OrganizationContext);
@@ -94,7 +126,7 @@ export const useCurrentUser = () => {
         globalUserState.user = null;
         globalUserState.hydrated = true;
         globalUserState.loading = false;
-        globalSubscribers.forEach(sub => sub(null, true));
+        notifySubscribers();
         return null;
       }
 
@@ -106,7 +138,7 @@ export const useCurrentUser = () => {
         globalUserState.loading = false;
         
         // Notify all subscribers
-        globalSubscribers.forEach(sub => sub(user, true));
+        notifySubscribers();
         
         return user;
       } catch (error: unknown) {
@@ -127,7 +159,7 @@ export const useCurrentUser = () => {
         globalUserState.loading = false;
         
         // Notify all subscribers
-        globalSubscribers.forEach(sub => sub(null, true));
+        notifySubscribers();
         
         return null;
       } finally {
@@ -141,11 +173,11 @@ export const useCurrentUser = () => {
   // Subscribe to global user state
   useEffect(() => {
     // Add this component as a subscriber
-    const subscriber = (user: User | null, isHydrated: boolean) => {
-      setRemoteUser(user);
-      setHydrated(isHydrated);
+    const syncFromGlobalState = () => {
+      setRemoteUser(globalUserState.user);
+      setHydrated(globalUserState.hydrated);
     };
-    globalSubscribers.add(subscriber);
+    globalSubscribers.add(syncFromGlobalState);
     
     // Force refetch if tokens exist but we have no user (e.g., user just logged in)
     if (hasTokens() && !globalUserState.user && !globalUserState.loading) {
@@ -160,7 +192,7 @@ export const useCurrentUser = () => {
     }
 
     return () => {
-      globalSubscribers.delete(subscriber);
+      globalSubscribers.delete(syncFromGlobalState);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -203,6 +235,7 @@ export const useCurrentUser = () => {
       active: orgMatch.active,
       // Preserve isSuperuser from remoteUser (API) as it's the source of truth
       isSuperuser: remoteUser.isSuperuser ?? orgMatch.isSuperuser ?? false,
+      rolePermissions: remoteUser.rolePermissions ?? orgMatch.rolePermissions,
     } satisfies User;
   }, [remoteUser, users]);
 

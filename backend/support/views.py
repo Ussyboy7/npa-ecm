@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from django_filters.rest_framework import DjangoFilterBackend
+from django.utils import timezone
 from rest_framework import filters, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -49,6 +51,15 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         creator = serializer.validated_data.get("created_by") or self.request.user
         serializer.save(created_by=creator)
+
+    @action(detail=True, methods=["post"], url_path="resolve")
+    def resolve(self, request, pk=None):
+        ticket = self.get_object()
+        ticket.status = SupportTicket.Status.RESOLVED
+        ticket.resolution_notes = request.data.get("resolution_notes", ticket.resolution_notes)
+        ticket.resolved_at = timezone.now()
+        ticket.save(update_fields=["status", "resolution_notes", "resolved_at", "updated_at"])
+        return Response(SupportTicketSerializer(ticket).data)
 
 
 class ClientLogIngestView(APIView):

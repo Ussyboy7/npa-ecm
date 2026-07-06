@@ -24,7 +24,7 @@ import {
 } from "@/lib/api/forms";
 import type { FormSignature, FormSignatureWorkflow } from "@/lib/types/forms";
 import { toast } from "sonner";
-import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, Link as LinkIcon, AlertCircle, Paperclip, Upload, Download, Send, Eye } from "lucide-react";
+import { FileText, PenTool, CheckCircle2, Clock, FileDown, Loader2, AlertCircle, Paperclip, Upload, Download, Send, Eye } from "lucide-react";
 import { ForwardFormDialog } from "@/components/forms/ForwardFormDialog";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import type { FormTemplate } from "@/lib/types/forms";
@@ -86,12 +86,7 @@ export function FormDocumentEditor({ documentId, formDocumentId }: FormDocumentE
       setLoading(true);
       
       logInfo('[FormDocumentEditor] Calling getFormDocument...');
-      const doc = await Promise.race([
-        getFormDocument(formDocumentId),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
-        )
-      ]) as FormDocumentType;
+      const doc = await getFormDocument(formDocumentId);
       
       logInfo('[FormDocumentEditor] Received form document:', { id: doc.id, template: doc.template });
       setFormDoc(doc);

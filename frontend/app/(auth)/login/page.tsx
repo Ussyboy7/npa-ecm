@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { NPA_LOGO_URL, NPA_BRAND_NAME, NPA_ECM_CONTACT_EMAIL } from "@/lib/branding";
-import { login, clearTokens } from "@/lib/api-client";
+import { login, clearTokens, isMfaChallenge, verifyLoginMFA, requestLoginMFAEmail, getOidcLoginUrl, fetchOidcStatus } from "@/lib/api-client";
 import { getStoredRedirectPath } from "@/lib/auth-errors";
 
 /** Valid route prefixes for post-login redirect. Invalid or unknown paths fall back to /dashboard to avoid 404s. */
@@ -106,8 +106,21 @@ function LoginForm() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+  const [mfaMethods, setMfaMethods] = useState<string[]>([]);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaMethod, setMfaMethod] = useState<"email" | "totp">("email");
+  const [mfaEmailSent, setMfaEmailSent] = useState(false);
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+  const ssoError = searchParams?.get("sso_error");
 
   const personaMap = useMemo(() => new Map(DEMO_PERSONAS.map((persona) => [persona.id, persona])), []);
+
+  useEffect(() => {
+    void fetchOidcStatus()
+      .then((data) => setOidcEnabled(Boolean(data.enabled)))
+      .catch(() => setOidcEnabled(false));
+  }, []);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -116,6 +129,26 @@ function LoginForm() {
     setUsername(persona.username);
     setPassword(persona.password);
   }, [personaMap, selectedUserId]);
+
+  const completeLoginRedirect = () => {
+      const redirectFromCookie = typeof document !== 'undefined' 
+        ? document.cookie.split('; ').find(row => row.startsWith('redirect_after_login='))?.split('=')[1]
+        : null;
+      const redirectFromStorage = getStoredRedirectPath();
+      const redirectFromUrl = searchParams?.get('redirect');
+      const redirectPath = resolveRedirectPath(
+        redirectFromUrl || redirectFromCookie || redirectFromStorage || DEFAULT_POST_LOGIN_PATH
+      );
+      if (redirectFromCookie && typeof document !== 'undefined') {
+        document.cookie = 'redirect_after_login=; path=/; max-age=0; samesite=lax';
+      }
+      if (typeof window !== "undefined") {
+        window.location.assign(redirectPath);
+        return;
+      }
+      router.refresh();
+      router.push(redirectPath);
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -128,7 +161,15 @@ function LoginForm() {
         return;
       }
 
-      await login(username, password);
+      const result = await login(username, password);
+
+      if (isMfaChallenge(result)) {
+        setMfaChallengeId(result.challenge_id);
+        setMfaMethods(result.methods);
+        setMfaMethod(result.methods.includes("totp") ? "totp" : "email");
+        toast.message("Enter your verification code to complete sign-in.");
+        return;
+      }
 
       if (rememberMe) {
         localStorage.setItem("npa_ecm_remember_me", JSON.stringify({ username }));
@@ -137,35 +178,7 @@ function LoginForm() {
       }
 
       toast.success("Signed in successfully");
-      
-      // Check for redirect from middleware (cookie) or sessionStorage
-      const redirectFromCookie = typeof document !== 'undefined' 
-        ? document.cookie.split('; ').find(row => row.startsWith('redirect_after_login='))?.split('=')[1]
-        : null;
-      
-      // Also check sessionStorage
-      const redirectFromStorage = getStoredRedirectPath();
-      
-      // Check URL search params (from middleware redirect)
-      const redirectFromUrl = searchParams?.get('redirect');
-      
-      // Priority: URL param > Cookie > SessionStorage > Default. Resolve to a known route to avoid 404s.
-      const redirectPath = resolveRedirectPath(
-        redirectFromUrl || redirectFromCookie || redirectFromStorage || DEFAULT_POST_LOGIN_PATH
-      );
-
-      // Clear cookie if it exists
-      if (redirectFromCookie && typeof document !== 'undefined') {
-        document.cookie = 'redirect_after_login=; path=/; max-age=0; samesite=lax';
-      }
-
-      // Full page redirect ensures layout re-runs with auth cookies, so server bootstrap gets fresh data.
-      if (typeof window !== "undefined") {
-        window.location.assign(redirectPath);
-        return;
-      }
-      router.refresh();
-      router.push(redirectPath);
+      completeLoginRedirect();
     } catch (error: unknown) {
       logError(error);
       clearTokens();
@@ -174,6 +187,35 @@ function LoginForm() {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleMfaSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!mfaChallengeId || !mfaCode.trim()) {
+      toast.error("Enter your verification code.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await verifyLoginMFA(mfaChallengeId, mfaCode.trim(), mfaMethod);
+      toast.success("Signed in successfully");
+      completeLoginRedirect();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Invalid verification code.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRequestMfaEmail = async () => {
+    if (!mfaChallengeId) return;
+    try {
+      await requestLoginMFAEmail(mfaChallengeId);
+      setMfaEmailSent(true);
+      toast.success("Verification code sent to your email.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Could not send email code.");
     }
   };
 
@@ -256,6 +298,63 @@ function LoginForm() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {ssoError && (
+                <p className="mb-4 text-sm text-destructive" role="alert">
+                  Single sign-on failed: {ssoError}. Use your ECM credentials below or contact ICT.
+                </p>
+              )}
+              {mfaChallengeId ? (
+                <form className="space-y-5" onSubmit={handleMfaSubmit}>
+                  <p className="text-sm text-muted-foreground">
+                    Multi-factor authentication is required. Enter the code from your authenticator app or email.
+                  </p>
+                  {mfaMethods.length > 1 && (
+                    <div className="space-y-2">
+                      <Label>Verification method</Label>
+                      <Select value={mfaMethod} onValueChange={(v) => setMfaMethod(v as "email" | "totp")}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {mfaMethods.includes("email") && <SelectItem value="email">Email code</SelectItem>}
+                          {mfaMethods.includes("totp") && <SelectItem value="totp">Authenticator app</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="mfaCode">Verification code</Label>
+                    <Input
+                      id="mfaCode"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={mfaCode}
+                      onChange={(e) => setMfaCode(e.target.value)}
+                      placeholder="6-digit code"
+                    />
+                  </div>
+                  {mfaMethod === "email" && mfaMethods.includes("email") && (
+                    <Button type="button" variant="outline" className="w-full" onClick={handleRequestMfaEmail}>
+                      {mfaEmailSent ? "Resend email code" : "Send code to my email"}
+                    </Button>
+                  )}
+                  <Button type="submit" className="w-full gap-2" disabled={isSubmitting}>
+                    {isSubmitting ? "Verifying…" : "Verify and sign in"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      setMfaChallengeId(null);
+                      setMfaCode("");
+                      clearTokens();
+                    }}
+                  >
+                    Back to sign in
+                  </Button>
+                </form>
+              ) : (
               <form className="space-y-5" onSubmit={handleSubmit}>
                 <div className="space-y-2">
                   <Label htmlFor="username">Username</Label>
@@ -340,7 +439,20 @@ function LoginForm() {
                   {isSubmitting ? "Signing in..." : "Continue"}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
+                {oidcEnabled ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      window.location.href = getOidcLoginUrl();
+                    }}
+                  >
+                    Sign in with NPA Active Directory
+                  </Button>
+                ) : null}
               </form>
+              )}
               <p className="mt-6 text-center text-sm text-muted-foreground">
                 Need an account? Contact the registry or programme office to request access.
               </p>

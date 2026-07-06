@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
@@ -240,17 +238,17 @@ export default function FOIADetailPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <>
         <div className="container mx-auto p-6 flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   if (error || !request) {
     return (
-      <DashboardLayout>
+      <>
         <div className="container mx-auto p-6">
           <ErrorState message={error || "Request not found"} variant="inline" />
           <Button variant="outline" className="mt-4" onClick={() => router.push("/foia")}>
@@ -258,12 +256,12 @@ export default function FOIADetailPage() {
             Back to FOIA Requests
           </Button>
         </div>
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">
           <Button variant="outline" size="sm" onClick={() => router.push("/foia")}>
@@ -272,12 +270,6 @@ export default function FOIADetailPage() {
           </Button>
           {statusInfo && <Badge className={statusInfo.className}>{statusInfo.label}</Badge>}
         </div>
-
-        <HelpGuideCard
-          title={`FOIA Request ${request.request_number}`}
-          description={`Submitted by ${request.requester_name} — manage status, notes, and linked documents.`}
-          links={[{ label: "FOIA Requests", href: "/foia" }, { label: "Help & Guides", href: "/help" }]}
-        />
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
@@ -597,6 +589,6 @@ export default function FOIADetailPage() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

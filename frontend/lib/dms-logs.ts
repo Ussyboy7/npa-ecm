@@ -156,25 +156,15 @@ export const getSharedDocuments = async (
 /**
  * Get documents shared by the current user (documents with permissions created by user)
  */
-export const getDocumentsSharedByUser = async (
+export const getDocumentsSharedByUser = (
   userId: string,
   params: Omit<DocumentQueryParams, 'authorId'> & { signal?: AbortSignal } = {},
-): Promise<PaginatedDocuments> => {
-  if (!hasTokens()) {
-    return { results: [], count: 0, next: null, previous: null };
-  }
-
-  try {
-    return await queryDocumentsExtended({
-      ...params,
-      authorId: userId,
-      sharedByMe: true,
-    });
-  } catch (error: unknown) {
-    logError('Failed to get documents shared by user', error);
-    return { results: [], count: 0, next: null, previous: null };
-  }
-};
+) =>
+  queryDocumentsExtended({
+    ...params,
+    authorId: userId,
+    sharedByMe: true,
+  });
 
 export const isSensitiveAccessAllowed = (document: DocumentRecord, user: User | null) => {
   if (!user) return document.sensitivity === 'public';

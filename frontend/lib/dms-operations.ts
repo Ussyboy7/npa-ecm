@@ -106,24 +106,14 @@ export const queryDocumentsExtended = async (params: ExtendedDocumentQueryParams
   const query = buildExtendedDocumentQueryString(params);
   const url = query ? `/dms/documents/?${query}` : '/dms/documents/';
 
-  try {
-    const payload = await Promise.race([
-      apiFetch<Record<string, unknown>>(url, { signal: params.signal }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000),
-      ),
-    ]) as Record<string, unknown> | { count?: number; next?: string | null; previous?: string | null; results?: unknown[] };
+  const payload = await apiFetch<Record<string, unknown>>(url, { signal: params.signal });
 
-    const results = (unwrapResults(payload) as Record<string, unknown>[]).map(mapDocument);
-    const count = typeof payload?.count === 'number' ? payload.count : results.length;
-    const next = typeof payload?.next === 'string' ? payload.next : null;
-    const previous = typeof payload?.previous === 'string' ? payload.previous : null;
+  const results = (unwrapResults(payload) as Record<string, unknown>[]).map(mapDocument);
+  const count = typeof payload?.count === 'number' ? payload.count : results.length;
+  const next = typeof payload?.next === 'string' ? payload.next : null;
+  const previous = typeof payload?.previous === 'string' ? payload.previous : null;
 
-    return { results, count, next, previous };
-  } catch (error: unknown) {
-    logError('[DMS] Error in queryDocumentsExtended:', error);
-    throw error;
-  }
+  return { results, count, next, previous };
 };
 
 // =============================================================================

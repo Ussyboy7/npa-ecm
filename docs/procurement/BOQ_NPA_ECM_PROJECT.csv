@@ -1,0 +1,59 @@
+Section,Line_ID,Line_Item,Unit,Qty,Unit_Cost_NGN,Total_NGN,Notes
+SECTION 1 - CORE SOFTWARE DEVELOPMENT,,,,,,
+1,1.01,Authentication and Access Control (RBAC SSO AD MFA all staff),Lot,1,15000000,15000000,Covers full NPA headcount; no per-seat fee
+1,1.02,Dashboard and UI System (role dashboards My Work),Lot,1,20000000,20000000,All roles; scales to 3000 users in same cap
+1,1.03,Document Management Engine (DMS OCR search),Lot,1,25000000,25000000,Unlimited internal users within infrastructure limits
+1,1.04,Workflow and Approval Automation (SLA escalation),Lot,1,30000000,30000000,Office routing for all NPA locations
+1,1.05,Correspondence and Memo Module,Lot,1,25000000,25000000,All staff eligible per role permissions
+1,1.06,Digital Signature and Seal Module,Lot,1,15000000,15000000,Executive seals; unlimited read-only verify access
+1,1.07,Analytics and Reports,Lot,1,15000000,15000000,Division and port dashboards
+1,1.08,Notifications and Alerts,Lot,1,10000000,10000000,In-app email WebSocket for all users
+1,1.09,Records Archival and Retention (legal hold),Lot,1,10000000,10000000,Org-wide records policy
+1,1.10,System Integrations (HRMS AD email ERP webhooks),Lot,1,15000000,15000000,HRMS sync for full 3000 employee master
+,1,SUBTOTAL SECTION 1,,,,180000000,
+SECTION 2 - INFRASTRUCTURE AND DEPLOYMENT,,,,,,
+2,2.01,Data Center Deployment (Docker PostgreSQL Nginx Daphne),Lot,1,10000000,10000000,Sized for full NPA user load in fixed cap
+2,2.02,Storage Configuration (MinIO SAN tiers),Lot,1,10000000,10000000,Active archive tiers included
+2,2.03,Network and Security Hardening (VPN SSL WAF ClamAV),Lot,1,15000000,15000000,HQ and all ports
+2,2.04,Backup and Disaster Recovery,Lot,1,10000000,10000000,Daily weekly DR per proposal
+2,2.05,User Devices and Scanners (scanners signature pads),Lot,1,20000000,20000000,Registry desks HQ and ports
+,2,SUBTOTAL SECTION 2,,,,65000000,
+SECTION 3 - PORT AND LOCATION IMPLEMENTATION,,,,,,
+3,3.01,HQ Implementation (all divisions all staff),Lot,1,10000000,10000000,Full HQ including all 3000 employees
+3,3.02,Pilot Ports (Apapa Rivers Tin Can),Lot,1,10000000,10000000,Pilot validation before national rollout
+3,3.03,Remaining Ports National Rollout,Lot,1,15000000,15000000,All NPA port locations
+,3,SUBTOTAL SECTION 3,,,,35000000,
+SECTION 4 - TRAINING CHANGE MANAGEMENT DOCUMENTATION,,,,,,
+4,4.01,Division and Departmental Trainings (hands-on all staff),Lot,1,10000000,10000000,Training program covers full 3000 headcount
+4,4.02,User Manuals and SOPs (print and digital),Lot,1,5000000,5000000,All role types
+4,4.03,Awareness and Launch Campaign,Lot,1,3000000,3000000,Org-wide NPA communications
+4,4.04,Helpdesk Setup (12 months),Lot,1,7000000,7000000,Tier 1 support all ECM users
+,4,SUBTOTAL SECTION 4,,,,25000000,
+SECTION 5 - QA SECURITY AUDIT SUPPORT,,,,,,
+5,5.01,Functional and UAT Testing,Lot,1,10000000,10000000,Load test at full user capacity
+5,5.02,Security and Penetration Testing,Lot,1,7000000,7000000,OWASP and network pen test
+5,5.03,Post-Go-Live Support (12 months included),Lot,1,8000000,8000000,All users covered
+,5,SUBTOTAL SECTION 5,,,,25000000,
+SECTION 6 - PROJECT MANAGEMENT CONTINGENCY,,,,,,
+6,6.01,Project Coordination (PM BA technical lead),Lot,1,10000000,10000000,18-month program
+6,6.02,Contingency and Miscellaneous,Lot,1,10000000,10000000,Migration HRMS data cleansing
+,6,SUBTOTAL SECTION 6,,,,20000000,
+GRAND TOTAL PROJECT (FIXED CAP),,,,,350000000,Same price whether 840 or 3000 users onboarded
+USER COVERAGE (NO EXTRA LICENSE FEE),,,,,,,
+COVERAGE,C.01,Users supported at fixed cap (no per-seat charge),Users,3000,0,0,All NPA employees; 840 is phased rollout subset
+COVERAGE,C.02,Comparison reference: phased rollout headcount,Users,840,0,0,Subset of same 3000; price unchanged
+ONGOING AMC (NOT IN PROJECT CAP),,,,,,,
+AMC,AMC.01,Annual Maintenance Contract Years 2-5 (estimate),Year,4,30000000,120000000,Same AMC range regardless of user count
+TCO,TCO.01,5-Year TCO Low (project plus AMC),Lot,1,470000000,470000000,350M plus 4x30M AMC
+TCO,TCO.02,5-Year TCO High (project plus AMC),Lot,1,550000000,550000000,350M plus 4x50M AMC
+PER USER METRICS (PRICE FIXED USER COUNT VARIES),,,,,,,
+METRIC,M.01,Project cost per user at 840 users,NGN per user,840,416667,350000000,840 users same total as 3000
+METRIC,M.02,Project cost per user at 3000 users,NGN per user,3000,116667,350000000,Per-user cost falls as headcount grows
+METRIC,M.03,5-Year TCO per user low at 840 users,NGN per user,840,559524,470000000,
+METRIC,M.04,5-Year TCO per user low at 3000 users,NGN per user,3000,156667,470000000,Same TCO total lower per-person economics
+METRIC,M.05,5-Year TCO per user high at 3000 users,NGN per user,3000,183333,550000000,
+BACKLOG REFERENCE (see REMAINING_WORK_BACKLOG.md - funded within cap above),,,,,,,
+BACKLOG,B.01,P0 Go-live blockers (SSR SSO MFA permissions integrations E2E load test),Ref,1,0,0,Maps to 1.01 1.05 1.10 5.01
+BACKLOG,B.02,P1 Enterprise (retention HRMS IMAP ERP Celery capture WCAG),Ref,1,0,0,Maps to 1.03 1.07 1.09 1.10 5.01
+BACKLOG,B.03,P2 Polish (search v2 DRM semantic AI version diff),Ref,1,0,0,Maps to 1.03 6.02 contingency
+BACKLOG,B.04,Program rollout (ports VPN training legacy migration),Ref,1,0,0,Maps to 3.x 4.x 6.02

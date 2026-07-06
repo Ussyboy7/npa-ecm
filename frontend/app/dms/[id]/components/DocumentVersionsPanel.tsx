@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,17 @@ import {
   Clock,
   User as UserIcon,
   FileText,
+  GitCompare,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { formatFileSize } from "@/lib/file-utils";
 import type { DocumentRecord, DocumentVersion } from "@/lib/dms-storage";
 import type { User } from "@/lib/npa-structure";
 import type { CaptureJob } from "@/lib/capture-storage";
+import { DocumentVersionDiffDialog } from "@/components/dms/DocumentVersionDiffDialog";
+import { fetchDocumentVersionDiff, type DocumentVersionDiff } from "@/lib/dms-version-diff";
+import { logError } from "@/lib/client-logger";
+import { toast } from "sonner";
 
 type OCRState = Record<string, { isProcessing: boolean; currentJob: CaptureJob | null; error: string | null }>;
 
@@ -57,6 +63,26 @@ export function DocumentVersionsPanel({
   onVersionOCR,
   onCancelOCR,
 }: DocumentVersionsPanelProps) {
+  const [diffOpen, setDiffOpen] = useState(false);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [versionDiff, setVersionDiff] = useState<DocumentVersionDiff | null>(null);
+
+  const handleCompareWithPrevious = async (newer: DocumentVersion, older: DocumentVersion) => {
+    setDiffOpen(true);
+    setDiffLoading(true);
+    setVersionDiff(null);
+    try {
+      const diff = await fetchDocumentVersionDiff(older.id, newer.id);
+      setVersionDiff(diff);
+    } catch (error) {
+      logError("Failed to load version diff", error);
+      toast.error("Failed to compare versions");
+      setDiffOpen(false);
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
   return (
     <Card className="border-border/50">
       <CardHeader className="pb-3">
@@ -118,6 +144,7 @@ export function DocumentVersionsPanel({
                   version.fileName?.toLowerCase().endsWith(".docx") ||
                   version.fileName?.toLowerCase().endsWith(".doc"))) ||
               Boolean(version.contentHtml && version.contentHtml.trim() !== "");
+            const olderVersion = index < versions.length - 1 ? versions[index + 1] : null;
 
             return (
               <div
@@ -154,6 +181,17 @@ export function DocumentVersionsPanel({
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
                     )}
+                    {olderVersion ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        title={`Compare to v${olderVersion.versionNumber}`}
+                        onClick={() => void handleCompareWithPrevious(version, olderVersion)}
+                      >
+                        <GitCompare className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null}
                     {version.fileUrl?.trim() && (
                       <Button
                         variant="ghost"
@@ -213,6 +251,12 @@ export function DocumentVersionsPanel({
           })
         )}
       </CardContent>
+      <DocumentVersionDiffDialog
+        open={diffOpen}
+        onOpenChange={setDiffOpen}
+        diff={versionDiff}
+        loading={diffLoading}
+      />
     </Card>
   );
 }

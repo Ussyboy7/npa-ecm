@@ -7,6 +7,8 @@ This section provides comprehensive user guides for using the new features and c
 - [Correspondence Completion Summary](#correspondence-completion-summary)
 - [Correspondence Actions Panel](#correspondence-actions-panel)
 - [Document Upload and Versioning](#document-upload-and-versioning)
+- [Document Version Comparison](#document-version-comparison)
+- [Helpdesk — Get Support](#helpdesk--get-support)
 
 ---
 
@@ -360,4 +362,46 @@ The Document Upload system provides a comprehensive solution for managing docume
 
 ## Support
 
-For technical issues or questions about document upload features, contact the NPA ECM support team or consult the system administrator.
+For technical issues or questions about document upload features, use **Get Support** (`/helpdesk`) or contact the NPA ECM helpdesk. See [HELPDESK_OPERATIONS.md](../rollout/HELPDESK_OPERATIONS.md) for SLAs.
+
+---
+
+## Document Version Comparison
+
+Compare two versions of a document from the DMS detail page.
+
+### How to Access
+
+1. Open a document at `/dms/{id}`
+2. In the **Versions** panel, select two versions
+3. Click **Compare** to open the diff dialog
+
+### What You See
+
+- Added, removed, and unchanged text segments
+- Version numbers and upload dates
+- Best results for text-based formats (PDF text layer, Word, plain text)
+
+Binary-only files may show limited diff detail.
+
+---
+
+## Helpdesk — Get Support
+
+Submit IT/ECM support requests without leaving the application.
+
+### How to Access
+
+- **All users:** Sidebar → **Get Support** (`/helpdesk`)
+- **Helpdesk staff:** **Support Queue** (`/admin/helpdesk`)
+
+### Submit a Ticket
+
+1. Open `/helpdesk`
+2. Choose category (access, correspondence, documents, etc.)
+3. Enter subject and description
+4. Submit — you receive an in-app notification on updates
+
+### Response Times
+
+See [HELPDESK_OPERATIONS.md](../rollout/HELPDESK_OPERATIONS.md) for acknowledgement and resolution SLAs during rollout and steady state.

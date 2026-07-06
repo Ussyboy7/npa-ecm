@@ -32,15 +32,9 @@ django-redis>=5.4
 # 2FA / Security
 pyotp>=2.9
 qrcode>=7.4
+cryptography>=42.0
 
-# Testing & quality
-pytest>=8.0
-pytest-django>=4.8
-factory-boy>=3.3
-faker>=24.0
-black>=24.8
-isort>=5.13
-flake8>=7.1
+# Testing & quality (see requirements-dev.txt)
 
 # Deployment
 gunicorn>=21.2

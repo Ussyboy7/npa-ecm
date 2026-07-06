@@ -61,12 +61,6 @@ class Division(UUIDModel, TimeStampedModel):
             models.Index(fields=["is_active"]),
             models.Index(fields=["directorate", "is_active"]),
         ]
-        indexes = [
-            models.Index(fields=["name"]),
-            models.Index(fields=["code"]),
-            models.Index(fields=["is_active"]),
-            models.Index(fields=["directorate", "is_active"]),
-        ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.directorate.code})"
@@ -260,3 +254,51 @@ class OfficeMembership(UUIDModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.user} → {self.office} ({self.assignment_role})"
+
+
+class ExecutiveCalendarEvent(UUIDModel, TimeStampedModel):
+    """Calendar events for executives and their assistants."""
+
+    class EventType(models.TextChoices):
+        MEETING = "meeting", "Meeting"
+        REMINDER = "reminder", "Reminder"
+        DEADLINE = "deadline", "Deadline"
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    location = models.CharField(max_length=255, blank=True)
+    event_type = models.CharField(
+        max_length=20,
+        choices=EventType.choices,
+        default=EventType.MEETING,
+    )
+    starts_at = models.DateTimeField(db_index=True)
+    ends_at = models.DateTimeField()
+    executive = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="executive_calendar_events",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calendar_events_created",
+    )
+    correspondence = models.ForeignKey(
+        "correspondence.Correspondence",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calendar_events",
+    )
+
+    class Meta:
+        ordering = ["starts_at"]
+        indexes = [
+            models.Index(fields=["executive", "starts_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.executive})"

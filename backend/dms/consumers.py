@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Optional
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer

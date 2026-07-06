@@ -31,6 +31,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { LoginMFASection } from '@/components/settings/LoginMFASection';
 
 interface SecuritySectionProps {
   twoFactorEnabled: boolean;
@@ -466,6 +467,8 @@ export function SecuritySection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LoginMFASection />
     </TabsContent>
   );
 }

@@ -86,7 +86,8 @@ This document summarizes the comprehensive notifications and audit trail system 
 - Automatic IP and user agent extraction
 
 #### 3. **API Endpoints**
-- `GET /api/audit/logs/` - List audit logs with filtering
+- `GET /api/v1/audit/activity-logs/` - List audit logs with filtering
+- `GET /api/v1/audit/activity-logs/compliance-export/` - Tamper-evident compliance bundle (Phase 9)
 - Filters: user, action, object_type, module, severity, success
 - Search: description, object_repr, user fields
 - Super admins see all logs; regular users see only their own

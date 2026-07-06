@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from integrations.models import (
     EmailConnector,
     ERPConnector,
+    HRMSConnector,
     IntegrationLog,
     Webhook,
     WebhookEvent,
@@ -18,15 +19,38 @@ from integrations.serializers import (
     EmailConnectorSerializer,
     ERPConnectorSerializer,
     ERPSyncRequestSerializer,
+    HRMSConnectorSerializer,
+    HRMSSyncRequestSerializer,
     IntegrationLogSerializer,
     SendEmailRequestSerializer,
     WebhookEventSerializer,
     WebhookSerializer,
 )
+from integrations.hrms_service import HRMSSyncService
+from integrations.imap_service import IMAPIngestionService
 from integrations.services import EmailService, ERPConnectorService, WebhookService
 
 
-class WebhookViewSet(viewsets.ModelViewSet):
+class IntegrationAdminMixin:
+    """Require integration hub administration permission for all actions."""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        from organization.permission_utils import require_permission
+
+        require_permission(request.user, "can_manage_integration")
+
+
+WEBHOOK_EVENT_CATALOG = [
+    {"id": "document.created", "label": "Document Created", "module": "dms"},
+    {"id": "document.updated", "label": "Document Updated", "module": "dms"},
+    {"id": "correspondence.created", "label": "Correspondence Created", "module": "correspondence"},
+    {"id": "correspondence.updated", "label": "Correspondence Updated", "module": "correspondence"},
+    {"id": "correspondence.completed", "label": "Correspondence Completed", "module": "correspondence"},
+]
+
+
+class WebhookViewSet(IntegrationAdminMixin, viewsets.ModelViewSet):
     """ViewSet for managing webhooks."""
 
     queryset = Webhook.objects.all()
@@ -44,6 +68,11 @@ class WebhookViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Set the creator when creating a webhook."""
         serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=["get"], url_path="event-catalog")
+    def event_catalog(self, request):
+        """Return supported webhook event types."""
+        return Response({"events": WEBHOOK_EVENT_CATALOG})
 
     @action(detail=True, methods=["post"])
     def test(self, request, pk=None):
@@ -81,7 +110,7 @@ class WebhookViewSet(viewsets.ModelViewSet):
             )
 
 
-class WebhookEventViewSet(viewsets.ReadOnlyModelViewSet):
+class WebhookEventViewSet(IntegrationAdminMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for viewing webhook events."""
 
     queryset = WebhookEvent.objects.all()
@@ -100,7 +129,7 @@ class WebhookEventViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.order_by("-created_at")
 
 
-class EmailConnectorViewSet(viewsets.ModelViewSet):
+class EmailConnectorViewSet(IntegrationAdminMixin, viewsets.ModelViewSet):
     """ViewSet for managing email connectors."""
 
     queryset = EmailConnector.objects.all()
@@ -139,8 +168,17 @@ class EmailConnectorViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    @action(detail=True, methods=["post"], url_path="poll-inbox")
+    def poll_inbox(self, request, pk=None):
+        """Poll IMAP inbox and ingest messages."""
+        connector = self.get_object()
+        result = IMAPIngestionService.poll_connector(str(connector.id))
+        if result.get("success"):
+            return Response(result)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class ERPConnectorViewSet(viewsets.ModelViewSet):
+
+class ERPConnectorViewSet(IntegrationAdminMixin, viewsets.ModelViewSet):
     """ViewSet for managing ERP connectors."""
 
     queryset = ERPConnector.objects.all()
@@ -174,7 +212,32 @@ class ERPConnectorViewSet(viewsets.ModelViewSet):
             )
 
 
-class IntegrationLogViewSet(viewsets.ReadOnlyModelViewSet):
+class HRMSConnectorViewSet(IntegrationAdminMixin, viewsets.ModelViewSet):
+    """ViewSet for managing HRMS connectors."""
+
+    queryset = HRMSConnector.objects.all()
+    serializer_class = HRMSConnectorSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        is_active = self.request.query_params.get("is_active")
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == "true")
+        return queryset.order_by("name")
+
+    @action(detail=False, methods=["post"])
+    def sync(self, request):
+        """Sync staff and org structure from HRMS."""
+        serializer = HRMSSyncRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = HRMSSyncService.sync_staff(str(serializer.validated_data["connector_id"]))
+        if result.get("success"):
+            return Response(result)
+        return Response(result, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class IntegrationLogViewSet(IntegrationAdminMixin, viewsets.ReadOnlyModelViewSet):
     """ViewSet for viewing integration logs."""
 
     queryset = IntegrationLog.objects.all()

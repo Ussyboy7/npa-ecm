@@ -44,7 +44,7 @@ scripts/
 
 ```bash
 # Local (Mac)
-scripts/local/env-manager.sh start
+scripts/local/env-manager.sh start   # runs migrate + ensure_dev_login_users via entrypoint
 scripts/local/env-manager.sh stop
 scripts/local/env-manager.sh status
 scripts/local/env-manager.sh logs backend --follow

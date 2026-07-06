@@ -91,7 +91,7 @@ interface BackendSignatureResponse {
 // Local Storage Keys (for templates/preferences only)
 // ==========================================
 
-const USER_PREF_KEY_PREFIX = 'npa_signature_pref_';
+const _USER_PREF_KEY_PREFIX = 'npa_signature_pref_';
 
 const SIGNATURE_CACHE_TTL_MS = 60 * 1000;
 const SIGNATURE_TEMPLATES_CACHE_TTL_MS = 5 * 60 * 1000;

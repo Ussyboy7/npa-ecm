@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, FileText, Users, Search } from "lucide-react";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,22 +77,22 @@ export default function WorkspaceDetailPage() {
 
   if (loadingWs) {
     return (
-      <DashboardLayout>
+      <>
         <LoadingState message="Loading workspace..." />
-      </DashboardLayout>
+      </>
     );
   }
 
   if (error || !workspace) {
     return (
-      <DashboardLayout>
+      <>
         <ErrorState message={error ?? "Workspace not found"} onRetry={loadWorkspace} />
-      </DashboardLayout>
+      </>
     );
   }
 
   return (
-    <DashboardLayout>
+    <>
       <div className="flex flex-col flex-1 min-h-0">
         <div className="border-b">
           <div className="flex items-center gap-3 p-4 sm:p-6">
@@ -178,6 +177,6 @@ export default function WorkspaceDetailPage() {
           )}
         </div>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
+import { AdminPageShell } from '@/components/shared/AdminPageShell';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
@@ -23,7 +22,6 @@ import {
   correspondenceQueueMetaItemClass,
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
-  registryQueueSearchStatsShellContentClass,
   registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
   registryQueueStatIconClass,
@@ -54,20 +52,23 @@ import {
   XCircle,
   Shield,
   FileText,
+  ScrollText,
   Download,
   RefreshCw,
   MoreVertical,
+  ShieldCheck,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
-import { getActivityLogs, type ActivityLog } from '@/lib/audit-storage';
+import { getActivityLogs, downloadComplianceExport, type ActivityLog } from '@/lib/audit-storage';
 import { PREVIEW_PAGE_SIZE } from '@/lib/pagination-constants';
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { logError, logWarn } from '@/lib/client-logger';
 import { exportToCSV } from '@/lib/admin-export';
+import { downloadBlob } from '@/lib/admin-api';
 import { toast } from 'sonner';
 
 const ACTION_TYPES = [
@@ -114,6 +115,20 @@ const DEFAULT_SUMMARY: AuditSummary = {
   errors: 0,
   actions: 0,
 };
+
+function getAuditScopeSubtitle(role: string): string {
+  const normalized = role.trim().toLowerCase();
+  if (normalized === 'managing director' || normalized === 'executive director') {
+    return 'Monitor organization-wide activity, access changes, and security events.';
+  }
+  if (normalized === 'general manager') {
+    return 'Monitor activity within your division scope for compliance and operations.';
+  }
+  if (normalized === 'assistant general manager') {
+    return 'Monitor activity within your department scope for compliance and operations.';
+  }
+  return 'Review your recent actions and account security events.';
+}
 
 function getSeverityVariant(severity: ActivityLog['severity']) {
   switch (severity) {
@@ -235,7 +250,7 @@ function AuditLogRow({
 }
 
 const AuditTrailPage = () => {
-  const { currentUser, hydrated } = useCurrentUser();
+  const { currentUser } = useCurrentUser();
   const { users: organizationUsers } = useOrganization();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -255,6 +270,7 @@ const AuditTrailPage = () => {
   const [summaryStats, setSummaryStats] = useState<AuditSummary>(DEFAULT_SUMMARY);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportingCompliance, setExportingCompliance] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasActiveFilters = useMemo(() => !!(
@@ -289,8 +305,6 @@ const AuditTrailPage = () => {
 
   // Fetch logs
   const fetchLogs = async () => {
-    if (!hydrated || !currentUser) return;
-    
     setLoading(true);
     setError(null);
     try {
@@ -380,10 +394,40 @@ const AuditTrailPage = () => {
     }
   };
 
+  const handleComplianceExport = async () => {
+    setExportingCompliance(true);
+    try {
+      const dateParams = getDateRangeParams();
+      const params: Record<string, unknown> = {
+        ordering: sortOrder === 'desc' ? '-timestamp' : 'timestamp',
+        ...dateParams,
+      };
+      if (actionFilter !== 'all') params.action = actionFilter;
+      if (moduleFilter !== 'all') params.module = moduleFilter;
+      if (severityFilter !== 'all') params.severity = severityFilter;
+      if (successFilter !== 'all') params.success = successFilter === 'true';
+      if (debouncedSearch) params.search = debouncedSearch;
+
+      const { blob, recordCount, sha256 } = await downloadComplianceExport(
+        params as Parameters<typeof downloadComplianceExport>[0],
+      );
+      const stamp = new Date().toISOString().split('T')[0];
+      downloadBlob(blob, `audit-compliance-${stamp}.zip`);
+      toast.success(
+        `Compliance bundle exported${recordCount != null ? ` (${recordCount} events)` : ''}${
+          sha256 ? ` — SHA-256: ${sha256.slice(0, 12)}…` : ''
+        }`,
+      );
+    } catch (err) {
+      logError('Failed to export compliance bundle', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to export compliance bundle');
+    } finally {
+      setExportingCompliance(false);
+    }
+  };
+
   // Fetch summary stats separately
   const fetchSummaryStats = async () => {
-    if (!hydrated || !currentUser) return;
-    
     try {
       const dateParams = getDateRangeParams();
       const baseParams: Record<string, unknown> = {
@@ -397,10 +441,9 @@ const AuditTrailPage = () => {
       if (debouncedSearch) baseParams.search = debouncedSearch;
 
       // Fetch counts for each stat
-      const [allResponse, loginResponse, errorResponse] = await Promise.all([
+      const [allResponse, loginResponse] = await Promise.all([
         getActivityLogs(baseParams),
         getActivityLogs({ ...baseParams, action: 'user_login' }),
-        getActivityLogs({ ...baseParams, severity: 'error' }),
       ]);
 
       // Get failed count (success = false)
@@ -413,7 +456,7 @@ const AuditTrailPage = () => {
       setSummaryStats({
         total: allResponse.count,
         logins: loginResponse.count,
-        errors: errorResponse.count + failedResponse.count,
+        errors: failedResponse.count,
         actions: actionCount,
       });
     } catch (err) {
@@ -426,10 +469,11 @@ const AuditTrailPage = () => {
     void fetchLogs();
     void fetchSummaryStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load when pagination or filters change
-  }, [hydrated, currentUser, pagination.page, pagination.pageSize, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateFrom, dateTo]);
+  }, [pagination.page, pagination.pageSize, debouncedSearch, actionFilter, moduleFilter, severityFilter, successFilter, sortOrder, dateFrom, dateTo]);
 
   // Use summary stats from API
   const summary = summaryStats;
+  const auditSubtitle = getAuditScopeSubtitle(currentUser?.systemRole ?? '');
 
   const getUserName = (userId?: string) => {
     if (!userId) return 'System';
@@ -448,66 +492,50 @@ const AuditTrailPage = () => {
   };
 
   return (
-    <DashboardLayout>
-      {!hydrated || !currentUser ? (
-        <div className="container mx-auto p-6">
-          <LoadingState message="Loading audit trail…" />
-        </div>
-      ) : (
-        <div className="container mx-auto space-y-6 p-6">
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Audit Trail</h1>
-            <p className="mt-1 max-w-2xl text-muted-foreground">
-              Track and monitor all system activities, user actions, and security events.
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <ContextualHelp
-                title="Using the audit trail"
-                description="Search and filter events across modules. Export filtered results as CSV from More for audits and compliance."
-                steps={[
-                  'Use the search box for user names, actions, descriptions, or object text.',
-                  'Use the filter bar to narrow by action type, module, severity, status, or date.',
-                  'Clear filters from the filter bar or empty state when no rows match.',
-                ]}
-              />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <MoreVertical className="mr-2 h-4 w-4" />
-                    More
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => void fetchLogs()} disabled={loading}>
-                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || logs.length === 0}>
-                    <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
-                    {exporting ? 'Exporting...' : 'Export CSV'}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </div>
-
-        <HelpGuideCard
-          title="Workspace guide"
-          description="Summary counts respect your current search and filters (except action type, which is broken out in the list). Cross-check unusual activity in User Management."
-          links={[
-            { label: 'User Management', href: '/admin/users-roles?tab=users' },
-            { label: 'System Settings', href: '/settings' },
-          ]}
-        />
-
-        <Card>
-          <CardContent className={registryQueueSearchStatsShellContentClass}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <AdminPageShell
+      title="Audit & Compliance"
+      subtitle={auditSubtitle}
+      icon={ScrollText}
+      actions={
+        <>
+          <ContextualHelp
+            title="Using the audit trail"
+            description="Review activity events and export evidence for compliance."
+            steps={[
+              'Search by user, action, description, or object text.',
+              'Filter by action type, module, severity, status, or date.',
+              'Export filtered rows as CSV or a tamper-evident compliance ZIP from More.',
+            ]}
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <MoreVertical className="mr-2 h-4 w-4" />
+                More
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void fetchLogs()} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || logs.length === 0}>
+                <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
+                {exporting ? 'Exporting...' : 'Export CSV'}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => void handleComplianceExport()}
+                disabled={exportingCompliance || loading}
+              >
+                <ShieldCheck className={`h-4 w-4 mr-2 ${exportingCompliance ? 'animate-spin' : ''}`} />
+                {exportingCompliance ? 'Building bundle...' : 'Export Compliance Bundle'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      }
+    >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {
                   label: 'Total Events',
@@ -552,9 +580,7 @@ const AuditTrailPage = () => {
                   </CardContent>
                 </Card>
               ))}
-            </div>
-          </CardContent>
-        </Card>
+        </div>
 
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-2">
@@ -642,9 +668,7 @@ const AuditTrailPage = () => {
         {totalCount > 0 && (
           <PaginationControls pagination={pagination} className="border-t border-border/60 pt-4" />
         )}
-      </div>
-    )}
-  </DashboardLayout>
+    </AdminPageShell>
   );
 };
 

@@ -4,10 +4,10 @@ A modern React-based frontend application for the NPA Electronic Content Managem
 
 ## 🚀 Features
 
-- **Document Management**: Upload, organize, and manage official documents
-- **Correspondence System**: Handle letters, memos, and official communications
-- **Workflow Engine**: Multi-step approval processes with digital signatures
-- **Advanced Search**: Full-text search with filters and metadata
+- **Document Management**: Upload, version diff, DRM policies, `/dms` library
+- **Correspondence System**: Office routing, minutes, seals, outbox
+- **Advanced Search**: Full-text + semantic re-rank toggle (MVP)
+- **Helpdesk**: User tickets (`/helpdesk`) and admin queue
 - **Real-time Notifications**: WebSocket-powered notifications and updates
 - **Role-based Access**: Comprehensive permissions and user management
 - **Analytics Dashboard**: System statistics and reporting
@@ -30,7 +30,9 @@ frontend/
 ├── app/                    # Next.js App Router pages
 │   ├── (auth)/            # Authentication pages
 │   ├── dashboard/         # Main dashboard
-│   ├── documents/         # Document management
+│   ├── dms/               # Document management (canonical)
+│   ├── documents/         # Redirects to /dms
+│   ├── helpdesk/          # User support tickets
 │   ├── correspondence/    # Correspondence system
 │   ├── workflow/          # Workflow management
 │   ├── search/            # Advanced search
@@ -84,10 +86,10 @@ The application will be available at `http://localhost:3002`
 
 ```env
 # API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+NEXT_PUBLIC_API_URL=http://localhost:8002/api/v1
 
 # WebSocket Configuration
-NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
+NEXT_PUBLIC_WS_URL=ws://localhost:8002/ws
 
 # Authentication
 NEXT_PUBLIC_TOKEN_STORAGE=localStorage

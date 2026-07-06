@@ -5,6 +5,8 @@ from django.contrib import admin
 from integrations.models import (
     EmailConnector,
     ERPConnector,
+    ERPSyncRecord,
+    HRMSConnector,
     IntegrationLog,
     Webhook,
     WebhookEvent,
@@ -97,6 +99,19 @@ class ERPConnectorAdmin(admin.ModelAdmin):
     search_fields = ["name", "base_url"]
     readonly_fields = ["id", "created_at", "updated_at"]
     date_hierarchy = "created_at"
+
+
+@admin.register(HRMSConnector)
+class HRMSConnectorAdmin(admin.ModelAdmin):
+    list_display = ["name", "base_url", "is_active", "sync_enabled", "last_synced_at"]
+    list_filter = ["is_active", "sync_enabled"]
+    search_fields = ["name", "base_url"]
+
+
+@admin.register(ERPSyncRecord)
+class ERPSyncRecordAdmin(admin.ModelAdmin):
+    list_display = ["connector", "external_id", "document", "last_synced_at"]
+    search_fields = ["external_id", "connector__name"]
 
 
 @admin.register(IntegrationLog)

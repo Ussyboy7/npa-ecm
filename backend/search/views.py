@@ -51,6 +51,7 @@ class SearchViewSet(viewsets.ViewSet):
         limit = serializer.validated_data.get("limit", 50)
         offset = serializer.validated_data.get("offset", 0)
         search_type = serializer.validated_data.get("search_type", "documents")
+        search_mode = serializer.validated_data.get("search_mode", "keyword")
 
         # Perform search
         if search_type == "cases":
@@ -72,7 +73,7 @@ class SearchViewSet(viewsets.ViewSet):
             results["results"] = serialized
         elif search_type == "documents":
             results = SearchService.full_text_search_documents(
-                query, filters, limit, offset, user=request.user
+                query, filters, limit, offset, user=request.user, search_mode=search_mode
             )
             # Serialize documents
             from dms.serializers import DocumentSerializer
@@ -108,7 +109,7 @@ class SearchViewSet(viewsets.ViewSet):
         else:
             # Search all (documents, correspondence, and cases)
             doc_results = SearchService.full_text_search_documents(
-                query, filters, limit, offset, user=request.user
+                query, filters, limit, offset, user=request.user, search_mode=search_mode
             )
             corr_results = SearchService.search_correspondence(
                 query, filters, limit, offset, user=request.user
@@ -238,6 +239,31 @@ class SearchViewSet(viewsets.ViewSet):
         suggestions = SearchService.get_search_suggestions(query, limit)
 
         return Response({"suggestions": suggestions})
+
+    @action(detail=False, methods=["post"], url_path="related")
+    def related(self, request):
+        """
+        Find related items and potential duplicates for a record.
+
+        Request body: { "type": "document|correspondence|case", "id": "uuid", "limit": 8 }
+        """
+        record_type = request.data.get("type", "")
+        record_id = request.data.get("id", "")
+        limit = int(request.data.get("limit", 8))
+
+        if record_type not in {"document", "correspondence", "case"} or not record_id:
+            return Response(
+                {"detail": "type and id are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        results = SearchService.find_related_items(
+            record_type=record_type,
+            record_id=record_id,
+            user=request.user,
+            limit=limit,
+        )
+        return Response(results)
 
 
 class SavedSearchViewSet(viewsets.ModelViewSet):

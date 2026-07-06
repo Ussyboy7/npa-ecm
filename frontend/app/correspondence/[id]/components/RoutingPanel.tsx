@@ -6,6 +6,8 @@ import { ActionsPanel } from './ActionsPanel';
 import { MinuteThreadPanel } from './MinuteThreadPanel';
 import { WorkflowProgressIndicator } from '@/components/correspondence/WorkflowProgressIndicator';
 import { SealTrackingPanel } from '@/components/seals/SealTrackingPanel';
+import { ParallelRoutingStatusPanel } from '@/components/correspondence/ParallelRoutingStatusPanel';
+import { RelatedItemsPanel } from '@/components/search/RelatedItemsPanel';
 
 interface RoutingPanelProps {
   correspondence: Correspondence;
@@ -116,6 +118,9 @@ export function RoutingPanel({
           )}
 
           {hasSeals && <SealTrackingPanel minutes={minutes} />}
+
+          <ParallelRoutingStatusPanel correspondenceId={correspondence.id} />
+          <RelatedItemsPanel type="correspondence" id={correspondence.id} />
         </div>
       </ScrollArea>
 

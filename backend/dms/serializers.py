@@ -15,6 +15,7 @@ from .models import (
     DocumentDiscussionMessage,
     DocumentEditorSession,
     DocumentPermission,
+    DocumentRightsPolicy,
     DocumentTemplate,
     DocumentVersion,
     DocumentWorkspace,
@@ -164,6 +165,26 @@ class DocumentPermissionSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
 
+class DocumentRightsPolicySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DocumentRightsPolicy
+        fields = [
+            "id",
+            "name",
+            "description",
+            "allow_download",
+            "allow_print",
+            "allow_external_share",
+            "view_only",
+            "watermark_text",
+            "expires_after_days",
+            "is_active",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
 class DocumentSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
     author_id = serializers.PrimaryKeyRelatedField(
@@ -193,6 +214,14 @@ class DocumentSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    drm_policy_id = serializers.PrimaryKeyRelatedField(
+        source="drm_policy",
+        queryset=DocumentRightsPolicy.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    drm_rights = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
@@ -216,10 +245,19 @@ class DocumentSerializer(serializers.ModelSerializer):
             "case_links",
             "parent_document",
             "parent_document_id",
+            "drm_policy_id",
+            "drm_rights",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "author", "versions", "permissions", "form_document", "case_links", "parent_document", "created_at", "updated_at"]
+        read_only_fields = ["id", "author", "versions", "permissions", "form_document", "case_links", "parent_document", "drm_rights", "created_at", "updated_at"]
+
+    def get_drm_rights(self, obj):
+        from .drm import resolve_document_rights
+
+        request = self.context.get("request")
+        user = request.user if request else None
+        return resolve_document_rights(obj, user)
 
     def get_parent_document(self, obj):
         """Get parent document data if this is a response document."""

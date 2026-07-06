@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, forwardRef, useImperativeHandle, useCallback } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +44,6 @@ import {
 import { useOrganization, type AssistantAssignment } from "@/contexts/OrganizationContext";
 import { AssistantAssignmentModal } from "@/components/admin/AssistantAssignmentModal";
 import { useCurrentUser } from "@/hooks/use-current-user";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import {
   AlertDialog,
@@ -56,20 +56,72 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
+import { registryQueueEmptyIconClass } from "@/components/shared/registry-queue-styles";
 
 type ViewMode = "executives" | "all";
 type TypeFilter = "all" | "TA" | "PA";
 
 const MANAGEMENT_GRADES = ["MDCS", "EDCS", "MSS1", "MSS2"];
 
-export const AssistantsManagementTab = () => {
+export type AssistantsManagementTabHandle = {
+  openAssignAssistant: () => void;
+};
+
+export const AssistantsManagementTab = forwardRef<
+  AssistantsManagementTabHandle,
+  {
+    searchQuery?: string;
+    onSearchQueryChange?: (value: string) => void;
+    hideInlineSearch?: boolean;
+    hideHeaderActions?: boolean;
+    assistantsTypeFilter?: TypeFilter;
+    onAssistantsTypeFilterChange?: (value: TypeFilter) => void;
+    viewMode?: ViewMode;
+    onViewModeChange?: (value: ViewMode) => void;
+    hideViewModeTabs?: boolean;
+  }
+>(function AssistantsManagementTab(
+  {
+    searchQuery: controlledSearchQuery,
+    onSearchQueryChange,
+    hideInlineSearch = false,
+    hideHeaderActions = false,
+    assistantsTypeFilter: controlledTypeFilter,
+    onAssistantsTypeFilterChange,
+    viewMode: controlledViewMode,
+    onViewModeChange,
+    hideViewModeTabs = false,
+  },
+  ref,
+) {
   const { assistantAssignments, users, deleteAssignment } = useOrganization();
   const { currentUser } = useCurrentUser();
   
   // View & filter state
-  const [viewMode, setViewMode] = useState<ViewMode>("executives");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [internalViewMode, setInternalViewMode] = useState<ViewMode>("executives");
+  const viewMode = controlledViewMode ?? internalViewMode;
+  const setViewMode = (value: ViewMode) => {
+    onViewModeChange?.(value);
+    if (controlledViewMode === undefined) {
+      setInternalViewMode(value);
+    }
+  };
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
+  const searchQuery = controlledSearchQuery ?? internalSearchQuery;
+  const setSearchQuery = (value: string) => {
+    onSearchQueryChange?.(value);
+    if (controlledSearchQuery === undefined) {
+      setInternalSearchQuery(value);
+    }
+  };
+  const [internalTypeFilter, setInternalTypeFilter] = useState<TypeFilter>("all");
+  const typeFilter = controlledTypeFilter ?? internalTypeFilter;
+  const setTypeFilter = (value: TypeFilter) => {
+    onAssistantsTypeFilterChange?.(value);
+    if (controlledTypeFilter === undefined) {
+      setInternalTypeFilter(value);
+    }
+  };
   
   // Modal state
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
@@ -159,13 +211,13 @@ export const AssistantsManagementTab = () => {
     return users.find(u => u.id === executiveId);
   };
 
-  const canManageExecutive = (execId: string) => {
+  const canManageExecutive = useCallback((execId: string) => {
     if (isSuperAdmin) return true;
     return execId === currentUser?.id;
-  };
+  }, [isSuperAdmin, currentUser?.id]);
 
   // Action handlers
-  const handleAssignAssistant = (execId?: string) => {
+  const handleAssignAssistant = useCallback((execId?: string) => {
     if (execId && !canManageExecutive(execId)) {
       toast({ title: "Action not allowed", description: "Only the executive or super admin can modify assistants.", variant: "destructive" });
       return;
@@ -173,7 +225,11 @@ export const AssistantsManagementTab = () => {
     setSelectedExecutiveId(execId || "");
     setSelectedAssignment(undefined);
     setAssignmentModalOpen(true);
-  };
+  }, [canManageExecutive]);
+
+  useImperativeHandle(ref, () => ({
+    openAssignAssistant: () => handleAssignAssistant(),
+  }), [handleAssignAssistant]);
 
   const handleEditAssignment = (assignment: AssistantAssignment) => {
     if (!canManageExecutive(assignment.executiveId)) {
@@ -215,9 +271,8 @@ export const AssistantsManagementTab = () => {
   return (
     <ClientErrorBoundary>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div></div>
-          <div className="flex gap-2">
+        {!hideHeaderActions ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
             <Button 
               onClick={() => handleAssignAssistant()} 
               size="sm"
@@ -229,29 +284,19 @@ export const AssistantsManagementTab = () => {
             </Button>
             <ContextualHelp
               title="How to manage assistants"
-              description="Assign Technical Assistants (TAs) and Personal Assistants (PAs) to executives. Configure permissions and specializations for each assignment."
+              description="Assign assistants to executives with the right permissions."
               steps={[
-                'Click "Assign Assistant" to create a new assignment.',
-                'Select an executive and an assistant from the dropdown lists.',
-                'Choose the assistant type (TA or PA) and set permissions.',
-                'Add specialization details if needed.',
-                'Edit or remove assignments as organizational needs change.',
+                'Create an assignment by selecting executive and assistant.',
+                'Set assistant type (TA/PA) and permissions.',
+                'Edit or remove assignments as staffing changes.',
               ]}
             />
-          </div>
         </div>
-
-        <HelpGuideCard
-          title="Assistant Assignments"
-          description="Technical Assistants (TAs) handle technical and administrative tasks, while Personal Assistants (PAs) manage executive schedules and communications. Assign assistants based on executive needs and organizational structure."
-          links={[
-            { label: "User Management", href: "/admin/users-roles?tab=users" },
-            { label: "Help & Guides", href: "/help" },
-          ]}
-        />
+        ) : null}
 
         <Card>
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+            {!hideViewModeTabs ? (
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -267,6 +312,7 @@ export const AssistantsManagementTab = () => {
                     </TabsTrigger>
                   </TabsList>
                 </div>
+                {!hideInlineSearch ? (
                 <div className="flex items-center gap-2">
                   <div className="relative w-64">
                     <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -291,20 +337,30 @@ export const AssistantsManagementTab = () => {
                     </Select>
                   )}
                 </div>
+                ) : null}
               </div>
             </CardHeader>
-            <CardContent>
+            ) : null}
+            <CardContent className={hideViewModeTabs ? "pt-6" : undefined}>
 
               <TabsContent value="executives" className="space-y-4">
               {filteredExecutives.length === 0 ? (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <Shield className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-                    <p className="text-muted-foreground">
-                      {searchQuery ? "No executives match your search" : "No executives found"}
-                    </p>
-                  </CardContent>
-                </Card>
+                <EmptyState
+                  icon={<Shield className={registryQueueEmptyIconClass} />}
+                  title={searchQuery.trim() ? "No executives match your search" : "No executives in scope"}
+                  message={
+                    searchQuery.trim()
+                      ? "Try a different name, role, or grade level keyword."
+                      : "Assistants are assigned to managing directors, executive directors, and general managers. Assignments appear here once executives exist in your scope."
+                  }
+                  actionLabel={searchQuery.trim() ? "Clear search" : "Assign assistant"}
+                  onAction={
+                    searchQuery.trim()
+                      ? () => setSearchQuery("")
+                      : () => handleAssignAssistant()
+                  }
+                  variant="dashed"
+                />
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
                   {filteredExecutives.map((executive) => {
@@ -549,5 +605,5 @@ export const AssistantsManagementTab = () => {
       </AlertDialog>
     </ClientErrorBoundary>
   );
-};
+});
 

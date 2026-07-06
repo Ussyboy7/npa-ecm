@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useCallback, useReducer, useRef } from 'react';
+import { useEffect, useMemo, useCallback, useReducer, useRef, useState } from 'react';
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { useParams, useSearchParams } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { toast } from 'sonner';
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
@@ -12,7 +11,6 @@ import { useOrganization } from '@/contexts/OrganizationContext';
 import { logDocumentAccess, type DocumentRecord } from '@/lib/dms-storage';
 import { apiFetch } from '@/lib/api-client';
 import { bumpSidebarCounts } from '@/hooks/use-sidebar-counts';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { getCorrespondencePreviewContext, resolveCorrespondenceDmsAccessTarget } from '@/lib/correspondence-preview-target';
 import { useModalState } from '@/hooks/use-modal-state';
@@ -24,6 +22,9 @@ import { CorrespondenceDetailModals } from './components/CorrespondenceDetailMod
 import { MobileStickyActionBar } from './components/MobileStickyActionBar';
 import { CompactStatusStrip } from '@/components/correspondence/CompactStatusStrip';
 import { useCorrespondenceDetailData } from './hooks/use-correspondence-detail-data';
+import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
+import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
+import { useAccessExplanation } from '@/hooks/use-access-explanation';
 
 const CorrespondenceDetailContent = () => {
   const params = useParams();
@@ -84,7 +85,7 @@ const CorrespondenceDetailContent = () => {
   const setAttachmentSearchQuery = useCallback((query: string) => {
     dispatch({ type: 'SET_ATTACHMENT_SEARCH_QUERY', payload: query });
   }, []);
-  const setSelectedLinkedDocVersion = useCallback((version: Record<string, number>) => {
+  const _setSelectedLinkedDocVersion = useCallback((version: Record<string, number>) => {
     dispatch({ type: 'SET_SELECTED_LINKED_DOC_VERSION', payload: version });
   }, []);
   const setIsPreviewFullscreen = useCallback((fullscreen: boolean) => {
@@ -103,6 +104,11 @@ const CorrespondenceDetailContent = () => {
   // Use API retry hook for critical requests
   const { fetchWithRetry } = useApiRetry({ maxRetries: 3 });
   const wasDocumentPreviewOpenRef = useRef(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const { result: accessExplanation, loading: accessExplanationLoading } = useAccessExplanation(
+    'correspondence_view',
+    accessDenied,
+  );
 
   const { refreshMinutes } = useCorrespondenceDetailData({
     id,
@@ -119,6 +125,7 @@ const CorrespondenceDetailContent = () => {
     setDetailLoading,
     setBackendDelegation,
     setLinkedDocuments,
+    setAccessDenied,
   });
 
   const handleModalRefreshClose = () => {
@@ -426,8 +433,17 @@ const CorrespondenceDetailContent = () => {
   const goToRoutingTab = useCallback(() => setMobileActiveTab('routing'), [setMobileActiveTab]);
 
   return (
-    <DashboardLayout>
+    <>
       {!correspondence ? (
+        accessDenied ? (
+          <ResourceAccessDenied
+            title="Correspondence Unavailable"
+            check={accessExplanation}
+            loading={accessExplanationLoading}
+            backHref="/correspondence/inbox"
+            backLabel="Back to Inbox"
+          />
+        ) : (
         <div className="flex items-center justify-center h-full">
           {detailLoading ? (
             <p className="text-sm text-muted-foreground">Loading correspondence…</p>
@@ -435,7 +451,12 @@ const CorrespondenceDetailContent = () => {
             <p>Correspondence not found</p>
           )}
         </div>
-      ) : !activeUser ? null : (
+        )
+      ) : !activeUser ? (
+        <div className="flex items-center justify-center h-full min-h-[40vh]">
+          <p className="text-sm text-muted-foreground">Loading session…</p>
+        </div>
+      ) : (
         <>
       <div className="flex flex-col min-w-0 flex-1 min-h-0 overflow-hidden">
         {/* Header - Full Width */}
@@ -455,12 +476,6 @@ const CorrespondenceDetailContent = () => {
               await refreshData();
               await syncFromApi();
             }}
-          />
-
-          <HelpGuideCard
-            title="Correspondence Workspace"
-            description="Read the document on the left, then route or respond from the panel on the right."
-            links={[{ label: 'Help & Guides', href: '/help' }]}
           />
 
           <CorrespondenceMobileTabBar
@@ -545,14 +560,18 @@ const CorrespondenceDetailContent = () => {
       )}
         </>
       )}
-    </DashboardLayout>
+    </>
   );
 };
 
 const CorrespondenceDetailPage = () => (
-  <CorrespondenceProvider>
-    <CorrespondenceDetailContent />
-  </CorrespondenceProvider>
+  <ClientErrorBoundary>
+    <CorrespondenceProvider>
+      <CorrespondenceDetailContent />
+    </CorrespondenceProvider>
+  </ClientErrorBoundary>
 );
+
+export const dynamic = "force-dynamic";
 
 export default CorrespondenceDetailPage;

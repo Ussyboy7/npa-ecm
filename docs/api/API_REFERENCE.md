@@ -512,7 +512,7 @@ const fetchWithRetry = async (endpoint: string, maxRetries = 3) => {
 
 ```env
 # API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:8000/api
+NEXT_PUBLIC_API_URL=http://localhost:8002/api/v1
 
 # Authentication
 NEXT_PUBLIC_API_TIMEOUT=30000
@@ -578,6 +578,19 @@ describe('API Client', () => {
 ---
 
 ## Migration Notes
+
+### Phase 9–11 API additions (June 2026)
+
+| Area | Endpoint | Notes |
+|------|----------|-------|
+| Search | `GET /api/v1/search/?q=…&search_mode=semantic` | MVP semantic re-rank (no pgvector) |
+| DMS diff | `GET /api/v1/dms/document-versions/{id}/diff/?compare_with={id}` | Text version comparison |
+| Audit | `GET /api/v1/audit/activity-logs/compliance-export/` | Tamper-evident bundle |
+| Records | `GET /api/v1/records/legal-holds/{id}/ediscovery-export/` | Legal hold ZIP |
+| DRM | `GET /api/v1/dms/documents/{id}/drm-rights/` | Effective rights for user |
+| Support | `POST /api/v1/support/tickets/` | Helpdesk tickets |
+
+See Swagger at `/api/docs/` for the authoritative schema.
 
 ### From Previous Versions
 

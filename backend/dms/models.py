@@ -10,6 +10,30 @@ from django.db.models import Q
 from common.models import SoftDeleteModel, TimeStampedModel, UUIDModel
 
 
+class DocumentRightsPolicy(UUIDModel, TimeStampedModel):
+    """Information rights management policy attachable to documents."""
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    allow_download = models.BooleanField(default=True)
+    allow_print = models.BooleanField(default=True)
+    allow_external_share = models.BooleanField(default=False)
+    view_only = models.BooleanField(
+        default=False,
+        help_text="When true, users may view but not download or print.",
+    )
+    watermark_text = models.CharField(max_length=255, blank=True)
+    expires_after_days = models.PositiveIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name_plural = "Document rights policies"
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class DocumentWorkspace(UUIDModel, TimeStampedModel):
     """Collaborative workspace grouping documents and members."""
 
@@ -93,6 +117,13 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
     
     # Full-text search vector (updated via signals or management command)
     search_vector = SearchVectorField(null=True, editable=False)
+    drm_policy = models.ForeignKey(
+        "dms.DocumentRightsPolicy",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="documents",
+    )
 
     class Meta:
         ordering = ["-updated_at"]

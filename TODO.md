@@ -1,36 +1,54 @@
 # NPA ECM - Updated TODO List
 
-**Last Updated:** April 2026
+**Last Updated:** June 2026
 **Status:** Active Tasks
 
 ---
 
 ## 🎯 Active Tasks
 
-*(No active tasks currently)*
+### Security Hardening (remaining)
+**Priority:** Critical  
+**Status:** ⏳ Partial — defaults improved; production middleware still open
+
+- [ ] Add security headers middleware
+- [ ] Review CORS configuration for production
+- [ ] Implement rate limiting
+- [ ] Add input validation and sanitization pass
 
 ---
 
 ## 📋 Future Tasks
 
-### 1. Security Hardening
-**Priority:** Critical
-**Status:** ⏳ Pending
-**Timeline:** Q2 2026
+*(See [REMAINING_WORK_BACKLOG.md](./docs/procurement/REMAINING_WORK_BACKLOG.md) for full P0/P1/P2 list.)*
 
-#### Description
-Address remaining security concerns identified in codebase review:
+### AI / inference stack (deferred)
+**Status:** 🔵 Waiting on ICT AI host provisioning
 
-- [ ] Review and strengthen SECRET_KEY validation
-- [ ] Implement proper production DEBUG settings
-- [ ] Add security headers middleware
-- [ ] Review CORS configuration for production
-- [ ] Implement rate limiting
-- [ ] Add input validation and sanitization
+- pgvector migration + Ollama sidecar
+- Embed-on-ingest Celery task
+- Wire `DocumentSummaryService` to Ollama chat
 
 ---
 
 ## ✅ Completed Tasks
+
+### Phase 9–11 documentation sync (June 2026) ✅
+- Updated backlog, comparison matrix, setup guides, feature docs
+- Documented AI deferral, infra notes (`devsecops` vs `emr`), Phase 9–11 MVP status
+
+### Phase 9–11 platform MVPs ✅
+- Tamper-evident audit compliance export
+- Document version diff (API + UI)
+- eDiscovery export (legal hold ZIP)
+- Executive/PA calendar
+- `/dms` canonical route
+- WCAG prep (skip link, focus styles, checklist)
+- DRM policy layer + admin UI
+- Legacy import command + admin UI
+- Helpdesk UI + rollout runbooks
+- Semantic search MVP (FTS + hash re-rank, no vectors)
+- Local Docker `ensure_dev_login_users` bootstrap
 
 ### 1. Documentation Fixes ✅
 **Completed:** April 2026

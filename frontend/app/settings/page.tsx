@@ -3,23 +3,15 @@
 import { logError } from '@/lib/client-logger';
 import { ALLOWED_IMAGE_MIME_TYPES } from '@/lib/file-types';
 import { useCallback, useEffect, useState } from 'react';
-import { DashboardLayout } from '@/components/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import Image from 'next/image';
 import { useTheme } from 'next-themes';
-import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
-} from '@/components/ui/select';
+
 import dynamic from 'next/dynamic';
 
 const PasswordDialog = dynamic(() => import('@/components/settings/PasswordDialog').then(mod => ({ default: mod.PasswordDialog })), { ssr: false });
@@ -40,7 +32,6 @@ import {
   Bell, 
   Shield, 
   Palette,
-  Save,
   Mail,
   Image as ImageIcon,
   RefreshCcw,
@@ -51,7 +42,6 @@ import {
   Copy,
   AlertTriangle,
   Download,
-  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -463,7 +453,7 @@ export default function SettingsPage() {
     : 'U';
 
   return (
-    <DashboardLayout>
+    <>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div>
@@ -472,14 +462,6 @@ export default function SettingsPage() {
             Manage your account settings and preferences
           </p>
         </div>
-
-        <HelpGuideCard
-          title="Personalise Your Workspace"
-          description="Update profile details, notifications, appearance, security options, and digital signature templates."
-          links={[
-            { label: "Help & Guides", href: "/help" },
-          ]}
-        />
 
         <Tabs value={activeTab} onValueChange={(tab: string) => {
           const newTab = tab as typeof activeTab;
@@ -583,7 +565,6 @@ export default function SettingsPage() {
           <TabsContent value="signature" className="space-y-4">
             <SignatureSettingsCard />
           </TabsContent>
-
 
         </Tabs>
         
@@ -819,6 +800,6 @@ export default function SettingsPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </DashboardLayout>
+    </>
   );
 }

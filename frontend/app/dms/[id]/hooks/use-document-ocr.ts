@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { logError } from '@/lib/client-logger';
+import { logError, logWarn } from '@/lib/client-logger';
 import { runOCROnVersion, type DocumentRecord } from '@/lib/dms-storage';
 import { processOCR, getCaptureJob, cancelCaptureJob, type CaptureJob } from '@/lib/capture-storage';
 import { toast } from 'sonner';
@@ -161,7 +161,7 @@ export function useDocumentOcr({ document, refreshDocument }: UseDocumentOcrOpti
             }
           })
           .catch((err) => {
-            console.warn('[OCR] Final status check failed:', err);
+            logWarn('[OCR] Final status check failed:', err);
           });
       }, 5 * 60 * 1000);
     },

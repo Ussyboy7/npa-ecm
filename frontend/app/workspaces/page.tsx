@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderKanban, Plus, Search, Pencil, Trash2, Users, Loader2, FileText, Palette, ChevronRight } from "lucide-react";
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { HelpGuideCard } from "@/components/help/HelpGuideCard";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -138,7 +136,7 @@ export default function WorkspacesPage() {
   };
 
   return (
-    <DashboardLayout>
+    <>
       <div className="flex flex-col flex-1 min-h-0">
         <div className="flex items-center justify-between gap-4 p-4 sm:p-6 border-b">
           <div>
@@ -147,7 +145,7 @@ export default function WorkspacesPage() {
               Workspaces
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Organize documents into project workspaces.
+              Group related documents by project, case, or workstream so teams can collaborate in one place.
             </p>
           </div>
           <Button onClick={openCreate} className="gap-2 shrink-0">
@@ -157,7 +155,6 @@ export default function WorkspacesPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          <HelpGuideCard title="About Workspaces" description="Workspaces are for grouping related documents by project or theme. For workflow-based grouping (complaints, requests, legal matters), use Cases instead." />
 
           <div className="relative max-w-sm">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -335,6 +332,6 @@ export default function WorkspacesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </DashboardLayout>
+    </>
   );
 }

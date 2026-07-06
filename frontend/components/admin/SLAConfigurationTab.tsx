@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, forwardRef, useImperativeHandle, useMemo, useCallback } from 'react';
 import { logError } from '@/lib/client-logger';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,7 +50,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
   registryQueueStatIconClass,
   registryQueueStatLabelClass,
@@ -105,7 +104,21 @@ const priorityStatVisual = (priority: string) => {
   }
 };
 
-export const SLAConfigurationTab = () => {
+export type SLAConfigurationTabHandle = {
+  openAddRule: () => void;
+};
+
+export const SLAConfigurationTab = forwardRef<
+  SLAConfigurationTabHandle,
+  {
+    searchQuery?: string;
+    hideAddRuleButton?: boolean;
+    onDataChange?: () => void;
+  }
+>(function SLAConfigurationTab(
+  { searchQuery = '', hideAddRuleButton = false, onDataChange },
+  ref,
+) {
   const { divisions } = useOrganization();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -130,11 +143,7 @@ export const SLAConfigurationTab = () => {
     description: '',
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [configsData, targetsData, choicesData] = await Promise.all([
@@ -146,12 +155,17 @@ export const SLAConfigurationTab = () => {
       setTargets(targetsData);
       setTempTargets(targetsData);
       setChoices(choicesData);
+      onDataChange?.();
     } catch (error: unknown) {
       logError('Failed to load SLA data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [onDataChange]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSaveTargets = async () => {
     setSaving(true);
@@ -225,6 +239,24 @@ export const SLAConfigurationTab = () => {
     }
   };
 
+  useImperativeHandle(ref, () => ({
+    openAddRule: () => handleOpenDialog(),
+  }), []);
+
+  const filteredConfigs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return configs;
+    return configs.filter((config) => {
+      return (
+        config.name.toLowerCase().includes(query)
+        || config.priorityDisplay.toLowerCase().includes(query)
+        || config.correspondenceTypeDisplay.toLowerCase().includes(query)
+        || (config.description?.toLowerCase().includes(query) ?? false)
+        || (config.divisionDetail?.name.toLowerCase().includes(query) ?? false)
+      );
+    });
+  }, [configs, searchQuery]);
+
   if (loading) {
     return <LoadingState message="Loading SLA settings…" />;
   }
@@ -232,136 +264,140 @@ export const SLAConfigurationTab = () => {
   return (
     <ClientErrorBoundary>
       <div className="space-y-8">
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle className="text-lg">Default SLA targets</CardTitle>
-                <CardDescription>
-                  Maximum response time (hours) before a priority is considered overdue. Advanced rules can override these for specific types or divisions.
-                </CardDescription>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                {!editingTargets ? (
-                  <Button variant="outline" size="sm" onClick={() => setEditingTargets(true)}>
-                    <Edit className="h-4 w-4 mr-2" />
-                    Edit targets
+        <section className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">Default SLA targets</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Maximum response time (hours) before a priority is overdue. Advanced rules can override these for specific types or divisions.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {!editingTargets ? (
+                <Button variant="outline" size="sm" onClick={() => setEditingTargets(true)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit targets
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setTempTargets(targets);
+                      setEditingTargets(false);
+                    }}
+                  >
+                    Cancel
                   </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setTempTargets(targets);
-                        setEditingTargets(false);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button size="sm" onClick={handleSaveTargets} disabled={saving}>
-                      {saving ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Save className="h-4 w-4 mr-2" />
-                      )}
-                      Save
-                    </Button>
-                  </>
-                )}
-              </div>
+                  <Button size="sm" onClick={handleSaveTargets} disabled={saving}>
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save
+                  </Button>
+                </>
+              )}
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {(['urgent', 'high', 'medium', 'low'] as const).map((priority) => {
-                const { box, icon: iconColor } = priorityStatVisual(priority);
-                const hours = editingTargets ? tempTargets[priority] : targets[priority];
-                const LeadIcon =
-                  priority === 'urgent'
-                    ? AlertTriangle
-                    : priority === 'low'
-                      ? CheckCircle
-                      : Clock;
-                return (
-                  <Card key={priority}>
-                    <CardContent className={registryQueueStatCardContentClass}>
-                      <div className="flex items-start gap-4">
-                        <div className={cn(registryQueueStatIconBoxClass, box)}>
-                          <LeadIcon className={cn(registryQueueStatIconClass, iconColor)} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {(['urgent', 'high', 'medium', 'low'] as const).map((priority) => {
+              const { box, icon: iconColor } = priorityStatVisual(priority);
+              const hours = editingTargets ? tempTargets[priority] : targets[priority];
+              const LeadIcon =
+                priority === 'urgent'
+                  ? AlertTriangle
+                  : priority === 'low'
+                    ? CheckCircle
+                    : Clock;
+              return (
+                <div
+                  key={priority}
+                  className="rounded-lg border border-border/80 bg-card p-4"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className={cn(registryQueueStatIconBoxClass, box)}>
+                      <LeadIcon className={cn(registryQueueStatIconClass, iconColor)} />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <Badge
+                        variant={getPriorityBadgeVariant(priority)}
+                        className={correspondenceQueueBadgeClass}
+                      >
+                        {priority.toUpperCase()}
+                      </Badge>
+                      <p className={registryQueueStatLabelClass}>Max response</p>
+                      <p className={registryQueueStatValueClass}>{hours}h</p>
+                      {editingTargets ? (
+                        <div className="space-y-2 border-t border-border/60 pt-3">
+                          <Slider
+                            value={[tempTargets[priority]]}
+                            onValueChange={([value]) =>
+                              setTempTargets({ ...tempTargets, [priority]: value })
+                            }
+                            min={1}
+                            max={720}
+                            step={1}
+                          />
+                          <Input
+                            type="number"
+                            value={tempTargets[priority]}
+                            onChange={(e) =>
+                              setTempTargets({
+                                ...tempTargets,
+                                [priority]: parseInt(e.target.value, 10) || 1,
+                              })
+                            }
+                            className="h-8"
+                            min={1}
+                            max={720}
+                          />
                         </div>
-                        <div className="min-w-0 flex-1 space-y-2">
-                          <Badge
-                            variant={getPriorityBadgeVariant(priority)}
-                            className={correspondenceQueueBadgeClass}
-                          >
-                            {priority.toUpperCase()}
-                          </Badge>
-                          <p className={registryQueueStatLabelClass}>Max response</p>
-                          <p className={registryQueueStatValueClass}>{hours}h</p>
-                          {editingTargets ? (
-                            <div className="space-y-2 border-t border-border/60 pt-3">
-                              <Slider
-                                value={[tempTargets[priority]]}
-                                onValueChange={([value]) =>
-                                  setTempTargets({ ...tempTargets, [priority]: value })
-                                }
-                                min={1}
-                                max={720}
-                                step={1}
-                              />
-                              <Input
-                                type="number"
-                                value={tempTargets[priority]}
-                                onChange={(e) =>
-                                  setTempTargets({
-                                    ...tempTargets,
-                                    [priority]: parseInt(e.target.value, 10) || 1,
-                                  })
-                                }
-                                className="h-8"
-                                min={1}
-                                max={720}
-                              />
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle className="text-lg">Advanced SLA rules ({configs.length})</CardTitle>
-                <CardDescription>
-                  Overrides for correspondence types, divisions, or combinations.
-                </CardDescription>
-              </div>
+        <section className="space-y-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">Advanced SLA rules ({filteredConfigs.length})</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Overrides for correspondence types, divisions, or combinations.
+              </p>
+            </div>
+            {!hideAddRuleButton ? (
               <Button size="sm" onClick={() => handleOpenDialog()} className="shrink-0">
                 <Plus className="h-4 w-4 mr-2" />
                 Add rule
               </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
+            ) : null}
+          </div>
             {configs.length === 0 ? (
               <EmptyState
                 icon={<Settings className={registryQueueEmptyIconClass} />}
                 title="No advanced rules yet"
-                message="Defaults apply everywhere until you add a rule for a specific type or division."
-                actionLabel="Add rule"
-                onAction={() => handleOpenDialog()}
+                message="Organization-wide defaults apply until you add a rule for a specific priority, correspondence type, or division."
+                actionLabel={hideAddRuleButton ? undefined : "Add rule"}
+                onAction={hideAddRuleButton ? undefined : () => handleOpenDialog()}
+                variant="dashed"
+              />
+            ) : filteredConfigs.length === 0 ? (
+              <EmptyState
+                icon={<Settings className={registryQueueEmptyIconClass} />}
+                title="No rules match your search"
+                message="Try a different name, priority, or correspondence type keyword."
+                variant="dashed"
               />
             ) : (
               <div className={correspondenceQueueListStackClass}>
-                {configs.map((config) => (
+                {filteredConfigs.map((config) => (
                   <ListRowCard
                     key={config.id}
                     density="compact"
@@ -439,8 +475,7 @@ export const SLAConfigurationTab = () => {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+        </section>
 
         {/* Add/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -614,5 +649,5 @@ export const SLAConfigurationTab = () => {
       </div>
     </ClientErrorBoundary>
   );
-};
+});
 

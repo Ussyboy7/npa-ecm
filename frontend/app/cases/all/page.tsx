@@ -1,6 +1,5 @@
 "use client";
 
-import { DashboardLayout } from "@/components/DashboardLayout";
 import { CasesListContent } from "../components/CasesListContent";
 import { useScopeChecks } from "@/hooks/use-scope-checks";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
@@ -13,13 +12,13 @@ export default function AllCasesPage() {
 
   return (
     <ErrorBoundary>
-      <DashboardLayout>
+      <>
         <CasesListContent 
           scope="all"
           title={scopeLabel}
           description="All cases in your scope"
         />
-      </DashboardLayout>
+      </>
     </ErrorBoundary>
   );
 }

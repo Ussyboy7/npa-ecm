@@ -261,44 +261,13 @@ class SearchService:
         )
 
     @staticmethod
-    def build_search_vector_with_versions() -> SearchVector:
-        """
-        Build search vector for documents including version content.
-
-        Returns:
-            SearchVector combining document fields and version content with weights
-        """
-        from django.db.models import Value, CharField
-        from django.db.models.functions import Coalesce
-        
-        # Base document fields
-        base_vector = (
-            SearchVector("title", weight="A", config="english")
-            + SearchVector("description", weight="B", config="english")
-            + SearchVector("reference_number", weight="A", config="english")
-            + SearchVector("tags", weight="C", config="english")
-        )
-        
-        # Aggregate version content (OCR text and content_text) into a single field
-        # We'll use a subquery to get the latest version's content
-        from dms.models import DocumentVersion
-        from django.db.models import OuterRef, Subquery
-        
-        latest_version = DocumentVersion.objects.filter(
-            document=OuterRef('pk')
-        ).order_by('-version_number')[:1]
-        
-        # We'll search in versions separately using a Q filter
-        # This is more efficient than trying to aggregate in SearchVector
-        return base_vector
-
-    @staticmethod
     def full_text_search_documents(
         query: str,
         filters: Optional[Dict[str, Any]] = None,
         limit: int = 50,
         offset: int = 0,
         user: Optional[Any] = None,
+        search_mode: str = "keyword",
     ) -> Dict[str, Any]:
         """
         Perform full-text search on documents.
@@ -354,7 +323,7 @@ class SearchService:
         # Perform full-text search
         if query:
             from dms.models import DocumentVersion
-            from django.db.models import Max, Aggregate
+            from django.db.models import Max
             
             search_query = SearchQuery(query, config="english")
             
@@ -404,6 +373,39 @@ class SearchService:
         else:
             # No query, just apply filters and sort by date
             queryset = queryset.order_by("-created_at")
+
+        if query and search_mode == "semantic":
+            from search.semantic_service import rerank_documents
+
+            pool_limit = min(max(queryset.count(), limit + offset), 200)
+            pool = list(queryset[:pool_limit])
+            for document in pool:
+                document._semantic_fts_rank = float(
+                    getattr(document, "final_rank", 0) or getattr(document, "rank", 0) or 0
+                )
+            ranked = rerank_documents(query, pool, limit=pool_limit)
+            total_count = len(ranked)
+            results = ranked[offset : offset + limit]
+            if query:
+                enriched_results = []
+                for doc in results:
+                    snippet = SearchService.extract_snippet(
+                        doc.description or doc.title or "",
+                        query,
+                    )
+                    doc._search_snippet = snippet
+                    doc._match_field = "semantic"
+                    doc._matching_version_id = None
+                    enriched_results.append(doc)
+                results = enriched_results
+            return {
+                "results": results,
+                "total_count": total_count,
+                "limit": limit,
+                "offset": offset,
+                "has_more": (offset + limit) < total_count,
+                "search_mode": "semantic",
+            }
 
         # Get total count before pagination
         total_count = queryset.count()
@@ -767,3 +769,158 @@ class SearchService:
         )
 
         return list(suggestions)
+
+    @staticmethod
+    def find_related_items(
+        *,
+        record_type: str,
+        record_id: str,
+        user: Any,
+        limit: int = 8,
+    ) -> dict[str, Any]:
+        """Find related records and potential duplicates for search v2."""
+        from uuid import UUID
+
+        try:
+            record_uuid = UUID(str(record_id))
+        except (TypeError, ValueError):
+            return {"related": [], "duplicates": [], "total_count": 0}
+
+        related: list[dict[str, Any]] = []
+        duplicates: list[dict[str, Any]] = []
+
+        if record_type == "document":
+            doc_qs = SearchService._apply_visibility_filters(
+                Document.objects.filter(is_deleted=False), user
+            )
+            try:
+                document = doc_qs.get(id=record_uuid)
+            except Document.DoesNotExist:
+                return {"related": [], "duplicates": [], "total_count": 0}
+
+            tag_list = list(document.tags or [])
+            related_qs = doc_qs.exclude(id=document.id)
+            if tag_list:
+                related_qs = related_qs.filter(tags__overlap=tag_list)
+            elif document.author_id:
+                related_qs = related_qs.filter(author_id=document.author_id)
+            else:
+                words = [w for w in (document.title or "").split() if len(w) > 3][:3]
+                if words:
+                    q = Q()
+                    for word in words:
+                        q |= Q(title__icontains=word)
+                    related_qs = related_qs.filter(q)
+
+            for item in related_qs.order_by("-updated_at")[:limit]:
+                related.append(
+                    {
+                        "type": "document",
+                        "id": str(item.id),
+                        "title": item.title,
+                        "reference": item.reference_number,
+                        "reason": "shared tags" if tag_list else "same author or title",
+                    }
+                )
+
+            dup_qs = doc_qs.exclude(id=document.id).filter(title__iexact=document.title)
+            for item in dup_qs[:5]:
+                duplicates.append(
+                    {
+                        "type": "document",
+                        "id": str(item.id),
+                        "title": item.title,
+                        "reference": item.reference_number,
+                        "reason": "identical title",
+                    }
+                )
+
+        elif record_type == "correspondence":
+            corr_qs = SearchService._apply_correspondence_visibility_filters(
+                Correspondence.objects.filter(is_deleted=False), user
+            )
+            try:
+                correspondence = corr_qs.get(id=record_uuid)
+            except Correspondence.DoesNotExist:
+                return {"related": [], "duplicates": [], "total_count": 0}
+
+            related_qs = corr_qs.exclude(id=correspondence.id)
+            if correspondence.sender_organization:
+                related_qs = related_qs.filter(
+                    sender_organization__iexact=correspondence.sender_organization
+                )
+            elif correspondence.division_id:
+                related_qs = related_qs.filter(division_id=correspondence.division_id)
+            else:
+                words = [w for w in (correspondence.subject or "").split() if len(w) > 3][:3]
+                if words:
+                    q = Q()
+                    for word in words:
+                        q |= Q(subject__icontains=word)
+                    related_qs = related_qs.filter(q)
+
+            for item in related_qs.order_by("-updated_at")[:limit]:
+                related.append(
+                    {
+                        "type": "correspondence",
+                        "id": str(item.id),
+                        "title": item.subject,
+                        "reference": item.reference_number,
+                        "reason": (
+                            "same sender organization"
+                            if correspondence.sender_organization
+                            else "same division or subject"
+                        ),
+                    }
+                )
+
+            if correspondence.subject:
+                dup_qs = corr_qs.exclude(id=correspondence.id).filter(
+                    subject__iexact=correspondence.subject
+                )
+                if correspondence.sender_organization:
+                    dup_qs = dup_qs.filter(
+                        sender_organization__iexact=correspondence.sender_organization
+                    )
+                for item in dup_qs[:5]:
+                    duplicates.append(
+                        {
+                            "type": "correspondence",
+                            "id": str(item.id),
+                            "title": item.subject,
+                            "reference": item.reference_number,
+                            "reason": "matching subject"
+                            + (
+                                " and sender"
+                                if correspondence.sender_organization
+                                else ""
+                            ),
+                        }
+                    )
+
+        elif record_type == "case":
+            case_qs = Case.objects.filter(is_deleted=False)
+            try:
+                case = case_qs.get(id=record_uuid)
+            except Case.DoesNotExist:
+                return {"related": [], "duplicates": [], "total_count": 0}
+
+            related_qs = case_qs.exclude(id=case.id)
+            if case.division_id:
+                related_qs = related_qs.filter(division_id=case.division_id)
+            for item in related_qs.order_by("-opened_at")[:limit]:
+                related.append(
+                    {
+                        "type": "case",
+                        "id": str(item.id),
+                        "title": item.title,
+                        "reference": item.case_number,
+                        "reason": "same division",
+                    }
+                )
+
+        return {
+            "related": related,
+            "duplicates": duplicates,
+            "total_count": len(related) + len(duplicates),
+        }

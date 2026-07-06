@@ -1,6 +1,6 @@
 # Migration Guide
 
-**Last Updated:** April 2026
+**Last Updated:** June 2026
 **Purpose:** Complete guide for all data migrations and system transitions
 
 ---
@@ -380,7 +380,18 @@ This guide consolidates all migration activities performed during the ECM system
 
 ---
 
-**Migration Date:** January 2025
-**Migration Team:** Development Team
-**Next Review:** April 2026</content>
-<parameter name="filePath">../npa-ecm/docs/implementation/MIGRATION_GUIDE.md
+**Migration Date:** January 2025  
+**Migration Team:** Development Team  
+**Next Review:** June 2026
+
+### Phase 9–11 schema additions (June 2026)
+
+| Area | Migrations / modules | Notes |
+|------|----------------------|-------|
+| DRM | `dms` — `DocumentRightsPolicy`, `drm_policy` FK | Policy layer; download enforcement |
+| Records | `records` — retention, legal hold, disposal | Admin UI + eDiscovery export |
+| Search | `search/semantic_service.py` | No DB migration (in-process MVP) |
+| Support | `support` app | Helpdesk tickets |
+| Audit | compliance export action | Bundle API on `ActivityLog` viewset |
+
+See `REMAINING_WORK_BACKLOG.md` for enforcement hardening still open.

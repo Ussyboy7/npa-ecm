@@ -2,6 +2,7 @@
 
 import { memo } from 'react';
 import { ArrowLeft, ArrowRight, Building2 } from 'lucide-react';
+import { ExternalEntityCombobox } from "@/components/correspondence/ExternalEntityCombobox";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -35,17 +36,15 @@ function PartiesStepComponent({
               <Label htmlFor="senderOrganization">
                 Sender Organization/Private Entity <span className="text-destructive">*</span>
               </Label>
-              <Input
+              <ExternalEntityCombobox
                 id="senderOrganization"
-                placeholder="Enter organization or private entity name"
                 value={formData.senderOrganization}
-                onChange={(e) => {
-                  onFormDataChange({ senderOrganization: e.target.value });
-                  if (errors.senderOrganization) onErrorClear('senderOrganization');
+                onChange={(value) => {
+                  onFormDataChange({ senderOrganization: value });
+                  if (errors.senderOrganization) onErrorClear("senderOrganization");
                 }}
-                className={errors.senderOrganization ? 'border-destructive' : ''}
                 aria-invalid={!!errors.senderOrganization}
-                aria-describedby={errors.senderOrganization ? 'senderOrganization-error' : undefined}
+                className={errors.senderOrganization ? "border-destructive" : ""}
               />
               {errors.senderOrganization && (
                 <p id="senderOrganization-error" className="text-xs text-destructive" role="alert">

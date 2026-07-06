@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import textwrap
 import uuid
 from io import BytesIO
 from typing import Iterable, List, Sequence
@@ -19,15 +18,14 @@ from django.utils.text import slugify
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+from reportlab.lib.enums import TA_LEFT, TA_CENTER
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib import colors
-from reportlab.pdfgen import canvas
 import logging
 
-from accounts.models import User
-
 logger = logging.getLogger(__name__)
+
+from accounts.models import User
 from audit.services import AuditService
 from correspondence.models import (
     Case,
@@ -290,7 +288,6 @@ class CorrespondenceDocumentService:
         Args:
             minute: The Minute instance that was just created
         """
-        from correspondence.models import Minute as MinuteModel
         
         # Get the linked document
         link = CorrespondenceDocumentLink.objects.filter(
@@ -1378,7 +1375,6 @@ class ExecutiveApprovalPDFService:
                             try:
                                 from pdf2image import convert_from_path
                                 import tempfile
-                                import subprocess
                                 poppler_path = None
                                 for bin_path in ['/opt/local/bin', '/usr/local/bin', '/usr/bin']:
                                     if os.path.exists(os.path.join(bin_path, 'pdftoppm')):
@@ -1657,7 +1653,6 @@ class CaseService:
     @classmethod
     def generate_case_number(cls) -> str:
         """Generate a unique case number."""
-        from datetime import datetime
         today = timezone.now().date()
         count = Case.objects.filter(opened_at__date=today).count() + 1
         return f"CASE/{today.strftime('%Y%m%d')}/{count:04d}"
@@ -1975,7 +1970,7 @@ class CaseService:
     @transaction.atomic
     def generate_case_completion_package(cls, case: "Case", triggered_by: User | None = None) -> Document:
         """Generate completion package for a closed case."""
-        from correspondence.models import CaseDocumentLink, CaseCorrespondenceLink, CaseFormLink
+        from correspondence.models import CaseDocumentLink
         
         # Check if completion package already exists
         if case.completion_package:
@@ -2049,8 +2044,8 @@ class CaseService:
         from reportlab.lib.pagesizes import LETTER
         from reportlab.lib.units import inch
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.enums import TA_LEFT, TA_CENTER
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
         from reportlab.lib import colors
         from django.utils import timezone
         
@@ -2193,9 +2188,7 @@ class CaseService:
     @classmethod
     def check_case_sla(cls, case: "Case") -> dict:
         """Check and return SLA status for a case."""
-        from correspondence.models import CaseSLA
         from django.utils import timezone
-        from datetime import timedelta
         
         # Get or create SLA
         if not hasattr(case, 'sla'):
@@ -2270,4 +2263,3 @@ class CaseService:
         # 1. Query active workflow rules for this case type/division
         # 2. Evaluate rule conditions against case state and context
         # 3. Execute matching rule actions (notifications, status updates, etc.)
-        pass

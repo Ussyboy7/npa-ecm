@@ -3,7 +3,6 @@
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/DashboardLayout';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +14,6 @@ import {
   type DocumentRecord,
   type DocumentVersion,
   type DocumentWorkspace,
-  type DocumentComment,
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
 import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
@@ -28,7 +26,6 @@ import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
 import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
-import { HelpGuideCard } from '@/components/help/HelpGuideCard';
 import { DmsDocumentWorkspace, DocumentMobileTabBar } from '@/app/dms/[id]/components/DocumentWorkspace';
 import { DocumentMobileStickyBar } from '@/app/dms/[id]/components/DocumentMobileStickyBar';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
@@ -39,6 +36,8 @@ import { AccessActivityDetailsDialog } from '@/components/dms/AccessActivityDeta
 import { useDocumentDetail } from '@/app/dms/[id]/hooks/use-document-detail';
 import { useDocumentOcr } from '@/app/dms/[id]/hooks/use-document-ocr';
 import { Correspondence } from '@/lib/npa-structure';
+import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
+import { useAccessExplanation } from '@/hooks/use-access-explanation';
 
 const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
@@ -50,6 +49,7 @@ const DocumentDetailContent = () => {
     setDocument,
     loading,
     error: documentError,
+    accessDenied,
     formDocumentId,
     comments,
     setComments,
@@ -75,6 +75,10 @@ const DocumentDetailContent = () => {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
 
   const { currentUser, hydrated } = useCurrentUser();
+  const { result: accessExplanation, loading: accessExplanationLoading } = useAccessExplanation(
+    'document_view',
+    accessDenied,
+  );
   const { users: organizationUsers, divisions, departments } = useOrganization();
   const userLookup = useMemo(() => new Map(organizationUsers.map((user) => [user.id, user])), [organizationUsers]);
   const divisionLookup = useMemo(() => new Map(divisions.map((division) => [division.id, division.name])), [divisions]);
@@ -84,7 +88,7 @@ const DocumentDetailContent = () => {
   );
   const uploadUser = useMemo(
     () => currentUser ?? organizationUsers.find((user) => user.active) ?? null,
-    [currentUser?.id, organizationUsers],
+    [currentUser, organizationUsers],
   );
 
   useEffect(() => {
@@ -125,13 +129,13 @@ const DocumentDetailContent = () => {
     if (!document?.id) return;
     const logs = await getDocumentAccessLogs(document.id);
     setAccessLogs(logs);
-  }, [document?.id]);
+  }, [document?.id, setAccessLogs]);
 
   // Memoize workspaces refresh handler
   const handleWorkspacesRefreshed = useCallback(async () => {
     const ws = await fetchWorkspaces();
     setWorkspaces(ws);
-  }, []);
+  }, [setWorkspaces]);
 
   // Memoize open comments dialog handler
   const handleOpenCommentsDialog = useCallback(() => {
@@ -153,7 +157,7 @@ const DocumentDetailContent = () => {
       logError('Failed to add workspace', error);
       toast.error('Unable to add workspace');
     }
-  }, [document]);
+  }, [document, setDocument]);
 
   const handleRemoveWorkspace = useCallback(async (workspaceId: string) => {
     if (!document) return;
@@ -168,7 +172,7 @@ const DocumentDetailContent = () => {
       logError('Failed to remove workspace', error);
       toast.error('Unable to remove workspace');
     }
-  }, [document]);
+  }, [document, setDocument]);
 
   // Get user initials for avatar
   const getUserInitials = (userId: string) => {
@@ -221,7 +225,7 @@ const DocumentDetailContent = () => {
   }, []);
 
   return (
-    <DashboardLayout>
+    <>
       {loading ? (
         <div className="container mx-auto p-6">
           <Card>
@@ -231,6 +235,14 @@ const DocumentDetailContent = () => {
             </CardContent>
           </Card>
         </div>
+      ) : accessDenied ? (
+        <ResourceAccessDenied
+          title="Document Unavailable"
+          check={accessExplanation}
+          loading={accessExplanationLoading}
+          backHref="/dms"
+          backLabel="Back to Documents"
+        />
       ) : documentError || !document ? (
         <div className="container mx-auto p-6">
           <Card>
@@ -241,7 +253,7 @@ const DocumentDetailContent = () => {
                 {documentError || 'The document you are looking for does not exist or you do not have permission to view it.'}
               </p>
               <div className="flex gap-2 justify-center">
-                <Button onClick={() => router.push('/documents')} variant="default">
+                <Button onClick={() => router.push('/dms')} variant="default">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to My Documents
                 </Button>
@@ -295,14 +307,6 @@ const DocumentDetailContent = () => {
               setMinuteDocumentCorrespondence(relatedCorrespondence[0].correspondence);
               setMinuteDocumentModalOpen(true);
             }}
-          />
-
-          <HelpGuideCard
-            title="Document workspace"
-            description="Expand the preview from the toolbar. Use the header icon for the full viewer with OCR."
-            links={[{ label: 'Help & Guides', href: '/help' }]}
-            dismissible
-            dismissKey="dms-document-workspace"
           />
 
           <DocumentMobileTabBar
@@ -467,14 +471,18 @@ const DocumentDetailContent = () => {
 
       </ClientErrorBoundary>
     )}
-  </DashboardLayout>
+  </>
   );
 };
 
 const DocumentDetailPage = () => (
-  <CorrespondenceProvider>
-    <DocumentDetailContent />
-  </CorrespondenceProvider>
+  <ClientErrorBoundary>
+    <CorrespondenceProvider>
+      <DocumentDetailContent />
+    </CorrespondenceProvider>
+  </ClientErrorBoundary>
 );
+
+export const dynamic = "force-dynamic";
 
 export default DocumentDetailPage;
