@@ -1847,3 +1847,7 @@ class CheckOutEvent(UUIDModel, TimeStampedModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+# Register FOIA models with the correspondence app so migrations stay in sync.
+from .foia_models import FOIANote, FOIARequest, FOIARequestDocument  # noqa: E402,F401
