@@ -3,24 +3,25 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
-from .views import (
+from .correspondence_views import (
+    CorrespondenceAttachmentViewSet,
+    CorrespondenceDelegationViewSet,
+    CorrespondenceDistributionViewSet,
+    CorrespondenceDocumentLinkViewSet,
+    CorrespondenceDraftViewSet,
+    CorrespondenceTemplateViewSet,
+    CorrespondenceViewSet,
+    DelegationViewSet,
+    DispatchRecordViewSet,
+)
+from .minutes_views import MinuteViewSet, ParallelRoutingGroupViewSet
+from .case_views import (
     CaseCommentViewSet,
     CaseCorrespondenceLinkViewSet,
     CaseSLAViewSet,
     CaseTemplateViewSet,
     CaseViewSet,
     CaseWorkflowRuleViewSet,
-    CorrespondenceAttachmentViewSet,
-    CorrespondenceDelegationViewSet,
-    CorrespondenceDraftViewSet,
-    CorrespondenceDistributionViewSet,
-    CorrespondenceDocumentLinkViewSet,
-    CorrespondenceTemplateViewSet,
-    CorrespondenceViewSet,
-    DelegationViewSet,
-    DispatchRecordViewSet,
-    MinuteViewSet,
-    ParallelRoutingGroupViewSet,
 )
 from .external_entity_views import ExternalEntityViewSet
 from .physical_views import (
@@ -70,9 +71,9 @@ urlpatterns = [
         name="correspondence-my-sent",
     ),
     path(
-        "items/office-dispatched/",
-        CorrespondenceViewSet.as_view({"get": "office_dispatched"}),
-        name="correspondence-office-dispatched",
+        "items/office-sent/",
+        CorrespondenceViewSet.as_view({"get": "office_sent"}),
+        name="correspondence-office-sent",
     ),
     *router.urls,
 ]

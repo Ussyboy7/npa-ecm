@@ -614,3 +614,253 @@ def _add_field_to_pdf(story, field: Dict[str, Any], form_data: Dict[str, Any],
     
     story.append(Spacer(1, 0.1*cm))
 
+
+def generate_witnessing_deliveries_pdf(form_data: Dict[str, Any]) -> bytes:
+    """Generate PDF for Witnessing of Deliveries Form."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm,
+                            topMargin=1*cm, bottomMargin=1*cm)
+    story = []
+    styles = getSampleStyleSheet()
+
+    hdr = ParagraphStyle('Header', parent=styles['Normal'], fontSize=14,
+                         fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=4)
+    sub = ParagraphStyle('Sub', parent=styles['Normal'], fontSize=10,
+                         fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=2)
+    title = ParagraphStyle('Title', parent=styles['Normal'], fontSize=11,
+                           fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=16)
+    lbl = ParagraphStyle('Label', parent=styles['Normal'], fontSize=9,
+                         fontName='Helvetica-Bold', spaceAfter=2)
+    val = ParagraphStyle('Value', parent=styles['Normal'], fontSize=9,
+                         fontName='Helvetica', spaceAfter=4)
+    fd = ParagraphStyle('Field', parent=styles['Normal'], fontSize=9,
+                        fontName='Helvetica', spaceAfter=4)
+
+    story.append(Paragraph("NIGERIAN PORTS AUTHORITY", hdr))
+    story.append(Paragraph("INTERNAL AUDIT DIVISION", sub))
+    story.append(Paragraph("WITNESSING OF DELIVERIES FORM", title))
+
+    # Header fields
+    headers = [
+        ["Date:", form_data.get("date", "") or ""],
+        ["Location:", form_data.get("location", "") or ""],
+        ["Contractor's Name:", form_data.get("contractor_name", "") or ""],
+        ["Address:", form_data.get("contractor_address", "") or ""],
+        ["Letter of Award Ref. No:", form_data.get("award_ref", "") or ""],
+        ["Vehicle Regn. No:", form_data.get("vehicle_reg", "") or ""],
+    ]
+    ht = Table(headers, colWidths=[4.5*cm, 11*cm])
+    ht.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.append(ht)
+    story.append(Spacer(1, 0.3*cm))
+
+    # Line items table
+    items = form_data.get("items", [])
+    if not items:
+        items = [{"sn": i + 1, "qty": "", "description": "", "unit_price": "", "amount": ""}
+                 for i in range(10)]
+
+    table_data = [["S/N", "QTY", "DESCRIPTION", "UNIT PRICE (\u20a6)", "AMOUNT (\u20a6)"]]
+    for row in items:
+        table_data.append([
+            str(row.get("sn", "")),
+            str(row.get("qty", "")),
+            str(row.get("description", "")),
+            str(row.get("unit_price", "")),
+            str(row.get("amount", "")),
+        ])
+
+    lt = Table(table_data, colWidths=[1.5*cm, 2*cm, 8*cm, 3*cm, 3*cm])
+    lt.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (1, 0), (1, -1), "CENTER"),
+        ("ALIGN", (3, 0), (4, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
+    ]))
+    story.append(lt)
+    story.append(Spacer(1, 0.2*cm))
+
+    # Totals
+    subtotal = form_data.get("sub_total", 0)
+    vat = form_data.get("vat", 0)
+    grand_total = form_data.get("grand_total", 0)
+    try:
+        subtotal = float(subtotal) if subtotal else 0
+    except (ValueError, TypeError):
+        subtotal = 0
+    try:
+        vat = float(vat) if vat else 0
+    except (ValueError, TypeError):
+        vat = 0
+    try:
+        grand_total = float(grand_total) if grand_total else 0
+    except (ValueError, TypeError):
+        grand_total = 0
+
+    totals_data = [
+        ["SUB TOTAL", f"\u20a6{subtotal:,.2f}"],
+        ["VAT", f"\u20a6{vat:,.2f}"],
+        ["GRAND TOTAL", f"\u20a6{grand_total:,.2f}"],
+    ]
+    tt = Table(totals_data, colWidths=[8*cm, 3*cm])
+    tt.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+        ("LINEABOVE", (0, 0), (-1, 0), 0.5, colors.grey),
+        ("LINEABOVE", (0, 2), (-1, 2), 1, colors.black),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.append(tt)
+    story.append(Spacer(1, 0.4*cm))
+
+    # Supplier certification
+    story.append(Paragraph("ITEMS SUPPLIED", lbl))
+    supp_data = [
+        ["Supplier Name:", form_data.get("supplier_name", "") or ""],
+        ["Supplier Signature:", "✓ Signed" if form_data.get("supplier_signature") else ""],
+        ["Date:", form_data.get("supplier_date", "") or ""],
+    ]
+    st = Table(supp_data, colWidths=[4*cm, 11*cm])
+    st.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.append(st)
+    story.append(Spacer(1, 0.3*cm))
+
+    # Certification by User, Procurement & Audit
+    story.append(Paragraph(
+        "We hereby certify that the items listed above are supplied in accordance with description and specifications.",
+        ParagraphStyle('Cert', parent=styles['Normal'], fontSize=9, fontName='Helvetica',
+                       alignment=TA_CENTER, spaceAfter=12, spaceBefore=8),
+    ))
+
+    cert_headers = [["DEPARTMENT", "NAME", "P/NO", "DESIGNATION", "SIGNATURE", "DATE"]]
+    cert_rows = []
+    for role in ["user_dept", "procurement", "audit"]:
+        if role == "user_dept":
+            label = "USER"
+        else:
+            label = role.upper()
+        cert_rows.append([
+            label,
+            form_data.get(f"{role}_name", "") or "",
+            form_data.get(f"{role}_pn", "") or "",
+            form_data.get(f"{role}_designation", "") or "",
+            "✓" if form_data.get(f"{role}_signature") else "",
+            form_data.get(f"{role}_date", "") or "",
+        ])
+    cert_data = cert_headers + cert_rows
+    ct = Table(cert_data, colWidths=[2.5*cm, 3.5*cm, 2*cm, 3*cm, 2*cm, 2.5*cm])
+    ct.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e5e7eb")),
+    ]))
+    story.append(ct)
+    story.append(Spacer(1, 0.3*cm))
+
+    # Distribution note
+    story.append(Paragraph(
+        "White - Audit for Payment, Green - Audit Office Copy, Pink - Store Copy, Yellow - User's Copy",
+        ParagraphStyle('Dist', parent=styles['Normal'], fontSize=7, fontName='Helvetica',
+                       textColor=colors.HexColor("#666666"), alignment=TA_CENTER),
+    ))
+
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+
+
+def generate_audit_query_pdf(form_data: Dict[str, Any]) -> bytes:
+    """Generate PDF for Audit Query - Bills for Certification Form."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=2*cm, leftMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+    story = []
+    styles = getSampleStyleSheet()
+
+    hdr = ParagraphStyle('Header', parent=styles['Normal'], fontSize=13,
+                         fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=4)
+    sub = ParagraphStyle('Sub', parent=styles['Normal'], fontSize=10,
+                         fontName='Helvetica-Bold', alignment=TA_CENTER, spaceAfter=2)
+    ref_style = ParagraphStyle('Ref', parent=styles['Normal'], fontSize=9,
+                               fontName='Helvetica', spaceAfter=8)
+    lbl = ParagraphStyle('Label', parent=styles['Normal'], fontSize=10,
+                         fontName='Helvetica-Bold', spaceAfter=2)
+    val = ParagraphStyle('Value', parent=styles['Normal'], fontSize=10,
+                         fontName='Helvetica', spaceAfter=6)
+    body = ParagraphStyle('Body', parent=styles['Normal'], fontSize=10,
+                          fontName='Helvetica', spaceAfter=10, leading=16)
+
+    story.append(Paragraph("NIGERIAN PORTS AUTHORITY", hdr))
+    story.append(Paragraph("INTERNAL AUDIT DIVISION", sub))
+    story.append(Paragraph("HEADQUARTERS", sub))
+    story.append(Spacer(1, 0.3*cm))
+
+    story.append(Paragraph(f"<b>TO:</b> {form_data.get('to', '') or ''}", val))
+    story.append(Paragraph(f"<b>FROM:</b> GENERAL MANAGER AUDIT, HQ.", val))
+    story.append(Paragraph(f"<b>DATE:</b> {form_data.get('date', '') or ''}", val))
+    story.append(Paragraph(f"<b>REF:</b> {form_data.get('ref', '') or ''}", ref_style))
+    story.append(Paragraph(f"<b>SUBJECT: AUDIT QUERY - BILLS FOR CERTIFICATION</b>", lbl))
+    story.append(Spacer(1, 0.2*cm))
+
+    story.append(Paragraph(f"<b>Payee:</b> {form_data.get('payee', '') or ''}", val))
+
+    pv_date = form_data.get("pv_date", "") or ""
+    story.append(Paragraph(
+        f'I return herewith P. V. No <b>{form_data.get("pv_no", "") or ""}</b> '
+        f'dated <b>{pv_date}</b> '
+        f'together with relevant documents uncertified because of the following reasons:',
+        body,
+    ))
+
+    naira = form_data.get("amount_naira", 0)
+    kobo = form_data.get("amount_kobo", 0)
+    try:
+        naira_str = f"\u20a6{float(naira):,.2f}"
+    except (ValueError, TypeError):
+        naira_str = f"\u20a6{naira}"
+    story.append(Paragraph(f"<b>Amount:</b> {naira_str}", val))
+    if kobo:
+        story.append(Paragraph(f"<b>Kobo:</b> {kobo}", val))
+
+    story.append(Spacer(1, 0.3*cm))
+    reasons = form_data.get("reasons", "") or ""
+    story.append(Paragraph(reasons, body))
+    story.append(Spacer(1, 0.3*cm))
+
+    deadline = form_data.get("response_deadline", 48)
+    story.append(Paragraph(
+        "Could you please explain the observations made above and return same to the undersigned "
+        f"within <b>{deadline} hours</b>, for further necessary action.",
+        body,
+    ))
+    story.append(Spacer(1, 0.5*cm))
+
+    story.append(Paragraph("for: Gen. Manager Audit", val))
+    story.append(Paragraph(form_data.get("gm_name", "") or "", val))
+    if form_data.get("gm_designation"):
+        story.append(Paragraph(form_data["gm_designation"], val))
+
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return pdf_bytes
+

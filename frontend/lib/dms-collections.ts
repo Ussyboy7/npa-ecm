@@ -1,113 +1,72 @@
-import { ERROR_AUTHENTICATION_REQUIRED } from '@/lib/constants';
-import { apiFetch, hasTokens } from './api-client';
-import { unwrapResults } from '@/lib/type-utils';
-import type { DocumentCollection, CreateDocumentCollectionInput } from './dms-types';
-import { mapCollection } from './dms-types';
+"use client";
 
-let collectionsCache: DocumentCollection[] = [];
+import { apiFetch } from "@/lib/api-client";
+import type { DocumentCollection } from "./dms-types";
+import { mapCollection } from "./dms-types";
 
-export const fetchCollections = async (): Promise<DocumentCollection[]> => {
-  if (!hasTokens()) {
-    collectionsCache = [];
-    return collectionsCache;
-  }
+export type { DocumentCollection };
 
-  const payload = await apiFetch<unknown>('/dms/collections/');
-  collectionsCache = (unwrapResults(payload) as Record<string, unknown>[]).map(mapCollection);
-  return collectionsCache;
+export const fetchCollections = async (signal?: AbortSignal): Promise<DocumentCollection[]> => {
+  const payload = await apiFetch<Record<string, unknown>>("/dms/collections/", { signal });
+  const raw = Array.isArray(payload) ? payload : ((payload.results ?? []) as unknown[]);
+  return raw.map((item) => mapCollection(item as Record<string, unknown>));
 };
 
-export const fetchCollectionById = async (id: string): Promise<DocumentCollection> => {
-  if (!hasTokens()) {
-    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  }
-
-  const data = await apiFetch<Record<string, unknown>>(`/dms/collections/${id}/`);
-  return mapCollection(data);
+export const fetchCollectionById = async (id: string, signal?: AbortSignal): Promise<DocumentCollection> => {
+  const payload = await apiFetch<Record<string, unknown>>(`/dms/collections/${id}/`, { signal });
+  return mapCollection(payload);
 };
 
-export const createCollection = async (input: CreateDocumentCollectionInput): Promise<DocumentCollection> => {
-  if (!hasTokens()) {
-    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  }
-
-  const payload: Record<string, unknown> = {
-    name: input.name,
-    description: input.description ?? '',
-    document_ids: input.documentIds ?? [],
-    member_ids: input.memberIds ?? [],
-    is_public: input.isPublic ?? false,
-  };
-
-  const data = await apiFetch<Record<string, unknown>>('/dms/collections/', {
-    method: 'POST',
-    body: JSON.stringify(payload),
+export const createCollection = async (name: string, description?: string): Promise<DocumentCollection> => {
+  const response = await apiFetch<Record<string, unknown>>("/dms/collections/", {
+    method: "POST",
+    body: JSON.stringify({ name, description }),
   });
-
-  const collection = mapCollection(data);
-  collectionsCache = [...collectionsCache, collection];
-  return collection;
+  return mapCollection(response);
 };
 
-export const updateCollection = async (
-  id: string,
-  input: Partial<CreateDocumentCollectionInput>,
-): Promise<DocumentCollection> => {
-  if (!hasTokens()) {
-    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  }
-
-  const payload: Record<string, unknown> = {};
-  if (input.name !== undefined) payload.name = input.name;
-  if (input.description !== undefined) payload.description = input.description;
-  if (input.documentIds !== undefined) payload.document_ids = input.documentIds;
-  if (input.memberIds !== undefined) payload.member_ids = input.memberIds;
-  if (input.isPublic !== undefined) payload.is_public = input.isPublic;
-
-  const data = await apiFetch<Record<string, unknown>>(`/dms/collections/${id}/`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
+export const updateCollection = async (id: string, data: Partial<{ name: string; description: string }>): Promise<DocumentCollection> => {
+  const response = await apiFetch<Record<string, unknown>>(`/dms/collections/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
   });
-
-  const collection = mapCollection(data);
-  collectionsCache = collectionsCache.map((c) => (c.id === id ? collection : c));
-  return collection;
-};
-
-export const deleteCollection = async (id: string): Promise<void> => {
-  if (!hasTokens()) {
-    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  }
-
-  await apiFetch(`/dms/collections/${id}/`, {
-    method: 'DELETE',
-  });
-
-  collectionsCache = collectionsCache.filter((c) => c.id !== id);
+  return mapCollection(response);
 };
 
 export const addDocumentsToCollection = async (collectionId: string, documentIds: string[]): Promise<void> => {
-  if (!hasTokens()) {
-    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  }
-
   await apiFetch(`/dms/collections/${collectionId}/add-documents/`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ document_ids: documentIds }),
   });
+};
 
-  collectionsCache = [];
+export const removeDocumentFromCollection = async (collectionId: string, documentId: string): Promise<void> => {
+  await apiFetch(`/dms/collections/${collectionId}/remove-document/`, {
+    method: "POST",
+    body: JSON.stringify({ document_id: documentId }),
+  });
 };
 
 export const removeDocumentsFromCollection = async (collectionId: string, documentIds: string[]): Promise<void> => {
-  if (!hasTokens()) {
-    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
-  }
-
   await apiFetch(`/dms/collections/${collectionId}/remove-documents/`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({ document_ids: documentIds }),
   });
+};
 
-  collectionsCache = [];
+export const deleteCollection = async (collectionId: string): Promise<void> => {
+  await apiFetch(`/dms/collections/${collectionId}/`, { method: "DELETE" });
+};
+
+export const fetchDocumentsInCollection = async (
+  collectionId: string,
+  params?: { page?: number; pageSize?: number },
+  signal?: AbortSignal,
+) => {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("page_size", String(params.pageSize));
+  const qs = query.toString();
+  const url = `/dms/collections/${collectionId}/documents/${qs ? `?${qs}` : ""}`;
+  return await apiFetch<Record<string, unknown>>(url, { signal });
 };

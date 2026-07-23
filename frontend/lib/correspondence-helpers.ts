@@ -1,5 +1,51 @@
 import { Correspondence, Minute } from './npa-structure';
 
+export const CORRESPONDENCE_CLOSED_STATUSES = [
+  'completed',
+  'dispatched',
+  'acknowledged',
+  'archived',
+  'withdrawn',
+] as const;
+
+export type CorrespondenceClosedStatus = (typeof CORRESPONDENCE_CLOSED_STATUSES)[number];
+
+/** Workflow finished or cancelled — no further minutes/routing. */
+export const isCorrespondenceClosed = (
+  status: string | null | undefined,
+): boolean =>
+  Boolean(status && (CORRESPONDENCE_CLOSED_STATUSES as readonly string[]).includes(status));
+
+/** True when correspondence is outward (going out of office). */
+export const isCorrespondenceOutward = (
+  correspondence: Pick<Correspondence, 'isOutward' | 'direction' | 'flowType'> | null | undefined,
+): boolean => {
+  if (!correspondence) return false;
+  if (typeof correspondence.isOutward === 'boolean') return correspondence.isOutward;
+  if (correspondence.flowType?.startsWith('outward')) return true;
+  return correspondence.direction === 'downward';
+};
+
+/** Registry dispatch is only for completed outward items. */
+export const canDispatchCorrespondence = (
+  correspondence: Pick<Correspondence, 'status' | 'isOutward' | 'direction' | 'flowType'> | null | undefined,
+): boolean => {
+  if (!correspondence || correspondence.status !== 'completed') return false;
+  return isCorrespondenceOutward(correspondence);
+};
+
+/** Archive after completion (inward) or after dispatch/ack (outward). */
+export const canArchiveCorrespondence = (
+  correspondence: Pick<Correspondence, 'status'> | null | undefined,
+): boolean => {
+  if (!correspondence) return false;
+  return (
+    correspondence.status === 'completed' ||
+    correspondence.status === 'dispatched' ||
+    correspondence.status === 'acknowledged'
+  );
+};
+
 // Generate unique IDs
 export const generateId = (prefix: string): string => {
   const timestamp = Date.now();
@@ -33,9 +79,14 @@ export const getPriorityVariant = (priority: string): 'destructive' | 'default' 
 // Get status badge variant
 export const getStatusVariant = (status: string): 'default' | 'secondary' | 'outline' => {
   switch (status) {
-    case 'completed': return 'default';
-    case 'in-progress': return 'secondary';
-    default: return 'outline';
+    case 'completed':
+    case 'acknowledged':
+      return 'default';
+    case 'in-progress':
+    case 'dispatched':
+      return 'secondary';
+    default:
+      return 'outline';
   }
 };
 
@@ -106,9 +157,18 @@ export const isOverdue = (correspondence: Correspondence): boolean => {
 // Get correspondence status color
 export const getStatusColor = (status: string): string => {
   switch (status) {
-    case 'completed': return 'text-success';
-    case 'in-progress': return 'text-info';
-    case 'pending': return 'text-warning';
-    default: return 'text-muted-foreground';
+    case 'completed':
+    case 'acknowledged':
+      return 'text-success';
+    case 'dispatched':
+      return 'text-info';
+    case 'in-progress':
+      return 'text-info';
+    case 'pending':
+      return 'text-warning';
+    case 'withdrawn':
+      return 'text-destructive';
+    default:
+      return 'text-muted-foreground';
   }
 };

@@ -10,7 +10,6 @@ export type ModalType =
   | 'edit-minute'
   | 'recall-minute'
   | 'additional-minute'
-  | 'parallel-route'
   | 'treatment'
   | 'completion'
   | 'delegate'

@@ -65,9 +65,9 @@ const FormDetailPage = () => {
     <>
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between gap-2">
-          <Button variant="outline" size="sm" onClick={() => router.push("/forms")}>
+          <Button variant="outline" size="sm" onClick={() => router.push("/dms")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Forms
+            Back to Documents
           </Button>
           <Button variant="ghost" size="sm" onClick={() => router.push(`/dms/${params.id}`)}>
             <ExternalLink className="h-4 w-4 mr-2" />

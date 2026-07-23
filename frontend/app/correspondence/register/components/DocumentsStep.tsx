@@ -185,7 +185,7 @@ export const DocumentsStep = memo(function DocumentsStep({
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-        <Button type="submit" disabled={submitting} onClick={onSubmit}>
+        <Button type="button" disabled={submitting} onClick={onSubmit}>
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />

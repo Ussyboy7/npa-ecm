@@ -29,18 +29,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import {
   createDocument,
   createDocumentVersion,
-  fetchWorkspaces,
   type DocumentRecord,
   type DocumentType,
   type DocumentStatus,
   type DocumentSensitivity,
-  type DocumentWorkspace,
 } from '@/lib/dms-storage';
+import { fetchDrmPolicies, type DocumentRightsPolicy } from '@/lib/drm-api';
 import type { User } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useSignature } from '@/hooks/use-signature';
@@ -109,6 +107,8 @@ export const DocumentUploadDialog = ({
   const [tagsInput, setTagsInput] = useState('');
   const [notes, setNotes] = useState('');
   const [sensitivity, setSensitivity] = useState<DocumentSensitivity>('internal');
+  const [drmPolicyId, setDrmPolicyId] = useState<string | null>(null);
+  const [drmPolicies, setDrmPolicies] = useState<DocumentRightsPolicy[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -118,8 +118,6 @@ export const DocumentUploadDialog = ({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [templateApplied, setTemplateApplied] = useState(false);
   const [templatePreviewId, setTemplatePreviewId] = useState<string | null>(null);
-  const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
-  const [selectedWorkspaceIds, setSelectedWorkspaceIds] = useState<string[]>([]);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showTemplateConfirm, setShowTemplateConfirm] = useState(false);
   const [pendingTemplateAction, setPendingTemplateAction] = useState<'apply' | 'preview' | null>(null);
@@ -163,10 +161,27 @@ export const DocumentUploadDialog = ({
     if (!open) return;
     if (document && isMountedRef.current) {
       setSensitivity(document.sensitivity ?? 'internal');
+      setDrmPolicyId(document.drmRights?.policy_id ?? null);
     } else if (isMountedRef.current) {
       setSensitivity('internal');
+      setDrmPolicyId(null);
     }
   }, [document, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetchDrmPolicies()
+      .then((policies) => {
+        if (!cancelled && isMountedRef.current) setDrmPolicies(policies);
+      })
+      .catch((err) => {
+        logWarn('Failed to load DRM policies', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const filteredDepartments = useMemo(() => {
     if (!divisionId) return activeDepartments;
@@ -217,15 +232,6 @@ export const DocumentUploadDialog = ({
       .replace(/\{\{date\.today\}\}/g, formattedDate);
   }, [currentUser, divisionId, departmentId, title, referenceNumber, activeDivisions, activeDepartments]);
 
-  // Load workspaces
-  useEffect(() => {
-    if (mode === 'create' && open) {
-      fetchWorkspaces().then(setWorkspaces).catch((err) => {
-        logError('Failed to load workspaces', err);
-      });
-    }
-  }, [mode, open]);
-
   // Auto-save draft to localStorage (debounced) - only when dialog is open
   const saveDraftRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -260,7 +266,6 @@ export const DocumentUploadDialog = ({
         tagsInput,
         notes,
         sensitivity,
-        selectedWorkspaceIds,
         composeMode,
         editorHtml,
         selectedTemplateId,
@@ -280,7 +285,7 @@ export const DocumentUploadDialog = ({
         saveDraftRef.current = null;
       }
     };
-  }, [open, mode, title, description, documentType, status, divisionId, departmentId, referenceNumber, tagsInput, notes, sensitivity, selectedWorkspaceIds, composeMode, editorHtml, selectedTemplateId]);
+  }, [open, mode, title, description, documentType, status, divisionId, departmentId, referenceNumber, tagsInput, notes, sensitivity, composeMode, editorHtml, selectedTemplateId]);
 
   // Load draft from localStorage when dialog opens (create mode only)
   useEffect(() => {
@@ -301,7 +306,6 @@ export const DocumentUploadDialog = ({
           setTagsInput(draft.tagsInput || '');
           setNotes(draft.notes || '');
           setSensitivity(draft.sensitivity || 'internal');
-          setSelectedWorkspaceIds(draft.selectedWorkspaceIds || []);
           setComposeMode(draft.composeMode ?? true);
           setEditorHtml(draft.editorHtml || '');
           setSelectedTemplateId(draft.selectedTemplateId || null);
@@ -532,7 +536,7 @@ export const DocumentUploadDialog = ({
             referenceNumber: referenceNumber.trim() || undefined,
             tags: uniqueTags,
             authorId: currentUser.id,
-            workspaceIds: selectedWorkspaceIds.length > 0 ? selectedWorkspaceIds : undefined,
+            drmPolicyId,
           },
           {
             fileName,
@@ -627,7 +631,7 @@ export const DocumentUploadDialog = ({
       setIsSubmitting(false);
       setUploadProgress(0);
     }
-  }, [mode, validateForm, tagsInput, composeMode, editorHtml, file, title, description, documentType, status, sensitivity, divisionId, departmentId, referenceNumber, currentUser, selectedWorkspaceIds, document, scanMode, onComplete, replaceTemplateTokens, handleClose, notes]);
+  }, [mode, validateForm, tagsInput, composeMode, editorHtml, file, title, description, documentType, status, sensitivity, drmPolicyId, divisionId, departmentId, referenceNumber, currentUser, document, scanMode, onComplete, replaceTemplateTokens, handleClose, notes]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -757,6 +761,21 @@ export const DocumentUploadDialog = ({
                 </Select>
               </div>
               <div>
+                <Label className="text-xs">DRM Policy</Label>
+                <Select
+                  value={drmPolicyId ?? 'none'}
+                  onValueChange={(v) => setDrmPolicyId(v === 'none' ? null : v)}
+                >
+                  <SelectTrigger className="h-8"><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {drmPolicies.map((policy) => (
+                      <SelectItem key={policy.id} value={policy.id}>{policy.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label className="text-xs">Division</Label>
                 <Select value={divisionId ?? 'none'} onValueChange={(v) => setDivisionId(v === 'none' ? undefined : v)}>
                   <SelectTrigger className="h-8"><SelectValue placeholder="Select" /></SelectTrigger>
@@ -793,21 +812,6 @@ export const DocumentUploadDialog = ({
                 <Input value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} placeholder="operations, berth-allocation" className="h-8" />
                 {validationErrors.tags && <p className="text-xs text-destructive mt-1">{validationErrors.tags}</p>}
               </div>
-              {workspaces.length > 0 && (
-                <div className="sm:col-span-2">
-                  <Label className="text-xs">Workspaces</Label>
-                  <div className="space-y-1 mt-1">
-                    {workspaces.map((w) => (
-                      <label key={w.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <Checkbox checked={selectedWorkspaceIds.includes(w.id)}
-                          onCheckedChange={(c) => setSelectedWorkspaceIds((prev) => c ? [...prev, w.id] : prev.filter((id) => id !== w.id))} />
-                        <span className="w-2 h-2 rounded-full" style={{backgroundColor: w.color}} />
-                        {w.name}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}

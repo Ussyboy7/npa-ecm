@@ -2,7 +2,6 @@
 
 import { memo } from 'react';
 import { ArrowLeft, ArrowRight, Building2 } from 'lucide-react';
-import { ExternalEntityCombobox } from "@/components/correspondence/ExternalEntityCombobox";
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -36,11 +35,12 @@ function PartiesStepComponent({
               <Label htmlFor="senderOrganization">
                 Sender Organization/Private Entity <span className="text-destructive">*</span>
               </Label>
-              <ExternalEntityCombobox
+              <Input
                 id="senderOrganization"
+                placeholder="Organization or private entity"
                 value={formData.senderOrganization}
-                onChange={(value) => {
-                  onFormDataChange({ senderOrganization: value });
+                onChange={(e) => {
+                  onFormDataChange({ senderOrganization: e.target.value });
                   if (errors.senderOrganization) onErrorClear("senderOrganization");
                 }}
                 aria-invalid={!!errors.senderOrganization}

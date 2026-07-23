@@ -1,29 +1,53 @@
 import { apiFetch } from './api-client';
-import type { ParallelRoutingGroup } from './npa-structure';
+import type { ParallelBranch } from './npa-structure';
 
-const mapGroup = (item: Record<string, unknown>): ParallelRoutingGroup => ({
-  id: String(item.id),
-  correspondenceId: String(item.correspondence ?? item.correspondence_id ?? ''),
-  createdById: String(
-    (item.created_by as Record<string, unknown> | undefined)?.id ?? item.created_by_id ?? '',
-  ),
-  createdByName:
-    (item.created_by as Record<string, unknown> | undefined)?.username as string | undefined,
-  mergeStrategy: (item.merge_strategy as ParallelRoutingGroup['mergeStrategy']) ?? 'all',
-  isComplete: Boolean(item.is_complete),
-  completedAt: item.completed_at ? String(item.completed_at) : undefined,
-  totalBranches: Number(item.total_branches ?? 0),
-  completedBranches: Number(item.completed_branches ?? 0),
-  createdAt: item.created_at ? String(item.created_at) : undefined,
-  updatedAt: item.updated_at ? String(item.updated_at) : undefined,
+const mapBranch = (item: Record<string, unknown>): ParallelBranch => ({
+  minuteId: String(item.minute_id ?? item.minuteId ?? ''),
+  groupId: item.group_id || item.groupId ? String(item.group_id ?? item.groupId) : null,
+  targetKind: (item.target_kind ?? item.targetKind) === 'user' ? 'user' : 'office',
+  targetId: String(item.target_id ?? item.targetId ?? ''),
+  targetLabel: String(item.target_label ?? item.targetLabel ?? 'Unknown'),
+  status: (item.status as ParallelBranch['status']) ?? 'pending',
+  deadline: item.deadline || item.response_deadline ? String(item.deadline ?? item.response_deadline) : null,
+  branchOriginatorId:
+    item.branch_originator_id || item.branchOriginatorId
+      ? String(item.branch_originator_id ?? item.branchOriginatorId)
+      : null,
 });
 
-export const fetchParallelRoutingGroups = async (
+export const fetchParallelBranches = async (
   correspondenceId: string,
-): Promise<ParallelRoutingGroup[]> => {
-  const response = await apiFetch<Record<string, unknown>>(
-    `/correspondence/parallel-routing-groups/?correspondence=${correspondenceId}&page_size=20`,
+): Promise<ParallelBranch[]> => {
+  const data = await apiFetch<unknown>(
+    `/correspondence/items/${correspondenceId}/parallel-branches/`,
   );
-  const results = Array.isArray(response.results) ? response.results : [];
-  return results.map((item) => mapGroup(item as Record<string, unknown>));
+  return Array.isArray(data)
+    ? (data as Record<string, unknown>[]).map(mapBranch)
+    : [];
+};
+
+export const remindParallelBranch = async (
+  correspondenceId: string,
+  payload: { minute_id?: string; parallel_group_id?: string; office_id?: string; user_id?: string; custom_message?: string },
+): Promise<Record<string, unknown>> => {
+  return apiFetch<Record<string, unknown>>(
+    `/correspondence/items/${correspondenceId}/remind-branch/`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+};
+
+export const forceCompleteParallelBranch = async (
+  correspondenceId: string,
+  payload: { minute_id?: string; parallel_group_id?: string; office_id?: string; user_id?: string },
+): Promise<Record<string, unknown>> => {
+  return apiFetch<Record<string, unknown>>(
+    `/correspondence/items/${correspondenceId}/force-complete-branch/`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 };

@@ -7,6 +7,16 @@ html, body {
   height: 100%;
 }
 
+/* Apple Design: font-optical-sizing for responsive type rendering */
+html {
+  font-optical-sizing: auto;
+}
+
+/* Apple Design: size-specific tracking for headings */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
@@ -79,9 +89,9 @@ All colors MUST be HSL.
     --shadow-strong: 0 8px 24px hsl(218 65% 25% / 0.18);
     --shadow-glow: 0 0 20px hsl(175 50% 50% / 0.3);
 
-    /* Transitions */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-fast: all 0.15s ease-out;
+    /* Transitions — Apple-inspired: slower to start, fast finish */
+    --transition-smooth: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    --transition-fast: all 0.12s ease-out;
 
     --radius: 0.5rem;
   }
@@ -160,6 +170,37 @@ All colors MUST be HSL.
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+    }
+
+    /* Tailwind animate-in utilities still set animation-name; kill those too */
+    .animate-in,
+    .fade-in,
+    .slide-in-from-right-2,
+    .slide-in-from-top-1,
+    .zoom-in-95 {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .dialog-content,
+    .sheet-content,
+    .backdrop-blur-surface {
+      background: hsl(var(--background)) !important;
+      backdrop-filter: none !important;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    :root {
+      --border: 218 20% 60%;
+    }
+    .dark {
+      --border: 218 20% 40%;
+    }
+    * {
+      border-color: hsl(var(--border));
     }
   }
 }

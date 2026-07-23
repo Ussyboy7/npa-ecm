@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useAbortController } from "@/hooks/use-abort-controller";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +18,7 @@ import { toast } from "sonner";
 import { logError, logWarn } from "@/lib/client-logger";
 import { exportToCSV } from "@/lib/admin-export";
 import { apiFetch } from "@/lib/api-client";
-import { Search, Plus, FileText, Loader2, Briefcase, Building2, Download, ChevronRight } from "lucide-react";
+import { Search, Plus, FileText, Loader2, Briefcase, Building2, Download, ChevronRight, AlertTriangle, CheckCircle2, Clock, FolderOpen } from "lucide-react";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import {
@@ -46,6 +47,11 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
 } from "@/components/shared/registry-queue-styles";
 
 const statusOptions = [
@@ -119,7 +125,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const {divisions, departments: _departments, offices, officeMemberships } = useOrganization();
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal, reset } = useAbortController();
   
   // Get user's office IDs for scope filtering
   const userOfficeIds = useMemo(() => {
@@ -210,13 +216,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const signal = getSignal();
 
     const fetchCases = async () => {
       setLoading(true);
@@ -267,11 +267,6 @@ export function CasesListContent({ scope, title, description }: CasesListContent
 
     void fetchCases();
     
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
   }, [
     currentUser,
     pagination.page,
@@ -425,6 +420,30 @@ export function CasesListContent({ scope, title, description }: CasesListContent
             steps={['Filter by status, type, priority, or division.', 'Open a case to link correspondence, documents, and forms.', 'Create a case for new complaints, requests, inquiries, or projects.']}
           />
         </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Total Cases", value: count, icon: FolderOpen, bgClass: "bg-primary/10", iconClass: "text-primary" },
+          { label: "Open", value: cases.filter((c) => c.status === "open").length, icon: Clock, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
+          { label: "In Progress", value: cases.filter((c) => c.status === "in_progress").length, icon: AlertTriangle, bgClass: "bg-amber-500/10", iconClass: "text-amber-600" },
+          { label: "Resolved", value: cases.filter((c) => c.status === "resolved" || c.status === "closed").length, icon: CheckCircle2, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
+        ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+          <Card key={label}>
+            <CardContent className={registryQueueStatCardContentClass}>
+              <div className="flex items-center gap-4">
+                <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                  <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                </div>
+                <div>
+                  <p className={registryQueueStatLabelClass}>{label}</p>
+                  <p className={registryQueueStatValueClass}>{value}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Inline Filter Bar */}

@@ -1,9 +1,10 @@
 "use client";
 
+import React from "react";
 import { Download } from "lucide-react";
 import { logError, logInfo } from '@/lib/client-logger';
 import { getStoredAccessToken } from '@/lib/api-client';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,10 @@ import {
 import type { Correspondence, Minute } from "@/lib/npa-structure";
 import Image from "next/image";
 import mammoth from "mammoth";
+import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
+import { SecurePdfCanvasPreview } from '@/components/dms/SecurePdfCanvasPreview';
+import { forceDownloadMedia } from '@/lib/correspondence-url-utils';
+import { Button } from '@/components/ui/button';
 
 interface DocumentPreviewModalProps {
   correspondence: Correspondence;
@@ -25,7 +30,7 @@ interface DocumentPreviewModalProps {
   attachmentSource?: 'attachment' | 'completion-package';
 }
 
-export const DocumentPreviewModal = ({ 
+const DocumentPreviewModalContent = ({ 
   correspondence, 
   minutes: _minutes, 
   isOpen, 
@@ -35,184 +40,136 @@ export const DocumentPreviewModal = ({
   attachmentFileName,
   attachmentSource = 'attachment',
 }: DocumentPreviewModalProps) => {
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Determine file type
-  const isPDF = attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.pdf');
-  const isImage = attachmentUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachmentFileName || '');
-  const isWordDocx = attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.docx');
-  const isWordDoc = attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.doc');
-  const isHtml = attachmentUrl && /\.(html|htm)$/i.test(attachmentFileName || '');
+  const isPDF = Boolean(attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.pdf'));
+  const isImage = Boolean(attachmentUrl && /\.(jpg|jpeg|png|gif|webp)$/i.test(attachmentFileName || ''));
+  const isWordDocx = Boolean(attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.docx'));
+  const isWordDoc = Boolean(attachmentUrl && attachmentFileName?.toLowerCase().endsWith('.doc'));
+  const isHtml = Boolean(attachmentUrl && /\.(html|htm)$/i.test(attachmentFileName || ''));
   
-  // Show treatment response only from dedicated field (no summary fallback).
   const treatmentResponse = correspondence?.treatmentResponse;
   const hasTreatmentSummary = Boolean(treatmentResponse && treatmentResponse.trim().length > 0);
   const sourceLabel = attachmentSource === 'completion-package' ? 'Completion Package' : 'Attached Document';
+
+  const handleDownload = useCallback(async () => {
+    if (!attachmentUrl) return;
+    try {
+      await forceDownloadMedia(attachmentUrl, attachmentFileName || 'document');
+    } catch (err) {
+      logError('DocumentPreviewModal download failed', err);
+      setError(err instanceof Error ? err.message : 'Download failed');
+    }
+  }, [attachmentUrl, attachmentFileName]);
   
-  // Fetch PDF or Word document as blob when modal opens
   useEffect(() => {
-    if (isOpen && attachmentUrl) {
-      setLoading(true);
-      setError(null);
-      
-      // Get authentication token
-      const token = getStoredAccessToken();
-      const headers: HeadersInit = {};
-      
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      
-      // Debug logging
-      logInfo('[DocumentPreviewModal] Fetching attachment:', {
-        attachmentUrl,
-        attachmentFileName,
-        hasToken: !!token,
-        isPDF,
-        isWordDocx,
-      });
-      
-      // Fetch the file with authentication
-      fetch(attachmentUrl, {
-        credentials: 'include',
-        headers,
-      })
-        .then(response => {
-          logInfo('[DocumentPreviewModal] Fetch response:', {
-            status: response.status,
-            statusText: response.statusText,
-            ok: response.ok,
-            url: attachmentUrl,
-          });
-          
-          if (!response.ok) {
-            logError('DocumentPreviewModal: Fetch failed', {
-              status: response.status,
-              statusText: response.statusText,
-              url: attachmentUrl,
-            });
-            throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
-          }
-          return response.blob();
-        })
-        .then(blob => {
-          if (isPDF) {
-            // For PDFs, create blob URL for iframe
-            const url = URL.createObjectURL(blob);
-            setPdfBlobUrl(url);
-            setLoading(false);
-          } else if (isWordDocx) {
-            // For .docx files, convert to HTML using mammoth
-            blob.arrayBuffer()
-              .then(arrayBuffer => mammoth.convertToHtml({ arrayBuffer }))
-              .then(result => {
-                setWordHtml(result.value);
-                setLoading(false);
-              })
-              .catch(err => {
-                logError('Error converting Word document:', err);
-                setError(`Failed to convert Word document: ${err.message}`);
-                setLoading(false);
-              });
-          } else if (isHtml) {
-            blob.text()
-              .then((text) => {
-                setHtmlContent(text);
-                setLoading(false);
-              })
-              .catch((err) => {
-                logError('Error loading HTML document:', err);
-                setError(`Failed to load HTML document: ${err.message}`);
-                setLoading(false);
-              });
-          } else {
-            // For other file types, just reset loading
-            setLoading(false);
-          }
-        })
-        .catch(err => {
-          logError('Error loading file:', err);
-          setError(err.message);
-          setLoading(false);
-        });
-    } else {
-      // Reset state when modal closes or attachment changes
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
-        setPdfBlobUrl(null);
-      }
+    if (!isOpen || !attachmentUrl) {
+      setPdfBytes(null);
       setWordHtml(null);
       setHtmlContent(null);
       setLoading(false);
       setError(null);
+      return;
     }
-    
-    // Cleanup blob URL when component unmounts or dependencies change
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setPdfBytes(null);
+    setWordHtml(null);
+    setHtmlContent(null);
+
+    const token = getStoredAccessToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    logInfo('[DocumentPreviewModal] Fetching attachment:', {
+      attachmentUrl,
+      attachmentFileName,
+      hasToken: !!token,
+      isPDF,
+      isWordDocx,
+    });
+
+    fetch(attachmentUrl, { credentials: 'include', headers })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
+        }
+        return response.blob();
+      })
+      .then(async (blob) => {
+        if (cancelled) return;
+        if (isPDF) {
+          setPdfBytes(await blob.arrayBuffer());
+          setLoading(false);
+          return;
+        }
+        if (isWordDocx) {
+          const result = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+          if (cancelled) return;
+          setWordHtml(result.value);
+          setLoading(false);
+          return;
+        }
+        if (isHtml) {
+          const text = await blob.text();
+          if (cancelled) return;
+          setHtmlContent(text);
+          setLoading(false);
+          return;
+        }
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        logError('Error loading file:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load file');
+        setLoading(false);
+      });
+
     return () => {
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
-      }
+      cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isPDF, isWordDocx, isHtml, attachmentUrl]);
+  }, [isOpen, isPDF, isWordDocx, isHtml, attachmentUrl, attachmentFileName]);
   
   const renderAttachmentPreview = () => {
     if (!attachmentUrl) return null;
 
     if (isPDF) {
       return (
-        <div className="w-full h-full min-h-[600px]">
+        <div className="w-full h-full min-h-full">
           {loading ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+            <div className="flex flex-col items-center justify-center p-12 text-center min-h-[50vh]">
               <p className="text-sm text-muted-foreground">Loading PDF...</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
+            <div className="flex flex-col items-center justify-center p-12 text-center min-h-[50vh]">
               <p className="text-lg font-medium mb-4 text-destructive">Error loading PDF</p>
               <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <a
-                href={attachmentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-              >
-                <Download className="h-4 w-4" />
-                Open PDF in new tab
-              </a>
+              <Button type="button" onClick={() => void handleDownload()}>
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
+              </Button>
             </div>
-          ) : pdfBlobUrl ? (
-            <iframe
-              src={pdfBlobUrl}
-              className="w-full h-full min-h-[600px] border-0"
-              title="Document Preview"
-            />
+          ) : pdfBytes ? (
+            <div className="w-full min-h-full overflow-visible bg-muted/20 p-2">
+              <SecurePdfCanvasPreview data={pdfBytes} minHeightClassName="min-h-0" />
+            </div>
           ) : (
-            <object
-              data={attachmentUrl}
-              type="application/pdf"
-              className="w-full h-full min-h-[600px] border-0"
-              title="Document Preview"
-            >
-              <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
-                <p className="text-lg font-medium mb-4">Unable to display PDF</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Your browser may not support PDF preview. Please download the file to view it.
-                </p>
-                <a
-                  href={attachmentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                >
-                  <Download className="h-4 w-4" />
-                  Open PDF in new tab
-                </a>
-              </div>
-            </object>
+            <div className="flex flex-col items-center justify-center p-12 text-center min-h-[50vh]">
+              <p className="text-lg font-medium mb-4">Unable to display PDF</p>
+              <Button type="button" onClick={() => void handleDownload()}>
+                <Download className="h-4 w-4" />
+                Download PDF
+              </Button>
+            </div>
           )}
         </div>
       );
@@ -244,15 +201,10 @@ export const DocumentPreviewModal = ({
             <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
               <p className="text-lg font-medium mb-4 text-destructive">Error loading Word document</p>
               <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <a
-                href={attachmentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-              >
-                <Download className="h-4 w-4" />
-                Open Word document in new tab
-              </a>
+              <Button type="button" onClick={() => void handleDownload()}>
+                <Download className="h-4 w-4 mr-2" />
+                Download Word document
+              </Button>
             </div>
           ) : wordHtml ? (
             <div className="prose prose-base dark:prose-invert max-w-none p-6">
@@ -274,15 +226,10 @@ export const DocumentPreviewModal = ({
             <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
               <p className="text-lg font-medium mb-4 text-destructive">Error loading HTML document</p>
               <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <a
-                href={attachmentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-              >
-                <Download className="h-4 w-4" />
+              <Button type="button" onClick={() => void handleDownload()}>
+                <Download className="h-4 w-4 mr-2" />
                 Download HTML
-              </a>
+              </Button>
             </div>
           ) : htmlContent ? (
             <div className="prose prose-base dark:prose-invert max-w-none p-6">
@@ -300,15 +247,10 @@ export const DocumentPreviewModal = ({
           <p className="text-sm text-muted-foreground mb-4">
             Preview is not available for .doc files. Please download to view.
           </p>
-          <a
-            href={attachmentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-          >
-            <Download className="h-4 w-4" />
+          <Button type="button" onClick={() => void handleDownload()}>
+            <Download className="h-4 w-4 mr-2" />
             Download Word document
-          </a>
+          </Button>
         </div>
       );
     }
@@ -316,15 +258,10 @@ export const DocumentPreviewModal = ({
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
         <p className="text-lg font-medium mb-4">{attachmentFileName || 'Document'}</p>
-        <a
-          href={attachmentUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-        >
-          <Download className="h-4 w-4" />
+        <Button type="button" onClick={() => void handleDownload()}>
+          <Download className="h-4 w-4 mr-2" />
           Download to view
-        </a>
+        </Button>
       </div>
     );
   };
@@ -333,27 +270,38 @@ export const DocumentPreviewModal = ({
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) onClose();
     }}>
-      <DialogContent className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="px-4 pt-3 pb-1 flex-shrink-0">
+      <DialogContent className="max-w-6xl w-[95vw] sm:w-full h-[92vh] max-h-[95vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-4 pt-3 pb-1 flex-shrink-0 flex-row items-center justify-between gap-2 space-y-0">
           <DialogTitle className="text-sm font-medium truncate">
             {attachmentFileName || correspondence.referenceNumber}
           </DialogTitle>
+          {attachmentUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0"
+              onClick={() => void handleDownload()}
+            >
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Download
+            </Button>
+          ) : null}
         </DialogHeader>
 
-        <div className="flex-1 border-t overflow-y-auto">
-          {/* Show treatment response summary first if it exists */}
+        <div className="flex-1 min-h-0 overflow-y-auto border-t">
           {hasTreatmentSummary ? (
             <div className="flex flex-col">
               <div className="p-6 border-b">
                 <div className="mb-2 pb-2 border-b border-border">
                   <h4 className="text-sm font-semibold text-muted-foreground">Treatment Response</h4>
                 </div>
-                <div className="whitespace-pre-wrap text-sm">
-                  {treatmentResponse}
-                </div>
+                <div
+                  className="prose prose-sm dark:prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: treatmentResponse! }}
+                />
               </div>
               
-              {/* Show attachments below treatment response */}
               {attachmentUrl && (
                 <div className="p-6 bg-muted/30">
                   <h4 className="text-sm font-semibold text-muted-foreground mb-3">{sourceLabel}</h4>
@@ -362,26 +310,24 @@ export const DocumentPreviewModal = ({
               )}
             </div>
           ) : (
-            <>{/* Original logic for no summary */}
+            <>
           {attachmentUrl ? (
-            // Priority 1: Show uploaded attachment
             <>{renderAttachmentPreview()}</>
           ) : documentContentHtml ? (
-            // Priority 2: Show DMS content
             <div
               className="prose prose-base dark:prose-invert max-w-none p-6"
               dangerouslySetInnerHTML={{ __html: documentContentHtml }}
             />
           ) : (
-            // No document available - show treatment response if available
             hasTreatmentSummary ? (
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="mb-4 pb-4 border-b border-border sticky top-0 bg-background">
                   <h4 className="text-sm font-semibold text-muted-foreground">Treatment Response</h4>
                 </div>
-                <div className="whitespace-pre-wrap text-sm">
-                  {treatmentResponse}
-                </div>
+                <div
+                  className="prose prose-sm dark:prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: treatmentResponse! }}
+                />
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
@@ -395,8 +341,14 @@ export const DocumentPreviewModal = ({
           </>)}
         </div>
 
-        <div className="h-2" />
       </DialogContent>
     </Dialog>
   );
 };
+
+export const DocumentPreviewModal = React.memo((props: DocumentPreviewModalProps) => (
+  <ModalErrorBoundary onClose={props.onClose}>
+    <DocumentPreviewModalContent {...props} />
+  </ModalErrorBoundary>
+));
+DocumentPreviewModal.displayName = 'DocumentPreviewModal';

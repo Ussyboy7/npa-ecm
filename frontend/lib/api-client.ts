@@ -3,32 +3,83 @@
 import { logWarn } from './client-logger';
 
 const isBrowser = () => typeof window !== "undefined";
+const AUTH_CHANGED_EVENT = "npa_ecm_auth_changed";
+const ACCESS_TOKEN_KEY = "access_token";
+const REFRESH_TOKEN_KEY = "refresh_token";
+const ACCESS_TOKEN_EXP_KEY = "access_token_exp";
+const ACCESS_COOKIE_NAME = "npa_ecm_access_token";
+const REFRESH_COOKIE_NAME = "npa_ecm_refresh_token";
+const LEGACY_ACCESS_COOKIE_NAME = "access_token";
+const LEGACY_REFRESH_COOKIE_NAME = "refresh_token";
+const DEFAULT_ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
+const DEFAULT_REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+const getCookieValue = (name: string): string | null => {
+  if (!isBrowser()) return null;
+  const cookie = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`));
+  if (!cookie) return null;
+  const value = cookie.split("=").slice(1).join("=");
+  return value ? decodeURIComponent(value) : null;
+};
+
+const setCookieValue = (name: string, value: string, maxAgeSeconds: number) => {
+  if (!isBrowser()) return;
+  const secure = window.location.protocol === "https:" ? "; secure" : "";
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; samesite=lax${secure}`;
+};
+
+const clearCookieValue = (name: string) => {
+  if (!isBrowser()) return;
+  const secure = window.location.protocol === "https:" ? "; secure" : "";
+  document.cookie = `${name}=; path=/; max-age=0; samesite=lax${secure}`;
+};
+
+const notifyAuthChanged = () => {
+  if (!isBrowser()) return;
+  window.dispatchEvent(new Event(AUTH_CHANGED_EVENT));
+};
 
 // Simple auth helpers for NPA-ECM
 export const getStoredAccessToken = () => {
   if (!isBrowser()) return null;
-  return localStorage.getItem('access_token');
+  return (
+    localStorage.getItem(ACCESS_TOKEN_KEY)
+    || getCookieValue(ACCESS_COOKIE_NAME)
+  );
 };
 
 export const getStoredRefreshToken = () => {
   if (!isBrowser()) return null;
-  return localStorage.getItem('refresh_token');
+  return (
+    localStorage.getItem(REFRESH_TOKEN_KEY)
+    || getCookieValue(REFRESH_COOKIE_NAME)
+  );
 };
 
 export const storeTokens = (accessToken: string, refreshToken: string, expiresInSeconds?: number) => {
   if (!isBrowser()) return;
-  localStorage.setItem('access_token', accessToken);
-  localStorage.setItem('refresh_token', refreshToken);
-  if (expiresInSeconds) {
-    const expiresAt = Date.now() + expiresInSeconds * 1000;
-    localStorage.setItem('access_token_exp', expiresAt.toString());
-  }
+  const accessTtlSeconds = expiresInSeconds ?? DEFAULT_ACCESS_TOKEN_TTL_SECONDS;
+  const expiresAt = Date.now() + accessTtlSeconds * 1000;
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  localStorage.setItem(ACCESS_TOKEN_EXP_KEY, expiresAt.toString());
+  setCookieValue(ACCESS_COOKIE_NAME, accessToken, accessTtlSeconds);
+  setCookieValue(REFRESH_COOKIE_NAME, refreshToken, DEFAULT_REFRESH_TOKEN_TTL_SECONDS);
+  clearCookieValue(LEGACY_ACCESS_COOKIE_NAME);
+  clearCookieValue(LEGACY_REFRESH_COOKIE_NAME);
+  notifyAuthChanged();
 };
 
 export const clearTokens = () => {
   if (!isBrowser()) return;
-  localStorage.removeItem('access_token');
-  localStorage.removeItem('refresh_token');
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(ACCESS_TOKEN_EXP_KEY);
+  clearCookieValue(ACCESS_COOKIE_NAME);
+  clearCookieValue(REFRESH_COOKIE_NAME);
+  notifyAuthChanged();
 };
 
 export const hasTokens = () => {
@@ -68,13 +119,18 @@ async function attemptTokenRefresh(): Promise<boolean> {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh: refreshToken }),
+        credentials: "include",
       });
       if (!res.ok) {
         clearTokens();
         return false;
       }
       const data = await res.json();
-      storeTokens(data.access, data.refresh, data.expires_in ?? 3600);
+      storeTokens(
+        data.access,
+        typeof data.refresh === "string" ? data.refresh : refreshToken,
+        data.expires_in ?? 3600,
+      );
       return true;
     } catch {
       clearTokens();
@@ -89,6 +145,7 @@ async function attemptTokenRefresh(): Promise<boolean> {
 export const apiFetch = async <T = unknown>(path: string, options: FetchOptions = {}): Promise<T> => {
   const {
     skipAuth,
+    responseType,
     headers,
     ...rest
   } = options;
@@ -116,13 +173,7 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
     });
 
     if (!response.ok) {
-      let responseBody = '';
-      try {
-        responseBody = await response.text();
-      } catch (_e) {
-        responseBody = 'Could not read response body';
-      }
-
+      const responseBody = await response.text().catch(() => 'Could not read response body');
       let apiMessage: string | undefined;
       try {
         const parsed = JSON.parse(responseBody);
@@ -130,9 +181,7 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
           const p = parsed as Record<string, unknown>;
           apiMessage = (p.detail || p.message || p.error) as string | undefined;
         }
-      } catch {
-        // Not JSON
-      }
+      } catch { /* Not JSON */ }
 
       const err = new Error(apiMessage || `HTTP ${response.status}`);
       (err as unknown as Record<string, unknown>).status = response.status;
@@ -145,6 +194,8 @@ export const apiFetch = async <T = unknown>(path: string, options: FetchOptions 
       return undefined as T;
     }
 
+    if (responseType === 'blob') return await response.blob() as T;
+    if (responseType === 'text') return await response.text() as T;
     return await response.json() as T;
   };
 
@@ -267,17 +318,22 @@ export const logout = async () => {
 
 export const storeOriginalTokens = () => {
   if (!isBrowser()) return;
-  const access = localStorage.getItem('access_token');
-  const refresh = localStorage.getItem('refresh_token');
+  const access = getStoredAccessToken();
+  const refresh = getStoredRefreshToken();
   if (!access || !refresh) return;
   localStorage.setItem('original_access_token', access);
   localStorage.setItem('original_refresh_token', refresh);
+  const expiresAt = localStorage.getItem(ACCESS_TOKEN_EXP_KEY);
+  if (expiresAt) {
+    localStorage.setItem('original_access_exp', expiresAt);
+  }
 };
 
 export const clearOriginalTokens = () => {
   if (!isBrowser()) return;
   localStorage.removeItem('original_access_token');
   localStorage.removeItem('original_refresh_token');
+  localStorage.removeItem('original_access_exp');
 };
 
 export const getOriginalTokens = () => {
@@ -317,4 +373,3 @@ export const impersonateUser = async (userId: string) => {
   const data = await response.json();
   storeTokens(data.access, data.refresh, data.expires_in ?? 3600);
 };
-

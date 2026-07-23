@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,13 +27,14 @@ import { Loader2, Lock } from 'lucide-react';
 import { apiFetch } from '@/lib/api-client';
 import { logError } from '@/lib/client-logger';
 import { validatePassword } from '@/app/settings/settings-utils';
+import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 
 interface PasswordDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function PasswordDialog({ open, onOpenChange }: PasswordDialogProps) {
+const PasswordDialogContent = ({ open, onOpenChange }: PasswordDialogProps) => {
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
@@ -42,6 +43,7 @@ export function PasswordDialog({ open, onOpenChange }: PasswordDialogProps) {
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const submittingRef = useRef(false);
 
   const handleChangePassword = async () => {
     const errors: Record<string, string> = {};
@@ -64,6 +66,8 @@ export function PasswordDialog({ open, onOpenChange }: PasswordDialogProps) {
       return;
     }
 
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setPasswordErrors({});
     setIsChangingPassword(true);
 
@@ -92,6 +96,7 @@ export function PasswordDialog({ open, onOpenChange }: PasswordDialogProps) {
       setPasswordErrors({});
     } finally {
       setIsChangingPassword(false);
+      submittingRef.current = false;
     }
   };
 
@@ -198,4 +203,11 @@ export function PasswordDialog({ open, onOpenChange }: PasswordDialogProps) {
       </AlertDialog>
     </>
   );
-}
+};
+
+export const PasswordDialog = React.memo((props: PasswordDialogProps) => (
+  <ModalErrorBoundary onClose={() => props.onOpenChange?.(false)}>
+    <PasswordDialogContent {...props} />
+  </ModalErrorBoundary>
+));
+PasswordDialog.displayName = 'PasswordDialog';

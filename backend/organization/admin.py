@@ -2,7 +2,16 @@
 
 from django.contrib import admin
 
-from .models import Department, Directorate, Division, Office, OfficeMembership, Role
+from .models import (
+    ActingAppointment,
+    ActingRequest,
+    Department,
+    Directorate,
+    Division,
+    Office,
+    OfficeMembership,
+    Role,
+)
 
 
 @admin.register(Directorate)
@@ -53,3 +62,46 @@ class OfficeMembershipAdmin(admin.ModelAdmin):
     )
     list_filter = ("assignment_role", "is_primary", "can_register", "can_route", "can_approve", "is_active")
     search_fields = ("office__name", "office__code", "user__username", "user__first_name", "user__last_name")
+
+
+@admin.register(ActingAppointment)
+class ActingAppointmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "office",
+        "principal",
+        "acting_user",
+        "starts_at",
+        "ends_at",
+        "is_active",
+        "items_transferred",
+        "items_reclaimed",
+    )
+    list_filter = ("is_active", "office")
+    search_fields = (
+        "office__name",
+        "principal__username",
+        "acting_user__username",
+        "reason",
+    )
+    raw_id_fields = ("office", "principal", "acting_user", "appointed_by", "ended_by", "membership")
+
+@admin.register(ActingRequest)
+class ActingRequestAdmin(admin.ModelAdmin):
+    list_display = (
+        "office",
+        "principal",
+        "requested_by",
+        "status",
+        "pending_item_count",
+        "created_at",
+    )
+    list_filter = ("status", "office")
+    search_fields = ("office__name", "reason", "requested_by__username")
+    raw_id_fields = (
+        "office",
+        "principal",
+        "requested_by",
+        "suggested_acting_user",
+        "resolved_by",
+        "appointment",
+    )

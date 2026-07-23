@@ -1,5 +1,4 @@
 import { apiFetch } from '../api-client';
-import { logError } from '@/lib/client-logger';
 import { isRecord } from '@/lib/type-utils';
 
 export interface ApiSignatureTemplate {
@@ -58,86 +57,57 @@ const mapApiPreferencesToFrontend = (api: ApiUserSignaturePreferences): UserSign
   autoApplyForMinutes: api.auto_apply_for_minutes,
 });
 
-/**
- * Get all signature templates
- */
 export async function getSignatureTemplates(params?: {
   template_type?: 'approval' | 'minute' | 'forward' | 'treatment';
   style?: 'stamp' | 'formal' | 'minimal';
   default_apply?: boolean;
 }, signal?: AbortSignal): Promise<SignatureTemplate[]> {
-  try {
-    const queryParams = new URLSearchParams();
-    if (params?.template_type) queryParams.append('template_type', params.template_type);
-    if (params?.style) queryParams.append('style', params.style);
-    if (params?.default_apply !== undefined) queryParams.append('default_apply', String(params.default_apply));
+  const queryParams = new URLSearchParams();
+  if (params?.template_type) queryParams.append('template_type', params.template_type);
+  if (params?.style) queryParams.append('style', params.style);
+  if (params?.default_apply !== undefined) queryParams.append('default_apply', String(params.default_apply));
 
-    const response = await apiFetch<unknown>(
-      `/accounts/signature-templates/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
-      { signal }
-    );
-    
-    const templates = Array.isArray(response)
-      ? (response as ApiSignatureTemplate[])
-      : isRecord(response) && Array.isArray(response.results)
-        ? (response.results as ApiSignatureTemplate[])
-        : [];
-    return templates.map(mapApiTemplateToFrontend);
-  } catch (error: unknown) {
-    if (!(error instanceof DOMException && error.name === 'AbortError')) {
-      logError('Failed to fetch signature templates from backend', error);
-    }
-    return [];
-  }
+  const response = await apiFetch<unknown>(
+    `/accounts/signature-templates/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`,
+    { signal }
+  );
+
+  const templates = Array.isArray(response)
+    ? (response as ApiSignatureTemplate[])
+    : isRecord(response) && Array.isArray(response.results)
+      ? (response.results as ApiSignatureTemplate[])
+      : [];
+  return templates.map(mapApiTemplateToFrontend);
 }
 
-/**
- * Get user signature preferences
- */
 export async function getUserSignaturePreferences(signal?: AbortSignal): Promise<UserSignaturePreferences | null> {
-  try {
-    const response = await apiFetch<ApiUserSignaturePreferences>(
-      '/accounts/signature-preferences/my_preferences/',
-      { signal }
-    );
-    return mapApiPreferencesToFrontend(response);
-  } catch (error: unknown) {
-    if (!(error instanceof DOMException && error.name === 'AbortError')) {
-      logError('Failed to fetch user signature preferences from backend', error);
-    }
-    return null;
-  }
+  const response = await apiFetch<ApiUserSignaturePreferences>(
+    '/accounts/signature-preferences/my_preferences/',
+    { signal }
+  );
+  return mapApiPreferencesToFrontend(response);
 }
 
-/**
- * Update user signature preferences
- */
 export async function updateUserSignaturePreferences(
   preferences: Partial<UserSignaturePreferences>
 ): Promise<UserSignaturePreferences> {
-  try {
-    const apiData: Partial<ApiUserSignaturePreferences> = {};
-    if (preferences.defaultTemplateId !== undefined) {
-      apiData.default_template_id = preferences.defaultTemplateId || null;
-    }
-    if (preferences.templateOverrides !== undefined) {
-      apiData.template_overrides = preferences.templateOverrides;
-    }
-    if (preferences.autoApplyForMinutes !== undefined) {
-      apiData.auto_apply_for_minutes = preferences.autoApplyForMinutes;
-    }
-
-    const response = await apiFetch<ApiUserSignaturePreferences>(
-      '/accounts/signature-preferences/my_preferences/',
-      {
-        method: 'PATCH',
-        body: JSON.stringify(apiData),
-      }
-    );
-    return mapApiPreferencesToFrontend(response);
-  } catch (error: unknown) {
-    logError('Failed to update user signature preferences on backend', error);
-    throw error;
+  const apiData: Partial<ApiUserSignaturePreferences> = {};
+  if (preferences.defaultTemplateId !== undefined) {
+    apiData.default_template_id = preferences.defaultTemplateId || null;
   }
-}
+  if (preferences.templateOverrides !== undefined) {
+    apiData.template_overrides = preferences.templateOverrides;
+  }
+  if (preferences.autoApplyForMinutes !== undefined) {
+    apiData.auto_apply_for_minutes = preferences.autoApplyForMinutes;
+  }
 
+  const response = await apiFetch<ApiUserSignaturePreferences>(
+    '/accounts/signature-preferences/my_preferences/',
+    {
+      method: 'PATCH',
+      body: JSON.stringify(apiData),
+    }
+  );
+  return mapApiPreferencesToFrontend(response);
+}

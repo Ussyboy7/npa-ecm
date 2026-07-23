@@ -96,6 +96,9 @@ export type DistributionRecipient = {
   addedAt?: string;
   purpose?: 'information' | 'action'; // Removed 'comment' - streamlined to 2 purposes
   customMinuteText?: string; // Optional custom minute text for users with "For Action"
+  is_active?: boolean;
+  readAt?: string;
+  readBy?: string;
 };
 
 export type CorrespondenceAttachment = {
@@ -112,12 +115,22 @@ export type Correspondence = {
   id: string;
   referenceNumber: string;
   subject: string;
+  bodyHtml?: string;
   treatmentResponse?: string;
   documentType?: string;
   senderReference?: string;
   letterDate?: string;
   dispatchDate?: string;
   acknowledgedDate?: string;
+  hasPhysicalCopy?: boolean;
+  physicalDocuments?: Array<{
+    id: string;
+    tracking_number: string;
+    status: string;
+    location?: { display_name: string };
+    checked_out_to?: { name: string };
+    created_at: string;
+  }>;
   lifecycleStages?: Array<{
     key: string;
     label: string;
@@ -156,6 +169,10 @@ export type Correspondence = {
   direction: 'upward' | 'downward';
   currentApproverName?: string;
   createdByName?: string;
+  isActingSeat?: boolean;
+  actingAppointmentId?: string;
+  actingOriginalApproverId?: string;
+  actingPrincipalName?: string;
   owningOfficeId?: string;
   owningOfficeName?: string;
   currentOfficeId?: string;
@@ -196,12 +213,29 @@ export type Correspondence = {
     isInternal: boolean;
     isExternal: boolean;
     should_appear_in_office_inbox: boolean;
-    should_appear_in_office_outbox: boolean;
     description: string;
   };
   createdAt?: string;
   updatedAt?: string;
   tags?: string[];
+  isRead?: boolean;
+};
+
+export type ParallelBranchStatus =
+  | 'pending'
+  | 'completed'
+  | 'overdue'
+  | 'force_completed';
+
+export type ParallelBranch = {
+  minuteId: string;
+  groupId: string | null;
+  targetKind: 'user' | 'office';
+  targetId: string;
+  targetLabel: string;
+  status: ParallelBranchStatus;
+  deadline: string | null;
+  branchOriginatorId: string | null;
 };
 
 export type MinuteSignaturePayload = {
@@ -462,7 +496,7 @@ export type CaseDetail = Case & {
   statusHistory?: CaseStatusHistory[];
 };
 
-export { updateOrganizationCache } from './organization-cache';
+export { updateOrganizationCache, resetOrgCache } from './organization-cache';
 export {
   getOrganizationSnapshot,
   getDirectorateById,

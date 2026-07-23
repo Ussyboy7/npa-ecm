@@ -9,16 +9,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { replaceDocumentVersion, type DocumentVersion } from '@/lib/dms-storage';
 import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file-utils';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
 import { FileUploadZone } from './FileUploadZone';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { QuillEditor } from './QuillEditor';
+import { Loader2, AlertTriangle, PenTool, Upload as UploadIcon } from 'lucide-react';
 import type { DocumentRecord } from '@/lib/dms-storage';
 
 interface ReplaceVersionDialogProps {
@@ -51,13 +54,14 @@ export const ReplaceVersionDialog = ({
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [composeMode, setComposeMode] = useState(() => Boolean(version?.contentHtml));
+  const [editorHtml, setEditorHtml] = useState(() => version?.contentHtml ?? '');
 
   const handleFileSelect = useCallback((selectedFile: File | null) => {
     setFile(selectedFile);
     setError(null);
     
     if (selectedFile) {
-      // Validate file type
       const typeValidation = validateFileType(selectedFile);
       if (!typeValidation.valid) {
         setError(typeValidation.error || 'Invalid file type');
@@ -65,7 +69,6 @@ export const ReplaceVersionDialog = ({
         return;
       }
 
-      // Validate file size
       const sizeValidation = validateFileSize(selectedFile, MAX_FILE_SIZE_MB);
       if (!sizeValidation.valid) {
         setError(sizeValidation.error || 'File too large');
@@ -77,13 +80,20 @@ export const ReplaceVersionDialog = ({
 
   const handleClose = useCallback(() => {
     setFile(null);
+    setEditorHtml('');
     setNotes('');
     setError(null);
+    setComposeMode(Boolean(version?.contentHtml));
     onOpenChange(false);
-  }, [onOpenChange]);
+  }, [onOpenChange, version]);
 
   const handleSubmit = useCallback(async () => {
-    if (!file || !version || !document) {
+    if (!version || !document) {
+      toast.error('No version selected');
+      return;
+    }
+
+    if (!composeMode && !file) {
       toast.error('Please select a file to replace the version');
       return;
     }
@@ -92,18 +102,38 @@ export const ReplaceVersionDialog = ({
     setError(null);
 
     try {
-      const fileUrl = await fileToDataUrl(file);
-      
-      const updated = await replaceDocumentVersion(version.id, {
-        fileName: file.name,
-        fileType: file.type || 'application/octet-stream',
-        fileSize: file.size,
-        fileUrl,
-        notes: notes.trim() || 'Version replaced',
-      });
+      if (composeMode) {
+        const fileName = `${version.fileName?.replace(/\.[^/.]+$/, '') || 'document'}-edited-v${version.versionNumber}.html`;
+        const fileType = 'text/html';
+        const contentHtml = editorHtml;
+        const htmlFile = new File([contentHtml], fileName, { type: fileType });
 
-      onComplete(updated);
-      toast.success('Version replaced successfully');
+        const updated = await replaceDocumentVersion(version.id, {
+          fileName,
+          fileType,
+          fileSize: htmlFile.size,
+          fileUrl: await fileToDataUrl(htmlFile),
+          contentHtml,
+          notes: notes.trim() || 'Version edited',
+        });
+
+        onComplete(updated);
+        toast.success('Version updated successfully');
+      } else {
+        const fileUrl = await fileToDataUrl(file!);
+        
+        const updated = await replaceDocumentVersion(version.id, {
+          fileName: file!.name,
+          fileType: file!.type || 'application/octet-stream',
+          fileSize: file!.size,
+          fileUrl,
+          notes: notes.trim() || 'Version replaced',
+        });
+
+        onComplete(updated);
+        toast.success('Version replaced successfully');
+      }
+
       handleClose();
     } catch (error: unknown) {
       logError('Failed to replace version', error);
@@ -113,67 +143,102 @@ export const ReplaceVersionDialog = ({
     } finally {
       setIsSubmitting(false);
     }
-  }, [file, version, document, notes, onComplete, handleClose]);
+  }, [file, version, document, notes, composeMode, editorHtml, onComplete, handleClose]);
 
   if (!version || !document) return null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent className="max-w-5xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle>Replace Version {version.versionNumber}</DialogTitle>
+          <DialogTitle>Edit Version {version.versionNumber}</DialogTitle>
           <DialogDescription>
-            Upload a new file to replace this version. The version number and upload date will be preserved.
+            Edit the content or upload a new file to replace this version. The version number and upload date will be preserved.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="p-3 border rounded-lg bg-muted/30">
-            <p className="text-sm font-medium mb-1">Current Version:</p>
-            <p className="text-xs text-muted-foreground">{version.fileName}</p>
-          </div>
+        <ScrollArea className="max-h-[calc(95vh-200px)] sm:max-h-[60vh] pr-2 sm:pr-4">
+          <div className="space-y-4">
+            <div className="p-3 border rounded-lg bg-muted/30">
+              <p className="text-sm font-medium mb-1">Current Version:</p>
+              <p className="text-xs text-muted-foreground break-all">{version.fileName}</p>
+            </div>
 
-          <div className="space-y-2">
-            <Label>
-              New File <span className="text-destructive">*</span>
-            </Label>
-            <FileUploadZone
-              file={file}
-              onFileSelect={handleFileSelect}
-              maxSizeMB={MAX_FILE_SIZE_MB}
-              disabled={isSubmitting}
-            />
-            {error && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-sm">
+                <PenTool className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Compose</span>
+              </div>
+              <Switch
+                checked={composeMode}
+                onCheckedChange={(checked) => {
+                  setComposeMode(checked);
+                  setError(null);
+                }}
+              />
+              <div className="flex items-center gap-2 text-sm">
+                <UploadIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Upload</span>
+              </div>
+            </div>
+
+            {composeMode ? (
+              <div className="min-h-[400px] border rounded-lg overflow-hidden">
+                <QuillEditor
+                  value={editorHtml}
+                  onChange={(html: string) => setEditorHtml(html)}
+                  placeholder="Edit the document content..."
+                  showCharacterCount
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>
+                  New File <span className="text-destructive">*</span>
+                </Label>
+                <FileUploadZone
+                  file={file}
+                  onFileSelect={handleFileSelect}
+                  maxSizeMB={MAX_FILE_SIZE_MB}
+                  disabled={isSubmitting}
+                />
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
             )}
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="replace-notes">Replacement Notes (optional)</Label>
-            <Textarea
-              id="replace-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Explain why this version is being replaced..."
-              rows={3}
-              disabled={isSubmitting}
-            />
+            <div className="space-y-2">
+              <Label htmlFor="replace-notes">
+                {composeMode ? 'Edit Notes (optional)' : 'Replacement Notes (optional)'}
+              </Label>
+              <Textarea
+                id="replace-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={composeMode ? "Explain what was changed..." : "Explain why this version is being replaced..."}
+                rows={2}
+                disabled={isSubmitting}
+              />
+            </div>
           </div>
-        </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting || !file}>
+          <Button onClick={handleSubmit} disabled={isSubmitting || (!composeMode && !file)}>
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Replacing...
+                Saving...
               </>
+            ) : composeMode ? (
+              'Save Changes'
             ) : (
               'Replace Version'
             )}

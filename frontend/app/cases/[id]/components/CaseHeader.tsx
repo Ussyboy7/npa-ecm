@@ -9,7 +9,6 @@ import {
   MoreVertical,
   Printer,
   Link as LinkIcon,
-  ExternalLink,
   Edit,
   Upload,
   FileText,
@@ -40,10 +39,8 @@ interface CaseHeaderProps {
   } | null;
   slaError?: string | null;
   updatingStatus: boolean;
-  exporting: boolean;
   onStatusUpdate: (status: CaseDetail["status"]) => void;
   onGenerateCompletionPackage: () => void;
-  onExport: () => void;
   onEdit?: () => void;
   onImport: () => void;
   owningOffice?: { id: string; name: string } | null;
@@ -90,10 +87,8 @@ export const CaseHeader = ({
   slaStatus,
   slaError,
   updatingStatus,
-  exporting,
   onStatusUpdate,
   onGenerateCompletionPackage,
-  onExport,
   onEdit,
   onImport,
   owningOffice,
@@ -114,8 +109,8 @@ export const CaseHeader = ({
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-base md:text-xl font-bold text-foreground truncate font-mono">
+            <div className="flex items-center gap-1.5 md:gap-2 flex-wrap min-w-0">
+              <h1 className="text-sm md:text-xl font-bold text-foreground truncate font-mono min-w-0 max-w-full">
                 {caseData.caseNumber}
               </h1>
               {/* Priority badge */}
@@ -204,14 +199,16 @@ export const CaseHeader = ({
               'Update status as work progresses and generate a completion package at closure.',
             ]}
           />
-          <Select
-            value={caseData.status}
-            onValueChange={(value) => onStatusUpdate(value as CaseDetail["status"])}
-            disabled={updatingStatus}
-          >
-            <SelectTrigger className="w-[180px]" aria-label="Case status">
-              <SelectValue />
-            </SelectTrigger>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Status:</span>
+            <Select
+              value={caseData.status}
+              onValueChange={(value) => onStatusUpdate(value as CaseDetail["status"])}
+              disabled={updatingStatus}
+            >
+              <SelectTrigger className="w-[140px] bg-muted/30 border-dashed" aria-label="Case status">
+                <SelectValue />
+              </SelectTrigger>
             <SelectContent>
               <SelectItem value="open">Open</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
@@ -220,6 +217,7 @@ export const CaseHeader = ({
               <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
+          </div>
           {caseData.status === "closed" && !caseData.completionPackage && (
             <Button
               variant="outline"
@@ -246,24 +244,6 @@ export const CaseHeader = ({
               </a>
             </Button>
           )}
-          <Button
-            variant="outline"
-            onClick={onExport}
-            aria-label="Export case"
-            disabled={exporting}
-          >
-            {exporting ? (
-              <>
-                <Download className="h-4 w-4 mr-2 animate-spin" />
-                Exporting...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </>
-            )}
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="icon" aria-label="More options">
@@ -291,14 +271,6 @@ export const CaseHeader = ({
               >
                 <LinkIcon className="h-4 w-4 mr-2" />
                 Copy Link
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  window.open(window.location.href, '_blank');
-                }}
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Open in New Tab
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onImport}>
                 <Upload className="h-4 w-4 mr-2" />
@@ -348,10 +320,6 @@ export const CaseHeader = ({
               <DropdownMenuItem onClick={() => window.print()}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onExport} disabled={exporting}>
-                <Download className="h-4 w-4 mr-2" />
-                {exporting ? 'Exporting...' : 'Export'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

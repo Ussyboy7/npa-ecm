@@ -10,14 +10,7 @@ from .models import (
     DocumentEditorSession,
     DocumentPermission,
     DocumentVersion,
-    DocumentWorkspace,
 )
-
-
-@admin.register(DocumentWorkspace)
-class DocumentWorkspaceAdmin(admin.ModelAdmin):
-    list_display = ("name", "slug", "color")
-    search_fields = ("name", "slug")
 
 
 class DocumentPermissionInline(admin.TabularInline):
@@ -38,7 +31,6 @@ class DocumentAdmin(admin.ModelAdmin):
     list_filter = ("document_type", "status", "sensitivity", "division", "department")
     search_fields = ("title", "reference_number", "description")
     inlines = [DocumentVersionInline, DocumentPermissionInline]
-    filter_horizontal = ("workspaces",)
 
 
 @admin.register(DocumentVersion)

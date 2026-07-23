@@ -1,5 +1,5 @@
 import { logError } from '@/lib/client-logger';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -45,10 +45,11 @@ export const AdditionalMinuteModal = ({
   const [characterCount, setCharacterCount] = useState(0);
   const [minuteTextError, setMinuteTextError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
-  // Filter out minutes that are already additional minutes (to avoid nesting)
+  // Filter out minutes that are already additional or recalled (to avoid nesting on dead chains)
   const availableMinutes = useMemo(() => {
-    return minutes.filter(m => !m.isAdditional);
+    return minutes.filter(m => !m.isAdditional && !m.isRecalled);
   }, [minutes]);
 
   useEffect(() => {
@@ -121,6 +122,8 @@ export const AdditionalMinuteModal = ({
       return;
     }
 
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       // Get current user's primary office
@@ -138,7 +141,7 @@ export const AdditionalMinuteModal = ({
           minute_text: minuteText.trim(),
           action_type: 'minute',
           direction: correspondence.direction,
-          step_number: minutes.length + 1,
+          step_number: minutes.filter(m => !m.isRecalled).length + 1,
           from_office_id: currentUserOfficeId,
           minute_type: minuteType,
           is_additional: true,
@@ -158,6 +161,7 @@ export const AdditionalMinuteModal = ({
       toast.error(ModalErrorHandler.getUserFriendlyMessage(modalError));
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 

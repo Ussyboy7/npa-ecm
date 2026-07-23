@@ -31,6 +31,7 @@ from .models import (
     Minute,
     ParallelRoutingGroup,
 )
+from .physical_serializers import PhysicalDocumentSerializer
 
 
 class CorrespondenceDocumentLinkSerializer(serializers.ModelSerializer):
@@ -117,6 +118,12 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
     division_name = serializers.CharField(source="division.name", read_only=True, allow_null=True, required=False)
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True, required=False)
     user_name = serializers.CharField(source="user.name", read_only=True, allow_null=True, required=False)
+    read_at = serializers.DateTimeField(read_only=True)
+    read_by = UserSerializer(read_only=True)
+    read_by_id = serializers.PrimaryKeyRelatedField(
+        source="read_by",
+        read_only=True,
+    )
     added_by_id = serializers.PrimaryKeyRelatedField(
         source="added_by",
         queryset=CorrespondenceDistribution._meta.get_field("added_by").remote_field.model.objects.all(),
@@ -157,10 +164,13 @@ class CorrespondenceDistributionSerializer(serializers.ModelSerializer):
             "division_name",
             "department_name",
             "user_name",
+            "read_at",
+            "read_by",
+            "read_by_id",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "added_by", "created_at", "updated_at"]
+        read_only_fields = ["id", "added_by", "created_at", "updated_at", "read_at", "read_by"]
 
 
 class MinuteSerializer(serializers.ModelSerializer):
@@ -495,6 +505,14 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False,
     )
+    acting_appointment_id = serializers.PrimaryKeyRelatedField(
+        source="acting_appointment", read_only=True
+    )
+    acting_original_approver_id = serializers.PrimaryKeyRelatedField(
+        source="acting_original_approver", read_only=True
+    )
+    acting_principal_name = serializers.SerializerMethodField()
+    is_acting_seat = serializers.SerializerMethodField()
     parent_correspondence = serializers.SerializerMethodField()
     parent_correspondence_id = serializers.PrimaryKeyRelatedField(
         source="parent_correspondence",
@@ -520,6 +538,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     attachments = CorrespondenceAttachmentSerializer(many=True, read_only=True)
     distribution = CorrespondenceDistributionSerializer(many=True, read_only=True)
     minutes = MinuteSerializer(many=True, read_only=True)
+    # physical_documents = PhysicalDocumentSerializer(many=True, read_only=True)
     linked_document_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         source="linked_documents",
@@ -537,6 +556,8 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
     is_internal = serializers.SerializerMethodField()
     is_external = serializers.SerializerMethodField()
     routing_metadata = serializers.SerializerMethodField()
+    parallel_branches = serializers.SerializerMethodField()
+    is_read = serializers.BooleanField(read_only=True)
 
     def validate_reference_number(self, value):
         """
@@ -545,6 +566,20 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
         """
         # Allow empty or any value - uniqueness is handled in the view
         return value
+
+    def validate_status(self, value):
+        """Prevent invalid status transitions at the serializer level."""
+        if self.instance and self.instance.status == 'completed' and value != 'completed':
+            raise serializers.ValidationError("Cannot change status of a completed correspondence.")
+        return value
+
+    def validate(self, attrs):
+        """Cross-field validation for correspondence."""
+        direction = attrs.get('direction', getattr(self.instance, 'direction', None))
+        source = attrs.get('source', getattr(self.instance, 'source', None))
+        if direction == 'outward' and not source:
+            raise serializers.ValidationError({"source": "Source is required for outward correspondence."})
+        return attrs
 
     class Meta:
         model = Correspondence
@@ -579,6 +614,10 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "created_by_id",
             "current_approver",
             "current_approver_id",
+            "acting_appointment_id",
+            "acting_original_approver_id",
+            "acting_principal_name",
+            "is_acting_seat",
             "linked_document_ids",
             "auto_created_document_id",
             "attachments",
@@ -594,10 +633,12 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "workflow_state",
             "active_parallel_branches",
             "completed_parallel_branches",
+            "parallel_branches",
             "parent_correspondence",
             "parent_correspondence_id",
             "case",
             "case_id",
+            "has_physical_copy",
             # Routing concept metadata
             "flow_type",
             "is_inward",
@@ -605,6 +646,7 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "is_internal",
             "is_external",
             "routing_metadata",
+            "is_read",
             "created_at",
             "updated_at",
         ]
@@ -612,6 +654,10 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "id",
             "created_by",
             "current_approver",
+            "acting_appointment_id",
+            "acting_original_approver_id",
+            "acting_principal_name",
+            "is_acting_seat",
             "attachments",
             "distribution",
             "minutes",
@@ -624,12 +670,24 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "completion_summary_generated_at",
         ]
 
+    def get_acting_principal_name(self, obj) -> str:
+        principal = getattr(obj, "acting_original_approver", None)
+        if not principal:
+            return ""
+        return principal.get_full_name() or principal.username
+
+    def get_is_acting_seat(self, obj) -> bool:
+        return bool(getattr(obj, "acting_appointment_id", None))
+
     def get_lifecycle_stages(self, obj):
         """Return lifecycle progress stages for the frontend progress bar."""
         return obj.lifecycle_stages
 
     def get_auto_created_document_id(self, obj):
-        """Get the primary DMS document for this correspondence."""
+        """Get the primary DMS document for this correspondence. Uses annotated value on list views."""
+        auto_id = getattr(obj, '_auto_created_document_id', None)
+        if auto_id:
+            return str(auto_id)
         from correspondence.models import CorrespondenceDocumentLink
 
         auto_link = (
@@ -739,7 +797,6 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "is_internal": obj.is_internal(),
             "is_external": obj.is_external(),
             "should_appear_in_office_inbox": obj.should_appear_in_office_inbox(),
-            "should_appear_in_office_outbox": obj.should_appear_in_office_outbox(),
             "description": self._get_flow_type_description(flow_type),
         }
     
@@ -752,6 +809,100 @@ class CorrespondenceSerializer(serializers.ModelSerializer):
             "outward-external": "Going OUT OF office to external organization (registered, printed, mailed)",
         }
         return descriptions.get(flow_type, "Unknown flow type")
+
+    def get_parallel_branches(self, obj):
+        """Detail-only: per-branch status for parallel routing + non-response handling."""
+        view = self.context.get("view")
+        action = getattr(view, "action", None)
+        if action not in ("retrieve", "parallel_branches", "list_parallel_branches"):
+            return None
+        from django.utils import timezone
+
+        from .models import Minute
+        from organization.models import OfficeMembership
+
+        minutes = (
+            Minute.objects.filter(correspondence=obj, is_parallel_branch=True)
+            .select_related("to_office", "to_user", "branch_originator")
+            .order_by("timestamp")
+        )
+
+        top_level = []
+        seen = set()
+        for m in minutes:
+            target = m.to_office_id or m.to_user_id
+            if not target or target in seen:
+                continue
+            seen.add(target)
+            top_level.append(m)
+
+        now = timezone.now()
+        branches = []
+        for minute in top_level:
+            if minute.to_user_id:
+                recipient_acted = Minute.objects.filter(
+                    correspondence=obj, user_id=minute.to_user_id, timestamp__gt=minute.timestamp
+                ).exists()
+                target_label = (
+                    minute.to_user.get_full_name() or minute.to_user.username
+                    if minute.to_user
+                    else "Unknown"
+                )
+                target_kind = "user"
+                target_id = minute.to_user_id
+            elif minute.to_office_id:
+                member_ids = list(
+                    OfficeMembership.objects.filter(
+                        office=minute.to_office, is_active=True
+                    ).values_list("user_id", flat=True)
+                )
+                recipient_acted = (
+                    Minute.objects.filter(
+                        correspondence=obj,
+                        user_id__in=member_ids,
+                        timestamp__gt=minute.timestamp,
+                    ).exists()
+                    if member_ids
+                    else False
+                )
+                target_label = minute.to_office.name if minute.to_office else "Unknown"
+                target_kind = "office"
+                target_id = minute.to_office_id
+            else:
+                continue
+
+            force_completed = bool(minute.branch_completed_at)
+            completed = (
+                force_completed
+                or recipient_acted
+                or obj.status == Correspondence.Status.COMPLETED
+            )
+            overdue = bool(minute.response_deadline and minute.response_deadline < now and not completed)
+            status = (
+                "force_completed"
+                if force_completed
+                else "completed"
+                if completed
+                else "overdue"
+                if overdue
+                else "pending"
+            )
+            branches.append(
+                {
+                    "minute_id": str(minute.id),
+                    "group_id": str(minute.parallel_group_id) if minute.parallel_group_id else None,
+                    "target_kind": target_kind,
+                    "target_id": target_id,
+                    "target_label": target_label,
+                    "status": status,
+                    "deadline": minute.response_deadline.isoformat() if minute.response_deadline else None,
+                    "branch_originator_id": str(minute.branch_originator_id)
+                    if minute.branch_originator_id
+                    else None,
+                }
+            )
+        return branches
+
 
 
 class ParallelRoutingGroupSerializer(serializers.ModelSerializer):
@@ -1230,6 +1381,8 @@ class CorrespondenceDraftSerializer(serializers.ModelSerializer):
         source="correspondence",
         queryset=Correspondence.objects.all(),
         write_only=True,
+        required=False,
+        allow_null=True,
     )
     correspondence = serializers.SerializerMethodField()
     
@@ -1243,6 +1396,7 @@ class CorrespondenceDraftSerializer(serializers.ModelSerializer):
             "draft_type",
             "content",
             "subject",
+            "form_data",
             "forward_to",
             "on_behalf_of",
             "action_type",
@@ -1254,6 +1408,8 @@ class CorrespondenceDraftSerializer(serializers.ModelSerializer):
     
     def get_correspondence(self, obj):
         """Return minimal correspondence info."""
+        if obj.correspondence is None:
+            return None
         return {
             "id": str(obj.correspondence.id),
             "reference_number": obj.correspondence.reference_number,

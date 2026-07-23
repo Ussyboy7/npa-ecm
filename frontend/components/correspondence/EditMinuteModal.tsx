@@ -1,5 +1,6 @@
+import React from 'react';
 import { logError } from '@/lib/client-logger';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,6 +12,7 @@ import { apiFetch } from '@/lib/api-client';
 import { useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
+import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 
 interface EditMinuteModalProps {
   minute: Minute | null;
@@ -19,12 +21,13 @@ interface EditMinuteModalProps {
   onSuccess?: () => void;
 }
 
-export const EditMinuteModal = ({ minute, isOpen, onClose, onSuccess }: EditMinuteModalProps) => {
+const EditMinuteModalContent = ({ minute, isOpen, onClose, onSuccess }: EditMinuteModalProps) => {
   const { syncFromApi } = useCorrespondence();
   const [minuteText, setMinuteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (minute && isOpen) {
@@ -72,6 +75,8 @@ export const EditMinuteModal = ({ minute, isOpen, onClose, onSuccess }: EditMinu
       return;
     }
 
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
 
@@ -95,6 +100,7 @@ export const EditMinuteModal = ({ minute, isOpen, onClose, onSuccess }: EditMinu
       toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
@@ -192,4 +198,11 @@ export const EditMinuteModal = ({ minute, isOpen, onClose, onSuccess }: EditMinu
     </Dialog>
   );
 };
+
+export const EditMinuteModal = React.memo((props: EditMinuteModalProps) => (
+  <ModalErrorBoundary onClose={props.onClose}>
+    <EditMinuteModalContent {...props} />
+  </ModalErrorBoundary>
+));
+EditMinuteModal.displayName = 'EditMinuteModal';
 

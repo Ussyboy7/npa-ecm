@@ -1,19 +1,36 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const publicPaths = ['/', '/login', '/verify', '/_next'];
+const ACCESS_COOKIE_NAME = 'npa_ecm_access_token';
+const LEGACY_ACCESS_COOKIE_NAME = 'access_token';
 
-const isPublicPath = (pathname: string) =>
-  publicPaths.some((p) => pathname.startsWith(p));
+const isPublicPath = (pathname: string) => (
+  pathname === '/'
+  || pathname === '/login'
+  || pathname.startsWith('/login/')
+  || pathname === '/verify'
+  || pathname.startsWith('/verify/')
+  || pathname === '/auth/callback'
+  || pathname.startsWith('/auth/callback/')
+  || pathname === '/foia/public'
+  || pathname.startsWith('/foia/public/')
+);
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', pathname);
 
   if (isPublicPath(pathname)) {
-    return NextResponse.next();
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   }
 
-  const token = request.cookies.get('access_token')?.value
+  const token = request.cookies.get(ACCESS_COOKIE_NAME)?.value
+    ?? request.cookies.get(LEGACY_ACCESS_COOKIE_NAME)?.value
     ?? request.headers.get('authorization')?.replace('Bearer ', '');
 
   if (!token) {
@@ -22,7 +39,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 }
 
 export const config = {

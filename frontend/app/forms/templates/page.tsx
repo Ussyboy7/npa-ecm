@@ -7,9 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { FileCheck, Loader2, Plus, Search, Eye } from "lucide-react";
+import { FileCheck, Loader2, Plus, Search, Eye, LayoutTemplate, FolderOpen } from "lucide-react";
 import { getFormTemplates, type FormTemplate } from "@/lib/api/forms";
 import { CreateFormDocumentDialog } from "@/components/dms/CreateFormDocumentDialog";
+import { cn } from "@/lib/utils";
+import {
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from "@/components/shared/registry-queue-styles";
 import { logError } from "@/lib/client-logger";
 
 const FormsTemplatesPage = () => {
@@ -120,37 +128,72 @@ const FormsTemplatesPage = () => {
             <h1 className="text-3xl font-bold">Form Templates</h1>
             <p className="text-muted-foreground mt-1">Browse organization-wide templates and start a new form.</p>
           </div>
-          <Button variant="outline" onClick={() => router.push("/forms")}>
-            Back to Forms
+          <Button variant="outline" onClick={() => router.push("/dms")}>
+            Back to Documents
           </Button>
         </div>
 
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search templates..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant={categoryFilter === "all" ? "default" : "outline"} onClick={() => setCategoryFilter("all")}>
-            All
-          </Button>
-          {categories.map((category) => (
-            <Button
-              key={category}
-              size="sm"
-              variant={categoryFilter === category ? "default" : "outline"}
-              onClick={() => setCategoryFilter(category)}
-              className="capitalize"
-            >
-              {category}
-            </Button>
+        {/* Stats Cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "Total Templates", value: templates.length, icon: LayoutTemplate, bgClass: "bg-primary/10", iconClass: "text-primary" },
+            { label: "Categories", value: categories.length, icon: FolderOpen, bgClass: "bg-violet-500/10", iconClass: "text-violet-600" },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
+
+        {/* Search + category filter bar */}
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search templates..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <button
+                onClick={() => setCategoryFilter("all")}
+                className={`h-8 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  categoryFilter === "all"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                All
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  onClick={() => setCategoryFilter(category)}
+                  className={`h-8 rounded-md px-2.5 text-xs font-medium capitalize transition-colors ${
+                    categoryFilter === category
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {loading ? (
           <Card>

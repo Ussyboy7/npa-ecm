@@ -66,21 +66,16 @@ export async function verifySeal(serialNumber: string, signal?: AbortSignal): Pr
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
       
-      // Try to get error message from response
+      // Try JSON, fall back to text
       try {
         const errorData = await response.json();
         errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
         logInfo('[Seal Verification] Error response:', errorData);
       } catch {
-        // If not JSON, try text
-        try {
-          const errorText = await response.text();
-          if (errorText) {
-            errorMessage = errorText;
-          }
+        const errorText = await response.text().catch(() => '');
+        if (errorText) {
+          errorMessage = errorText;
           logInfo('[Seal Verification] Error text:', errorText);
-        } catch {
-          // Use default error message
         }
       }
       

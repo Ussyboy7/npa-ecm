@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, useRef, Suspense } from 'react';
+import { useEffect, useMemo, useState, useCallback, Suspense } from 'react';
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,19 +20,10 @@ import {
   Search,
   Calendar,
   User as UserIcon,
-  ArrowDown,
-  ArrowUp,
   CheckCircle2,
-  FileArchive,
-  Building2,
-  ChevronRight,
-  FileText,
   RefreshCw,
   Download,
   MoreVertical,
-  Eye,
-  ExternalLink,
-  Copy,
 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
@@ -48,21 +39,13 @@ import { exportToCSV } from '@/lib/admin-export';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { RecordCard } from './components/RecordCard';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import {
-  correspondenceQueueBadgeClass,
-  correspondenceQueueDateClass,
-  correspondenceQueueLeadingBoxClass,
-  correspondenceQueueLeadingIconClass,
   correspondenceQueueListStackClass,
-  correspondenceQueueMetaIconClass,
-  correspondenceQueueMetaItemClass,
-  correspondenceQueueMetaRowClass,
-  correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
   registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
@@ -71,11 +54,6 @@ import {
   registryQueueStatValueClass,
   registryQueueSearchStatsShellContentClass,
 } from '@/components/shared/registry-queue-styles';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 // Grade levels that can see directorate-wide records
@@ -99,7 +77,7 @@ const RecordsArchiveForm = () => {
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const {directorates, divisions, departments, offices: _offices, officeMemberships } = useOrganization();
   const { dataVersion: _dataVersion } = useCorrespondence();
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal, reset } = useAbortController();
 
   // Initialize filters from URL params or localStorage
   useEffect(() => {
@@ -169,6 +147,7 @@ const RecordsArchiveForm = () => {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -367,15 +346,6 @@ const RecordsArchiveForm = () => {
   }, [searchParams]);
 
   // Fetch records
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
-
   const getFilterParams = useCallback(() => {
     const params = new URLSearchParams();
     if (debouncedSearch) params.append('search', debouncedSearch);
@@ -390,13 +360,7 @@ const RecordsArchiveForm = () => {
   const fetchRecords = useCallback(async () => {
     if (!currentUser?.id) return;
 
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const signal = getSignal();
 
     setLoading(true);
     setError(null);
@@ -408,10 +372,10 @@ const RecordsArchiveForm = () => {
       params.append('sort_order', sortOrder);
 
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/records-archive/?${params.toString()}`, {
-        signal: controller.signal,
+        signal,
       });
       
-      if (controller.signal.aborted) {
+      if (signal.aborted) {
         return;
       }
       
@@ -444,7 +408,7 @@ const RecordsArchiveForm = () => {
       setCount(0);
       logError('Failed to fetch records:', err);
     } finally {
-      if (!controller.signal.aborted) {
+      if (!signal.aborted) {
         setLoading(false);
         setRefreshing(false);
       }
@@ -532,16 +496,6 @@ const RecordsArchiveForm = () => {
     }
   };
 
-  const getPriorityBadgeVariant = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'destructive';
-      case 'high': return 'default';
-      case 'medium': return 'secondary';
-      case 'low': return 'outline';
-      default: return 'secondary';
-    }
-  };
-
   const getScopeLabel = () => {
     switch (userScope.level) {
       case 'directorate': return currentUser?.isSuperuser ? 'Organization-wide' : 'Directorate';
@@ -549,172 +503,6 @@ const RecordsArchiveForm = () => {
       case 'department': return 'Department';
       default: return 'Your Offices';
     }
-  };
-
-  // RecordCard component
-  const RecordCard = ({ corr }: { corr: Correspondence }) => {
-    const division = corr.divisionId ? divisions.find((item) => item.id as string === corr.divisionId) : null;
-    const department = corr.departmentId ? departments.find((item) => item.id as string === corr.departmentId) : null;
-    const directorate = corr.directorateId ? directorates.find((item) => item.id as string === corr.directorateId) : null;
-    const archiveLevel = corr.archiveLevel || 'department';
-    const levelLabel = archiveLevel === 'directorate' ? 'Directorate' : archiveLevel === 'division' ? 'Division' : 'Department';
-    const orgParts: string[] = [];
-    if (directorate?.name) orgParts.push(directorate.name);
-    if (division?.name) orgParts.push(division.name);
-    if (department?.name) orgParts.push(department.name);
-    const orgPath = orgParts.join(' → ');
-
-    return (
-      <ListRowCard
-        density="compact"
-        href={`/correspondence/${corr.id}`}
-        leading={(
-          <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-muted')}>
-            <FileArchive className={cn(correspondenceQueueLeadingIconClass, 'text-muted-foreground')} />
-          </div>
-        )}
-        actions={(
-          <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  aria-label="Open record"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    router.push(`/correspondence/${corr.id}`);
-                  }}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">Open record</TooltipContent>
-            </Tooltip>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  aria-label="More actions"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <Link href={`/correspondence/${corr.id}`} className="flex items-center">
-                    <Eye className="mr-2 h-4 w-4" />
-                    View Details
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.open(`/correspondence/${corr.id}`, '_blank');
-                  }}
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Open in New Tab
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void navigator.clipboard.writeText(corr.referenceNumber || '');
-                    toast.success('Reference number copied to clipboard');
-                  }}
-                >
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy Reference
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void navigator.clipboard.writeText(`${window.location.origin}/correspondence/${corr.id}`);
-                    toast.success('Link copied to clipboard');
-                  }}
-                >
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy Link
-                </DropdownMenuItem>
-                {corr.completionPackage?.fileUrl ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.preventDefault();
-                        window.open(corr.completionPackage?.fileUrl, '_blank');
-                      }}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download Completion Package
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
-        )}
-      >
-        <h4 className={correspondenceQueueSubjectClass}>{corr.subject}</h4>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-            <Badge variant={getPriorityBadgeVariant(corr.priority)} className={correspondenceQueueBadgeClass}>
-              {corr.priority.toUpperCase()}
-            </Badge>
-            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
-              {corr.direction === 'downward' ? (
-                <><ArrowDown className="h-2.5 w-2.5 text-info" />Downward</>
-              ) : (
-                <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
-              )}
-            </Badge>
-            <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, 'gap-0.5 text-success bg-success/10')}>
-              <CheckCircle2 className="h-2.5 w-2.5" />
-              {corr.status === 'archived' ? 'Archived' : 'Completed'}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={cn(
-                correspondenceQueueBadgeClass,
-                archiveLevel === 'directorate'
-                  ? 'bg-primary/10 text-primary'
-                  : archiveLevel === 'division'
-                    ? 'bg-info/10 text-info'
-                    : '',
-              )}
-            >
-              {levelLabel} Record
-            </Badge>
-          </div>
-          <span className={correspondenceQueueDateClass}>
-            {formatDateShort(corr.completedAt || corr.receivedDate)}
-          </span>
-        </div>
-        <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
-          <span className={correspondenceQueueMetaItemClass}>
-            <UserIcon className={correspondenceQueueMetaIconClass} />
-            <span className="truncate">From: {corr.senderName || 'Unknown'}</span>
-          </span>
-          <span className={correspondenceQueueMetaItemClass}>
-            <FileText className={correspondenceQueueMetaIconClass} />
-            <span className="truncate">Ref: {corr.referenceNumber || 'N/A'}</span>
-          </span>
-          {orgPath ? (
-            <span className={correspondenceQueueMetaItemClass}>
-              <Building2 className={correspondenceQueueMetaIconClass} />
-              <span className="truncate">{orgPath}</span>
-            </span>
-          ) : null}
-        </div>
-      </ListRowCard>
-    );
   };
 
   return (
@@ -728,7 +516,7 @@ const RecordsArchiveForm = () => {
           {/* Header */}
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-3xl font-bold">Records & Archives</h1>
+              <h1 className="text-3xl font-bold">Archives</h1>
               <p className="text-muted-foreground mt-1">
                 Review completed and archived correspondence in your {getScopeLabel().toLowerCase()} scope.
               </p>
@@ -755,98 +543,17 @@ const RecordsArchiveForm = () => {
           </div>
         </div>
 
-        {/* Inline filter bar */}
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
-            <div className="relative min-w-[200px] flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search records..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 pl-8 text-xs"
-              />
-            </div>
-
-            {userScope.level === 'directorate' && visibleDirectorates.length > 1 && (
-              <Select value={selectedDirectorate} onValueChange={(v) => { setSelectedDirectorate(v); pagination.goToFirstPage(); }}>
-                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Directorate" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Directorates</SelectItem>
-                  {visibleDirectorates.map((dir) => (
-                    <SelectItem key={dir.id} value={dir.id}>{dir.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            {(userScope.level === 'directorate' || userScope.level === 'division') && visibleDivisions.length > 0 && (
-              <Select value={selectedDivision} onValueChange={(v) => { setSelectedDivision(v); pagination.goToFirstPage(); }}>
-                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Division" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Divisions</SelectItem>
-                  {visibleDivisions.map((div) => (
-                    <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            {userScope.level !== 'office' && visibleDepartments.length > 0 && (
-              <Select value={selectedDepartment} onValueChange={(v) => { setSelectedDepartment(v); pagination.goToFirstPage(); }}>
-                <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Department" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Departments</SelectItem>
-                  {visibleDepartments.map((dept) => (
-                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
-
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="completed-desc">Completed (Newest)</SelectItem>
-                <SelectItem value="completed-asc">Completed (Oldest)</SelectItem>
-                <SelectItem value="received-desc">Received (Newest)</SelectItem>
-                <SelectItem value="received-asc">Received (Oldest)</SelectItem>
-                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
-                <SelectItem value="subject-desc">Subject (Z-A)</SelectItem>
-                <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
-                <SelectItem value="reference-desc">Reference (Z-A)</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
-          </CardContent>
-        </Card>
-
         {/* Summary stats */}
         <Card>
           <CardContent className={registryQueueSearchStatsShellContentClass}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
               {[
                 { label: 'Total Records', value: summary.total, icon: Archive, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
                 { label: 'This Year', value: summary.thisYear, icon: Calendar, bgClass: 'bg-secondary/50', iconClass: 'text-muted-foreground' },
                 { label: 'Completed', value: summary.completed, icon: CheckCircle2, bgClass: 'bg-success/10', iconClass: 'text-success' },
                 { label: 'Archived', value: summary.archived, icon: Archive, bgClass: 'bg-muted', iconClass: 'text-muted-foreground' },
               ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-                <Card key={label}>
+                <Card key={label} aria-label={label}>
                   <CardContent className={registryQueueStatCardContentClass}>
                     <div className="flex items-center gap-4">
                       <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
@@ -864,6 +571,97 @@ const RecordsArchiveForm = () => {
           </CardContent>
         </Card>
 
+        {/* Inline filter bar */}
+        <Card>
+          <CardContent className="p-2">
+            <div className="md:hidden mb-2">
+              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="w-full justify-between">
+                <span className="flex items-center"><Search className="h-3.5 w-3.5 mr-2" /> Filters</span>
+                {hasActiveFilters && <span className="bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">1</span>}
+              </Button>
+            </div>
+            <div className={`flex-wrap items-center gap-2${filtersOpen ? ' flex' : ' hidden'} md:flex`}>
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search records..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+                aria-label="Search correspondence"
+              />
+            </div>
+
+            {userScope.level === 'directorate' && visibleDirectorates.length > 1 && (
+              <Select value={selectedDirectorate} onValueChange={(v) => { setSelectedDirectorate(v); pagination.goToFirstPage(); }}>
+                <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by directorate"><SelectValue placeholder="Directorate" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Directorates</SelectItem>
+                  {visibleDirectorates.map((dir) => (
+                    <SelectItem key={dir.id} value={dir.id}>{dir.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {(userScope.level === 'directorate' || userScope.level === 'division') && visibleDivisions.length > 0 && (
+              <Select value={selectedDivision} onValueChange={(v) => { setSelectedDivision(v); pagination.goToFirstPage(); }}>
+                <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by division"><SelectValue placeholder="Division" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Divisions</SelectItem>
+                  {visibleDivisions.map((div) => (
+                    <SelectItem key={div.id} value={div.id}>{div.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {userScope.level !== 'office' && visibleDepartments.length > 0 && (
+              <Select value={selectedDepartment} onValueChange={(v) => { setSelectedDepartment(v); pagination.goToFirstPage(); }}>
+                <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by department"><SelectValue placeholder="Department" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {visibleDepartments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
+              <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by priority"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Sort by"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="completed-desc">Completed (Newest)</SelectItem>
+                <SelectItem value="completed-asc">Completed (Oldest)</SelectItem>
+                <SelectItem value="received-desc">Received (Newest)</SelectItem>
+                <SelectItem value="received-asc">Received (Oldest)</SelectItem>
+                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+                <SelectItem value="subject-asc">Subject (A-Z)</SelectItem>
+                <SelectItem value="subject-desc">Subject (Z-A)</SelectItem>
+                <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
+                <SelectItem value="reference-desc">Reference (Z-A)</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div aria-live="polite">
         {loading && !refreshing ? (
           <LoadingState message="Loading records…" />
         ) : error ? (
@@ -887,12 +685,15 @@ const RecordsArchiveForm = () => {
             onAction={hasActiveFilters ? clearFilters : undefined}
           />
         ) : (
-          <div className={correspondenceQueueListStackClass}>
+          <div className={correspondenceQueueListStackClass} role="list">
             {records.map((corr) => (
-              <RecordCard key={corr.id} corr={corr} />
+              <div key={corr.id} role="listitem">
+                <RecordCard corr={corr} />
+              </div>
             ))}
           </div>
         )}
+        </div>
 
         {/* Pagination */}
         {count > 0 && (

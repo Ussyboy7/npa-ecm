@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Send, FileCheck } from "lucide-react";
+import { logError } from "@/lib/client-logger";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,7 @@ interface DispatchModalProps {
 export function DispatchModal({ correspondenceId, onSuccess }: DispatchModalProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
   const [dispatchMode, setDispatchMode] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [courierName, setCourierName] = useState("");
@@ -43,6 +45,8 @@ export function DispatchModal({ correspondenceId, onSuccess }: DispatchModalProp
       toast.error("Please select a dispatch mode");
       return;
     }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     try {
       await apiFetch(`/correspondence/items/${correspondenceId}/dispatch/`, {
@@ -60,10 +64,12 @@ export function DispatchModal({ correspondenceId, onSuccess }: DispatchModalProp
       toast.success("Correspondence dispatched successfully");
       setOpen(false);
       onSuccess();
-    } catch (_err) {
+    } catch (err) {
+      logError("Failed to dispatch correspondence", err);
       toast.error("Failed to dispatch correspondence");
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
 

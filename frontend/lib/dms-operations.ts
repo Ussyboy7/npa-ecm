@@ -1,6 +1,6 @@
 import { ERROR_AUTHENTICATION_REQUIRED } from '@/lib/constants';
 import { apiFetch, hasTokens } from './api-client';
-import { logError, logWarn } from '@/lib/client-logger';
+import { logWarn } from '@/lib/client-logger';
 import { unwrapResults } from '@/lib/type-utils';
 import type { BulkOperationResult, ExtendedDocumentQueryParams, PaginatedDocuments, DocumentStats, OCRResult, SummaryResult } from './dms-types';
 import { mapDocument } from './dms-types';
@@ -90,7 +90,6 @@ const buildExtendedDocumentQueryString = (params: ExtendedDocumentQueryParams) =
   if (typeof params.recentDays === 'number' && params.recentDays > 0) searchParams.set('recent_days', String(params.recentDays));
   if (params.statusIn && params.statusIn.length > 0) searchParams.set('status_in', params.statusIn.join(','));
   if (params.documentTypeIn && params.documentTypeIn.length > 0) searchParams.set('document_type_in', params.documentTypeIn.join(','));
-  if (params.workspaceId) searchParams.set('workspace', params.workspaceId);
   return searchParams.toString();
 };
 
@@ -125,24 +124,19 @@ export const getDocumentStats = async (): Promise<DocumentStats> => {
     return { total: 0, draft: 0, published: 0, archived: 0 };
   }
 
-  try {
-    const [allResponse, draftResponse, publishedResponse, archivedResponse] = await Promise.all([
-      apiFetch<Record<string, unknown>>('/dms/documents/?page_size=1'),
-      apiFetch<Record<string, unknown>>('/dms/documents/?status=draft&page_size=1'),
-      apiFetch<Record<string, unknown>>('/dms/documents/?status=published&page_size=1'),
-      apiFetch<Record<string, unknown>>('/dms/documents/?status=archived&page_size=1'),
-    ]);
+  const [allResponse, draftResponse, publishedResponse, archivedResponse] = await Promise.all([
+    apiFetch<Record<string, unknown>>('/dms/documents/?page_size=1'),
+    apiFetch<Record<string, unknown>>('/dms/documents/?status=draft&page_size=1'),
+    apiFetch<Record<string, unknown>>('/dms/documents/?status=published&page_size=1'),
+    apiFetch<Record<string, unknown>>('/dms/documents/?status=archived&page_size=1'),
+  ]);
 
-    return {
-      total: typeof allResponse?.count === 'number' ? allResponse.count : 0,
-      draft: typeof draftResponse?.count === 'number' ? draftResponse.count : 0,
-      published: typeof publishedResponse?.count === 'number' ? publishedResponse.count : 0,
-      archived: typeof archivedResponse?.count === 'number' ? archivedResponse.count : 0,
-    };
-  } catch (error: unknown) {
-    logError('Failed to fetch document stats', error);
-    return { total: 0, draft: 0, published: 0, archived: 0 };
-  }
+  return {
+    total: typeof allResponse?.count === 'number' ? allResponse.count : 0,
+    draft: typeof draftResponse?.count === 'number' ? draftResponse.count : 0,
+    published: typeof publishedResponse?.count === 'number' ? publishedResponse.count : 0,
+    archived: typeof archivedResponse?.count === 'number' ? archivedResponse.count : 0,
+  };
 };
 
 // =============================================================================

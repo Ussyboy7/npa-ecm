@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { logError, logWarn } from '@/lib/client-logger';
 import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
 import {
@@ -34,12 +34,12 @@ import type { User } from "@/lib/npa-structure";
 import { shareDocument, apiFetch, hasTokens } from "@/lib/dms-storage";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Search, Users, Building2, Users2, AlertTriangle, Loader2, X, FileText, Trash2, History, FolderKanban, CheckCircle2, ArrowLeft, Shield, Mail, Send } from "lucide-react";
+import { Search, Users, Building2, Users2, AlertTriangle, Loader2, X, FileText, Trash2, History, CheckCircle2, ArrowLeft, Shield, Mail, Send } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
+import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 import { getActivityLogsForObject, type ActivityLog } from "@/lib/audit-storage";
-import { fetchWorkspaces, type DocumentWorkspace } from "@/lib/dms-storage";
 import { filterUsersBySearch } from "@/lib/routing-utils";
 import { CorrespondenceRoutingView } from "./CorrespondenceRoutingView";
 
@@ -64,7 +64,7 @@ interface RecentRecipients {
   directorates: string[];
 }
 
-export const ShareDocumentDialog = ({
+const ShareDocumentDialogContent = ({
   open,
   onOpenChange,
   document,
@@ -89,6 +89,7 @@ export const ShareDocumentDialog = ({
   const [shareProgress, setShareProgress] = useState(0);
   const [editingPermissionId, setEditingPermissionId] = useState<string | null>(null);
   const [deletingPermissionId, setDeletingPermissionId] = useState<string | null>(null);
+  const submittingRef = useRef(false);
   const [showDeletePermissionConfirm, setShowDeletePermissionConfirm] = useState(false);
   const [permissionToDelete, setPermissionToDelete] = useState<string | null>(null);
   const [selectedSystemRoles, setSelectedSystemRoles] = useState<Set<string>>(new Set());
@@ -97,15 +98,10 @@ export const ShareDocumentDialog = ({
   const [pendingShareAction, setPendingShareAction] = useState<(() => Promise<void>) | null>(null);
   const [showPermissionsView, setShowPermissionsView] = useState(false);
   const [showHistoryView, setShowHistoryView] = useState(false);
-  const [, setShareSection] = useState<'users' | 'org' | 'workspaces'>('users');
   
-  // Share history and workspaces
+  // Share history
   const [shareHistory, setShareHistory] = useState<ActivityLog[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const [_workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
-  const [, setIsLoadingWorkspaces] = useState(false);
-  const [, setSelectedWorkspaceIds] = useState<Set<string>>(new Set());
-  const [_searchWorkspaceQuery, setSearchWorkspaceQuery] = useState("");
   
   // Correspondence routing state
   const [_correspondenceRecipient, setCorrespondenceRecipient] = useState<string>('');
@@ -223,31 +219,6 @@ export const ShareDocumentDialog = ({
     void fetchHistory();
   }, [open, document?.id]);
 
-  // Fetch workspaces
-  useEffect(() => {
-    if (!open) return;
-    
-    setIsLoadingWorkspaces(true);
-    const fetchWorkspacesData = async () => {
-      try {
-        if (!hasTokens()) {
-          setIsLoadingWorkspaces(false);
-          return;
-        }
-        const spaces = await fetchWorkspaces();
-        setWorkspaces(spaces);
-      } catch (error: unknown) {
-        // Silently handle - workspaces are optional
-        logWarn('Failed to fetch workspaces:', error);
-        setWorkspaces([]);
-      } finally {
-        setIsLoadingWorkspaces(false);
-      }
-    };
-    
-    void fetchWorkspacesData();
-  }, [open]);
-
   // Load recent recipients
   useEffect(() => {
     if (!open) return;
@@ -292,7 +263,6 @@ export const ShareDocumentDialog = ({
       setSelectedDepartmentIds(new Set());
       setSelectedSystemRoles(new Set());
       setActiveTab("share");
-      setShareSection('users');
       setShowPermissionsView(false);
       setShowHistoryView(false);
       setAccessLevel("read");
@@ -304,8 +274,6 @@ export const ShareDocumentDialog = ({
       setShowDeletePermissionConfirm(false);
       setPermissionToDelete(null);
       setShowReviewStep(false);
-      setSelectedWorkspaceIds(new Set());
-      setSearchWorkspaceQuery("");
       setShareHistory([]);
       // Reset correspondence state
       setCorrespondenceRecipient('');
@@ -736,11 +704,12 @@ export const ShareDocumentDialog = ({
   const performShare = async (
     userIds: string[],
     divisionIds: string[],
-    departmentIds: string[],
-    workspaceIds: string[] = []
+    departmentIds: string[]
   ) => {
     if (!document) return;
 
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     setShareProgress(10);
     
@@ -770,36 +739,12 @@ export const ShareDocumentDialog = ({
         });
       }
       
-      setShareProgress(60);
-      
-      // Add document to workspaces (if any selected)
-      if (workspaceIds.length > 0) {
-        try {
-          const currentWorkspaceIds = document.workspaceIds || [];
-          const newWorkspaceIds = Array.from(new Set([...currentWorkspaceIds, ...workspaceIds]));
-          
-          await apiFetch(`/dms/documents/${document.id}/`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              workspace_ids: newWorkspaceIds,
-            }),
-          });
-          
-          // Refresh document to get updated workspaceIds
-          updated = await apiFetch<DocumentRecord>(`/dms/documents/${document.id}/`);
-        } catch (error: unknown) {
-          logError('Failed to add document to workspaces', error);
-          toast.error('Document shared, but failed to add to workspaces');
-        }
-      }
-      
       setShareProgress(100);
       
       const recipientSummary = [];
       if (userIds.length > 0) recipientSummary.push(`${userIds.length} user(s)`);
       if (divisionIds.length > 0) recipientSummary.push(`${divisionIds.length} division(s)`);
       if (departmentIds.length > 0) recipientSummary.push(`${departmentIds.length} department(s)`);
-      if (workspaceIds.length > 0) recipientSummary.push(`${workspaceIds.length} workspace(s)`);
       
       toast.success("Document shared", {
         description: `Access level: ${accessLevel}. ${recipientSummary.join(', ')}`,
@@ -823,6 +768,7 @@ export const ShareDocumentDialog = ({
     } finally {
       setIsSubmitting(false);
       setShareProgress(0);
+      submittingRef.current = false;
     }
   };
 
@@ -872,7 +818,6 @@ export const ShareDocumentDialog = ({
       divisions: divisionIds.length,
       departments: departmentIds.length,
       directorates: 0,
-      workspaces: 0,
       total: totalSelected,
     };
   }, [selectedUserIds.size, correspondenceRouteType, directShareDerivedDivisionIds, directShareDerivedDepartmentIds, totalSelected]);
@@ -921,7 +866,8 @@ export const ShareDocumentDialog = ({
   // Delete permission
   const handleDeletePermission = async (permissionId: string) => {
     if (!document || !permissionId) return;
-    
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setPermissionToDelete(null);
     setShowDeletePermissionConfirm(false);
     setDeletingPermissionId(permissionId);
@@ -962,6 +908,7 @@ export const ShareDocumentDialog = ({
       logError('Failed to delete permission', error);
       toast.error('Failed to remove permission');
     } finally {
+      submittingRef.current = false;
       setDeletingPermissionId(null);
     }
   };
@@ -969,7 +916,8 @@ export const ShareDocumentDialog = ({
   // Update permission access level
   const handleUpdatePermission = async (permissionId: string, newAccess: PermissionAccess) => {
     if (!document || !permissionId) return;
-    
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setEditingPermissionId(permissionId);
     try {
       await apiFetch(`/dms/permissions/${permissionId}/`, {
@@ -1009,6 +957,7 @@ export const ShareDocumentDialog = ({
       logError('Failed to update permission', error);
       toast.error('Failed to update permission');
     } finally {
+      submittingRef.current = false;
       setEditingPermissionId(null);
     }
   };
@@ -1098,7 +1047,7 @@ export const ShareDocumentDialog = ({
                         <p className="text-xs text-muted-foreground">Recipients</p>
                         <p className="text-sm font-medium">
                           {shareToAll ? `All ${activeUserCount} users` : 
-                            `${selectionSummary.users + selectionSummary.directorates + selectionSummary.divisions + selectionSummary.departments + selectionSummary.workspaces} selected`}
+                            `${selectionSummary.users + selectionSummary.directorates + selectionSummary.divisions + selectionSummary.departments} selected`}
                         </p>
                       </div>
                     </div>
@@ -1123,11 +1072,6 @@ export const ShareDocumentDialog = ({
                         {selectionSummary.departments > 0 && (
                           <Badge variant="secondary" className="gap-1">
                             <Users2 className="h-3 w-3" /> {selectionSummary.departments} depts
-                          </Badge>
-                        )}
-                        {selectionSummary.workspaces > 0 && (
-                          <Badge variant="secondary" className="gap-1">
-                            <FolderKanban className="h-3 w-3" /> {selectionSummary.workspaces} workspaces
                           </Badge>
                         )}
                       </div>
@@ -1863,3 +1807,10 @@ export const ShareDocumentDialog = ({
     </>
   );
 };
+
+export const ShareDocumentDialog = React.memo((props: ShareDocumentDialogProps) => (
+  <ModalErrorBoundary onClose={() => props.onOpenChange?.(false)}>
+    <ShareDocumentDialogContent {...props} />
+  </ModalErrorBoundary>
+));
+ShareDocumentDialog.displayName = 'ShareDocumentDialog';

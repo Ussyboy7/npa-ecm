@@ -16,7 +16,11 @@ from forms.serializers import (
     FormSubmissionSerializer,
     FormSubmissionListSerializer,
 )
-from forms.pdf_generator import generate_project_monitoring_report_pdf
+from forms.pdf_generator import (
+    generate_project_monitoring_report_pdf,
+    generate_witnessing_deliveries_pdf,
+    generate_audit_query_pdf,
+)
 from forms.signature_models import FormSignatureWorkflow, FormSignature
 from forms.signature_serializers import (
     FormSignatureWorkflowSerializer,
@@ -115,25 +119,42 @@ class FormSubmissionViewSet(viewsets.ModelViewSet):
     def generate_pdf(self, request, pk=None):
         """Generate PDF for a form submission."""
         submission = self.get_object()
-        
-        # Check if this is a Project Monitoring Report
-        if submission.template.slug == "project-monitoring-report-audit":
+        slug = submission.template.slug
+
+        generators = {
+            "project-monitoring-report-audit": (
+                generate_project_monitoring_report_pdf,
+                "project-monitoring-report",
+            ),
+            "witnessing-of-deliveries": (
+                generate_witnessing_deliveries_pdf,
+                "witnessing-of-deliveries",
+            ),
+            "audit-query-bills-certification": (
+                generate_audit_query_pdf,
+                "audit-query",
+            ),
+        }
+
+        if slug in generators:
             try:
-                pdf_bytes = generate_project_monitoring_report_pdf(submission.data)
-                
+                gen_func, filename_prefix = generators[slug]
+                pdf_bytes = gen_func(submission.data)
                 response = HttpResponse(pdf_bytes, content_type="application/pdf")
-                response["Content-Disposition"] = f'inline; filename="project-monitoring-report-{submission.id}.pdf"'
+                response["Content-Disposition"] = (
+                    f'inline; filename="{filename_prefix}-{submission.id}.pdf"'
+                )
                 return response
-            except Exception as e:
+            except Exception:
                 return Response(
                     {"error": "Failed to generate PDF. Please try again or contact support."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
-        else:
-            return Response(
-                {"error": "PDF generation not available for this form template"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+
+        return Response(
+            {"error": "PDF generation not available for this form template"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     
     @action(detail=True, methods=["get"])
     def signature_workflow(self, request, pk=None):

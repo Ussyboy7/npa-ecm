@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ListRowCard } from '@/components/shared/ListRowCard';
+import { InboxCorrespondenceCard } from './components/InboxCorrespondenceCard';
+import type { UserOrgIds } from './components/InboxCorrespondenceCard';
 import {
   Select,
   SelectContent,
@@ -18,26 +18,13 @@ import {
   Mail,
   Search,
   User as UserIcon,
-  ArrowDown,
-  ArrowUp,
   Clock,
   AlertCircle,
-  Building2,
   Inbox,
-  Copy,
 } from 'lucide-react';
-import { formatDateShort } from '@/lib/correspondence-helpers';
 import { cn } from '@/lib/utils';
 import {
-  correspondenceQueueBadgeClass,
-  correspondenceQueueDateClass,
-  correspondenceQueueLeadingBoxClass,
-  correspondenceQueueLeadingIconClass,
-  correspondenceQueueMetaIconClass,
-  correspondenceQueueMetaItemClass,
-  correspondenceQueueMetaRowClass,
   correspondenceQueueListStackClass,
-  correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
   registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
@@ -60,29 +47,6 @@ import { DateRangePicker } from '@/components/shared/DateRangePicker';
 
 const STORAGE_KEY = 'office-inbox-selection';
 
-const SLA_THRESHOLDS: Record<string, number> = {
-  urgent: 2,
-  high: 5,
-  medium: 10,
-  low: 14,
-  default: 10,
-};
-
-const isOverdue = (item: Correspondence): boolean => {
-  if (!item.receivedDate) return false;
-  const priority = item.priority ?? 'default';
-  const threshold = SLA_THRESHOLDS[priority] ?? SLA_THRESHOLDS.default;
-  const received = new Date(item.receivedDate).getTime();
-  const daysOpen = (Date.now() - received) / (1000 * 60 * 60 * 24);
-  return daysOpen > threshold && item.status as string !== 'completed';
-};
-
-const calculateDaysPending = (item: Correspondence): number => {
-  if (!item.receivedDate) return 0;
-  const received = new Date(item.receivedDate).getTime();
-  return Math.floor((Date.now() - received) / (1000 * 60 * 60 * 24));
-};
-
 type InboxSummary = {
   total: number;
   urgent: number;
@@ -100,11 +64,12 @@ const DEFAULT_SUMMARY: InboxSummary = {
 const CorrespondenceInboxContent = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
-  const { divisions, users: organizationUsers, offices, officeMemberships } = useOrganization();
+  const { offices, officeMemberships } = useOrganization();
   const { dataVersion } = useCorrespondence();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedOfficeId, setSelectedOfficeId] = useState<string | null>(null);
   
   // Use pagination hook
@@ -169,31 +134,6 @@ const CorrespondenceInboxContent = () => {
 
     return { officeIds, divisionIds, departmentIds, directorateIds };
   }, [userOfficeMemberships, offices]);
-
-  // Helper to check if user is a CC recipient and get the purpose
-  const getCCInfo = (corr: Correspondence): { isCC: boolean; purpose?: string } => {
-    if (!corr.distribution || corr.distribution.length === 0) {
-      return { isCC: false };
-    }
-
-    for (const recipient of corr.distribution) {
-      // Check if user's org matches this distribution entry
-      if (recipient.type === 'office' && recipient.officeId && userOrgIds.officeIds.has(recipient.officeId)) {
-        return { isCC: true, purpose: recipient.purpose };
-      }
-      if (recipient.type === 'division' && recipient.divisionId && userOrgIds.divisionIds.has(recipient.divisionId)) {
-        return { isCC: true, purpose: recipient.purpose };
-      }
-      if (recipient.type === 'department' && recipient.departmentId && userOrgIds.departmentIds.has(recipient.departmentId)) {
-        return { isCC: true, purpose: recipient.purpose };
-      }
-      if (recipient.type === 'directorate' && recipient.directorateId && userOrgIds.directorateIds.has(recipient.directorateId)) {
-        return { isCC: true, purpose: recipient.purpose };
-      }
-    }
-
-    return { isCC: false };
-  };
 
   // Count active filters for badge
   const activeFilterCount = useMemo(() => {
@@ -327,156 +267,6 @@ const CorrespondenceInboxContent = () => {
     void fetchInbox();
   }, [hasCorrespondenceAccess, selectedOfficeId, debouncedSearch, pagination.page, pagination.pageSize, userOfficeIds, isSuperuser, selectedStatus, selectedPriority, assignedOnly, sortBy, sortOrder, dateFrom, dateTo, dataVersion]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'text-warning bg-warning/10';
-      case 'in-progress': return 'text-info bg-info/10';
-      case 'completed': return 'text-success bg-success/10';
-      case 'archived': return 'text-muted-foreground bg-muted';
-      default: return 'text-foreground bg-muted';
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'destructive';
-      case 'high': return 'default';
-      case 'medium': return 'secondary';
-      case 'low': return 'outline';
-      default: return 'secondary';
-    }
-  };
-
-  const CorrespondenceCard = ({ corr }: { corr: Correspondence }) => {
-    const division = corr.divisionId ? divisions.find((div) => div.id === corr.divisionId) : undefined;
-    const currentApprover = corr.currentApproverId ? organizationUsers.find((user) => user.id === corr.currentApproverId) : undefined;
-    const overdue = isOverdue(corr);
-    const daysPending = calculateDaysPending(corr);
-    const daysPendingColor = daysPending > 5 ? 'destructive' : daysPending > 2 ? 'default' : 'secondary';
-    const ccInfo = getCCInfo(corr);
-
-    const getPurposeLabel = (purpose?: string) => {
-      switch (purpose) {
-        case 'action': return 'For Action';
-        case 'information': return 'For Info';
-        case 'comment': return 'For Comment';
-        default: return 'CC';
-      }
-    };
-
-    const getPurposeColor = (purpose?: string) => {
-      switch (purpose) {
-        case 'action': return 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800';
-        case 'information': return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800';
-        case 'comment': return 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800';
-        default: return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700';
-      }
-    };
-
-    return (
-      <ListRowCard
-        density="compact"
-        href={`/correspondence/${corr.id}`}
-        leading={(
-          <div
-            className={cn(
-              correspondenceQueueLeadingBoxClass,
-              corr.priority === 'urgent'
-                ? 'bg-destructive/10'
-                : corr.priority === 'high'
-                  ? 'bg-warning/10'
-                  : 'bg-primary/10',
-            )}
-          >
-            <Mail
-              className={cn(
-                correspondenceQueueLeadingIconClass,
-                corr.priority === 'urgent'
-                  ? 'text-destructive'
-                  : corr.priority === 'high'
-                    ? 'text-warning'
-                    : 'text-primary',
-              )}
-            />
-            {ccInfo.isCC && (
-              <div className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-blue-500">
-                <Copy className="h-2 w-2 text-white" />
-              </div>
-            )}
-          </div>
-        )}
-      >
-        <h4 className={correspondenceQueueSubjectClass}>{corr.subject}</h4>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-            {ccInfo.isCC && (
-              <Badge
-                variant="outline"
-                className={cn(correspondenceQueueBadgeClass, getPurposeColor(ccInfo.purpose))}
-              >
-                <Copy className="h-2.5 w-2.5" />
-                {getPurposeLabel(ccInfo.purpose)}
-              </Badge>
-            )}
-            <Badge variant={getPriorityColor(corr.priority)} className={correspondenceQueueBadgeClass}>
-              {corr.priority.toUpperCase()}
-            </Badge>
-            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
-              {corr.direction === 'downward' ? (
-                <><ArrowDown className="h-2.5 w-2.5 text-info" />Downward</>
-              ) : (
-                <><ArrowUp className="h-2.5 w-2.5 text-success" />Upward</>
-              )}
-            </Badge>
-            <Badge variant="secondary" className={cn(correspondenceQueueBadgeClass, getStatusColor(corr.status))}>
-              {corr.status.replace('-', ' ')}
-            </Badge>
-            {overdue && (
-              <Badge variant="destructive" className={correspondenceQueueBadgeClass}>
-                SLA Breach
-              </Badge>
-            )}
-            {daysPending > 0 && (
-              <Badge variant={daysPendingColor} className={cn(correspondenceQueueBadgeClass, 'gap-0.5')}>
-                <Clock className="h-2.5 w-2.5" />
-                {daysPending} day{daysPending !== 1 ? 's' : ''} pending
-              </Badge>
-            )}
-          </div>
-          <span className={correspondenceQueueDateClass}>{formatDateShort(corr.receivedDate)}</span>
-        </div>
-        <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
-          <span className={correspondenceQueueMetaItemClass}>
-            <UserIcon className={correspondenceQueueMetaIconClass} />
-            <span className="truncate">From: {corr.senderName}</span>
-          </span>
-          <span className={correspondenceQueueMetaItemClass}>
-            <Mail className={correspondenceQueueMetaIconClass} />
-            <span className="truncate">Ref: {corr.referenceNumber}</span>
-          </span>
-          {division && (
-            <span className={correspondenceQueueMetaItemClass}>
-              <AlertCircle className={correspondenceQueueMetaIconClass} />
-              <span className="truncate">Division: {division.name}</span>
-            </span>
-          )}
-          {currentApprover && (
-            <span className={correspondenceQueueMetaItemClass}>
-              <Clock className={correspondenceQueueMetaIconClass} />
-              <span className="truncate">Current: {currentApprover.name}</span>
-            </span>
-          )}
-          {corr.currentOfficeName && (
-            <span className={correspondenceQueueMetaItemClass}>
-              <Building2 className={correspondenceQueueMetaIconClass} />
-              <span className="truncate">Office: {corr.currentOfficeName}</span>
-            </span>
-          )}
-        </div>
-      </ListRowCard>
-    );
-  };
-
   return (
     <>
       <div className="container mx-auto p-6 space-y-6">
@@ -504,72 +294,15 @@ const CorrespondenceInboxContent = () => {
           </div>
         </div>
 
-        {/* Search + filters bar */}
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
-            <div className="relative min-w-[200px] flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by subject, reference, sender..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 pl-8 text-xs"
-              />
-            </div>
-            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="in-progress">In Progress</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selectedPriority} onValueChange={setSelectedPriority}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selectedOfficeId ?? 'all'} onValueChange={setSelectedOfficeId}>
-              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder={isSuperuser ? 'All Offices' : 'All My Offices'} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{isSuperuser ? 'All Offices' : 'All My Offices'}</SelectItem>
-                {selectableOffices.map((office) => (
-                  <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
-            <Button variant={assignedOnly?'default':'outline'} size="sm" onClick={()=>setAssignedOnly(!assignedOnly)} className="h-8 text-xs"><UserIcon className="h-3.5 w-3.5 mr-1" /> Assigned</Button>
-            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
-                <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>
-                <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
-                <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
-                <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
-              </SelectContent>
-            </Select>
-            {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
-          </CardContent>
-        </Card>
-
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
           {[
             { label: 'Total in Queue', value: summary.total, icon: Inbox, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
             { label: 'Urgent Items', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
             { label: 'SLA Breaches', value: summary.overdue, icon: Clock, bgClass: 'bg-warning/10', iconClass: 'text-warning' },
             { label: 'Assigned to You', value: summary.assigned_to_user, icon: UserIcon, bgClass: 'bg-info/10', iconClass: 'text-info' },
           ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
+            <Card key={label} aria-label={label}>
               <CardContent className={registryQueueStatCardContentClass}>
                 <div className="flex items-center gap-4">
                   <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
@@ -585,6 +318,73 @@ const CorrespondenceInboxContent = () => {
           ))}
         </div>
 
+        {/* Search + filters bar */}
+        <Card>
+          <CardContent className="p-2">
+            <div className="md:hidden mb-2">
+              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="w-full justify-between">
+                <span className="flex items-center"><Search className="h-3.5 w-3.5 mr-2" /> Filters</span>
+                {activeFilterCount > 0 && <span className="bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">{activeFilterCount}</span>}
+              </Button>
+            </div>
+            <div className={`flex-wrap items-center gap-2${filtersOpen ? ' flex' : ' hidden'} md:flex`}>
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by subject, reference, sender..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+                aria-label="Search correspondence"
+              />
+            </div>
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by status"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in-progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={selectedPriority} onValueChange={setSelectedPriority}>
+              <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by priority"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={selectedOfficeId ?? 'all'} onValueChange={setSelectedOfficeId}>
+              <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Filter by office"><SelectValue placeholder={isSuperuser ? 'All Offices' : 'All My Offices'} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{isSuperuser ? 'All Offices' : 'All My Offices'}</SelectItem>
+                {selectableOffices.map((office) => (
+                  <SelectItem key={office.id} value={office.id}>{office.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+            <Button variant={assignedOnly?'default':'outline'} size="sm" onClick={()=>setAssignedOnly(!assignedOnly)} className="h-8 text-xs"><UserIcon className="h-3.5 w-3.5 mr-1" /> Assigned</Button>
+            <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
+              <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Sort by"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
+                <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>
+                <SelectItem value="updated-desc">Last Updated (Newest)</SelectItem>
+                <SelectItem value="updated-asc">Last Updated (Oldest)</SelectItem>
+                <SelectItem value="reference-asc">Reference (A-Z)</SelectItem>
+              </SelectContent>
+            </Select>
+            {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div aria-live="polite">
         {error && <ErrorState message={error} variant="inline" />}
 
         {loading ? (
@@ -598,12 +398,15 @@ const CorrespondenceInboxContent = () => {
             onAction={debouncedSearch || activeFilterCount > 0 ? clearFilters : undefined}
           />
         ) : (
-          <div className={correspondenceQueueListStackClass}>
+          <div className={correspondenceQueueListStackClass} role="list">
             {inboxItems.map((corr) => (
-              <CorrespondenceCard key={corr.id} corr={corr} />
+              <div key={corr.id} role="listitem">
+                <InboxCorrespondenceCard corr={corr} userOrgIds={userOrgIds as UserOrgIds} />
+              </div>
             ))}
           </div>
         )}
+        </div>
 
         {/* Pagination */}
         {count > 0 && (

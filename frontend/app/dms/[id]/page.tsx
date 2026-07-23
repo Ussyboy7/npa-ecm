@@ -8,12 +8,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   fetchDocumentById,
-  fetchWorkspaces,
-  updateDocumentWorkspaces,
   getDocumentAccessLogs,
+  downloadDocumentVersion,
+  canDownloadDocument,
   type DocumentRecord,
   type DocumentVersion,
-  type DocumentWorkspace,
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
 import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
@@ -26,7 +25,9 @@ import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
 import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
 import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
 import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
-import { DmsDocumentWorkspace, DocumentMobileTabBar } from '@/app/dms/[id]/components/DocumentWorkspace';
+import { DocumentMobileTabBar } from '@/app/dms/[id]/components/DocumentWorkspace';
+import { DocumentPreviewPanel } from '@/app/dms/[id]/components/DocumentPreviewPanel';
+import { DocumentSidebar } from '@/app/dms/[id]/components/DocumentSidebar';
 import { DocumentMobileStickyBar } from '@/app/dms/[id]/components/DocumentMobileStickyBar';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
@@ -56,8 +57,6 @@ const DocumentDetailContent = () => {
     accessLogs,
     setAccessLogs,
     relatedCorrespondence,
-    workspaces,
-    setWorkspaces,
     refreshDocument,
   } = useDocumentDetail(documentId);
   // Dialog state
@@ -66,7 +65,6 @@ const DocumentDetailContent = () => {
   const [linkCaseDialogOpen, setLinkCaseDialogOpen] = useState(false);
   const [minuteDocumentModalOpen, setMinuteDocumentModalOpen] = useState(false);
   const [commentsDialogOpen, setCommentsDialogOpen] = useState(false);
-  const [workspaceManageOpen, setWorkspaceManageOpen] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null);
   const [replaceVersionId, setReplaceVersionId] = useState<string | null>(null);
   const [minuteDocumentCorrespondence, setMinuteDocumentCorrespondence] = useState<Correspondence | null>(null);
@@ -115,15 +113,6 @@ const DocumentDetailContent = () => {
     refreshDocument,
   });
 
-  // Workspace management
-  const workspaceLookup = useMemo(() => new Map(workspaces.map((ws) => [ws.id, ws])), [workspaces]);
-  const documentWorkspaces = useMemo(() => {
-    if (!document) return [];
-    return document.workspaceIds
-      .map((id) => workspaceLookup.get(id))
-      .filter((ws): ws is DocumentWorkspace => ws !== undefined);
-  }, [document, workspaceLookup]);
-
   // Memoize access logs refresh handler
   const handleRefreshAccessLogs = useCallback(async () => {
     if (!document?.id) return;
@@ -131,48 +120,10 @@ const DocumentDetailContent = () => {
     setAccessLogs(logs);
   }, [document?.id, setAccessLogs]);
 
-  // Memoize workspaces refresh handler
-  const handleWorkspacesRefreshed = useCallback(async () => {
-    const ws = await fetchWorkspaces();
-    setWorkspaces(ws);
-  }, [setWorkspaces]);
-
   // Memoize open comments dialog handler
   const handleOpenCommentsDialog = useCallback(() => {
     setCommentsDialogOpen(true);
   }, []);
-
-  const handleAddWorkspace = useCallback(async (workspaceId: string) => {
-    if (!document) return;
-    try {
-      const currentIds = document.workspaceIds;
-      if (currentIds.includes(workspaceId)) {
-        toast.error('Workspace already assigned');
-        return;
-      }
-      const updated = await updateDocumentWorkspaces(document.id, [...currentIds, workspaceId]);
-      setDocument(updated);
-      toast.success('Workspace added');
-    } catch (error: unknown) {
-      logError('Failed to add workspace', error);
-      toast.error('Unable to add workspace');
-    }
-  }, [document, setDocument]);
-
-  const handleRemoveWorkspace = useCallback(async (workspaceId: string) => {
-    if (!document) return;
-    try {
-      const updated = await updateDocumentWorkspaces(
-        document.id,
-        document.workspaceIds.filter((id) => id !== workspaceId)
-      );
-      setDocument(updated);
-      toast.success('Workspace removed');
-    } catch (error: unknown) {
-      logError('Failed to remove workspace', error);
-      toast.error('Unable to remove workspace');
-    }
-  }, [document, setDocument]);
 
   // Get user initials for avatar
   const getUserInitials = (userId: string) => {
@@ -198,21 +149,26 @@ const DocumentDetailContent = () => {
     return versions[0];
   }, [versions, selectedVersionId]);
 
-  const handleDownloadVersion = useCallback((version: DocumentVersion | null | undefined) => {
-    if (!version?.fileUrl?.trim()) {
+  const handleDownloadVersion = useCallback(async (version: DocumentVersion | null | undefined) => {
+    if (!document) return;
+    if (!canDownloadDocument(document)) {
+      toast.error(document.drmRights?.message || 'Download blocked by DRM policy');
+      return;
+    }
+    if (!version?.id) {
       toast.error('No file available to download');
       return;
     }
-    const link = window.document.createElement('a');
-    link.href = version.fileUrl;
-    link.download = version.fileName || 'document';
-    window.document.body.appendChild(link);
-    link.click();
-    window.document.body.removeChild(link);
-  }, []);
+    try {
+      await downloadDocumentVersion(version.id, version.fileName || 'document');
+    } catch (err) {
+      logError('Failed to download document version', err);
+      toast.error(err instanceof Error ? err.message : 'Download failed');
+    }
+  }, [document]);
 
   const handleDownloadLatest = useCallback(() => {
-    handleDownloadVersion(selectedVersion);
+    void handleDownloadVersion(selectedVersion);
   }, [handleDownloadVersion, selectedVersion]);
 
   const handleOpenFullscreen = useCallback((version?: DocumentVersion | null) => {
@@ -274,7 +230,7 @@ const DocumentDetailContent = () => {
             divisions={divisions}
             departments={departments}
             hasLinkedCorrespondence={relatedCorrespondence.length > 0}
-            canDownload={Boolean(selectedVersion?.fileUrl?.trim())}
+            canDownload={canDownloadDocument(document) && Boolean(selectedVersion)}
             canFullscreen={Boolean(selectedVersion)}
             onFullscreen={() => handleOpenFullscreen()}
             onDownload={handleDownloadLatest}
@@ -310,56 +266,96 @@ const DocumentDetailContent = () => {
           />
 
           <DocumentMobileTabBar
-            mobileActiveTab={mobileActiveTab}
-            onSetMobileActiveTab={setMobileActiveTab}
-            commentsCount={comments.length}
+            mobileActiveTab={mobileActiveTab as 'document' | 'routing'}
+            onSetMobileActiveTab={(tab) => setMobileActiveTab(tab as 'document' | 'details')}
+            minutesCount={comments.length}
           />
           </div>
 
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <DmsDocumentWorkspace
-            mobileActiveTab={mobileActiveTab}
-            previewProps={{
-              document,
-              documentId: params.id,
-              formDocumentId,
-              versions,
-              selectedVersion,
-              onSelectVersion: handleSelectVersion,
-              onDownload: handleDownloadVersion,
-            }}
-            sidebarProps={{
-              document,
-              versions,
-              documentWorkspaces,
-              workspaces,
-              comments,
-              accessLogs,
-              relatedCorrespondence,
-              userLookup,
-              uploadUser,
-              ocrState,
-              workspaceManageOpen,
-              onWorkspaceManageOpenChange: setWorkspaceManageOpen,
-              onQuickVersionUpload: openVersionUpload,
-              onCreateVersion: openVersionUpload,
-              onAddWorkspace: handleAddWorkspace,
-              onRemoveWorkspace: handleRemoveWorkspace,
-              onWorkspacesRefreshed: handleWorkspacesRefreshed,
-              onOpenCommentsDialog: handleOpenCommentsDialog,
-              onViewActivityDetails: (log: DocumentAccessLog) => setSelectedAccessLog(log),
-              onRefreshAccessLogs: handleRefreshAccessLogs,
-              onPreviewVersion: (version: DocumentVersion) => setPreviewVersion(version),
-              onReplaceVersion: setReplaceVersionId,
-              onVersionOCR: handleVersionOCR,
-              onCancelOCR: handleCancelOCR,
-              getUserInitials,
-            }}
-          />
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="hidden md:flex flex-1 min-h-0 overflow-hidden">
+              <div className="w-[58%] min-w-0 flex flex-col min-h-0 border-r border-border">
+                <DocumentPreviewPanel
+                  document={document}
+                  documentId={params.id}
+                  formDocumentId={formDocumentId}
+                  versions={versions}
+                  selectedVersion={selectedVersion}
+                  onSelectVersion={handleSelectVersion}
+                  onDownload={handleDownloadVersion}
+                  canDownload={canDownloadDocument(document)}
+                />
+              </div>
+              <div className="w-[42%] min-w-0 flex flex-col min-h-0 overflow-hidden">
+                <DocumentSidebar
+                  document={document}
+                  versions={versions}
+                  comments={comments}
+                  accessLogs={accessLogs}
+                  relatedCorrespondence={relatedCorrespondence}
+                  userLookup={userLookup}
+                  uploadUser={uploadUser}
+                  ocrState={ocrState}
+                  onQuickVersionUpload={openVersionUpload}
+                  onCreateVersion={openVersionUpload}
+                  onOpenCommentsDialog={handleOpenCommentsDialog}
+                  onViewActivityDetails={(log: DocumentAccessLog) => setSelectedAccessLog(log)}
+                  onRefreshAccessLogs={handleRefreshAccessLogs}
+                  onPreviewVersion={(version: DocumentVersion) => setPreviewVersion(version)}
+                  onDownloadVersion={handleDownloadVersion}
+                  onReplaceVersion={setReplaceVersionId}
+                  onVersionOCR={handleVersionOCR}
+                  onCancelOCR={handleCancelOCR}
+                  getUserInitials={getUserInitials}
+                />
+              </div>
+            </div>
+
+            {mobileActiveTab === "document" && (
+              <div className="md:hidden flex-1 min-h-0 flex flex-col overflow-hidden pb-16">
+                <DocumentPreviewPanel
+                  document={document}
+                  documentId={params.id}
+                  formDocumentId={formDocumentId}
+                  versions={versions}
+                  selectedVersion={selectedVersion}
+                  onSelectVersion={handleSelectVersion}
+                  onDownload={handleDownloadVersion}
+                  canDownload={canDownloadDocument(document)}
+                />
+              </div>
+            )}
+            {mobileActiveTab === "details" && (
+              <div className="md:hidden flex-1 min-h-0 flex flex-col overflow-hidden pb-16">
+                <DocumentSidebar
+                  document={document}
+                  versions={versions}
+                  comments={comments}
+                  accessLogs={accessLogs}
+                  relatedCorrespondence={relatedCorrespondence}
+                  userLookup={userLookup}
+                  uploadUser={uploadUser}
+                  ocrState={ocrState}
+                  onQuickVersionUpload={openVersionUpload}
+                  onCreateVersion={openVersionUpload}
+                  onOpenCommentsDialog={handleOpenCommentsDialog}
+                  onViewActivityDetails={(log: DocumentAccessLog) => setSelectedAccessLog(log)}
+                  onRefreshAccessLogs={handleRefreshAccessLogs}
+                  onPreviewVersion={(version: DocumentVersion) => setPreviewVersion(version)}
+                  onDownloadVersion={handleDownloadVersion}
+                  onReplaceVersion={setReplaceVersionId}
+                  onVersionOCR={handleVersionOCR}
+                  onCancelOCR={handleCancelOCR}
+                  getUserInitials={getUserInitials}
+                />
+              </div>
+            )}
+          </div>
           </div>
 
           <DocumentMobileStickyBar
-            canDownload={Boolean(selectedVersion?.fileUrl?.trim())}
+            canDownload={canDownloadDocument(document) && Boolean(selectedVersion)}
             canUpload={Boolean(uploadUser)}
             onDownload={handleDownloadLatest}
             onShare={openShareDialog}
@@ -439,6 +435,7 @@ const DocumentDetailContent = () => {
           isOpen={!!previewVersion}
           onClose={() => setPreviewVersion(null)}
           documentId={document.id}
+          allowDownload={canDownloadDocument(document)}
           onVersionCreated={async (updated) => {
             setDocument(updated);
             setPreviewVersion(null);

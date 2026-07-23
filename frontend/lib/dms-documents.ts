@@ -1,22 +1,22 @@
 import { ERROR_AUTHENTICATION_REQUIRED, ERROR_UNKNOWN } from '@/lib/constants';
 import { apiFetch, hasTokens } from './api-client';
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
-import { logError, logInfo, logWarn } from '@/lib/client-logger';
+import { logInfo, logWarn } from '@/lib/client-logger';
 import { unwrapResults } from '@/lib/type-utils';
 import type { User } from './npa-structure';
 import type { Correspondence, Minute } from './npa-structure';
+import type { ApiCorrespondence, ApiMinute } from '@/lib/api/correspondence';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
 import { isRecord } from '@/lib/type-utils';
 import type {
   DocumentQueryParams,
   PaginatedDocuments,
   DocumentRecord,
-  DocumentWorkspace,
   PermissionAccess,
   CreateDocumentInput,
   CreateDocumentVersionInput,
 } from './dms-types';
-import { mapDocument, mapWorkspace } from './dms-types';
+import { mapDocument } from './dms-types';
 
 // ============ HELPERS ============
 
@@ -49,10 +49,9 @@ const buildDocumentPayload = (input: CreateDocumentInput) => {
   if (input.authorId) {
     payload.author_id = input.authorId;
   }
-  if (input.workspaceIds) {
-    payload.workspace_ids = input.workspaceIds;
+  if (input.drmPolicyId !== undefined) {
+    payload.drm_policy_id = input.drmPolicyId;
   }
-
   return payload;
 };
 
@@ -98,37 +97,28 @@ export const queryDocuments = async (params: DocumentQueryParams = {}): Promise<
   const url = query ? `/dms/documents/?${query}` : '/dms/documents/';
   logInfo('[DMS] Fetching documents from:', url);
 
-  try {
-    logInfo('[DMS] Starting apiFetch...');
-    const payload = await apiFetch<Record<string, unknown>>(url) as Record<string, unknown> | {
-      count?: number;
-      next?: string | null;
-      previous?: string | null;
-      results?: unknown[];
-    };
+  logInfo('[DMS] Starting apiFetch...');
+  const payload = await apiFetch<Record<string, unknown>>(url) as Record<string, unknown> | {
+    count?: number;
+    next?: string | null;
+    previous?: string | null;
+    results?: unknown[];
+  };
 
-    logInfo('[DMS] Received payload:', { hasResults: !!payload, isArray: Array.isArray(payload), count: payload?.count });
+  logInfo('[DMS] Received payload:', { hasResults: !!payload, isArray: Array.isArray(payload), count: payload?.count });
 
-    const results = (unwrapResults(payload) as Record<string, unknown>[]).map(mapDocument);
-    const count = typeof payload?.count === 'number' ? payload.count : results.length;
-    const next = typeof payload?.next === 'string' ? payload.next : null;
-    const previous = typeof payload?.previous === 'string' ? payload.previous : null;
+  const results = (unwrapResults(payload) as Record<string, unknown>[]).map(mapDocument);
+  const count = typeof payload?.count === 'number' ? payload.count : results.length;
+  const next = typeof payload?.next === 'string' ? payload.next : null;
+  const previous = typeof payload?.previous === 'string' ? payload.previous : null;
 
-    logInfo('[DMS] Mapped results:', { resultsCount: results.length, count, hasNext: !!next });
-    return {
-      results,
-      count,
-      next,
-      previous,
-    };
-  } catch (error: unknown) {
-    logError('[DMS] Error in queryDocuments:', error);
-    logError('[DMS] Error details:', {
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    throw error;
-  }
+  logInfo('[DMS] Mapped results:', { resultsCount: results.length, count, hasNext: !!next });
+  return {
+    results,
+    count,
+    next,
+    previous,
+  };
 };
 
 export const fetchDocuments = async (): Promise<DocumentRecord[]> => {
@@ -178,23 +168,12 @@ export const fetchDocumentRelatedCorrespondence = async (
   if (!Array.isArray(payload)) return [];
 
   return payload.filter(isRecord).map((row) => ({
-    correspondence: mapApiCorrespondence(row.correspondence as Record<string, unknown>),
+    correspondence: mapApiCorrespondence(row.correspondence as ApiCorrespondence),
     minutes: Array.isArray(row.minutes)
-      ? row.minutes.filter(isRecord).map((item) => mapApiMinute(item))
+      ? row.minutes.filter(isRecord).map((item) => mapApiMinute(item as ApiMinute))
       : [],
     linkNotes: typeof row.link_notes === 'string' ? row.link_notes : undefined,
   }));
-};
-
-// ============ WORKSPACES ============
-
-export const fetchWorkspaces = async (): Promise<DocumentWorkspace[]> => {
-  if (!hasTokens()) {
-    return [];
-  }
-
-  const payload = await apiFetch<unknown>('/dms/workspaces/');
-  return (unwrapResults(payload) as Record<string, unknown>[]).map(mapWorkspace);
 };
 
 // ============ CREATE / UPDATE / REPLACE ============
@@ -216,15 +195,10 @@ export const createDocument = async (
   const document = mapDocument(created);
 
   const versionPayload = buildVersionPayload(document.id, versionInput);
-  try {
-    await apiFetch('/dms/versions/', {
-      method: 'POST',
-      body: JSON.stringify(versionPayload),
-    });
-  } catch (error: unknown) {
-    logError('Failed to create document version:', error);
-    throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : ERROR_UNKNOWN}`);
-  }
+  await apiFetch('/dms/versions/', {
+    method: 'POST',
+    body: JSON.stringify(versionPayload),
+  });
 
   return fetchDocumentById(document.id);
 };
@@ -238,15 +212,10 @@ export const createDocumentVersion = async (
   }
 
   const versionPayload = buildVersionPayload(documentId, versionInput);
-  try {
-    await apiFetch('/dms/versions/', {
-      method: 'POST',
-      body: JSON.stringify(versionPayload),
-    });
-  } catch (error: unknown) {
-    logError('Failed to create document version:', error);
-    throw new Error(`Failed to upload document version: ${error instanceof Error ? error.message : ERROR_UNKNOWN}`);
-  }
+  await apiFetch('/dms/versions/', {
+    method: 'POST',
+    body: JSON.stringify(versionPayload),
+  });
 
   return fetchDocumentById(documentId);
 };
@@ -262,15 +231,10 @@ export const replaceDocumentVersion = async (
   const versionPayload = buildVersionPayload('', versionInput);
   delete versionPayload.document;
 
-  try {
-    await apiFetch(`/dms/versions/${versionId}/replace/`, {
-      method: 'POST',
-      body: JSON.stringify(versionPayload),
-    });
-  } catch (error: unknown) {
-    logError('Failed to replace document version', error);
-    throw new Error(`Failed to replace document version: ${error instanceof Error ? error.message : ERROR_UNKNOWN}`);
-  }
+  await apiFetch(`/dms/versions/${versionId}/replace/`, {
+    method: 'POST',
+    body: JSON.stringify(versionPayload),
+  });
 
   const version = await apiFetch<Record<string, unknown>>(`/dms/versions/${versionId}/`);
   return fetchDocumentById(String(version.document));
@@ -294,8 +258,7 @@ export const updateDocumentMetadata = async (
   if (updates.departmentId !== undefined) payload.department = updates.departmentId ?? null;
   if (updates.referenceNumber !== undefined) payload.reference_number = updates.referenceNumber ?? '';
   if (updates.tags !== undefined) payload.tags = updates.tags;
-  if (updates.workspaceIds !== undefined) payload.workspace_ids = updates.workspaceIds;
-
+  if (updates.drmPolicyId !== undefined) payload.drm_policy_id = updates.drmPolicyId;
   const updated = await apiFetch<Record<string, unknown>>(`/dms/documents/${documentId}/`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
@@ -305,10 +268,48 @@ export const updateDocumentMetadata = async (
   return document;
 };
 
-export const updateDocumentWorkspaces = async (
-  documentId: string,
-  workspaceIds: string[],
-): Promise<DocumentRecord> => updateDocumentMetadata(documentId, { workspaceIds });
+/** Download a document version through the DRM-enforced API endpoint. */
+export const downloadDocumentVersion = async (
+  versionId: string,
+  fileName?: string,
+): Promise<void> => {
+  if (!hasTokens()) {
+    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+  }
+
+  const blob = await apiFetch<Blob>(`/dms/versions/${versionId}/download/`, {
+    responseType: 'blob',
+  });
+  // Force a save dialog — browsers often open application/pdf in a viewer instead of downloading.
+  const saveBlob = new Blob([blob], { type: 'application/octet-stream' });
+  const blobUrl = URL.createObjectURL(saveBlob);
+  const link = window.document.createElement('a');
+  link.href = blobUrl;
+  link.download = fileName?.trim() || 'document';
+  link.rel = 'noopener';
+  window.document.body.appendChild(link);
+  link.click();
+  window.document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 2_000);
+};
+
+/** Inline/preview stream (view-allowed); applies DRM watermark when policy sets one. */
+export const fetchDocumentVersionContent = async (versionId: string): Promise<Blob> => {
+  if (!hasTokens()) {
+    throw new Error(ERROR_AUTHENTICATION_REQUIRED);
+  }
+  return apiFetch<Blob>(`/dms/versions/${versionId}/content/`, {
+    responseType: 'blob',
+  });
+};
+
+export const canDownloadDocument = (document: DocumentRecord | null | undefined): boolean => {
+  if (!document) return false;
+  const rights = document.drmRights;
+  if (!rights) return true;
+  if (rights.expired || rights.view_only) return false;
+  return rights.allow_download !== false;
+};
 
 // ============ SHARING ============
 

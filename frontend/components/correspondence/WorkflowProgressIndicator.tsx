@@ -57,16 +57,26 @@ const GRADE_HIERARCHY = [
   { grade: 'MDCS', role: 'Managing Director', shortName: 'MD' },
   { grade: 'EDCS', role: 'Executive Director', shortName: 'ED' },
   { grade: 'MSS1', role: 'General Manager', shortName: 'GM' },
-  { grade: 'GMCS', role: 'General Manager', shortName: 'GM' },
-  { grade: 'MSS2', role: 'Asst. General Manager', shortName: 'AGM' },
-  { grade: 'MSS3', role: 'Manager', shortName: 'MGR' },
-  { grade: 'SSS1', role: 'Senior Officer', shortName: 'SO' },
-  { grade: 'SSS2', role: 'Officer', shortName: 'OFF' },
+  { grade: 'MSS2', role: 'Assistant General Manager', shortName: 'AGM' },
+  { grade: 'MSS3', role: 'Principal Manager', shortName: 'PM' },
+  { grade: 'MSS4', role: 'Senior Manager', shortName: 'SM' },
+  { grade: 'MSS5', role: 'Manager', shortName: 'MGR' },
+  { grade: 'SSS1', role: 'Assistant Manager', shortName: 'AM' },
+  { grade: 'SSS2', role: 'Senior Officer', shortName: 'SO' },
+  { grade: 'SSS3', role: 'Officer I', shortName: 'OFF1' },
+  { grade: 'SSS4', role: 'Officer II', shortName: 'OFF2' },
+  { grade: 'JSS1', role: 'Staff I', shortName: 'ST1' },
+  { grade: 'JSS2', role: 'Staff II', shortName: 'ST2' },
+  { grade: 'JSS3', role: 'Staff III', shortName: 'ST3' },
 ];
 
 // Determine workflow type based on correspondence flow
-function detectWorkflowType(minutes: Minute[], users: User[]): 'upward' | 'downward' | 'lateral' | 'mixed' {
-  if (minutes.length < 2) return 'mixed';
+function detectWorkflowType(minutes: Minute[], users: User[], correspondence: Correspondence): 'upward' | 'downward' | 'lateral' | 'mixed' {
+  if (minutes.length < 2) {
+    if (correspondence.direction === 'upward') return 'upward';
+    if (correspondence.direction === 'downward') return 'downward';
+    return 'mixed';
+  }
   
   const gradeOrder = (grade: string) => {
     const idx = GRADE_HIERARCHY.findIndex(g => g.grade === grade);
@@ -98,34 +108,44 @@ function detectWorkflowType(minutes: Minute[], users: User[]): 'upward' | 'downw
 function getSuggestedWorkflow(
   currentApprover: User | null | undefined,
   flowType: 'upward' | 'downward' | 'lateral' | 'mixed',
-  isMdDirectorate: boolean
+  isMdDirectorate: boolean,
+  minutes: Minute[],
+  users: User[],
+  originGradeLevel: string | undefined,
 ): { grade: string; role: string; shortName: string }[] {
   if (!currentApprover) return [];
-  
-  const currentGradeIdx = GRADE_HIERARCHY.findIndex(
-    g => g.grade === currentApprover.gradeLevel
-  );
-  
-  if (currentGradeIdx < 0) return [];
-  
-  // For MD directorate, skip ED level
-  const relevantGrades = GRADE_HIERARCHY.filter(g => {
+
+  // Filter out ED level for MD directorate
+  const hierarchy = GRADE_HIERARCHY.filter(g => {
     if (isMdDirectorate && g.grade === 'EDCS') return false;
     return true;
   });
-  
+
+  const currentIdx = hierarchy.findIndex(g => g.grade === currentApprover.gradeLevel);
+  if (currentIdx < 0) return [];
+
   if (flowType === 'upward') {
-    // Show path from current to MD
-    return relevantGrades.slice(0, currentGradeIdx + 1).reverse();
-  } else if (flowType === 'downward') {
-    // Show path from MD to current
-    return relevantGrades.slice(currentGradeIdx);
+    // Include grades from the lowest minuted level up through current
+    const minuteGradeIndices = minutes
+      .map(m => {
+        const user = users.find(u => u.id === m.userId);
+        return user?.gradeLevel ? hierarchy.findIndex(g => g.grade === user.gradeLevel) : -1;
+      })
+      .filter(i => i >= 0);
+
+    const originGradeIdx = originGradeLevel ? hierarchy.findIndex(g => g.grade === originGradeLevel) : -1;
+    const lowestRelevantIdx = Math.max(currentIdx, ...minuteGradeIndices, originGradeIdx);
+    return hierarchy.slice(0, lowestRelevantIdx + 1).reverse();
   }
-  
+
+  if (flowType === 'downward') {
+    return hierarchy.slice(currentIdx);
+  }
+
   // Mixed/lateral - show surrounding levels
-  const start = Math.max(0, currentGradeIdx - 1);
-  const end = Math.min(relevantGrades.length, currentGradeIdx + 3);
-  return relevantGrades.slice(start, end);
+  const start = Math.max(0, currentIdx - 1);
+  const end = Math.min(hierarchy.length, currentIdx + 3);
+  return hierarchy.slice(start, end);
 }
 
 export function WorkflowProgressIndicator({
@@ -139,14 +159,23 @@ export function WorkflowProgressIndicator({
 }: WorkflowProgressIndicatorProps) {
   // Determine workflow type and suggested flow
   const workflowAnalysis = useMemo(() => {
-    const flowType = detectWorkflowType(minutes, users);
+    const flowType = detectWorkflowType(minutes, users, correspondence);
     
-    // Check if in MD directorate (no ED level)
-    const isMdDirectorate = currentApprover?.directorate?.includes('Managing Director') || 
-                           currentApprover?.directorate?.includes('MD') ||
-                           false;
+    // Check if in MD directorate (no ED level in the same directorate)
+    const isMdDirectorate = currentApprover?.gradeLevel === 'MDCS' ||
+      (!!currentApprover?.directorate &&
+        !users.some(u =>
+          u.directorate === currentApprover.directorate &&
+          u.gradeLevel === 'EDCS'
+        ) && currentApprover?.gradeLevel !== 'EDCS');
     
-    const suggestedSteps = getSuggestedWorkflow(currentApprover, flowType, isMdDirectorate);
+    // Find the origin creator's grade level (the user who first created the correspondence)
+    const originUser = correspondence.createdById
+      ? users.find(u => u.id === correspondence.createdById)
+      : undefined;
+    const originGradeLevel = originUser?.gradeLevel;
+    
+    const suggestedSteps = getSuggestedWorkflow(currentApprover, flowType, isMdDirectorate, minutes, users, originGradeLevel);
     
     // Build workflow steps with status
     const steps: WorkflowStep[] = suggestedSteps.map((step, index) => {
@@ -156,13 +185,9 @@ export function WorkflowProgressIndicator({
           const user = users.find(u => u.id === m.userId);
           return { minute: m, user };
         })
-        .filter(({ user }) => user?.gradeLevel === step.grade || 
-                             (step.grade === 'MSS1' && user?.gradeLevel === 'GMCS') ||
-                             (step.grade === 'GMCS' && user?.gradeLevel === 'MSS1'));
+        .filter(({ user }) => user?.gradeLevel === step.grade);
       
-      const isCurrentLevel = currentApprover?.gradeLevel === step.grade ||
-                            (step.grade === 'MSS1' && currentApprover?.gradeLevel === 'GMCS') ||
-                            (step.grade === 'GMCS' && currentApprover?.gradeLevel === 'MSS1');
+      const isCurrentLevel = currentApprover?.gradeLevel === step.grade;
       
       const hasActioned = usersAtGrade.length > 0;
       const lastAction = usersAtGrade[usersAtGrade.length - 1];
@@ -171,6 +196,8 @@ export function WorkflowProgressIndicator({
       if (isCurrentLevel && !hasActioned) {
         status = 'current';
       } else if (hasActioned) {
+        status = 'completed';
+      } else if (originGradeLevel && step.grade === originGradeLevel) {
         status = 'completed';
       }
       
@@ -196,10 +223,12 @@ export function WorkflowProgressIndicator({
           officeName: lastAction.minute.fromOfficeName || lastAction.minute.toOfficeName,
         } : isCurrentLevel && currentApprover ? {
           name: currentApprover.name,
-          // Get office name from user's primary office membership (most accurate)
           officeName: getUserOfficeName(currentApprover.id, officeMemberships, offices) ||
-                      // Fallback to correspondence office if user office not found
                       correspondence.currentOfficeName ||
+                      correspondence.owningOfficeName,
+        } : originGradeLevel && step.grade === originGradeLevel && originUser ? {
+          name: originUser.name,
+          officeName: getUserOfficeName(originUser.id, officeMemberships, offices) ||
                       correspondence.owningOfficeName,
         } : undefined,
         completedAt: lastAction?.minute.timestamp,
@@ -211,7 +240,7 @@ export function WorkflowProgressIndicator({
     let workflowName = 'Standard Flow';
     if (flowType === 'upward') {
       if (isMdDirectorate) {
-        workflowName = 'MD Directorate Approval (AGM → GM → MD)';
+        workflowName = 'MD Directorate Approval (Asst. GM → GM → MD)';
       } else {
         workflowName = 'Standard Upward Approval';
       }

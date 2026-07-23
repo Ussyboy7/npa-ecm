@@ -1,9 +1,4 @@
-/**
- * Frontend API client for Integration Hub (webhooks, email, ERP connectors).
- */
-
 import { apiFetch } from './api-client';
-import { logError } from './client-logger';
 
 function unwrapList<T>(response: T[] | { results?: T[] } | unknown): T[] {
   if (Array.isArray(response)) return response;
@@ -25,11 +20,7 @@ export interface Webhook {
   retry_count: number;
   timeout_seconds: number;
   headers: Record<string, string>;
-  created_by?: {
-    id: string;
-    name: string;
-    email: string;
-  };
+  created_by?: { id: string; name: string; email: string };
   created_at: string;
   updated_at: string;
 }
@@ -113,364 +104,110 @@ export interface IntegrationLog {
   created_at: string;
 }
 
-/**
- * Get all webhooks.
- */
-export const getWebhooks = async (params?: {
-  is_active?: boolean;
-}): Promise<Webhook[]> => {
-  try {
-    const queryParams = new URLSearchParams();
-    if (params?.is_active !== undefined) {
-      queryParams.append('is_active', String(params.is_active));
-    }
-    const query = queryParams.toString();
-    const response = await apiFetch<Webhook[] | { results: Webhook[] }>(
-      `/integrations/webhooks/${query ? `?${query}` : ''}`
-    );
-    return unwrapList(response);
-  } catch (error: unknown) {
-    logError('Failed to get webhooks', error);
-    throw error;
-  }
+export const getWebhooks = async (params?: { is_active?: boolean }): Promise<Webhook[]> => {
+  const queryParams = new URLSearchParams();
+  if (params?.is_active !== undefined) queryParams.append('is_active', String(params.is_active));
+  const query = queryParams.toString();
+  const response = await apiFetch<Webhook[] | { results: Webhook[] }>(
+    `/integrations/webhooks/${query ? `?${query}` : ''}`
+  );
+  return unwrapList(response);
 };
 
-/**
- * Create a webhook.
- */
-export const createWebhook = async (data: Partial<Webhook>): Promise<Webhook> => {
-  try {
-    const response = await apiFetch<Webhook>('/integrations/webhooks/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to create webhook', error);
-    throw error;
-  }
+export const createWebhook = async (data: Partial<Webhook>): Promise<Webhook> =>
+  apiFetch<Webhook>('/integrations/webhooks/', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateWebhook = async (id: string, data: Partial<Webhook>): Promise<Webhook> =>
+  apiFetch<Webhook>(`/integrations/webhooks/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+
+export const deleteWebhook = async (id: string): Promise<void> =>
+  apiFetch(`/integrations/webhooks/${id}/`, { method: 'DELETE' });
+
+export const testWebhook = async (id: string): Promise<{ status: string; message: string; event_id?: string; error?: string }> =>
+  apiFetch(`/integrations/webhooks/${id}/test/`, { method: 'POST' });
+
+export const getWebhookEvents = async (params?: { webhook?: string; status?: string }): Promise<WebhookEvent[]> => {
+  const queryParams = new URLSearchParams();
+  if (params?.webhook) queryParams.append('webhook', params.webhook);
+  if (params?.status) queryParams.append('status', params.status);
+  const query = queryParams.toString();
+  const response = await apiFetch<WebhookEvent[] | { results: WebhookEvent[] }>(
+    `/integrations/webhook-events/${query ? `?${query}` : ''}`
+  );
+  return unwrapList(response);
 };
 
-/**
- * Update a webhook.
- */
-export const updateWebhook = async (
-  id: string,
-  data: Partial<Webhook>
-): Promise<Webhook> => {
-  try {
-    const response = await apiFetch<Webhook>(`/integrations/webhooks/${id}/`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to update webhook', error);
-    throw error;
-  }
-};
-
-/**
- * Delete a webhook.
- */
-export const deleteWebhook = async (id: string): Promise<void> => {
-  try {
-    await apiFetch(`/integrations/webhooks/${id}/`, {
-      method: 'DELETE',
-    });
-  } catch (error: unknown) {
-    logError('Failed to delete webhook', error);
-    throw error;
-  }
-};
-
-/**
- * Test a webhook.
- */
-export const testWebhook = async (id: string): Promise<{
-  status: string;
-  message: string;
-  event_id?: string;
-  error?: string;
-}> => {
-  try {
-    const response = await apiFetch<{
-      status: string;
-      message: string;
-      event_id?: string;
-      error?: string;
-    }>(`/integrations/webhooks/${id}/test/`, {
-      method: 'POST',
-    });
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to test webhook', error);
-    throw error;
-  }
-};
-
-/**
- * Get webhook events.
- */
-export const getWebhookEvents = async (params?: {
-  webhook?: string;
-  status?: string;
-}): Promise<WebhookEvent[]> => {
-  try {
-    const queryParams = new URLSearchParams();
-    if (params?.webhook) {
-      queryParams.append('webhook', params.webhook);
-    }
-    if (params?.status) {
-      queryParams.append('status', params.status);
-    }
-    const query = queryParams.toString();
-    const response = await apiFetch<WebhookEvent[] | { results: WebhookEvent[] }>(
-      `/integrations/webhook-events/${query ? `?${query}` : ''}`
-    );
-    return unwrapList(response);
-  } catch (error: unknown) {
-    logError('Failed to get webhook events', error);
-    throw error;
-  }
-};
-
-/**
- * Get email connectors.
- */
 export const getEmailConnectors = async (): Promise<EmailConnector[]> => {
-  try {
-    const response = await apiFetch<EmailConnector[] | { results: EmailConnector[] }>(
-      '/integrations/email-connectors/'
-    );
-    return unwrapList(response);
-  } catch (error: unknown) {
-    logError('Failed to get email connectors', error);
-    throw error;
-  }
+  const response = await apiFetch<EmailConnector[] | { results: EmailConnector[] }>(
+    '/integrations/email-connectors/'
+  );
+  return unwrapList(response);
 };
 
-export const updateEmailConnector = async (
-  id: string,
-  data: Partial<EmailConnector> & { password?: string }
-): Promise<EmailConnector> => {
-  return apiFetch<EmailConnector>(`/integrations/email-connectors/${id}/`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-};
+export const updateEmailConnector = async (id: string, data: Partial<EmailConnector> & { password?: string }): Promise<EmailConnector> =>
+  apiFetch<EmailConnector>(`/integrations/email-connectors/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
 
-export const deleteEmailConnector = async (id: string): Promise<void> => {
-  await apiFetch(`/integrations/email-connectors/${id}/`, { method: 'DELETE' });
-};
+export const deleteEmailConnector = async (id: string): Promise<void> =>
+  apiFetch(`/integrations/email-connectors/${id}/`, { method: 'DELETE' });
 
-/**
- * Create an email connector.
- */
-export const createEmailConnector = async (
-  data: Partial<EmailConnector>
-): Promise<EmailConnector> => {
-  try {
-    const response = await apiFetch<EmailConnector>('/integrations/email-connectors/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to create email connector', error);
-    throw error;
-  }
-};
+export const createEmailConnector = async (data: Partial<EmailConnector>): Promise<EmailConnector> =>
+  apiFetch<EmailConnector>('/integrations/email-connectors/', { method: 'POST', body: JSON.stringify(data) });
 
-/**
- * Send email via connector.
- */
-export const sendEmail = async (data: {
-  to: string[];
-  subject: string;
-  body: string;
-  html_body?: string;
-  connector_id?: string;
-}): Promise<{ status: string; message: string }> => {
-  try {
-    const response = await apiFetch<{ status: string; message: string }>(
-      '/integrations/email-connectors/send_email/',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }
-    );
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to send email', error);
-    throw error;
-  }
-};
+export const sendEmail = async (data: { to: string[]; subject: string; body: string; html_body?: string; connector_id?: string }): Promise<{ status: string; message: string }> =>
+  apiFetch('/integrations/email-connectors/send_email/', { method: 'POST', body: JSON.stringify(data) });
 
-/**
- * Get ERP connectors.
- */
 export const getERPConnectors = async (): Promise<ERPConnector[]> => {
-  try {
-    const response = await apiFetch<ERPConnector[] | { results: ERPConnector[] }>(
-      '/integrations/erp-connectors/'
-    );
-    return unwrapList(response);
-  } catch (error: unknown) {
-    logError('Failed to get ERP connectors', error);
-    throw error;
-  }
+  const response = await apiFetch<ERPConnector[] | { results: ERPConnector[] }>('/integrations/erp-connectors/');
+  return unwrapList(response);
 };
 
-export const createERPConnector = async (
-  data: Partial<ERPConnector> & { password?: string; api_key?: string }
-): Promise<ERPConnector> => {
-  return apiFetch<ERPConnector>('/integrations/erp-connectors/', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+export const createERPConnector = async (data: Partial<ERPConnector> & { password?: string; api_key?: string }): Promise<ERPConnector> =>
+  apiFetch<ERPConnector>('/integrations/erp-connectors/', { method: 'POST', body: JSON.stringify(data) });
+
+export const updateERPConnector = async (id: string, data: Partial<ERPConnector> & { password?: string; api_key?: string }): Promise<ERPConnector> =>
+  apiFetch<ERPConnector>(`/integrations/erp-connectors/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
+
+export const deleteERPConnector = async (id: string): Promise<void> =>
+  apiFetch(`/integrations/erp-connectors/${id}/`, { method: 'DELETE' });
+
+export const syncFromERP = async (connectorId: string): Promise<{ success: boolean; documents_synced?: number; documents_created?: number; documents_updated?: number; documents_skipped?: number; error?: string }> =>
+  apiFetch('/integrations/erp-connectors/sync/', { method: 'POST', body: JSON.stringify({ connector_id: connectorId }) });
+
+export const getIntegrationLogs = async (params?: { log_type?: string; status?: string; integration_id?: string }): Promise<IntegrationLog[]> => {
+  const queryParams = new URLSearchParams();
+  if (params?.log_type) queryParams.append('log_type', params.log_type);
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.integration_id) queryParams.append('integration_id', params.integration_id);
+  const query = queryParams.toString();
+  const response = await apiFetch<IntegrationLog[] | { results: IntegrationLog[] }>(
+    `/integrations/logs/${query ? `?${query}` : ''}`
+  );
+  return unwrapList(response);
 };
 
-export const updateERPConnector = async (
-  id: string,
-  data: Partial<ERPConnector> & { password?: string; api_key?: string }
-): Promise<ERPConnector> => {
-  return apiFetch<ERPConnector>(`/integrations/erp-connectors/${id}/`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-};
-
-export const deleteERPConnector = async (id: string): Promise<void> => {
-  await apiFetch(`/integrations/erp-connectors/${id}/`, { method: 'DELETE' });
-};
-
-/**
- * Sync from ERP.
- */
-export const syncFromERP = async (
-  connectorId: string
-): Promise<{
-  success: boolean;
-  documents_synced?: number;
-  documents_created?: number;
-  documents_updated?: number;
-  documents_skipped?: number;
-  error?: string;
-}> => {
-  try {
-    const response = await apiFetch<{
-      success: boolean;
-      documents_synced?: number;
-      documents_created?: number;
-      documents_updated?: number;
-      documents_skipped?: number;
-      error?: string;
-    }>('/integrations/erp-connectors/sync/', {
-      method: 'POST',
-      body: JSON.stringify({ connector_id: connectorId }),
-    });
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to sync from ERP', error);
-    throw error;
-  }
-};
-
-/**
- * Get integration logs.
- */
-export const getIntegrationLogs = async (params?: {
-  log_type?: string;
-  status?: string;
-  integration_id?: string;
-}): Promise<IntegrationLog[]> => {
-  try {
-    const queryParams = new URLSearchParams();
-    if (params?.log_type) {
-      queryParams.append('log_type', params.log_type);
-    }
-    if (params?.status) {
-      queryParams.append('status', params.status);
-    }
-    if (params?.integration_id) {
-      queryParams.append('integration_id', params.integration_id);
-    }
-    const query = queryParams.toString();
-    const response = await apiFetch<IntegrationLog[] | { results: IntegrationLog[] }>(
-      `/integrations/logs/${query ? `?${query}` : ''}`
-    );
-    return unwrapList(response);
-  } catch (error: unknown) {
-    logError('Failed to get integration logs', error);
-    throw error;
-  }
-};
-
-export const getWebhookEventCatalog = async (): Promise<
-  Array<{ id: string; label: string; module: string }>
-> => {
+export const getWebhookEventCatalog = async (): Promise<Array<{ id: string; label: string; module: string }>> => {
   const response = await apiFetch<{ events: Array<{ id: string; label: string; module: string }> }>(
     '/integrations/webhooks/event-catalog/'
   );
   return response.events ?? [];
 };
 
-export const pollEmailInbox = async (
-  connectorId: string
-): Promise<{
-  success: boolean;
-  correspondence_created?: number;
-  messages_processed?: number;
-  error?: string;
-}> => {
-  return apiFetch(`/integrations/email-connectors/${connectorId}/poll-inbox/`, {
-    method: 'POST',
-  });
-};
+export const pollEmailInbox = async (connectorId: string): Promise<{ success: boolean; correspondence_created?: number; messages_processed?: number; error?: string }> =>
+  apiFetch(`/integrations/email-connectors/${connectorId}/poll-inbox/`, { method: 'POST' });
 
 export const getHRMSConnectors = async (): Promise<HRMSConnector[]> => {
-  const response = await apiFetch<HRMSConnector[] | { results: HRMSConnector[] }>(
-    '/integrations/hrms-connectors/'
-  );
+  const response = await apiFetch<HRMSConnector[] | { results: HRMSConnector[] }>('/integrations/hrms-connectors/');
   return unwrapList(response);
 };
 
-export const createHRMSConnector = async (
-  data: Partial<HRMSConnector> & { password?: string; api_key?: string }
-): Promise<HRMSConnector> => {
-  return apiFetch<HRMSConnector>('/integrations/hrms-connectors/', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-};
+export const createHRMSConnector = async (data: Partial<HRMSConnector> & { password?: string; api_key?: string }): Promise<HRMSConnector> =>
+  apiFetch<HRMSConnector>('/integrations/hrms-connectors/', { method: 'POST', body: JSON.stringify(data) });
 
-export const updateHRMSConnector = async (
-  id: string,
-  data: Partial<HRMSConnector> & { password?: string; api_key?: string }
-): Promise<HRMSConnector> => {
-  return apiFetch<HRMSConnector>(`/integrations/hrms-connectors/${id}/`, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-};
+export const updateHRMSConnector = async (id: string, data: Partial<HRMSConnector> & { password?: string; api_key?: string }): Promise<HRMSConnector> =>
+  apiFetch<HRMSConnector>(`/integrations/hrms-connectors/${id}/`, { method: 'PATCH', body: JSON.stringify(data) });
 
-export const deleteHRMSConnector = async (id: string): Promise<void> => {
-  await apiFetch(`/integrations/hrms-connectors/${id}/`, { method: 'DELETE' });
-};
+export const deleteHRMSConnector = async (id: string): Promise<void> =>
+  apiFetch(`/integrations/hrms-connectors/${id}/`, { method: 'DELETE' });
 
-export const syncFromHRMS = async (
-  connectorId: string
-): Promise<{
-  success: boolean;
-  staff_created?: number;
-  staff_updated?: number;
-  staff_deactivated?: number;
-  error?: string;
-}> => {
-  return apiFetch('/integrations/hrms-connectors/sync/', {
-    method: 'POST',
-    body: JSON.stringify({ connector_id: connectorId }),
-  });
-};
-
+export const syncFromHRMS = async (connectorId: string): Promise<{ success: boolean; staff_created?: number; staff_updated?: number; staff_deactivated?: number; error?: string }> =>
+  apiFetch('/integrations/hrms-connectors/sync/', { method: 'POST', body: JSON.stringify({ connector_id: connectorId }) });

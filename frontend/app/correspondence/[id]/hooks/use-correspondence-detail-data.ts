@@ -2,9 +2,10 @@ import { useEffect, useCallback, useRef } from 'react';
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { handleAuthenticationError } from '@/lib/auth-errors';
 import { isAccessDeniedError } from '@/lib/api-errors';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, isAbortError } from '@/lib/api-client';
 import { fetchDocumentById, type DocumentRecord } from '@/lib/dms-storage';
 import { mapApiCorrespondence, mapApiMinute } from '@/contexts/CorrespondenceContext';
+import type { ApiCorrespondence, ApiMinute } from '@/lib/api/correspondence';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
 import type { CorrespondenceDetailState } from '../correspondence-state-reducer';
 import type { useApiRetry } from '@/hooks/use-api-retry';
@@ -97,10 +98,11 @@ export function useCorrespondenceDetailData({
       setDetailLoading(true);
       setAccessDenied(false);
       try {
-        type MinutesResponse = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
+        type MinutesResponse = Array<ApiMinute> | { results: Array<ApiMinute> };
+        const signal = abortController.signal;
         const [corrResponse, minutesResponse, delegationResponse] = await Promise.all([
-          fetchWithRetry(() => apiFetch<Record<string, unknown>>(`/correspondence/items/${id}/`)),
-          fetchWithRetry(() => apiFetch<MinutesResponse>(`/correspondence/minutes/?correspondence=${id}`)),
+          fetchWithRetry(() => apiFetch<ApiCorrespondence>(`/correspondence/items/${id}/`, { signal })),
+          fetchWithRetry(() => apiFetch<MinutesResponse>(`/correspondence/minutes/?correspondence=${id}`, { signal })),
           fetchWithRetry(() => {
             type DelegationItem = {
               id: string;
@@ -115,6 +117,7 @@ export function useCorrespondenceDetailData({
             type DelegationResponse = Array<DelegationItem> | { results: Array<DelegationItem> };
             return apiFetch<DelegationResponse>(
               `/correspondence/correspondence-delegations/?correspondence=${id}&status=active`,
+              { signal },
             );
           }).catch(() => []),
         ]);
@@ -158,6 +161,7 @@ export function useCorrespondenceDetailData({
           }
         }
       } catch (error: unknown) {
+        if (isAbortError(error)) return;
         if (handleAuthenticationError(error)) return;
         if (!ignore && !abortController.signal.aborted) {
           if (isAccessDeniedError(error)) {
@@ -220,7 +224,7 @@ export function useCorrespondenceDetailData({
   const refreshMinutes = useCallback(async () => {
     if (!id) return;
     try {
-      type MinutesResponseType = Array<Record<string, unknown>> | { results: Array<Record<string, unknown>> };
+      type MinutesResponseType = Array<ApiMinute> | { results: Array<ApiMinute> };
       const minutesResponse = await fetchWithRetry(() =>
         apiFetch<MinutesResponseType>(`/correspondence/minutes/?correspondence=${id}`),
       );
@@ -236,5 +240,20 @@ export function useCorrespondenceDetailData({
     }
   }, [id, fetchWithRetry, setMinutes, mergeMinutes]);
 
-  return { refreshMinutes };
+  const refreshDetail = useCallback(async () => {
+    if (!id) return;
+    try {
+      setDetailLoading(true);
+      const corrResponse = await fetchWithRetry(() => apiFetch<ApiCorrespondence>(`/correspondence/items/${id}/`));
+      const mappedCorrespondence = mapApiCorrespondence(corrResponse);
+      setRemoteCorrespondence(mappedCorrespondence);
+    } catch (error: unknown) {
+      if (handleAuthenticationError(error)) return;
+      logError('Failed to refresh correspondence detail', error);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [id, fetchWithRetry, setRemoteCorrespondence, setDetailLoading]);
+
+  return { refreshMinutes, refreshDetail };
 }

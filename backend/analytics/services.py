@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from threading import Lock
 from typing import Any, Iterable, Sequence
 
 from django.db import models
@@ -120,29 +119,12 @@ class AnalyticsService:
         Correspondence.Priority.LOW: 7,
     }
     
-    # Cache for SLA targets (refreshed periodically)
-    _sla_cache: dict[str, int] | None = None
-    _sla_cache_time: datetime | None = None
-    _sla_cache_lock: Lock = Lock()
-    _SLA_CACHE_TTL = timedelta(minutes=5)
-    
     @classmethod
     def get_sla_targets(cls) -> dict[str, int]:
         """Get SLA targets from database, with fallback to defaults."""
-        now = timezone.now()
-        
-        # Check if cache is valid (read lock)
-        with cls._sla_cache_lock:
-            if cls._sla_cache and cls._sla_cache_time and (now - cls._sla_cache_time) < cls._SLA_CACHE_TTL:
-                return cls._sla_cache
-        
         try:
             from .models import SLAConfiguration
-            targets = SLAConfiguration.get_default_sla_targets()
-            with cls._sla_cache_lock:
-                cls._sla_cache = targets
-                cls._sla_cache_time = now
-            return targets
+            return SLAConfiguration.get_default_sla_targets()
         except Exception:
             return cls.DEFAULT_SLA_TARGETS
     

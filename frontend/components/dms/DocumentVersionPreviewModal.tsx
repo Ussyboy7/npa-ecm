@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Download, FileText, Edit2, Save, X } from "lucide-react";
 import type { DocumentVersion, DocumentRecord } from "@/lib/dms-storage";
 import { createDocumentVersion } from "@/lib/dms-storage";
+import { downloadDocumentVersion, fetchDocumentVersionContent } from "@/lib/dms-documents";
+import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 import mammoth from "mammoth";
 import { sanitizeRichText } from "@/lib/sanitize-html";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,6 +28,7 @@ interface DocumentVersionPreviewModalProps {
   onClose: () => void;
   documentId?: string;
   onVersionCreated?: (updatedDocument: DocumentRecord) => void;
+  allowDownload?: boolean;
 }
 
 export const DocumentVersionPreviewModal = ({ 
@@ -34,8 +37,10 @@ export const DocumentVersionPreviewModal = ({
   onClose,
   documentId,
   onVersionCreated,
+  allowDownload = true,
 }: DocumentVersionPreviewModalProps) => {
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
   const [wordHtml, setWordHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +53,7 @@ export const DocumentVersionPreviewModal = ({
   const isImage = version.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
   const isWordDocx = version.fileName?.toLowerCase().endsWith('.docx');
   const isWordDoc = version.fileName?.toLowerCase().endsWith('.doc');
+  const useSecureCanvas = Boolean(isPDF && !allowDownload);
   
   // Fetch file as blob when modal opens
   useEffect(() => {
@@ -59,8 +65,8 @@ export const DocumentVersionPreviewModal = ({
         return;
       }
       
-      // If there's a fileUrl, fetch it
-      if (version.fileUrl && version.fileUrl.trim() !== '') {
+      // If there's a fileUrl, fetch it (PDFs with version id go through DRM content API)
+      if ((version.fileUrl && version.fileUrl.trim() !== '') || (isPDF && version.id)) {
         logInfo('DocumentVersionPreviewModal: Fetching file', {
           fileUrl: version.fileUrl,
           fileName: version.fileName,
@@ -70,23 +76,36 @@ export const DocumentVersionPreviewModal = ({
         });
         setLoading(true);
         setError(null);
-        
-        // Fetch the file with authentication
-        fetch(version.fileUrl, {
-          credentials: 'include',
-        })
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
-            }
-            return response.blob();
-          })
-          .then(blob => {
+        setPdfBytes(null);
+
+        const loadBlob = isPDF && version.id
+          ? fetchDocumentVersionContent(version.id)
+          : fetch(version.fileUrl as string, { credentials: 'include' }).then((response) => {
+              if (!response.ok) {
+                if (response.status === 404) {
+                  setError('File not found on server. Preview unavailable for this version.');
+                  setLoading(false);
+                  return null;
+                }
+                throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
+              }
+              return response.blob();
+            });
+
+        loadBlob
+          .then(async (blob) => {
+            if (!blob) return;
             if (isPDF) {
-              // For PDFs, create blob URL for iframe
-              const url = URL.createObjectURL(blob);
-              setPdfBlobUrl(url);
-              setLoading(false);
+              if (useSecureCanvas) {
+                // No blob URL — browser PDF chrome would expose Download.
+                setPdfBytes(await blob.arrayBuffer());
+                setPdfBlobUrl(null);
+                setLoading(false);
+              } else {
+                const url = URL.createObjectURL(blob);
+                setPdfBlobUrl(url);
+                setLoading(false);
+              }
             } else if (isWordDocx) {
               // For .docx files, convert to HTML using mammoth
               blob.arrayBuffer()
@@ -107,7 +126,7 @@ export const DocumentVersionPreviewModal = ({
           })
           .catch(err => {
             logError('Error loading file:', err);
-            setError(err.message);
+            setError(err instanceof Error ? err.message : String(err));
             setLoading(false);
           });
       } else {
@@ -127,6 +146,7 @@ export const DocumentVersionPreviewModal = ({
         URL.revokeObjectURL(pdfBlobUrl);
         setPdfBlobUrl(null);
       }
+      setPdfBytes(null);
       setWordHtml(null);
       setLoading(false);
       setError(null);
@@ -139,7 +159,7 @@ export const DocumentVersionPreviewModal = ({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, isPDF, isWordDocx, version.fileUrl, version.contentHtml]);
+  }, [isOpen, isPDF, isWordDocx, useSecureCanvas, version.id, version.fileUrl, version.contentHtml]);
 
   // Initialize edited text when version changes or modal opens
   useEffect(() => {
@@ -158,6 +178,36 @@ export const DocumentVersionPreviewModal = ({
     setEditedOCRText(version.ocrText || '');
     setIsEditingOCR(false);
   };
+
+  const handleFileDownload = async () => {
+    if (!allowDownload || !version.id) {
+      toast.error('Download blocked by DRM policy');
+      return;
+    }
+    try {
+      await downloadDocumentVersion(version.id, version.fileName || 'document');
+    } catch (err) {
+      logError('Failed to download from preview modal', err);
+      toast.error(err instanceof Error ? err.message : 'Download failed');
+    }
+  };
+
+  const downloadAction = (label: string) =>
+    allowDownload ? (
+      <button
+        type="button"
+        onClick={() => {
+          void handleFileDownload();
+        }}
+        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        aria-label={`Download ${version.fileName || 'document'}`}
+      >
+        <Download className="h-4 w-4" />
+        {label}
+      </button>
+    ) : (
+      <p className="text-sm text-muted-foreground">Download blocked by DRM policy.</p>
+    );
 
   const handleSaveOCRVersion = async () => {
     if (!documentId || !editedOCRText.trim()) {
@@ -260,15 +310,14 @@ export const DocumentVersionPreviewModal = ({
                           <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                             <p className="text-lg font-medium mb-4 text-destructive">Error loading PDF</p>
                             <p className="text-sm text-muted-foreground mb-4">{error}</p>
-                            <a
-                              href={version.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                            >
-                              <Download className="h-4 w-4" />
-                              Open PDF in new tab
-                            </a>
+                            {downloadAction('Download PDF')}
+                          </div>
+                        ) : useSecureCanvas && pdfBytes ? (
+                          <div className="w-full h-full min-h-[600px] overflow-auto">
+                            <p className="px-4 pt-3 text-xs text-muted-foreground">
+                              View-only — download is disabled by DRM policy.
+                            </p>
+                            <SecurePdfCanvasPreview data={pdfBytes} minHeightClassName="min-h-[560px]" />
                           </div>
                         ) : pdfBlobUrl ? (
                           <iframe
@@ -283,16 +332,7 @@ export const DocumentVersionPreviewModal = ({
                             <p className="text-sm text-muted-foreground mb-4">
                               If the preview doesn't load, you can download the file instead.
                             </p>
-                            <a
-                              href={version.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                              aria-label={`Download ${version.fileName || 'PDF document'}`}
-                            >
-                              <Download className="h-4 w-4" />
-                              Download PDF
-                            </a>
+                            {downloadAction('Download PDF')}
                           </div>
                         )}
                       </div>
@@ -316,15 +356,7 @@ export const DocumentVersionPreviewModal = ({
                           <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                             <p className="text-lg font-medium mb-4 text-destructive">Error loading Word document</p>
                             <p className="text-sm text-muted-foreground mb-4">{error}</p>
-                            <a
-                              href={version.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                            >
-                              <Download className="h-4 w-4" />
-                              Open Word document in new tab
-                            </a>
+                            {downloadAction('Download Word document')}
                           </div>
                         ) : wordHtml ? (
                           <div className="prose prose-base dark:prose-invert max-w-none p-6">
@@ -338,28 +370,12 @@ export const DocumentVersionPreviewModal = ({
                         <p className="text-sm text-muted-foreground mb-4">
                           Preview is not available for .doc files. Please download to view.
                         </p>
-                        <a
-                          href={version.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                        >
-                          <Download className="h-4 w-4" />
-                          Download Word document
-                        </a>
+                        {downloadAction('Download Word document')}
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                         <p className="text-lg font-medium mb-4">{version.fileName || 'Document'}</p>
-                        <a
-                          href={version.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                        >
-                          <Download className="h-4 w-4" />
-                          Download to view
-                        </a>
+                        {downloadAction('Download to view')}
                       </div>
                     )}
                   </>
@@ -483,15 +499,14 @@ export const DocumentVersionPreviewModal = ({
                     <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                       <p className="text-lg font-medium mb-4 text-destructive">Error loading PDF</p>
                       <p className="text-sm text-muted-foreground mb-4">{error}</p>
-                      <a
-                        href={version.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                      >
-                        <Download className="h-4 w-4" />
-                        Open PDF in new tab
-                      </a>
+                      {downloadAction('Download PDF')}
+                    </div>
+                  ) : useSecureCanvas && pdfBytes ? (
+                    <div className="w-full h-full min-h-[600px] overflow-auto">
+                      <p className="px-4 pt-3 text-xs text-muted-foreground">
+                        View-only — download is disabled by DRM policy.
+                      </p>
+                      <SecurePdfCanvasPreview data={pdfBytes} minHeightClassName="min-h-[560px]" />
                     </div>
                   ) : pdfBlobUrl ? (
                     <iframe
@@ -506,16 +521,7 @@ export const DocumentVersionPreviewModal = ({
                       <p className="text-sm text-muted-foreground mb-4">
                         If the preview doesn't load, you can download the file instead.
                       </p>
-                      <a
-                        href={version.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                        aria-label={`Download ${version.fileName || 'PDF document'}`}
-                      >
-                        <Download className="h-4 w-4" />
-                        Download PDF
-                      </a>
+                      {downloadAction('Download PDF')}
                     </div>
                   )}
                 </div>
@@ -539,15 +545,7 @@ export const DocumentVersionPreviewModal = ({
                     <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                       <p className="text-lg font-medium mb-4 text-destructive">Error loading Word document</p>
                       <p className="text-sm text-muted-foreground mb-4">{error}</p>
-                      <a
-                        href={version.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                      >
-                        <Download className="h-4 w-4" />
-                        Open Word document in new tab
-                      </a>
+                      {downloadAction('Download Word document')}
                     </div>
                   ) : wordHtml ? (
                     <div className="prose prose-base dark:prose-invert max-w-none p-6">
@@ -561,28 +559,12 @@ export const DocumentVersionPreviewModal = ({
                   <p className="text-sm text-muted-foreground mb-4">
                     Preview is not available for .doc files. Please download to view.
                   </p>
-                  <a
-                    href={version.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download Word document
-                  </a>
+                  {downloadAction('Download Word document')}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center p-12 text-center min-h-[600px]">
                   <p className="text-lg font-medium mb-4">{version.fileName || 'Document'}</p>
-                  <a
-                    href={version.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download to view
-                  </a>
+                  {downloadAction('Download to view')}
                 </div>
               )}
             </>

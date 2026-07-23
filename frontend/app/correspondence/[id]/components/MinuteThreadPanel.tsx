@@ -1,10 +1,8 @@
 "use client";
 
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   MessageSquare,
   ArrowDown,
@@ -23,6 +21,8 @@ import type { Minute } from '@/lib/npa-structure';
 import { formatDateTime } from '@/lib/correspondence-helpers';
 import { SealBadge } from '@/components/seals/SealBadge';
 import { logWarn } from '@/lib/client-logger';
+import { cn } from '@/lib/utils';
+import { corrType } from '../correspondence-type';
 
 interface MinuteThreadPanelProps {
   minutes: Minute[];
@@ -38,6 +38,7 @@ interface MinuteThreadPanelProps {
   fullWidth?: boolean;
   /** Right-column layout: fills parent, no fixed widths */
   embedded?: boolean;
+  scrollable?: boolean;
 }
 
 export const MinuteThreadPanel = ({
@@ -53,237 +54,300 @@ export const MinuteThreadPanel = ({
   onAddNote,
   fullWidth,
   embedded,
+  scrollable = true,
 }: MinuteThreadPanelProps) => {
-  // Helper to check if minute is recalled (defensive check)
   const isMinuteRecalled = (minute: Minute): boolean => {
     return Boolean(minute.isRecalled || minute.recalledAt);
   };
 
   const panelClass = embedded
-    ? 'flex flex-col flex-1 min-h-0 w-full border-0 bg-background'
+    ? scrollable
+      ? 'flex flex-col flex-1 min-h-0 w-full border-0 bg-transparent'
+      : 'flex flex-col w-full border-0 bg-transparent'
     : fullWidth
-      ? 'w-full border-b md:border-b-0 flex flex-col border-border bg-background'
-      : 'w-full md:w-[60%] md:max-w-[750px] md:min-w-[450px] border-b md:border-b-0 md:border-r rounded-lg flex flex-col border-border bg-background';
+      ? 'w-full border-b md:border-b-0 flex flex-col border-border/60 bg-background'
+      : 'w-full md:w-[60%] md:max-w-[750px] md:min-w-[450px] border-b md:border-b-0 md:border-r rounded-2xl flex flex-col border-border/60 bg-background';
+  const contentClass = scrollable
+    ? 'flex-1 min-h-0 overflow-y-auto overscroll-contain'
+    : 'min-h-0';
 
   return (
     <main className={panelClass}>
-      <div className="p-4 border-b border-border bg-background flex-shrink-0">
-        <h3 className="font-semibold text-sm flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-secondary" />
-          Minute Thread
-        </h3>
+      <div className="px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-sm flex-shrink-0">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className={cn(corrType.panelTitle, 'flex items-center gap-2 min-w-0')}>
+            <MessageSquare className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <span className="truncate">Minute Thread</span>
+          </h3>
+          <span className={cn(corrType.caption, 'tabular-nums flex-shrink-0')}>
+            {minutes.length}
+          </span>
+        </div>
       </div>
-      <div className="flex-1 min-h-0">
-        <ScrollArea className="h-full">
-        <div className="p-4 space-y-4 overflow-x-hidden min-w-0">
+      <div className={contentClass}>
+        <div className={cn('overflow-x-hidden min-w-0', embedded ? 'p-3 pb-8' : 'p-4 pb-8')}>
           {minutes.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p className="font-medium">No minutes yet</p>
-              <p className="text-sm">Use the Actions panel to minute and route this correspondence</p>
+            <div className="text-center py-14 text-muted-foreground">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted/60">
+                <MessageSquare className="h-5 w-5 opacity-70" />
+              </div>
+              <p className={corrType.itemTitle}>No minutes yet</p>
+              <p className="mt-1 text-xs text-muted-foreground max-w-[220px] mx-auto leading-relaxed">
+                Review the document, then use Minute to route this correspondence.
+              </p>
             </div>
           ) : (
-            minutes.map((minuteItem, idx) => {
-              const user = lookupUser(minuteItem.userId);
-              const ActionIcon = getActionIcon(minuteItem.actionType);
-              const isDownward = minuteItem.direction === 'downward';
-              const displayName = user?.name ?? minuteItem.userName ?? 'Unknown user';
-              let systemRole = user?.systemRole ?? minuteItem.userSystemRole ?? 'Team Member';
-              if (systemRole && systemRole.includes('-') && systemRole.length > 30) {
-                systemRole = user?.systemRole ?? 'Team Member';
-              }
+            <ol className="relative space-y-0">
+              {minutes.map((minuteItem, idx) => {
+                const user = lookupUser(minuteItem.userId);
+                const ActionIcon = getActionIcon(minuteItem.actionType);
+                const isDownward = minuteItem.direction === 'downward';
+                const isOwn = String(minuteItem.userId) === String(activeUserId);
+                const displayName = user?.name ?? minuteItem.userName ?? 'Unknown user';
+                let systemRole = user?.systemRole ?? minuteItem.userSystemRole ?? 'Team Member';
+                if (systemRole && systemRole.includes('-') && systemRole.length > 30) {
+                  systemRole = user?.systemRole ?? 'Team Member';
+                }
+                const shouldShowRole = systemRole && systemRole !== displayName;
+                const routeLabel = minuteItem.fromOfficeName && minuteItem.toOfficeName
+                  ? `${minuteItem.fromOfficeName} → ${minuteItem.toOfficeName}`
+                  : minuteItem.fromOfficeName && minuteItem.toUserName
+                    ? `${minuteItem.fromOfficeName} → ${minuteItem.toUserName}`
+                    : minuteItem.toOfficeName || (shouldShowRole ? systemRole : '');
+                const hasActions =
+                  (minuteItem.canBeEdited && isOwn) ||
+                  (minuteItem.canBeRecalled && !isMinuteRecalled(minuteItem) && isOwn) ||
+                  (!minuteItem.isAdditional &&
+                    !isCompleted &&
+                    !isMinuteRecalled(minuteItem) &&
+                    (isOwn || isCurrentUserTurn));
 
-              return (
-                <div key={minuteItem.id} className="relative">
-                  {idx < minutes.length - 1 && (
-                    <div
-                      className={`absolute left-8 top-16 w-0.5 h-8 ${
-                        minuteItem.isRecalled 
-                          ? 'bg-destructive/30' 
-                          : isDownward 
-                          ? 'bg-info' 
-                          : 'bg-success'
-                      }`}
-                    />
-                  )}
-                  <Card
-                    className={`overflow-hidden ${minuteItem.userId === activeUserId ? 'border-primary shadow-glow' : ''} ${minuteItem.isRecalled ? 'opacity-75 border-destructive/30' : ''} cursor-pointer hover:shadow-md transition-all`}
-                    onClick={() => onMinuteClick(minuteItem)}
-                  >
-                    <CardContent className="p-3 md:p-4 overflow-hidden min-w-0">
-                      <div className="flex gap-2 min-w-0">
-                        <Avatar className={`h-9 w-9 flex-shrink-0 ${minuteItem.isRecalled ? 'ring-2 ring-destructive/50' : isDownward ? 'ring-2 ring-info' : 'ring-2 ring-success'}`}>
-                          <AvatarFallback className={`text-xs font-semibold ${minuteItem.isRecalled ? 'bg-destructive/10 text-destructive' : ''}`}>
-                            {minuteItem.isRecalled ? (
-                              <X className="h-5 w-5" />
-                            ) : (
-                              displayName
-                                .split(' ')
-                                .map((namePart) => namePart[0])
-                                .join('')
-                                .slice(0, 2)
-                                .toUpperCase()
-                            )}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0 overflow-hidden">
-                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 gap-2 min-w-0">
-                            <div className="flex-1 min-w-0 overflow-hidden">
-                              <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                <p className={`font-semibold text-sm truncate min-w-0 ${minuteItem.isRecalled ? 'line-through text-muted-foreground' : ''}`}>
-                                  {displayName}
-                                </p>
-                                {minuteItem.isRecalled && (
-                                  <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20 flex-shrink-0">
-                                    Recalled
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-xs text-muted-foreground break-words min-w-0 mt-1">
-                                {minuteItem.fromOfficeName && minuteItem.toOfficeName ? (
-                                  <span className="break-words">{minuteItem.fromOfficeName} → {minuteItem.toOfficeName}</span>
-                                ) : minuteItem.fromOfficeName && minuteItem.toUserName ? (
-                                  <span className="break-words">{minuteItem.fromOfficeName} → {minuteItem.toUserName}</span>
-                                ) : minuteItem.toOfficeName ? (
-                                  <span className="break-words">{minuteItem.toOfficeName}</span>
-                                ) : (
-                                  <span>{systemRole}</span>
-                                )}
-                                {minuteItem.actedByAssistant && minuteItem.performedByName && 
-                                 String(minuteItem.userId) === String(activeUserId) && (
-                                  <span className="break-words text-primary/70">
-                                    {' '}(via {minuteItem.performedByName})
-                                  </span>
-                                )}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
-                              <Badge variant="outline" className={`text-[10px] h-5 gap-0.5 ${minuteItem.isRecalled ? 'bg-destructive/10 text-destructive border-destructive/20' : ''}`}>
-                                {ActionIcon && <ActionIcon className="h-3 w-3" />}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={`text-[10px] h-5 gap-0.5 ${
-                                  minuteItem.isRecalled 
-                                    ? 'bg-destructive/10 text-destructive border-destructive/20'
-                                    : isDownward 
-                                    ? 'bg-info/10 text-info border-info/20' 
-                                    : 'bg-success/10 text-success border-success/20'
-                                }`}
-                              >
-                                {isDownward ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
-                              </Badge>
-                              {minuteItem.isParallelBranch && (
-                                <Badge variant="outline" className="text-[10px] h-5 bg-primary/10 text-primary border-primary/20">
-                                  <Users className="h-3 w-3" />
-                                </Badge>
-                              )}
-                              <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            </div>
-                          </div>
-                          <p className={`text-sm mb-2 line-clamp-3 break-words ${minuteItem.isRecalled ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
-                            {minuteItem.minuteText}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
-                            <span className="truncate">{formatDateTime(minuteItem.timestamp)}</span>
-                            <span className="text-muted-foreground/50 flex-shrink-0">•</span>
-                            <span className="flex-shrink-0">Step {minuteItem.stepNumber}</span>
-                            {minuteItem.isRecalled && minuteItem.recalledAt && (
-                              <>
-                                <span className="text-muted-foreground/50">•</span>
-                                <span className="text-destructive">Recalled</span>
-                              </>
-                            )}
-                            {/* Per-minute dispatch/ack status */}
-                            {minuteItem.dispatchedAt && !minuteItem.isRecalled && (
-                              <>
-                                <span className="text-muted-foreground/50">•</span>
-                                <span className="flex items-center gap-1 text-info">
-                                  <Send className="h-3 w-3" />
-                                  Dispatched {formatDateTime(minuteItem.dispatchedAt)}
-                                </span>
-                              </>
-                            )}
-                            {minuteItem.acknowledgedAt && !minuteItem.isRecalled && (
-                              <>
-                                <span className="text-muted-foreground/50">•</span>
-                                <span className="flex items-center gap-1 text-success">
-                                  <CheckCircle2 className="h-3 w-3" />
-                                  Acknowledged {formatDateTime(minuteItem.acknowledgedAt)}
-                                </span>
-                              </>
-                            )}
-                            {(minuteItem.actedBySecretary || minuteItem.actedByAssistant) && (
-                              <>
-                                <span className="text-muted-foreground/50">•</span>
-                                <Badge variant="outline" className="text-[10px] h-4 px-1">
-                                  {minuteItem.actedBySecretary ? 'Secretary' : minuteItem.assistantType}
-                                </Badge>
-                              </>
-                            )}
-                          </div>
-                          {minuteItem.signature && (
-                            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                              <ImageIcon className="h-3 w-3 text-primary" />
-                              <span>Signed {formatDateTime(minuteItem.signature.appliedAt)}</span>
-                            </div>
+                return (
+                  <li key={minuteItem.id} className="relative flex gap-3">
+                    {/* Timeline rail */}
+                    <div className="relative flex w-8 flex-shrink-0 flex-col items-center">
+                      {idx < minutes.length - 1 && (
+                        <div
+                          className={cn(
+                            'absolute top-8 bottom-0 w-px',
+                            minuteItem.isRecalled
+                              ? 'bg-destructive/25'
+                              : 'bg-border/80',
                           )}
-                          {minuteItem.sealData ? (
-                            <div className="mt-2 flex items-center gap-2">
-                              <SealBadge sealData={minuteItem.sealData} showDetails />
-                              <span className="text-xs text-muted-foreground">
-                                {minuteItem.sealData.serialNumber}
+                        />
+                      )}
+                      <Avatar
+                        className={cn(
+                          'relative z-10 h-8 w-8 border border-background shadow-sm',
+                          minuteItem.isRecalled && 'opacity-70',
+                        )}
+                      >
+                        <AvatarFallback
+                          className={cn(
+                            'text-[10px] font-semibold',
+                            minuteItem.isRecalled
+                              ? 'bg-destructive/10 text-destructive'
+                              : isOwn
+                                ? 'bg-primary/10 text-primary'
+                                : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {minuteItem.isRecalled ? (
+                            <X className="h-3.5 w-3.5" />
+                          ) : (
+                            displayName
+                              .split(' ')
+                              .map((namePart) => namePart[0])
+                              .join('')
+                              .slice(0, 2)
+                              .toUpperCase()
+                          )}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+
+                    {/* Content */}
+                    <button
+                      type="button"
+                      className={cn(
+                        'group mb-4 flex-1 min-w-0 rounded-2xl border px-3.5 py-3 text-left transition-colors',
+                        'border-transparent bg-transparent hover:bg-muted/40',
+                        isOwn && 'bg-muted/25 hover:bg-muted/45',
+                        minuteItem.isRecalled && 'opacity-70',
+                      )}
+                      onClick={() => onMinuteClick(minuteItem)}
+                    >
+                      <div className="flex items-start justify-between gap-2 min-w-0">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p
+                              className={cn(
+                                corrType.itemTitle,
+                                'truncate',
+                                minuteItem.isRecalled && 'line-through text-muted-foreground',
+                              )}
+                            >
+                              {displayName}
+                            </p>
+                            {minuteItem.isRecalled && (
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-destructive">
+                                Recalled
                               </span>
-                            </div>
-                          ) : minuteItem.sealApplied ? (
-                            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                              <Shield className="h-3 w-3 text-emerald-600" />
-                              <span>Seal applied (loading details...)</span>
-                            </div>
-                          ) : null}
-                          <div className="mt-2 flex items-center gap-2 flex-wrap">
-                            {minuteItem.canBeEdited && minuteItem.userId === activeUserId && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onEditMinute(minuteItem);
-                                  }}
-                                >
-                                  <RefreshCw className="h-3 w-3 mr-1" />
-                                  Edit
-                                </Button>
-                                {minuteItem.editWindowExpiresAt && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {(() => {
-                                      const expiresAt = new Date(minuteItem.editWindowExpiresAt);
-                                      const now = new Date();
-                                      const diffMs = expiresAt.getTime() - now.getTime();
-                                      if (diffMs <= 0) return 'Edit window expired';
-                                      const diffMins = Math.floor(diffMs / 60000);
-                                      return `${diffMins} min left`;
-                                    })()}
+                            )}
+                            {minuteItem.isParallelBranch && (
+                              <Users className="h-3 w-3 text-muted-foreground" aria-label="Parallel" />
+                            )}
+                          </div>
+                          {(routeLabel ||
+                            (minuteItem.actedByAssistant &&
+                              minuteItem.performedByName &&
+                              isOwn)) && (
+                            <p className={cn('mt-0.5 break-words', corrType.caption)}>
+                              {routeLabel && <span>{routeLabel}</span>}
+                              {minuteItem.actedByAssistant &&
+                                minuteItem.performedByName &&
+                                isOwn && (
+                                  <span className="text-primary/70">
+                                    {' '}
+                                    (via {minuteItem.performedByName})
                                   </span>
                                 )}
-                              </>
-                            )}
-                            {/* Only show recall button if minute can be recalled, is NOT already recalled, and belongs to current user */}
-                            {/* Use helper function for defensive check */}
-                            {minuteItem.canBeRecalled && 
-                             !isMinuteRecalled(minuteItem) &&
-                             minuteItem.userId === activeUserId && (
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 text-muted-foreground">
+                          {ActionIcon && <ActionIcon className="h-3.5 w-3.5 opacity-70" />}
+                          {isDownward ? (
+                            <ArrowDown className="h-3 w-3 opacity-50" />
+                          ) : (
+                            <ArrowUp className="h-3 w-3 opacity-50" />
+                          )}
+                          <ChevronRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" />
+                        </div>
+                      </div>
+
+                      <p
+                        className={cn(
+                          'mt-2 line-clamp-3 break-words',
+                          corrType.body,
+                          minuteItem.isRecalled
+                            ? 'text-muted-foreground line-through'
+                            : 'text-foreground/90',
+                        )}
+                      >
+                        {minuteItem.minuteText}
+                      </p>
+
+                      <div className={cn('mt-2 flex items-center gap-x-2 gap-y-1 flex-wrap', corrType.caption)}>
+                        <span>{formatDateTime(minuteItem.timestamp)}</span>
+                        <span className="text-muted-foreground/40">·</span>
+                        <span>Step {minuteItem.stepNumber}</span>
+                        {minuteItem.dispatchedAt && !minuteItem.isRecalled && (
+                          <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span className="inline-flex items-center gap-1">
+                              <Send className="h-3 w-3" />
+                              Dispatched
+                            </span>
+                          </>
+                        )}
+                        {minuteItem.acknowledgedAt && !minuteItem.isRecalled && (
+                          <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span className="inline-flex items-center gap-1 text-success">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Acknowledged
+                            </span>
+                          </>
+                        )}
+                        {(minuteItem.actedBySecretary || minuteItem.actedByAssistant) && (
+                          <>
+                            <span className="text-muted-foreground/40">·</span>
+                            <span>
+                              {minuteItem.actedBySecretary ? 'Secretary' : minuteItem.assistantType}
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      {minuteItem.signature && (
+                        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <ImageIcon className="h-3 w-3" />
+                          <span>Signed {formatDateTime(minuteItem.signature.appliedAt)}</span>
+                        </div>
+                      )}
+                      {minuteItem.sealData ? (
+                        <div className="mt-2 flex items-center gap-2">
+                          <SealBadge sealData={minuteItem.sealData} showDetails />
+                        </div>
+                      ) : minuteItem.sealApplied ? (
+                        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <Shield className="h-3 w-3" />
+                          <span>Seal applied</span>
+                        </div>
+                      ) : null}
+
+                      {minuteItem.isAdditional && minuteItem.minuteType && (
+                        <div className="mt-2">
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] h-5 border-border/60 text-muted-foreground"
+                          >
+                            {minuteItem.minuteType === 'instruction'
+                              ? 'Additional Instruction'
+                              : minuteItem.minuteType === 'clarification'
+                                ? 'Clarification'
+                                : 'Addendum'}
+                          </Badge>
+                        </div>
+                      )}
+
+                      {hasActions && (
+                        <div
+                          className="mt-3 flex items-center gap-1.5 flex-wrap"
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        >
+                          {minuteItem.canBeEdited && isOwn && (
+                            <>
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
-                                className="h-7 text-xs text-destructive hover:text-destructive"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // Double-check before opening modal
+                                  onEditMinute(minuteItem);
+                                }}
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                Edit
+                              </Button>
+                              {minuteItem.editWindowExpiresAt && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  {(() => {
+                                    const expiresAt = new Date(minuteItem.editWindowExpiresAt);
+                                    const diffMs = expiresAt.getTime() - Date.now();
+                                    if (diffMs <= 0) return 'Edit window expired';
+                                    return `${Math.floor(diffMs / 60000)} min left`;
+                                  })()}
+                                </span>
+                              )}
+                            </>
+                          )}
+                          {minuteItem.canBeRecalled &&
+                            !isMinuteRecalled(minuteItem) &&
+                            isOwn && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-destructive/80 hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   if (isMinuteRecalled(minuteItem)) {
-                                    logWarn('[MinuteThreadPanel] Attempted to recall already recalled minute:', minuteItem.id);
+                                    logWarn(
+                                      '[MinuteThreadPanel] Attempted to recall already recalled minute:',
+                                      minuteItem.id,
+                                    );
                                     return;
                                   }
                                   onRecallMinute(minuteItem);
@@ -293,17 +357,14 @@ export const MinuteThreadPanel = ({
                                 Recall
                               </Button>
                             )}
-                            {isMinuteRecalled(minuteItem) && (
-                              <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/20">
-                                Recalled
-                              </Badge>
-                            )}
-                            {!minuteItem.isAdditional && !isCompleted && !isMinuteRecalled(minuteItem) && 
-                             (String(minuteItem.userId) === String(activeUserId) || isCurrentUserTurn) && (
+                          {!minuteItem.isAdditional &&
+                            !isCompleted &&
+                            !isMinuteRecalled(minuteItem) &&
+                            (isOwn || isCurrentUserTurn) && (
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="sm"
-                                className="h-7 text-xs"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   onAddNote(minuteItem);
@@ -313,32 +374,16 @@ export const MinuteThreadPanel = ({
                                 Add Note
                               </Button>
                             )}
-                          </div>
-                          {minuteItem.isAdditional && minuteItem.minuteType && (
-                            <div className="mt-2">
-                              <Badge variant="outline" className="text-xs bg-info/10 text-info border-info/20">
-                                {minuteItem.minuteType === 'instruction' ? 'Additional Instruction' :
-                                 minuteItem.minuteType === 'clarification' ? 'Clarification' : 'Addendum'}
-                              </Badge>
-                              {minuteItem.relatesToMinuteId && (
-                                <span className="text-xs text-muted-foreground ml-2">
-                                  Related to minute #{minutes.findIndex(m => m.id === minuteItem.relatesToMinuteId) + 1}
-                                </span>
-                              )}
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              );
-            })
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
           )}
         </div>
-        </ScrollArea>
       </div>
     </main>
   );
 };
-

@@ -1,5 +1,5 @@
 import { logError } from '@/lib/client-logger';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -27,20 +27,25 @@ export const RecallMinuteModal = ({
 }: RecallMinuteModalProps) => {
   const [recallReason, setRecallReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   // If modal is opened with an already-recalled minute (e.g. stale state), close it
   useEffect(() => {
     if (isOpen && minute?.isRecalled) {
       onClose();
     }
-  }, [isOpen, minute?.id, minute?.isRecalled, onClose]);
+  }, [isOpen, minute?.id, minute?.isRecalled]);
 
   if (!minute) return null;
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
     // Validate character limit
     if (recallReason.length > MODAL_CONSTANTS.RECALL_REASON.MAX) {
       toast.error(`Reason cannot exceed ${MODAL_CONSTANTS.RECALL_REASON.MAX} characters.`);
+      submittingRef.current = false;
       return;
     }
 
@@ -72,6 +77,7 @@ export const RecallMinuteModal = ({
       toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -40,16 +41,9 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
   const [scannedFile, setScannedFile] = useState<File | null>(null);
   const [scanMode, setScanMode] = useState<'manual' | 'scanner'>('manual');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal, reset } = useAbortController();
 
-  // Cleanup on unmount or dialog close
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,13 +75,7 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
     }
 
 
-    // Cancel previous scan if any
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const signal = getSignal();
 
     setIsScanning(true);
     setScanProgress(0);
@@ -157,9 +145,7 @@ export const ScanDialog = ({ open, onOpenChange }: ScanDialogProps) => {
   const handleClose = useCallback(() => {
     if (isScanning) {
       // Cancel scan if in progress
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      reset();
       setIsScanning(false);
     }
     setScannedFile(null);

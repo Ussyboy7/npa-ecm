@@ -15,8 +15,13 @@ import {
 } from '@/components/ui/select';
 import {
   Search,
+  Users2,
+  ArrowRight,
+  UserCheck,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { useSidebarCounts } from '@/hooks/use-sidebar-counts';
+import { useOrganization } from '@/contexts/OrganizationContext';
 import type { Correspondence } from '@/lib/npa-structure';
 import { apiFetch } from '@/lib/api-client';
 import { MAX_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
@@ -34,6 +39,7 @@ import { InboxSummaryCards } from './components/InboxSummaryCards';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { InboxItemCard } from './components/InboxItemCard';
 import { InboxApprovalCard } from './components/InboxApprovalCard';
+import { getMyActingAppointments, type ActingAppointment } from '@/lib/api/acting-appointments';
 
 const calculateDaysPending = (item: Correspondence): number => {
   if (!item.receivedDate) return 0;
@@ -90,10 +96,53 @@ const ExecutiveInbox = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [slaTargets, setSlaTargets] = useState<{ urgent: number; high: number; medium: number; low: number } | null>(null);
+  const counts = useSidebarCounts();
+  const { officeMemberships } = useOrganization();
+  const [actingAppointments, setActingAppointments] = useState<ActingAppointment[]>([]);
+
+  const isOfficePrincipal = useMemo(
+    () =>
+      officeMemberships.some(
+        (m) =>
+          m.isActive &&
+          m.assignmentRole === 'principal' &&
+          String(m.userId) === String(currentUser?.id ?? '')
+      ),
+    [officeMemberships, currentUser?.id]
+  );
+
+  const isOfficeMember = useMemo(
+    () =>
+      officeMemberships.some(
+        (m) => m.isActive && String(m.userId) === String(currentUser?.id ?? '')
+      ),
+    [officeMemberships, currentUser?.id]
+  );
 
   const hasActiveFilters = useMemo(() => {
     return !!(selectedStatus || selectedPriority || dateFrom || dateTo);
   }, [selectedStatus, selectedPriority, dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (!currentUser?.id) {
+      setActingAppointments([]);
+      return;
+    }
+    let ignore = false;
+    const loadActing = async () => {
+      try {
+        const mine = await getMyActingAppointments();
+        if (!ignore) setActingAppointments(mine.filter((a) => a.isCurrentlyEffective));
+      } catch (err) {
+        logError('Failed to load acting appointments', err);
+        if (!ignore) setActingAppointments([]);
+      }
+    };
+    void loadActing();
+    return () => {
+      ignore = true;
+    };
+  }, [currentUser?.id]);
 
   const clearFilters = () => {
     setSelectedStatus('');
@@ -238,6 +287,68 @@ const ExecutiveInbox = () => {
       title="My Inbox"
       subtitle="Correspondence and documents that need your action"
     >
+      <InboxSummaryCards summary={summary} />
+
+      {actingAppointments.map((appt) => (
+        <div
+          key={appt.id}
+          className="flex items-center gap-3 rounded-lg border border-sky-200 bg-sky-50/60 px-4 py-2.5 text-sm dark:border-sky-800/40 dark:bg-sky-950/20"
+        >
+          <UserCheck className="h-4 w-4 text-sky-700 dark:text-sky-400" />
+          <span className="flex-1 text-sky-900 dark:text-sky-200">
+            You are acting as <span className="font-semibold">{appt.principalName}</span>
+            {appt.officeName ? ` (${appt.officeName})` : ''}
+            {appt.endsAt
+              ? ` until ${new Date(appt.endsAt).toLocaleDateString()}`
+              : ' until further notice'}
+            . Seat items appear in this inbox with an Acting badge.
+          </span>
+        </div>
+      ))}
+
+      {(isOfficePrincipal || isOfficeMember) && (
+        <a
+          href="/acting"
+          className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        >
+          <UserCheck className="h-4 w-4" />
+          <span className="flex-1">
+            {isOfficePrincipal
+              ? 'Appoint an acting officer for your seat (or request help)'
+              : 'Request an acting appointment if your office seat holder is away'}
+          </span>
+          <ArrowRight className="h-3 w-3" />
+        </a>
+      )}
+
+      {(currentUser?.isSuperuser ||
+        currentUser?.rolePermissions?.can_manage_org_structure ||
+        currentUser?.rolePermissions?.can_manage_users) && (
+        <a
+          href="/admin/acting-appointments"
+          className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        >
+          <UserCheck className="h-4 w-4" />
+          <span className="flex-1">Admin: manage acting appointments & requests</span>
+          <ArrowRight className="h-3 w-3" />
+        </a>
+      )}
+
+      {counts.delegated > 0 && (
+        <a
+          href="/inbox/delegated"
+          className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/50 px-4 py-2.5 text-sm transition-colors hover:bg-amber-50 dark:border-amber-800/40 dark:bg-amber-950/20 dark:hover:bg-amber-950/30"
+        >
+          <Users2 className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <span className="flex-1 text-amber-800 dark:text-amber-300">
+            <span className="font-semibold">{counts.delegated}</span> item{counts.delegated === 1 ? '' : 's'} delegated to you
+          </span>
+          <span className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+            View <ArrowRight className="h-3 w-3" />
+          </span>
+        </a>
+      )}
+
       <Card>
         <CardContent className="flex flex-wrap items-center gap-2 p-2">
           <div className="relative min-w-[200px] flex-1 max-w-sm">
@@ -279,8 +390,6 @@ const ExecutiveInbox = () => {
           )}
         </CardContent>
       </Card>
-
-      <InboxSummaryCards summary={summary} />
 
       {error && <ErrorState message={error} variant="inline" />}
 

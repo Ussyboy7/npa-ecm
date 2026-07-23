@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { ScanDialog } from "@/components/capture/ScanDialog";
 import { BatchUploadDialog } from "@/components/capture/BatchUploadDialog";
@@ -9,14 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import {
   Scan,
@@ -25,6 +16,9 @@ import {
   FileText,
   Layers,
   Loader2,
+  Link2,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -35,6 +29,13 @@ import {
   type CaptureJob,
 } from "@/lib/capture-storage";
 import { logError } from "@/lib/client-logger";
+import { ListRowCard } from "@/components/shared/ListRowCard";
+import {
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+} from "@/components/shared/registry-queue-styles";
+import { cn } from "@/lib/utils";
 
 function jobStatusBadge(status: CaptureJob["status"]) {
   const styles: Record<CaptureJob["status"], string> = {
@@ -165,136 +166,151 @@ function CaptureHubContent() {
         </TabsList>
 
         <TabsContent value="jobs">
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Document</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {jobs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
-                      No capture jobs yet. Scan a document or upload from DMS to start OCR.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  [...activeJobs, ...completedJobs].map((job) => (
-                    <TableRow key={job.id}>
-                      <TableCell>
-                        {job.document ? (
-                          <Link
-                            href={`/dms/${job.document.id}`}
-                            className="font-medium text-primary hover:underline"
-                          >
-                            {job.document.title}
-                          </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="uppercase text-xs">{job.job_type}</TableCell>
-                      <TableCell>{jobStatusBadge(job.status)}</TableCell>
-                      <TableCell className="w-40">
-                        {(job.status === "processing" || job.status === "pending") && (
-                          <div className="space-y-1">
-                            <Progress value={job.progress_percentage} />
-                            <span className="text-xs text-muted-foreground">
-                              {job.progress_percentage}%
-                            </span>
-                          </div>
-                        )}
-                        {job.status === "failed" && (
-                          <span className="text-xs text-destructive line-clamp-2">
-                            {job.error_message || "Processing failed"}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(job.created_at).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        {job.status === "failed" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={async () => {
-                              try {
-                                await retryCaptureJob(job.id);
-                                toast.success("Job requeued");
-                                await loadData();
-                              } catch {
-                                toast.error("Failed to retry job");
-                              }
-                            }}
-                          >
-                            Retry
-                          </Button>
-                        )}
-                        {job.status === "processing" && (
-                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </Card>
+          {jobs.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                No capture jobs yet. Scan a document or upload from DMS to start OCR.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className={correspondenceQueueListStackClass}>
+              {[...activeJobs, ...completedJobs].map((job) => (
+                <ListRowCard
+                  key={job.id}
+                  density="compact"
+                  href={job.document ? `/dms/${job.document.id}` : undefined}
+                  leading={(
+                    <div className={cn(
+                      correspondenceQueueLeadingBoxClass,
+                      job.status === "completed" ? "bg-green-500/10" :
+                      job.status === "failed" ? "bg-red-500/10" :
+                      job.status === "processing" ? "bg-blue-500/10" :
+                      "bg-amber-500/10"
+                    )}>
+                      <FileText className={cn(
+                        correspondenceQueueLeadingIconClass,
+                        job.status === "completed" ? "text-green-600 dark:text-green-400" :
+                        job.status === "failed" ? "text-red-600 dark:text-red-400" :
+                        job.status === "processing" ? "text-blue-600 dark:text-blue-400" :
+                        "text-amber-600 dark:text-amber-400"
+                      )} />
+                    </div>
+                  )}
+                  actions={job.status === "failed" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        try {
+                          await retryCaptureJob(job.id);
+                          toast.success("Job requeued");
+                          await loadData();
+                        } catch {
+                          toast.error("Failed to retry job");
+                        }
+                      }}
+                    >
+                      Retry
+                    </Button>
+                  ) : job.status === "processing" ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : undefined}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-1">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-foreground truncate">
+                        {job.document ? job.document.title : "Untitled"}
+                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                        <span className="text-[10px] uppercase text-muted-foreground font-medium">{job.job_type}</span>
+                        {jobStatusBadge(job.status)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {new Date(job.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {(job.status === "processing" || job.status === "pending") && (
+                    <div className="space-y-1 mt-1">
+                      <Progress value={job.progress_percentage} className="h-1.5" />
+                      <span className="text-[11px] text-muted-foreground">{job.progress_percentage}%</span>
+                    </div>
+                  )}
+                  {job.status === "failed" && job.error_message && (
+                    <p className="text-xs text-destructive line-clamp-2 mt-1">{job.error_message}</p>
+                  )}
+                </ListRowCard>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="batches">
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Files</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead>OCR</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {batches.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground">
-                      No batch uploads yet
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  batches.map((batch) => (
-                    <TableRow key={batch.id}>
-                      <TableCell>
-                        {batch.successful_files}/{batch.total_files} successful
-                        {batch.failed_files > 0 && (
-                          <span className="ml-1 text-destructive">({batch.failed_files} failed)</span>
-                        )}
-                      </TableCell>
-                      <TableCell>{batchStatusBadge(batch.status)}</TableCell>
-                      <TableCell>
-                        {batch.total_files > 0 && (
-                          <span className="text-sm">
-                            {batch.processed_files}/{batch.total_files} processed
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>{batch.process_ocr ? "Yes" : "No"}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(batch.created_at).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </Card>
+          {batches.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                No batch uploads yet
+              </CardContent>
+            </Card>
+          ) : (
+            <div className={correspondenceQueueListStackClass}>
+              {batches.map((batch) => (
+                <ListRowCard
+                  key={batch.id}
+                  density="compact"
+                  leading={(
+                    <div className={cn(
+                      correspondenceQueueLeadingBoxClass,
+                      batch.status === "completed" ? "bg-green-500/10" :
+                      batch.status === "failed" ? "bg-red-500/10" :
+                      "bg-blue-500/10"
+                    )}>
+                      <Layers className={cn(
+                        correspondenceQueueLeadingIconClass,
+                        batch.status === "completed" ? "text-green-600 dark:text-green-400" :
+                        batch.status === "failed" ? "text-red-600 dark:text-red-400" :
+                        "text-blue-600 dark:text-blue-400"
+                      )} />
+                    </div>
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {batchStatusBadge(batch.status)}
+                      {batch.process_ocr && (
+                        <Badge variant="outline" className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none gap-1">
+                          <CheckCircle2 className="h-3 w-3" />OCR
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                      {new Date(batch.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                    <span className="inline-flex items-center gap-1">
+                      <Link2 className="h-3 w-3" />
+                      {batch.successful_files}/{batch.total_files} files
+                    </span>
+                    {batch.failed_files > 0 && (
+                      <span className="inline-flex items-center gap-1 text-destructive">
+                        <XCircle className="h-3 w-3" />
+                        {batch.failed_files} failed
+                      </span>
+                    )}
+                    {batch.total_files > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        {batch.processed_files}/{batch.total_files} processed
+                      </span>
+                    )}
+                  </div>
+                </ListRowCard>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

@@ -4,7 +4,7 @@ import { SYSTEM_ROLE_SUPER_ADMIN } from '@/lib/constants';
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,7 +49,14 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   loadTemplates,
   type DocumentTemplate,
@@ -60,7 +67,7 @@ import {
   deleteTemplate,
 } from "@/lib/template-storage";
 import { getWorkflowTemplates, deleteWorkflowTemplate, updateWorkflowTemplate } from "@/lib/api/workflow";
-import { getFormTemplates, deleteFormTemplate, cloneFormTemplate } from "@/lib/api/forms";
+import { getFormTemplates, deleteFormTemplate, cloneFormTemplate, createFormTemplate } from "@/lib/api/forms";
 import type { WorkflowTemplate } from "@/lib/types/workflow";
 import { logError } from "@/lib/client-logger";
 import type { FormTemplate } from "@/lib/types/forms";
@@ -179,6 +186,13 @@ function TemplatesHubForm() {
   const [showWorkflowDeleteConfirm, setShowWorkflowDeleteConfirm] = useState(false);
   const [workflowToDelete, setWorkflowToDelete] = useState<{ id: string; name: string } | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  // Form creation dialog
+  const [showFormCreate, setShowFormCreate] = useState(false);
+  const [newFormName, setNewFormName] = useState("");
+  const [newFormCategory, setNewFormCategory] = useState<string>("general");
+  const [newFormDesc, setNewFormDesc] = useState("");
+  const [creatingForm, setCreatingForm] = useState(false);
 
   // Personal template users
   const personalTemplateUsers = useMemo(
@@ -499,6 +513,34 @@ function TemplatesHubForm() {
     }
   };
 
+  const handleCreateForm = async () => {
+    if (!newFormName.trim()) {
+      sonnerToast.error("Form name is required");
+      return;
+    }
+    setCreatingForm(true);
+    try {
+      const created = await createFormTemplate({
+        name: newFormName.trim(),
+        category: newFormCategory as FormTemplate["category"],
+        description: newFormDesc.trim(),
+        is_active: true,
+        structure: { fields: [] },
+      });
+      sonnerToast.success("Form template created");
+      setShowFormCreate(false);
+      setNewFormName("");
+      setNewFormCategory("general");
+      setNewFormDesc("");
+      await loadFormTemplates();
+      router.push(`/admin/form-templates/${created.id}`);
+    } catch {
+      sonnerToast.error("Failed to create form template");
+    } finally {
+      setCreatingForm(false);
+    }
+  };
+
   const filteredFormTemplates = Array.isArray(formTemplates)
     ? formCategoryFilter === "all"
       ? formTemplates
@@ -591,7 +633,7 @@ function TemplatesHubForm() {
     if (activeTab === "forms") {
       return (
         <>
-          <Button size="sm" className="bg-gradient-primary" onClick={() => router.push("/admin/form-templates/new")}>
+          <Button size="sm" className="bg-gradient-primary" onClick={() => setShowFormCreate(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create form
           </Button>
@@ -630,48 +672,51 @@ function TemplatesHubForm() {
     if (!workflowPreview) return null;
     const sortedSteps = [...workflowPreview.steps].sort((a, b) => a.order - b.order);
     return (
-      <Card className="mt-4 border-primary/20">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base">{workflowPreview.name}</CardTitle>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setWorkflowPreviewId(null)}>
-              Close
-            </Button>
+      <Dialog open={workflowPreviewId !== null} onOpenChange={(open) => { if (!open) setWorkflowPreviewId(null); }}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{workflowPreview.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {workflowPreview.description ? (
+              <p className="text-sm text-muted-foreground">{workflowPreview.description}</p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className={correspondenceQueueBadgeClass}>
+                {workflowPreview.applies_to === "correspondence" ? "Correspondence" : "Document"}
+              </Badge>
+              <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                {sortedSteps.length} steps
+              </Badge>
+              <Badge variant={workflowPreview.is_active ? "default" : "secondary"} className={correspondenceQueueBadgeClass}>
+                {workflowPreview.is_active ? "Active" : "Inactive"}
+              </Badge>
+            </div>
+            {sortedSteps.length > 0 ? (
+              <ol className="list-decimal space-y-1 pl-5 text-sm">
+                {sortedSteps.map((step) => (
+                  <li key={step.id}>{step.title}</li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-sm text-muted-foreground">No steps configured yet.</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
             <Button
               size="sm"
               className="bg-gradient-primary"
-              onClick={() => router.push(`/admin/workflow-templates/${workflowPreview.id}`)}
+              onClick={() => {
+                const id = workflowPreview.id;
+                setWorkflowPreviewId(null);
+                router.push(`/admin/workflow-templates/${id}`);
+              }}
             >
               Open full editor
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {workflowPreview.description ? (
-            <p className="text-sm text-muted-foreground">{workflowPreview.description}</p>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className={correspondenceQueueBadgeClass}>
-              {workflowPreview.applies_to === "correspondence" ? "Correspondence" : "Document"}
-            </Badge>
-            <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
-              {sortedSteps.length} steps
-            </Badge>
-            <Badge variant={workflowPreview.is_active ? "default" : "secondary"} className={correspondenceQueueBadgeClass}>
-              {workflowPreview.is_active ? "Active" : "Inactive"}
-            </Badge>
-          </div>
-          {sortedSteps.length > 0 ? (
-            <ol className="list-decimal space-y-1 pl-5 text-sm">
-              {sortedSteps.map((step) => (
-                <li key={step.id}>{step.title}</li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-sm text-muted-foreground">No steps configured yet.</p>
-          )}
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     );
   };
 
@@ -680,54 +725,57 @@ function TemplatesHubForm() {
     const styles = getFormCategoryStyles(formPreview.category);
     const fieldCount = formPreview.structure?.fields?.length || 0;
     return (
-      <Card className={cn("mt-4 border-primary/20 border-l-4", styles.accent)}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base">{formPreview.name}</CardTitle>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setFormPreviewId(null)}>
-              Close
-            </Button>
+      <Dialog open={formPreviewId !== null} onOpenChange={(open) => { if (!open) setFormPreviewId(null); }}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{formPreview.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {formPreview.description ? (
+              <p className="text-sm text-muted-foreground">{formPreview.description}</p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "capitalize", styles.badge)}>
+                {formPreview.category_display || formPreview.category}
+              </Badge>
+              <Badge variant={formPreview.is_active ? "default" : "outline"} className={correspondenceQueueBadgeClass}>
+                {formPreview.is_active ? "Active" : "Inactive"}
+              </Badge>
+              <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
+                {fieldCount} fields
+              </Badge>
+            </div>
+            {fieldCount > 0 ? (
+              <ul className="space-y-1 text-sm">
+                {formPreview.structure?.fields?.slice(0, 8).map((field) => (
+                  <li key={field.id} className="text-muted-foreground">
+                    {field.label || field.name}
+                    <span className="ml-2 text-xs uppercase">{field.type}</span>
+                  </li>
+                ))}
+                {fieldCount > 8 ? (
+                  <li className="text-xs text-muted-foreground">+ {fieldCount - 8} more fields</li>
+                ) : null}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No fields configured yet.</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
             <Button
               size="sm"
               className="bg-gradient-primary"
-              onClick={() => router.push(`/admin/form-templates/${formPreview.id}`)}
+              onClick={() => {
+                const id = formPreview.id;
+                setFormPreviewId(null);
+                router.push(`/admin/form-templates/${id}`);
+              }}
             >
               Open full editor
             </Button>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {formPreview.description ? (
-            <p className="text-sm text-muted-foreground">{formPreview.description}</p>
-          ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "capitalize", styles.badge)}>
-              {formPreview.category_display || formPreview.category}
-            </Badge>
-            <Badge variant={formPreview.is_active ? "default" : "outline"} className={correspondenceQueueBadgeClass}>
-              {formPreview.is_active ? "Active" : "Inactive"}
-            </Badge>
-            <Badge variant="secondary" className={correspondenceQueueBadgeClass}>
-              {fieldCount} fields
-            </Badge>
-          </div>
-          {fieldCount > 0 ? (
-            <ul className="space-y-1 text-sm">
-              {formPreview.structure?.fields?.slice(0, 8).map((field) => (
-                <li key={field.id} className="text-muted-foreground">
-                  {field.label || field.name}
-                  <span className="ml-2 text-xs uppercase">{field.type}</span>
-                </li>
-              ))}
-              {fieldCount > 8 ? (
-                <li className="text-xs text-muted-foreground">+ {fieldCount - 8} more fields</li>
-              ) : null}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">No fields configured yet.</p>
-          )}
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     );
   };
 
@@ -811,25 +859,14 @@ function TemplatesHubForm() {
               </div>
             )}
 
-            {templateEditorOpen ? (
-              <Card className="mt-4 border-primary/20">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                  <CardTitle className="text-base">
+            <Dialog open={templateEditorOpen} onOpenChange={(open) => { if (!open) { setTemplateEditorOpen(false); setSelectedTemplateId(null); } }}>
+              <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>
                     {selectedTemplateId ? "Edit template" : "New template"}
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    {selectedTemplateId ? (
-                      <Button variant="outline" size="sm" onClick={handleDeleteDocTemplate} className="text-destructive">
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete
-                      </Button>
-                    ) : null}
-                    <Button variant="ghost" size="sm" onClick={() => setTemplateEditorOpen(false)}>
-                      Close
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Title</Label>
@@ -856,15 +893,27 @@ function TemplatesHubForm() {
                       </div>
                     )}
                   </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={refreshTemplates}>Reset</Button>
+                </div>
+                <div className="flex justify-between pt-2">
+                  <div>
+                    {selectedTemplateId ? (
+                      <Button variant="outline" size="sm" onClick={handleDeleteDocTemplate} className="text-destructive">
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => { refreshTemplates(); setTemplateEditorOpen(false); }}>
+                      Reset
+                    </Button>
                     <Button onClick={handleSaveDocTemplate}>
                       {selectedTemplateId ? "Update Template" : "Create Template"}
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
-            ) : null}
+                </div>
+              </DialogContent>
+            </Dialog>
           </CardContent>
         </Card>
       </div>
@@ -1084,7 +1133,6 @@ function TemplatesHubForm() {
                       ))}
                     </div>
                   )}
-                  {renderWorkflowPreviewPanel()}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1100,7 +1148,7 @@ function TemplatesHubForm() {
                       title="No form templates found"
                       message="Adjust search or category filters, or create a new form template."
                       actionLabel="Create form"
-                      onAction={() => router.push("/admin/form-templates/new")}
+                      onAction={() => setShowFormCreate(true)}
                     />
                   ) : (
                     <div className={correspondenceQueueListStackClass}>
@@ -1187,12 +1235,52 @@ function TemplatesHubForm() {
                       })}
                     </div>
                   )}
-                  {renderFormPreviewPanel()}
                 </CardContent>
               </Card>
             </TabsContent>
           </Tabs>
           </AdminPageShell>
+
+        {renderWorkflowPreviewPanel()}
+        {renderFormPreviewPanel()}
+
+        {/* Create Form Dialog */}
+        <Dialog open={showFormCreate} onOpenChange={setShowFormCreate}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create Form Template</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="form-name">Name</Label>
+                <Input id="form-name" value={newFormName} onChange={(e) => setNewFormName(e.target.value)} placeholder="e.g. Leave Request Form" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="form-category">Category</Label>
+                <Select value={newFormCategory} onValueChange={setNewFormCategory}>
+                  <SelectTrigger id="form-category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">General</SelectItem>
+                    <SelectItem value="hr">HR</SelectItem>
+                    <SelectItem value="finance">Finance</SelectItem>
+                    <SelectItem value="procurement">Procurement</SelectItem>
+                    <SelectItem value="operations">Operations</SelectItem>
+                    <SelectItem value="compliance">Compliance</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="form-desc">Description (optional)</Label>
+                <Textarea id="form-desc" value={newFormDesc} onChange={(e) => setNewFormDesc(e.target.value)} rows={2} placeholder="Brief description of this form..." />
+              </div>
+              <Button className="w-full" onClick={() => void handleCreateForm()} disabled={creatingForm}>
+                {creatingForm ? "Creating..." : "Create & Open Builder"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Delete Form Confirmation */}
         <AlertDialog open={showFormDeleteConfirm} onOpenChange={setShowFormDeleteConfirm}>

@@ -6,7 +6,7 @@ import { apiFetch, hasTokens } from '@/lib/api-client';
 import { isRecord } from '@/lib/type-utils';
 import { DEFAULT_CATALOG_PAGE_SIZE } from '@/lib/pagination-constants';
 import { fetchAllCatalogPaginated } from '@/lib/pagination-utils';
-import { updateOrganizationCache } from '@/lib/npa-structure';
+import { updateOrganizationCache, resetOrgCache } from '@/lib/npa-structure';
 import type { User } from '@/lib/npa-structure';
 import type { BootstrapData } from '@/lib/server-bootstrap';
 import { parseBootstrapOrgState } from '@/lib/bootstrap-org-state';
@@ -179,20 +179,7 @@ export const OrganizationProvider: React.FC<{
     []
   );
 
-  const refreshOrganizationData = useCallback(async () => {
-    if (!currentUser?.id || !hasTokens()) {
-      logInfo('Skipping organization data refresh:', { hasCurrentUser: !!currentUser?.id, hasTokens: hasTokens() });
-      return;
-    }
-
-    if (organizationRefreshPromiseRef.current) {
-      return organizationRefreshPromiseRef.current;
-    }
-
-    logInfo('Refreshing organization data...');
-    setIsSyncing(true);
-
-    const refreshPromise = (async () => {
+  const fetchAllOrgData = async () => {
     try {
       const [
         directoratesRows,
@@ -258,16 +245,29 @@ export const OrganizationProvider: React.FC<{
     } catch (error: unknown) {
       logError('Failed to load organization data from API', error);
       if (error instanceof Error) {
-        logError('Error details:', { message: (error instanceof Error ? error.message : ERROR_UNKNOWN), stack: error.stack });
+        logError('Error details:', { message: error.message, stack: error.stack });
       }
-    } finally {
-      setIsSyncing(false);
-      organizationRefreshPromiseRef.current = null;
     }
-    })();
+  };
 
-    organizationRefreshPromiseRef.current = refreshPromise;
-    return refreshPromise;
+  const refreshOrganizationData = useCallback(async () => {
+    if (!currentUser?.id || !hasTokens()) {
+      logInfo('Skipping organization data refresh:', { hasCurrentUser: !!currentUser?.id, hasTokens: hasTokens() });
+      return;
+    }
+
+    if (organizationRefreshPromiseRef.current) {
+      return organizationRefreshPromiseRef.current;
+    }
+
+    logInfo('Refreshing organization data...');
+    setIsSyncing(true);
+
+    const promise = fetchAllOrgData();
+    promise.finally(() => { setIsSyncing(false); organizationRefreshPromiseRef.current = null; });
+
+    organizationRefreshPromiseRef.current = promise;
+    return promise;
   }, [currentUser?.id, fetchFirstPage]);
 
   useEffect(() => {
@@ -636,24 +636,19 @@ export const OrganizationProvider: React.FC<{
     return created;
   }, [applyRoleUpdate]);
 
-  const updateRole = useCallback(async (id: string, updates: UpdateRoleInput): Promise<Role | null> => {
-    try {
-      const response = await apiFetch<Record<string, unknown>>(`/organization/roles/${id}/`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          name: updates.name,
-          description: updates.description,
-          is_active: updates.isActive,
-          permissions: updates.permissions,
-        }),
-      });
-      const updated = mapApiRole(response);
-      applyRoleUpdate(updated);
-      return updated;
-    } catch (error: unknown) {
-      logError('Failed to update role', error);
-      return null;
-    }
+  const updateRole = useCallback(async (id: string, updates: UpdateRoleInput): Promise<Role> => {
+    const response = await apiFetch<Record<string, unknown>>(`/organization/roles/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: updates.name,
+        description: updates.description,
+        is_active: updates.isActive,
+        permissions: updates.permissions,
+      }),
+    });
+    const updated = mapApiRole(response);
+    applyRoleUpdate(updated);
+    return updated;
   }, [applyRoleUpdate]);
 
   const deleteRole = useCallback(async (id: string): Promise<void> => {
@@ -673,14 +668,7 @@ export const OrganizationProvider: React.FC<{
     setUsers([]);
     setRoles([]);
     setHasSynced(false);
-    updateOrganizationCache({
-      directorates: [],
-      divisions: [],
-      departments: [],
-      offices: [],
-      officeMemberships: [],
-      users: [],
-    });
+    resetOrgCache();
   }, []);
 
   const contextValue = useMemo(() => ({

@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
 import { SENSITIVITY_DETAILS, SENSITIVITY_VALUES } from '@/lib/constants';
 import { updateDocumentMetadata, queryDocuments, type DocumentRecord, type DocumentType } from '@/lib/dms-storage';
+import { fetchDrmPolicies, type DocumentRightsPolicy } from '@/lib/drm-api';
 import type { Division, Department } from '@/lib/npa-structure';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -50,6 +51,7 @@ interface MetadataDraft {
   tags: string;
   sensitivity: DocumentRecord['sensitivity'];
   status: DocumentRecord['status'];
+  drmPolicyId: string | null;
 }
 
 const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
@@ -80,6 +82,7 @@ export const DocumentMetadataEditDialog = ({
     tags: '',
     sensitivity: 'internal',
     status: 'draft',
+    drmPolicyId: null,
   });
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [savingMetadata, setSavingMetadata] = useState(false);
@@ -88,6 +91,7 @@ export const DocumentMetadataEditDialog = ({
   const [showStatusChangeConfirmation, setShowStatusChangeConfirmation] = useState(false);
   const [checkingReferenceNumber, setCheckingReferenceNumber] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
+  const [drmPolicies, setDrmPolicies] = useState<DocumentRightsPolicy[]>([]);
 
   // Filter departments by selected division
   const filteredDepartments = useMemo(() => {
@@ -114,11 +118,27 @@ export const DocumentMetadataEditDialog = ({
         tags: document.tags.join(', '),
         sensitivity: document.sensitivity,
         status: document.status,
+        drmPolicyId: document.drmRights?.policy_id ?? null,
       });
       setHasUnsavedChanges(false);
       setMetadataErrors({});
     }
   }, [open, document]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetchDrmPolicies()
+      .then((policies) => {
+        if (!cancelled) setDrmPolicies(policies);
+      })
+      .catch((err) => {
+        logError('Failed to load DRM policies', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Reset department when division changes
   useEffect(() => {
@@ -252,7 +272,8 @@ export const DocumentMetadataEditDialog = ({
       metadataDraft.departmentId !== document.departmentId ||
       metadataDraft.tags !== document.tags.join(', ') ||
       metadataDraft.sensitivity !== document.sensitivity ||
-      metadataDraft.status !== document.status;
+      metadataDraft.status !== document.status ||
+      metadataDraft.drmPolicyId !== (document.drmRights?.policy_id ?? null);
 
     if (!hasChanges) {
       toast.info('No changes to save');
@@ -277,6 +298,7 @@ export const DocumentMetadataEditDialog = ({
         tags,
         sensitivity: metadataDraft.sensitivity,
         status: metadataDraft.status,
+        drmPolicyId: metadataDraft.drmPolicyId,
       });
 
       onDocumentUpdate(updated);
@@ -310,6 +332,7 @@ export const DocumentMetadataEditDialog = ({
         tags: document.tags.join(', '),
         sensitivity: document.sensitivity,
         status: document.status,
+        drmPolicyId: document.drmRights?.policy_id ?? null,
       });
       setHasUnsavedChanges(false);
       setMetadataErrors({});
@@ -542,6 +565,34 @@ export const DocumentMetadataEditDialog = ({
                     </div>
                   </div>
                   )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="doc-drm-policy">DRM Policy</Label>
+                  <Select
+                    value={metadataDraft.drmPolicyId ?? 'none'}
+                    onValueChange={(value) => {
+                      setMetadataDraft((prev) => ({
+                        ...prev,
+                        drmPolicyId: value === 'none' ? null : value,
+                      }));
+                      setHasUnsavedChanges(true);
+                    }}
+                  >
+                    <SelectTrigger id="doc-drm-policy">
+                      <SelectValue placeholder="No DRM policy" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {drmPolicies.map((policy) => (
+                        <SelectItem key={policy.id} value={policy.id}>
+                          {policy.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Controls download, print, and sharing rights for this document.
+                  </p>
                 </div>
                 <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2">
                   <div className="space-y-2">

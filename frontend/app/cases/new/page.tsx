@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useAbortController } from "@/hooks/use-abort-controller";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ const NewCasePage = () => {
   const router = useRouter();
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const { divisions, departments, offices } = useOrganization();
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal, reset } = useAbortController();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
@@ -234,13 +235,7 @@ const NewCasePage = () => {
       return;
     }
 
-    // Cancel previous request if any
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const signal = getSignal();
 
     setLoading(true);
     try {
@@ -265,13 +260,7 @@ const NewCasePage = () => {
     }
   };
   
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+
 
   if (!currentUser?.id) {
     return null;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,7 @@ import { LinkFormDialog } from "@/components/cases/LinkFormDialog";
 import { CaseHeader } from "./components/CaseHeader";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getCaseById, updateCaseStatus, generateCaseCompletionPackage, unlinkCorrespondenceFromCase, unlinkDocumentFromCase, unlinkFormFromCase, exportCase, importCases, getCaseSLAStatus } from "@/lib/api/cases";
+import { getCaseById, updateCaseStatus, generateCaseCompletionPackage, unlinkCorrespondenceFromCase, unlinkDocumentFromCase, unlinkFormFromCase, importCases, getCaseSLAStatus } from "@/lib/api/cases";
 import type { CaseDetail } from "@/lib/npa-structure";
 import { logError } from "@/lib/client-logger";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
@@ -60,7 +61,7 @@ const CaseDetailPage = () => {
   const caseId = params.id as string;
   const { currentUser, hydrated } = useCurrentUser();
   const { offices, users } = useOrganization();
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal, reset } = useAbortController();
 
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,7 +80,6 @@ const CaseDetailPage = () => {
     breached: boolean;
   } | null>(null);
   const [slaError, setSlaError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showLinkCorrespondenceDialog, setShowLinkCorrespondenceDialog] = useState(false);
   const [showLinkDocumentDialog, setShowLinkDocumentDialog] = useState(false);
@@ -91,13 +91,7 @@ const CaseDetailPage = () => {
       return;
     }
 
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const signal = getSignal();
 
     const fetchCase = async () => {
       setLoading(true);
@@ -127,7 +121,12 @@ const CaseDetailPage = () => {
       } catch (err: unknown) {
         if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
         logError("Failed to load case", err);
-        setError("Failed to load case. Please try again.");
+        const status = (err as Record<string, unknown>).status;
+        if (status === 404) {
+          setError("Case not found. It may have been deleted or you may have followed an invalid link.");
+        } else {
+          setError("Failed to load case. Please try again.");
+        }
       } finally {
         if (!signal.aborted) {
           setLoading(false);
@@ -137,11 +136,7 @@ const CaseDetailPage = () => {
 
     void fetchCase();
     
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
+    return () => {};
   }, [hydrated, currentUser?.id, caseId, refreshKey]);
 
   const handleStatusUpdate = async (newStatus: CaseDetail["status"]) => {
@@ -170,30 +165,6 @@ const CaseDetailPage = () => {
     } catch (err) {
       logError("Failed to generate completion package", err);
       toast.error("Failed to generate completion package");
-    }
-  };
-
-  const handleExport = async () => {
-    if (!caseData) return;
-    
-    setExporting(true);
-    try {
-      const exportData = await exportCase(caseId);
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `case-${caseData.caseNumber}-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success("Case exported successfully");
-    } catch (err) {
-      logError("Failed to export case", err);
-      toast.error("Failed to export case");
-    } finally {
-      setExporting(false);
     }
   };
 
@@ -273,15 +244,20 @@ const CaseDetailPage = () => {
   return (
     <>
       {loading ? (
-        <div className="container mx-auto p-6">
+        <div className="px-4 md:px-6 py-6">
           <LoadingState message="Loading case…" />
         </div>
       ) : error || !caseData ? (
-        <div className="container mx-auto p-6">
+        <div className="px-4 md:px-6 py-6">
           <ErrorState
             message={error || "Case not found"}
-            onRetry={() => setRefreshKey((k) => k + 1)}
+            onRetry={error && error.includes("not found") ? undefined : () => setRefreshKey((k) => k + 1)}
           />
+          <div className="flex justify-center mt-4">
+            <Button variant="outline" onClick={() => router.push("/cases/my")}>
+              Back to Cases
+            </Button>
+          </div>
         </div>
       ) : (
         <ErrorBoundary>
@@ -290,34 +266,31 @@ const CaseDetailPage = () => {
           slaStatus={slaStatus}
           slaError={slaError}
           updatingStatus={updatingStatus}
-          exporting={exporting}
           onStatusUpdate={handleStatusUpdate}
           onGenerateCompletionPackage={handleGenerateCompletionPackage}
-          onExport={handleExport}
           onImport={() => setShowImportDialog(true)}
           owningOffice={owningOffice || null}
           assignedTo={assignedTo || null}
           createdBy={createdBy || null}
         />
         
-        <div className="container mx-auto p-6 space-y-6">
+        <div className="px-4 md:px-6 py-6 space-y-6">
 
         {/* Help Guide */}
 
-        {/* Case Description Card - Only show if description exists */}
+        {/* Case Description */}
         {caseData.description && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Description</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm whitespace-pre-wrap">{caseData.description}</div>
-            </CardContent>
-          </Card>
+          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Description</h3>
+            <div className="text-sm whitespace-pre-wrap leading-relaxed">{caseData.description}</div>
+          </div>
         )}
 
         {/* Tabs for Related Items */}
         <Tabs defaultValue="correspondence" className="space-y-4">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+            <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
           <div className="overflow-x-auto -mx-1">
             <TabsList className="inline-flex flex-nowrap w-max min-w-0">
             <TabsTrigger value="correspondence" className="gap-2 shrink-0">
@@ -350,6 +323,7 @@ const CaseDetailPage = () => {
               Timeline & History
             </TabsTrigger>
           </TabsList>
+          </div>
           </div>
 
           <TabsContent value="correspondence">

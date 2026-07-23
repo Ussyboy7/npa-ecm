@@ -34,25 +34,6 @@ class DocumentRightsPolicy(UUIDModel, TimeStampedModel):
         return self.name
 
 
-class DocumentWorkspace(UUIDModel, TimeStampedModel):
-    """Collaborative workspace grouping documents and members."""
-
-    slug = models.SlugField(unique=True)
-    name = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    color = models.CharField(max_length=16, default="#2563eb")
-    members = models.ManyToManyField(
-        settings.AUTH_USER_MODEL,
-        blank=True,
-        related_name="document_workspaces",
-    )
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self) -> str:
-        return self.name
-
 
 class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
     """Primary document metadata."""
@@ -71,6 +52,10 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
         PUBLISHED = "published", "Published"
         ARCHIVED = "archived", "Archived"
 
+    class Role(models.TextChoices):
+        PRIMARY = "primary", "Primary"
+        ATTACHMENT = "attachment", "Attachment"
+
     class Sensitivity(models.TextChoices):
         PUBLIC = "public", "Public"
         INTERNAL = "internal", "Internal"
@@ -78,6 +63,7 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
         RESTRICTED = "restricted", "Restricted"
 
     title = models.CharField(max_length=500)
+    role = models.CharField(max_length=32, choices=Role.choices, default=Role.PRIMARY)
     description = models.TextField(blank=True)
     document_type = models.CharField(max_length=32, choices=DocumentType.choices)
     reference_number = models.CharField(max_length=100, blank=True)
@@ -104,7 +90,6 @@ class Document(UUIDModel, SoftDeleteModel, TimeStampedModel):
         related_name="documents",
     )
     tags = models.JSONField(default=list, blank=True)
-    workspaces = models.ManyToManyField(DocumentWorkspace, blank=True, related_name="documents")
     # Parent document for document threading (response documents)
     parent_document = models.ForeignKey(
         "self",

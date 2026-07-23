@@ -93,13 +93,15 @@ export function getLoadingSnapshot(): boolean {
   return globalUserState.loading;
 }
 
-export function seedCurrentUserFromApi(data: unknown): void {
+export function seedCurrentUserFromApi(data: unknown, options?: { notify?: boolean }): void {
   if (!isRecord(data)) return;
   const user = mapApiUserToUser(data);
   globalUserState.user = user;
   globalUserState.hydrated = true;
   globalUserState.loading = false;
-  notifySubscribers();
+  if (options?.notify !== false) {
+    notifySubscribers();
+  }
 }
 
 export const useCurrentUser = () => {

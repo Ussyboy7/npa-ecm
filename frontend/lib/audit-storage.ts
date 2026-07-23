@@ -107,32 +107,26 @@ export const getActivityLogs = async (params?: {
 
   const query = queryParams.toString();
   const endpoint = `/audit/logs${query ? `?${query}` : ''}`;
-  try {
-    const response = await apiFetch<unknown>(endpoint);
-    
-    // Handle paginated response
-    if (isRecord(response) && Array.isArray(response.results)) {
-      return {
-        results: response.results.filter(isRecord).map(mapApiLog),
-        count: typeof response.count === 'number' ? response.count : 0,
-        next: typeof response.next === 'string' ? response.next : null,
-        previous: typeof response.previous === 'string' ? response.previous : null,
-      };
-    }
-    
-    // Handle non-paginated response (array)
-    const rawLogs = unwrapResults(response);
+  const response = await apiFetch<unknown>(endpoint);
+  
+  // Handle paginated response
+  if (isRecord(response) && Array.isArray(response.results)) {
     return {
-      results: rawLogs.filter(isRecord).map(mapApiLog),
-      count: rawLogs.length,
-      next: null,
-      previous: null,
+      results: response.results.filter(isRecord).map(mapApiLog),
+      count: typeof response.count === 'number' ? response.count : 0,
+      next: typeof response.next === 'string' ? response.next : null,
+      previous: typeof response.previous === 'string' ? response.previous : null,
     };
-  } catch (error: unknown) {
-    // Silently fail - audit logs are not critical for functionality
-    logWarn('Failed to fetch audit logs:', error);
-    return { results: [], count: 0, next: null, previous: null };
   }
+  
+  // Handle non-paginated response (array)
+  const rawLogs = unwrapResults(response);
+  return {
+    results: rawLogs.filter(isRecord).map(mapApiLog),
+    count: rawLogs.length,
+    next: null,
+    previous: null,
+  };
 };
 
 /**

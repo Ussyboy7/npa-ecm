@@ -1,9 +1,4 @@
-/**
- * Frontend API client for content capture (OCR, scanning, batch processing).
- */
-
 import { apiFetch } from './api-client';
-import { logError } from './client-logger';
 
 export interface CaptureJob {
   id: string;
@@ -96,49 +91,21 @@ function unwrapList<T>(response: T[] | { results?: T[] } | unknown): T[] {
   return [];
 }
 
-/**
- * List capture jobs for the current user.
- */
 export const listCaptureJobs = async (): Promise<CaptureJob[]> => {
-  try {
-    const response = await apiFetch<CaptureJob[] | { results?: CaptureJob[] }>('/capture/jobs/');
-    return unwrapList(response);
-  } catch (error: unknown) {
-    logError('Failed to list capture jobs', error);
-    throw error;
-  }
+  const response = await apiFetch<CaptureJob[] | { results?: CaptureJob[] }>('/capture/jobs/');
+  return unwrapList(response);
 };
 
-/**
- * Retry a failed or stuck capture job.
- */
-export const retryCaptureJob = async (jobId: string): Promise<CaptureJob> => {
-  try {
-    return await apiFetch<CaptureJob>(`/capture/jobs/${jobId}/retry/`, { method: 'POST' });
-  } catch (error: unknown) {
-    logError('Failed to retry capture job', error);
-    throw error;
-  }
-};
+export const retryCaptureJob = async (jobId: string): Promise<CaptureJob> =>
+  apiFetch<CaptureJob>(`/capture/jobs/${jobId}/retry/`, { method: 'POST' });
 
-/**
- * List batch uploads for the current user.
- */
 export const listBatchUploads = async (): Promise<BatchUpload[]> => {
-  try {
-    const response = await apiFetch<BatchUpload[] | { results?: BatchUpload[] }>(
-      '/capture/batch-uploads/',
-    );
-    return unwrapList(response);
-  } catch (error: unknown) {
-    logError('Failed to list batch uploads', error);
-    throw error;
-  }
+  const response = await apiFetch<BatchUpload[] | { results?: BatchUpload[] }>(
+    '/capture/batch-uploads/',
+  );
+  return unwrapList(response);
 };
 
-/**
- * Process OCR for a document.
- */
 export const processOCR = async (
   documentId: string,
   options: {
@@ -147,71 +114,32 @@ export const processOCR = async (
     extract_metadata?: boolean;
     force_reprocess?: boolean;
   } = {}
-): Promise<CaptureJob> => {
-  try {
-    const response = await apiFetch<CaptureJob>('/capture/operations/process_ocr/', {
-      method: 'POST',
-      body: JSON.stringify({
-        document_id: documentId,
-        language: options.language || 'eng',
-        auto_detect_language: options.auto_detect_language || false,
-        extract_metadata: options.extract_metadata || false,
-        force_reprocess: options.force_reprocess || false,
-      }),
-    });
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to process OCR', error);
-    throw error;
-  }
-};
+): Promise<CaptureJob> =>
+  apiFetch<CaptureJob>('/capture/operations/process_ocr/', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_id: documentId,
+      language: options.language || 'eng',
+      auto_detect_language: options.auto_detect_language || false,
+      extract_metadata: options.extract_metadata || false,
+      force_reprocess: options.force_reprocess || false,
+    }),
+  });
 
-/**
- * Get capture job status.
- */
-export const getCaptureJob = async (jobId: string): Promise<CaptureJob> => {
-  try {
-    const response = await apiFetch<CaptureJob>(`/capture/jobs/${jobId}/`);
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to get capture job', error);
-    throw error;
-  }
-};
+export const getCaptureJob = async (jobId: string): Promise<CaptureJob> =>
+  apiFetch<CaptureJob>(`/capture/jobs/${jobId}/`);
 
-/**
- * Get OCR result for a document.
- */
 export const getOCRResult = async (documentId: string): Promise<OCRResult | null> => {
-  try {
-    const response = await apiFetch<OCRResult[] | { results?: OCRResult[] }>(
-      `/capture/ocr-results/?document=${documentId}`,
-    );
-    const results = unwrapList<OCRResult>(response);
-    return results.length > 0 ? results[0] : null;
-  } catch (error: unknown) {
-    logError('Failed to get OCR result', error);
-    return null;
-  }
+  const response = await apiFetch<OCRResult[] | { results?: OCRResult[] }>(
+    `/capture/ocr-results/?document=${documentId}`,
+  );
+  const results = unwrapList<OCRResult>(response);
+  return results.length > 0 ? results[0] : null;
 };
 
-/**
- * Cancel a capture job.
- */
-export const cancelCaptureJob = async (jobId: string): Promise<void> => {
-  try {
-    await apiFetch(`/capture/jobs/${jobId}/cancel/`, {
-      method: 'POST',
-    });
-  } catch (error: unknown) {
-    logError('Failed to cancel capture job', error);
-    throw error;
-  }
-};
+export const cancelCaptureJob = async (jobId: string): Promise<void> =>
+  apiFetch(`/capture/jobs/${jobId}/cancel/`, { method: 'POST' });
 
-/**
- * Process multiple documents in batch.
- */
 export const processBatch = async (
   documentIds: string[],
   options: {
@@ -219,34 +147,16 @@ export const processBatch = async (
     extract_metadata?: boolean;
     language?: string;
   } = {}
-): Promise<BatchUpload> => {
-  try {
-    const response = await apiFetch<BatchUpload>('/capture/operations/batch_process/', {
-      method: 'POST',
-      body: JSON.stringify({
-        document_ids: documentIds,
-        process_ocr: options.process_ocr || false,
-        extract_metadata: options.extract_metadata || false,
-        language: options.language || 'eng',
-      }),
-    });
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to process batch', error);
-    throw error;
-  }
-};
+): Promise<BatchUpload> =>
+  apiFetch<BatchUpload>('/capture/operations/batch_process/', {
+    method: 'POST',
+    body: JSON.stringify({
+      document_ids: documentIds,
+      process_ocr: options.process_ocr || false,
+      extract_metadata: options.extract_metadata || false,
+      language: options.language || 'eng',
+    }),
+  });
 
-/**
- * Get batch upload status.
- */
-export const getBatchUpload = async (batchId: string): Promise<BatchUpload> => {
-  try {
-    const response = await apiFetch<BatchUpload>(`/capture/batch-uploads/${batchId}/`);
-    return response;
-  } catch (error: unknown) {
-    logError('Failed to get batch upload', error);
-    throw error;
-  }
-};
-
+export const getBatchUpload = async (batchId: string): Promise<BatchUpload> =>
+  apiFetch<BatchUpload>(`/capture/batch-uploads/${batchId}/`);

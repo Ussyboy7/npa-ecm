@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -61,8 +62,8 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
   const [batchUpload, setBatchUpload] = useState<BatchUpload | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const { getSignal, reset } = useAbortController();
 
   const validateFile = (file: File): string | null => {
     if (file.size > MAX_FILE_SIZE) {
@@ -136,9 +137,6 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
   // Cleanup on unmount or dialog close
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
       }
@@ -151,13 +149,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
       return;
     }
 
-    // Cancel previous upload if any
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const signal = getSignal();
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -242,7 +234,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
 
         // Poll for batch status
         pollIntervalRef.current = setInterval(async () => {
-          if (controller.signal.aborted) {
+          if (signal.aborted) {
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
             }
@@ -251,7 +243,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
 
           try {
             const updatedBatch = await getBatchUpload(batch.id);
-            if (controller.signal.aborted) return;
+            if (signal.aborted) return;
 
             setBatchUpload(updatedBatch);
 
@@ -297,7 +289,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
           if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
           }
-          if (isUploading && !controller.signal.aborted) {
+          if (isUploading && !signal.aborted) {
             setIsUploading(false);
             toast.warning('Batch processing is taking longer than expected. Check status later.');
           }
@@ -322,9 +314,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
   const handleClose = useCallback(() => {
     if (isUploading) {
       // Cancel upload if in progress
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      reset();
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
       }

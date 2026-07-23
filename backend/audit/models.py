@@ -50,6 +50,11 @@ class ActivityLog(UUIDModel):
         WORKFLOW_APPROVED = "workflow_approved", "Workflow Approved"
         WORKFLOW_REJECTED = "workflow_rejected", "Workflow Rejected"
 
+        # Role actions
+        ROLE_CREATED = "role_created", "Role Created"
+        ROLE_UPDATED = "role_updated", "Role Updated"
+        ROLE_DELETED = "role_deleted", "Role Deleted"
+
         # System actions
         SYSTEM_CONFIG_CHANGED = "system_config_changed", "System Configuration Changed"
         SYSTEM_BACKUP = "system_backup", "System Backup"

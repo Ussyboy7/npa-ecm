@@ -147,6 +147,22 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         null=True,
         blank=True,
     )
+    acting_appointment = models.ForeignKey(
+        "organization.ActingAppointment",
+        related_name="transferred_items",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Active acting appointment that transferred this item's seat ownership.",
+    )
+    acting_original_approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="acting_original_approver_items",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Principal who owned this item before acting reassignment.",
+    )
     linked_documents = models.ManyToManyField(
         "dms.Document",
         through="CorrespondenceDocumentLink",
@@ -213,6 +229,11 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         blank=True,
         related_name="correspondence",
         help_text="Case/File this correspondence belongs to",
+    )
+    # Physical document tracking
+    has_physical_copy = models.BooleanField(
+        default=False,
+        help_text="Whether a physical (paper) original exists for this correspondence",
     )
 
     class Meta:
@@ -291,48 +312,62 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
             True if inward (direction=UPWARD), False otherwise
         """
         return self.is_inward()
-    
-    def should_appear_in_office_outbox(self) -> bool:
-        """
-        Check if correspondence should appear in Office Outbox.
-        
-        Office Outbox shows OUTWARD correspondence (going OUT OF office):
-        - Outward-Internal: You minute it out
-        - Outward-External: Registered, printed, mailed
-        
-        Returns:
-            True if outward (direction=DOWNWARD), False otherwise
-        """
-        return self.is_outward()
 
     def get_lifecycle_stage(self) -> int:
-        """Return the lifecycle progress stage (0-6) for the progress bar."""
-        stage_map = {
-            self.Status.PENDING: 0,
-            self.Status.IN_PROGRESS: 1,
-            self.Status.COMPLETED: 2,
-            self.Status.DISPATCHED: 3,
-            self.Status.ACKNOWLEDGED: 4,
-            self.Status.ARCHIVED: 5,
-            self.Status.WITHDRAWN: -1,
-        }
+        """Return the lifecycle progress stage for the progress bar."""
+        if self.is_outward():
+            stage_map = {
+                self.Status.PENDING: 0,
+                self.Status.IN_PROGRESS: 1,
+                self.Status.COMPLETED: 2,
+                self.Status.DISPATCHED: 3,
+                self.Status.ACKNOWLEDGED: 3,  # same stage as dispatched (receipt badge)
+                self.Status.ARCHIVED: 4,
+                self.Status.WITHDRAWN: -1,
+            }
+        else:
+            # Inward: no dispatch stage — completed then archive
+            stage_map = {
+                self.Status.PENDING: 0,
+                self.Status.IN_PROGRESS: 1,
+                self.Status.COMPLETED: 2,
+                self.Status.DISPATCHED: 2,  # legacy/mis-set; treat as completed
+                self.Status.ACKNOWLEDGED: 2,
+                self.Status.ARCHIVED: 3,
+                self.Status.WITHDRAWN: -1,
+            }
         return stage_map.get(self.status, 0)
 
     @property
     def lifecycle_stages(self) -> list[dict]:
-        """Return the full lifecycle with timestamps for the progress bar UI."""
-        stages = [
-            {"key": "pending", "label": "Pending", "index": 0},
-            {"key": "in_progress", "label": "In Progress", "index": 1},
-            {"key": "completed", "label": "Completed", "index": 2},
-            {"key": "dispatched", "label": "Dispatched", "index": 3},
-            {"key": "acknowledged", "label": "Acknowledged", "index": 4},
-            {"key": "archived", "label": "Archived", "index": 5},
-        ]
+        """Return flow-aware lifecycle stages with timestamps for the progress bar UI."""
+        if self.is_outward():
+            stages = [
+                {"key": "pending", "label": "Pending", "index": 0},
+                {"key": "in_progress", "label": "In Progress", "index": 1},
+                {"key": "completed", "label": "Completed", "index": 2},
+                {"key": "dispatched", "label": "Dispatched", "index": 3},
+                {"key": "archived", "label": "Archived", "index": 4},
+            ]
+        else:
+            stages = [
+                {"key": "pending", "label": "Pending", "index": 0},
+                {"key": "in_progress", "label": "In Progress", "index": 1},
+                {"key": "completed", "label": "Completed", "index": 2},
+                {"key": "archived", "label": "Archived", "index": 3},
+            ]
+
+        post_complete = {
+            self.Status.COMPLETED,
+            self.Status.DISPATCHED,
+            self.Status.ACKNOWLEDGED,
+            self.Status.ARCHIVED,
+        }
         timestamps = {
             "pending": self.created_at,
             "in_progress": self.created_at,
-            "completed": self.completed_at or (self.created_at if self.status in ("completed", "dispatched", "acknowledged", "archived") else None),
+            "completed": self.completed_at
+            or (self.created_at if self.status in post_complete else None),
             "dispatched": self.dispatch_date,
             "acknowledged": self.acknowledged_date,
             "archived": self.archived_at,
@@ -340,7 +375,7 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
         current = self.get_lifecycle_stage()
         for stage in stages:
             stage["completed"] = stage["index"] <= current if current >= 0 else False
-            stage["timestamp"] = timestamps[stage["key"]]
+            stage["timestamp"] = timestamps.get(stage["key"])
         return stages
 
 
@@ -485,6 +520,19 @@ class CorrespondenceDistribution(UUIDModel, TimeStampedModel):
         help_text="Whether this distribution entry is active. Set to False when the linked minute is recalled.",
     )
     purpose = models.CharField(max_length=20, choices=Purpose.choices, default=Purpose.INFORMATION)
+    read_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this distribution entry was marked as read by the recipient",
+    )
+    read_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="read_distributions",
+        help_text="User who marked this distribution entry as read",
+    )
 
     class Meta:
         ordering = ["created_at"]
@@ -650,6 +698,14 @@ class Minute(UUIDModel, TimeStampedModel):
         related_name="parallel_branches_originated",
         help_text="The user who originally received this parallel branch (for routing back up hierarchy)",
     )
+    # When a parallel branch is force-completed (e.g. non-response escalation),
+    # this is stamped so check_and_update_completion counts it as done even
+    # though the recipient never created a response minute.
+    branch_completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when a parallel branch is force-completed via escalation/non-response handling",
+    )
     # Consultation routing (for lateral input requests)
     is_consultation = models.BooleanField(
         default=False,
@@ -729,30 +785,14 @@ class Minute(UUIDModel, TimeStampedModel):
         
         A minute can be recalled if:
         1. It hasn't been recalled already
-        2. No subsequent minutes have been created (no one has acted on it yet)
         
-        If no subsequent minutes exist, we allow recall even if:
-        - The minute was acknowledged (viewed/picked up)
-        - The minute was dispatched
-        
-        This is more flexible and practical - if no action has been taken,
-        the sender should be able to recall their minute.
+        Note: Unlike the previous version, this allows recall even when subsequent
+        minutes exist. Those minutes will be cascaded (marked as recalled) by the
+        recall view to maintain workflow integrity.
         """
         if self.is_recalled:
             return False  # Already recalled
         
-        # Check if any subsequent minutes have been created
-        # If yes, the workflow has progressed and recall is not safe
-        subsequent_minutes = Minute.objects.filter(
-            correspondence=self.correspondence,
-            timestamp__gt=self.timestamp,
-            is_recalled=False  # Don't count other recalled minutes
-        ).exists()
-        
-        if subsequent_minutes:
-            return False  # Workflow has progressed, cannot recall
-        
-        # If no subsequent minutes, allow recall regardless of dispatched/acknowledged status
         return True
 
     def save(self, *args, **kwargs):
@@ -797,6 +837,21 @@ class Minute(UUIDModel, TimeStampedModel):
         return self.direction == self.Direction.DOWNWARD
 
 
+class ReadReceipt(UUIDModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE
+    )
+    correspondence = models.ForeignKey(
+        'Correspondence', on_delete=models.CASCADE, related_name='read_receipts'
+    )
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'correspondence')
+        verbose_name = "Read Receipt"
+        verbose_name_plural = "Read Receipts"
+
+
 class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
     """Groups minutes that are part of a parallel routing."""
 
@@ -828,76 +883,83 @@ class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
         from django.utils import timezone
         from organization.models import OfficeMembership
 
-        # Get all minutes in this parallel group
+        # Get the *top-level* branch minutes in this parallel group. Subsequent
+        # minutes created while acting within a branch (sub-routing / responses)
+        # also carry is_parallel_branch=True via inheritance, but they are not
+        # independent branches and must not be counted as such.
+        # Identify the *top-level* branch minutes. Sub-routing / response minutes
+        # also carry is_parallel_branch=True (via inheritance) and share the group
+        # id, but they are not independent branches. A branch is defined by its
+        # original target office/user; the earliest minute for each distinct target
+        # is the top-level branch. (Replies do not set parent_minute_id, so parent
+        # linkage alone is not enough to distinguish them.)
         parallel_minutes = Minute.objects.filter(
             parallel_group_id=self.id,
-            is_parallel_branch=True
-        ).select_related('to_office', 'correspondence')
+            is_parallel_branch=True,
+        ).select_related('to_office', 'correspondence').order_by('timestamp')
+
+        top_level_branches = []
+        seen_targets = set()
+        for m in parallel_minutes:
+            target = m.to_office_id or m.to_user_id
+            if not target or target in seen_targets:
+                continue
+            seen_targets.add(target)
+            top_level_branches.append(m)
+
+        # Recount total branches dynamically. Frontend-initiated parallel routes
+        # create branch minutes with a shared parallel_group_id but do not always
+        # persist a ParallelRoutingGroup row with total_branches populated.
+        self.total_branches = len(top_level_branches)
 
         # Count completed branches (branches where recipient has acted)
         # A branch is complete if:
         # 1. Correspondence is completed (all branches implicitly complete), OR
         # 2. The recipient has created a subsequent minute/response
         completed_branch_ids = set()
-        for minute in parallel_minutes:
+        for minute in top_level_branches:
             # Check if correspondence is completed (all branches implicitly complete)
             if self.correspondence.status == Correspondence.Status.COMPLETED:
+                completed_branch_ids.add(minute.id)
+                continue
+
+            # Force-completed branch (non-response escalation) counts as done.
+            if minute.branch_completed_at:
                 completed_branch_ids.add(minute.id)
                 continue
 
             # Determine the recipient user
             # Priority: to_user (if set) > office principal > acting > highest grade
             recipient_user_id = None
-            
+
             # First, check if to_user is explicitly set (for parallel routing or direct user routing)
             if minute.to_user_id:
                 recipient_user_id = minute.to_user_id
-            elif minute.to_office:
-                # Find office head with hierarchy fallback
-                # 1. Try principal
-                office_head = OfficeMembership.objects.filter(
-                    office=minute.to_office,
-                    is_active=True,
-                    assignment_role='principal'
-                ).select_related('user').first()
-                
-                if office_head:
-                    recipient_user_id = office_head.user_id
-                else:
-                    # 2. Try acting head
-                    acting = OfficeMembership.objects.filter(
-                        office=minute.to_office,
-                        is_active=True,
-                        assignment_role='acting'
-                    ).select_related('user').order_by('-starts_at').first()
-                    
-                    if acting:
-                        recipient_user_id = acting.user_id
-                    else:
-                        # 3. Find highest grade staff member
-                        memberships = OfficeMembership.objects.filter(
-                            office=minute.to_office,
-                            is_active=True
-                        ).select_related('user').all()
-                        
-                        if memberships.exists():
-                            # Sort by grade level (highest first)
-                            sorted_memberships = sorted(
-                                memberships,
-                                key=lambda m: get_grade_level(getattr(m.user, 'grade_level', None)),
-                                reverse=True,
-                            )
-                            recipient_user_id = sorted_memberships[0].user_id
-
-            # If we have a recipient, check if they've created a subsequent minute (completed their action)
-            if recipient_user_id:
                 recipient_acted = Minute.objects.filter(
                     correspondence=self.correspondence,
                     user_id=recipient_user_id,
-                    timestamp__gt=minute.timestamp
+                    timestamp__gt=minute.timestamp,
                 ).exists()
                 if recipient_acted:
                     completed_branch_ids.add(minute.id)
+            elif minute.to_office:
+                # Office-routed branch: the branch is complete once ANY active member of
+                # the target office has responded (created a subsequent minute). This
+                # supports office-level parallel routing where to_user is not set.
+                member_ids = list(
+                    OfficeMembership.objects.filter(
+                        office=minute.to_office,
+                        is_active=True,
+                    ).values_list("user_id", flat=True)
+                )
+                if member_ids:
+                    acted = Minute.objects.filter(
+                        correspondence=self.correspondence,
+                        user_id__in=member_ids,
+                        timestamp__gt=minute.timestamp,
+                    ).exists()
+                    if acted:
+                        completed_branch_ids.add(minute.id)
 
         completed_count = len(completed_branch_ids)
         self.completed_branches = completed_count
@@ -925,7 +987,7 @@ class ParallelRoutingGroup(UUIDModel, TimeStampedModel):
                 self.correspondence.completed_parallel_branches = completed_count
                 self.correspondence.save(update_fields=["workflow_state", "completed_parallel_branches"])
 
-        self.save(update_fields=["completed_branches", "is_complete", "completed_at"])
+        self.save(update_fields=["completed_branches", "is_complete", "completed_at", "total_branches"])
 
 
 class Delegation(UUIDModel, TimeStampedModel):
@@ -1581,6 +1643,7 @@ class CorrespondenceDraft(UUIDModel, TimeStampedModel):
     class DraftType(models.TextChoices):
         MINUTE = "minute", "Minute"
         TREATMENT = "treatment", "Treatment"
+        REGISTRATION = "registration", "Registration"
 
     class ActionType(models.TextChoices):
         MINUTE = "minute", "Minute"
@@ -1590,7 +1653,14 @@ class CorrespondenceDraft(UUIDModel, TimeStampedModel):
         Correspondence,
         on_delete=models.CASCADE,
         related_name="drafts",
-        help_text="The correspondence this draft is for",
+        null=True,
+        blank=True,
+        help_text="The correspondence this draft is for (nullable for registration drafts)",
+    )
+    form_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="JSON form data for registration drafts",
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -1644,22 +1714,15 @@ class Location(UUIDModel, TimeStampedModel):
     building = models.CharField(max_length=255)
     floor = models.CharField(max_length=255, blank=True)
     room = models.CharField(max_length=255, blank=True)
-    shelf = models.CharField(max_length=255, blank=True)
-    cabinet = models.CharField(max_length=255, blank=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = ["building", "floor", "room", "shelf", "cabinet"]
+        unique_together = ["building", "floor", "room"]
         ordering = ["building", "floor", "room"]
 
     def __str__(self) -> str:
-        parts = [self.building, self.floor, self.room]
-        if self.shelf:
-            parts.append(f"Shelf {self.shelf}")
-        if self.cabinet:
-            parts.append(f"Cabinet {self.cabinet}")
-        return " / ".join(p for p in parts if p)
+        return " / ".join(p for p in [self.building, self.floor, self.room] if p)
 
     def display_name(self) -> str:
         return str(self)
@@ -1669,9 +1732,9 @@ class PhysicalDocument(UUIDModel, TimeStampedModel, SoftDeleteModel):
     """Tracks physical (paper) documents alongside their digital records."""
 
     class Status(models.TextChoices):
-        IN_STORAGE = "in_storage", "In Storage"
+        FILED = "filed", "Filed"
         CHECKED_OUT = "checked_out", "Checked Out"
-        IN_TRANSIT = "in_transit", "In Transit"
+        ARCHIVED = "archived", "Archived"
         DESTROYED = "destroyed", "Destroyed"
         MISSING = "missing", "Missing"
 
@@ -1701,7 +1764,7 @@ class PhysicalDocument(UUIDModel, TimeStampedModel, SoftDeleteModel):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.IN_STORAGE,
+        default=Status.FILED,
     )
     description = models.CharField(max_length=500, blank=True)
     checked_out_to = models.ForeignKey(

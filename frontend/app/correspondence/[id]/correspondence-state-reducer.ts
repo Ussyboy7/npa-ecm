@@ -19,9 +19,11 @@ export interface CorrespondenceDetailState {
   linkedDocuments: DocumentRecord[];
   selectedMinute: Minute | null;
   selectedAttachmentIndex: number | null;
+  selectedLinkedDocumentId: string | null;
   attachmentSearchQuery: string;
   selectedLinkedDocVersion: Record<string, number>;
   isPreviewFullscreen: boolean;
+  documentFocus: boolean;
   mobileActiveTab: 'document' | 'routing';
 }
 
@@ -33,9 +35,11 @@ export type CorrespondenceDetailAction =
   | { type: 'SET_LINKED_DOCUMENTS'; payload: DocumentRecord[] }
   | { type: 'SET_SELECTED_MINUTE'; payload: Minute | null }
   | { type: 'SET_SELECTED_ATTACHMENT_INDEX'; payload: number | null }
+  | { type: 'SET_SELECTED_LINKED_DOCUMENT_ID'; payload: string | null }
   | { type: 'SET_ATTACHMENT_SEARCH_QUERY'; payload: string }
   | { type: 'SET_SELECTED_LINKED_DOC_VERSION'; payload: Record<string, number> }
   | { type: 'SET_PREVIEW_FULLSCREEN'; payload: boolean }
+  | { type: 'SET_DOCUMENT_FOCUS'; payload: boolean }
   | { type: 'SET_MOBILE_ACTIVE_TAB'; payload: 'document' | 'routing' }
   | { type: 'RESET' };
 
@@ -47,9 +51,11 @@ export const initialState: CorrespondenceDetailState = {
   linkedDocuments: [],
   selectedMinute: null,
   selectedAttachmentIndex: null,
+  selectedLinkedDocumentId: null,
   attachmentSearchQuery: '',
   selectedLinkedDocVersion: {},
   isPreviewFullscreen: false,
+  documentFocus: false,
   mobileActiveTab: 'document',
 };
 
@@ -71,13 +77,25 @@ export const correspondenceDetailReducer = (
     case 'SET_SELECTED_MINUTE':
       return { ...state, selectedMinute: action.payload };
     case 'SET_SELECTED_ATTACHMENT_INDEX':
-      return { ...state, selectedAttachmentIndex: action.payload };
+      return {
+        ...state,
+        selectedAttachmentIndex: action.payload,
+        selectedLinkedDocumentId: action.payload !== null ? null : state.selectedLinkedDocumentId,
+      };
+    case 'SET_SELECTED_LINKED_DOCUMENT_ID':
+      return {
+        ...state,
+        selectedLinkedDocumentId: action.payload,
+        selectedAttachmentIndex: action.payload ? null : state.selectedAttachmentIndex,
+      };
     case 'SET_ATTACHMENT_SEARCH_QUERY':
       return { ...state, attachmentSearchQuery: action.payload };
     case 'SET_SELECTED_LINKED_DOC_VERSION':
       return { ...state, selectedLinkedDocVersion: action.payload };
     case 'SET_PREVIEW_FULLSCREEN':
       return { ...state, isPreviewFullscreen: action.payload };
+    case 'SET_DOCUMENT_FOCUS':
+      return { ...state, documentFocus: action.payload };
     case 'SET_MOBILE_ACTIVE_TAB':
       return { ...state, mobileActiveTab: action.payload };
     case 'RESET':

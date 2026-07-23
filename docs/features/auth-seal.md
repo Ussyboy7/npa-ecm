@@ -1,10 +1,14 @@
 # Authentication & Digital Seals
 
 ## Authentication
-- JWT-based (access + refresh tokens)
+- JWT-based (access + refresh tokens) stored in **HTTP-only secure cookies** (`npa_ecm_access_token`, `npa_ecm_refresh_token`)
+- **No longer uses `localStorage`** — migrated from localStorage to cookies for XSS protection
+- Token refresh handled transparently via cookie-based refresh API calls
+- Auth state broadcast via custom `auth-changed` events
 - 2FA support (TOTP + Email OTP)
 - Impersonation for admins
 - JWT blacklist for revocation
+- Server-side bootstrap reads auth cookies on initial render
 
 ## Digital Signatures
 - User signatures stored in `ExecutiveSignature`
@@ -26,3 +30,6 @@
 ## Constants
 - `EXECUTIVE_GRADES` in `common/grade_utils.py`
 - `SYSTEM_ROLE_SUPER_ADMIN` in `lib/constants.ts`
+
+## Recent Changes
+- **Auth cookie migration**: Tokens moved from `localStorage` to HTTP-only secure cookies (`npa_ecm_access_token`, `npa_ecm_refresh_token`). `api-client.ts` rewritten to use `getCookieValue`/`setCookieValue`/`clearCookieValue` helpers. Auth callback updated for cookie-based tokens. Proxy updated for cookie forwarding.

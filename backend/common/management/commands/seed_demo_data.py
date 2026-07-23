@@ -18,6 +18,7 @@ from correspondence.models import (
     CaseCorrespondenceLink,
     CaseDocumentLink,
     CaseFormLink,
+    CaseTemplate,
     Correspondence,
     CorrespondenceAttachment,
     CorrespondenceDistribution,
@@ -34,8 +35,8 @@ from dms.models import (
     Document,
     DocumentAccessLog,
     DocumentPermission,
+    DocumentRightsPolicy,
     DocumentVersion,
-    DocumentWorkspace,
     FormDocument,
 )
 from organization.models import Department, Directorate, Division, Office, OfficeMembership, Role
@@ -90,6 +91,8 @@ class Command(BaseCommand):
                 self._ensure_support_content(users)
                 self._ensure_analytics(users)
                 self._ensure_physical_tracking(users, correspondence_items, documents)
+                self._ensure_drm_policies()
+                self._ensure_case_templates(users)
                 self._ensure_project_cases(users, divisions, departments, offices)
             else:
                 self.stdout.write(self.style.WARNING("Skipping demo data creation (no users available)"))
@@ -657,21 +660,6 @@ class Command(BaseCommand):
         divisions: dict[str, Division],
         departments: dict[str, Department],
     ):
-        workspace, _ = DocumentWorkspace.objects.update_or_create(
-            slug="digital-transformation",
-            defaults={
-                "name": "Digital Transformation Taskforce",
-                "description": "ICT and Procurement initiatives",
-                "color": "#2563eb",
-            },
-        )
-        workspace.members.set(
-            [
-                users.get("gmict") or users.get("user-gm-ict"),
-                users.get("md") or users.get("user-md"),
-            ]
-        )
-
         division = divisions.get("div-ict")
         department = departments.get("dept-ict-software")
 
@@ -689,7 +677,6 @@ class Command(BaseCommand):
                 "tags": ["ecm", "strategy"],
             },
         )
-        document.workspaces.set([workspace])
 
         DocumentVersion.objects.update_or_create(
             document=document,
@@ -724,7 +711,7 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS("Documents and related records ensured."))
-        return {"primary": document, "workspace": workspace}
+        return {"primary": document}
 
     def _ensure_correspondence(
         self,
@@ -821,9 +808,25 @@ class Command(BaseCommand):
                 defaults={
                     "subject": "FY2025 Capital Expenditure Review — Finance & Administration",
                     "body_html": (
-                        "<p><strong>ED F&amp;A approval required</strong></p>"
+                        "<div style='font-family: Georgia, serif; max-width: 720px; margin: 0 auto;'>"
+                        "<p style='text-align:right;color:#555;font-size:13px;'>Internal Memo</p>"
+                        "<h2 style='color:#1a3a5c;margin:12px 0 4px;'>FY2025 Capital Expenditure Review</h2>"
+                        "<p style='color:#666;margin:0 0 20px;'>Finance &amp; Administration Directorate</p>"
+                        "<p><strong>To:</strong> Executive Director, Finance &amp; Administration</p>"
+                        "<p><strong>From:</strong> General Manager, ICT</p>"
+                        "<p><strong>Subject:</strong> Capex allocation review ahead of board submission</p>"
+                        "<hr style='margin:20px 0;border:none;border-top:1px solid #ddd;'/>"
                         "<p>Please review the proposed capital expenditure allocations for Q3–Q4 "
-                        "before submission to the Managing Director.</p>"
+                        "before submission to the Managing Director and the Board.</p>"
+                        "<p><strong>Highlights for review:</strong></p>"
+                        "<ul>"
+                        "<li>Network infrastructure refresh (Lagos Port Complex)</li>"
+                        "<li>Enterprise storage and backup capacity uplift</li>"
+                        "<li>Endpoint security licence renewals</li>"
+                        "</ul>"
+                        "<p>Kindly approve or return with comments so Finance can finalise the pack.</p>"
+                        "<p style='margin-top:28px;'>Respectfully,<br/><strong>General Manager, ICT</strong></p>"
+                        "</div>"
                     ),
                     "source": Correspondence.Source.INTERNAL,
                     "priority": Correspondence.Priority.URGENT,
@@ -2191,8 +2194,6 @@ class Command(BaseCommand):
             floor="Ground Floor",
             room="Registry",
             defaults={
-                "shelf": "A1-A10",
-                "cabinet": "R01",
                 "description": "Main registry for active correspondence files",
                 "is_active": True,
             },
@@ -2202,8 +2203,6 @@ class Command(BaseCommand):
             floor="2nd Floor",
             room="Archive Room 201",
             defaults={
-                "shelf": "B1-B20",
-                "cabinet": "A01-A05",
                 "description": "Archived correspondence and completed case files",
                 "is_active": True,
             },
@@ -2213,8 +2212,6 @@ class Command(BaseCommand):
             floor="1st Floor",
             room="Executive Office 104",
             defaults={
-                "shelf": "C1-C5",
-                "cabinet": "E01",
                 "description": "Active documents for executive review",
                 "is_active": True,
             },
@@ -2227,7 +2224,7 @@ class Command(BaseCommand):
                 "barcode": "NPA-BAR-0001",
                 "correspondence": correspondence_items.get("primary"),
                 "location": loc1,
-                "status": PhysicalDocument.Status.IN_STORAGE,
+                "status": PhysicalDocument.Status.FILED,
                 "description": "ECM Implementation Contract - Signed Original",
                 "notes": "Original signed copy of ECM rollout contract",
             },
@@ -2238,7 +2235,7 @@ class Command(BaseCommand):
                 "barcode": "NPA-BAR-0002",
                 "correspondence": correspondence_items.get("primary"),
                 "location": loc2,
-                "status": PhysicalDocument.Status.IN_STORAGE,
+                "status": PhysicalDocument.Status.FILED,
                 "description": "Rollout Status Report - ECM Q1 2025",
                 "notes": "Hard copy of quarterly progress report",
             },
@@ -2261,7 +2258,7 @@ class Command(BaseCommand):
             defaults={
                 "barcode": "NPA-BAR-0004",
                 "location": loc3,
-                "status": PhysicalDocument.Status.IN_STORAGE,
+                "status": PhysicalDocument.Status.FILED,
                 "description": "Digital Transformation Taskforce Charter",
                 "notes": "Original charter signed by MD",
             },
@@ -2380,6 +2377,400 @@ class Command(BaseCommand):
                 },
             )
             self.stdout.write(self.style.SUCCESS("1 FOIARequestDocument record ensured."))
+
+    def _ensure_drm_policies(self):
+        self.stdout.write(self.style.MIGRATE_HEADING("Ensuring DRM policies"))
+
+        policies_data = [
+            {
+                "name": "Confidential — View Only",
+                "description": "Document is view-only; download and print are disabled. A watermark is applied.",
+                "allow_download": False,
+                "allow_print": False,
+                "allow_external_share": False,
+                "view_only": True,
+                "watermark_text": "CONFIDENTIAL",
+                "expires_after_days": None,
+            },
+            {
+                "name": "Internal — Download Allowed",
+                "description": "Standard internal document. Download and print allowed; PDF downloads are watermarked.",
+                "allow_download": True,
+                "allow_print": True,
+                "allow_external_share": False,
+                "view_only": False,
+                "watermark_text": "INTERNAL USE ONLY",
+                "expires_after_days": None,
+            },
+            {
+                "name": "External Sharing — Controlled",
+                "description": "Download and print allowed, but external sharing is restricted. Expires after 180 days.",
+                "allow_download": True,
+                "allow_print": True,
+                "allow_external_share": False,
+                "view_only": False,
+                "watermark_text": "",
+                "expires_after_days": 180,
+            },
+            {
+                "name": "Strictly Confidential — Time-Limited",
+                "description": "Highest restriction. View-only, watermarked, expires after 30 days. After expiry, only the author and superadmin can view.",
+                "allow_download": False,
+                "allow_print": False,
+                "allow_external_share": False,
+                "view_only": True,
+                "watermark_text": "STRICTLY CONFIDENTIAL",
+                "expires_after_days": 30,
+            },
+            {
+                "name": "Public Record",
+                "description": "No restrictions. Full download, print, and external sharing permitted.",
+                "allow_download": True,
+                "allow_print": True,
+                "allow_external_share": True,
+                "view_only": False,
+                "watermark_text": "",
+                "expires_after_days": None,
+            },
+        ]
+
+        for data in policies_data:
+            DocumentRightsPolicy.objects.update_or_create(
+                name=data["name"],
+                defaults=data,
+            )
+
+        self.stdout.write(self.style.SUCCESS(f"{len(policies_data)} DRM policies ensured."))
+
+    def _ensure_case_templates(self, users):
+        """Seed default case templates."""
+        self.stdout.write(self.style.MIGRATE_HEADING("Ensuring case templates"))
+        templates = [
+            {
+                "name": "General Complaint",
+                "slug": "general-complaint",
+                "description": "Template for handling general complaints from the public or stakeholders.",
+                "case_type": "complaint",
+                "default_priority": "high",
+                "structure": {
+                    "default_fields": {
+                        "title": "Complaint: ",
+                        "description": "",
+                        "tags": ["complaint"],
+                        "metadata": {"source": "public"},
+                    }
+                },
+            },
+            {
+                "name": "FOIA Request",
+                "slug": "foia-request",
+                "description": "Template for processing Freedom of Information Act requests.",
+                "case_type": "request",
+                "default_priority": "high",
+                "structure": {
+                    "default_fields": {
+                        "title": "FOIA Request: ",
+                        "description": "",
+                        "tags": ["foia", "public-records"],
+                        "metadata": {"category": "public-records"},
+                    }
+                },
+            },
+            {
+                "name": "Audit Investigation",
+                "slug": "audit-investigation",
+                "description": "Template for internal audit investigations.",
+                "case_type": "audit",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "Audit: ",
+                        "description": "",
+                        "tags": ["audit", "compliance"],
+                        "metadata": {"audit_type": "internal"},
+                    }
+                },
+            },
+            {
+                "name": "Procurement Review",
+                "slug": "procurement-review",
+                "description": "Template for procurement and contract review cases.",
+                "case_type": "project",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "Procurement: ",
+                        "description": "",
+                        "tags": ["procurement", "contract"],
+                        "metadata": {"category": "procurement"},
+                    }
+                },
+            },
+            {
+                "name": "Legal Inquiry",
+                "slug": "legal-inquiry",
+                "description": "Template for handling legal inquiries and requests for legal opinion.",
+                "case_type": "legal",
+                "default_priority": "high",
+                "structure": {
+                    "default_fields": {
+                        "title": "Legal Inquiry: ",
+                        "description": "",
+                        "tags": ["legal"],
+                        "metadata": {"category": "legal-opinion"},
+                    }
+                },
+            },
+            {
+                "name": "HR Grievance",
+                "slug": "hr-grievance",
+                "description": "Template for handling employee grievances and workplace complaints. Captures complainant details, nature of grievance, evidence, and resolution steps.",
+                "case_type": "complaint",
+                "default_priority": "high",
+                "structure": {
+                    "default_fields": {
+                        "title": "HR Grievance: ",
+                        "description": "",
+                        "tags": ["hr", "grievance", "employee"],
+                        "metadata": {"category": "hr"},
+                    }
+                },
+            },
+            {
+                "name": "Public Enquiry",
+                "slug": "public-enquiry",
+                "description": "Template for general public enquiries and information requests not covered by FOIA. Captures enquirer contact details, questions, and response tracking.",
+                "case_type": "request",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "Enquiry: ",
+                        "description": "",
+                        "tags": ["public", "enquiry"],
+                        "metadata": {"source": "public"},
+                    }
+                },
+            },
+            {
+                "name": "Safety Incident Report",
+                "slug": "safety-incident-report",
+                "description": "Template for reporting workplace safety incidents and near-misses. Tracks incident type, location, injuries, root cause, and corrective actions.",
+                "case_type": "audit",
+                "default_priority": "urgent",
+                "structure": {
+                    "default_fields": {
+                        "title": "Safety Incident: ",
+                        "description": "",
+                        "tags": ["safety", "incident", "hse"],
+                        "metadata": {"incident_type": "safety"},
+                    }
+                },
+            },
+            {
+                "name": "Contract Renewal",
+                "slug": "contract-renewal",
+                "description": "Template for managing contract renewal processes. Tracks current contract details, vendor performance, renewal terms, and approval workflow.",
+                "case_type": "project",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "Contract Renewal: ",
+                        "description": "",
+                        "tags": ["contract", "renewal", "procurement"],
+                        "metadata": {"category": "procurement"},
+                    }
+                },
+            },
+            {
+                "name": "Policy Amendment Request",
+                "slug": "policy-amendment-request",
+                "description": "Template for proposing amendments to NPA policies and procedures. Captures policy reference, proposed change, rationale, and stakeholder review.",
+                "case_type": "request",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "Policy Amendment: ",
+                        "description": "",
+                        "tags": ["policy", "amendment", "governance"],
+                        "metadata": {"category": "governance"},
+                    }
+                },
+            },
+            {
+                "name": "IT Service Request",
+                "slug": "it-service-request",
+                "description": "Template for IT support requests including hardware provisioning, software access, system access, and infrastructure changes.",
+                "case_type": "general",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "IT Request: ",
+                        "description": "",
+                        "tags": ["it", "service-request", "support"],
+                        "metadata": {"category": "it"},
+                    }
+                },
+            },
+            {
+                "name": "Stakeholder Engagement",
+                "slug": "stakeholder-engagement",
+                "description": "Template for planning and tracking stakeholder engagement activities including meetings, consultations, and feedback collection.",
+                "case_type": "project",
+                "default_priority": "low",
+                "structure": {
+                    "default_fields": {
+                        "title": "Engagement: ",
+                        "description": "",
+                        "tags": ["stakeholder", "engagement", "communications"],
+                        "metadata": {"category": "communications"},
+                    }
+                },
+            },
+            {
+                "name": "Disciplinary Matter",
+                "slug": "disciplinary-matter",
+                "description": "Template for handling employee disciplinary proceedings. Tracks allegations, evidence, hearing details, and outcomes with confidentiality controls.",
+                "case_type": "legal",
+                "default_priority": "urgent",
+                "structure": {
+                    "default_fields": {
+                        "title": "Disciplinary: ",
+                        "description": "",
+                        "tags": ["disciplinary", "hr", "legal", "confidential"],
+                        "metadata": {"sensitivity": "confidential"},
+                    }
+                },
+            },
+            {
+                "name": "Project Initiation",
+                "slug": "project-initiation",
+                "description": "Template for initiating new projects. Captures project charter, objectives, scope, stakeholders, budget, timeline, and risk assessment.",
+                "case_type": "project",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "Project: ",
+                        "description": "",
+                        "tags": ["project", "initiation", "charter"],
+                        "metadata": {"category": "project-management"},
+                    }
+                },
+            },
+            {
+                "name": "Travel Authorization",
+                "slug": "travel-authorization",
+                "description": "Template for staff travel authorization requests. Captures destination, dates, purpose, estimated costs, and supervisor approval.",
+                "case_type": "general",
+                "default_priority": "low",
+                "structure": {
+                    "default_fields": {
+                        "title": "Travel Authorization: ",
+                        "description": "",
+                        "tags": ["travel", "authorization", "staff"],
+                        "metadata": {"category": "travel"},
+                    }
+                },
+            },
+            {
+                "name": "Contract Agreement",
+                "slug": "contract-agreement",
+                "description": "Template for drafting and reviewing contract agreements with vendors, partners, and service providers. Tracks terms, review cycle, and legal approval.",
+                "case_type": "legal",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "Contract Agreement: ",
+                        "description": "",
+                        "tags": ["contract", "legal", "agreement"],
+                        "metadata": {"category": "legal"},
+                    }
+                },
+            },
+            {
+                "name": "Budget Request",
+                "slug": "budget-request",
+                "description": "Template for departmental budget requests and reallocations. Captures fiscal year, cost centre, line items, justification, and approval chain.",
+                "case_type": "general",
+                "default_priority": "medium",
+                "structure": {
+                    "default_fields": {
+                        "title": "Budget Request: ",
+                        "description": "",
+                        "tags": ["budget", "finance", "request"],
+                        "metadata": {"category": "finance"},
+                    }
+                },
+            },
+            {
+                "name": "Board Resolution",
+                "slug": "board-resolution",
+                "description": "Template for drafting board resolutions. Captures resolution number, subject, preamble, operative clauses, and voting record.",
+                "case_type": "legal",
+                "default_priority": "high",
+                "structure": {
+                    "default_fields": {
+                        "title": "Board Resolution: ",
+                        "description": "",
+                        "tags": ["board", "resolution", "governance"],
+                        "metadata": {"category": "governance"},
+                    }
+                },
+            },
+            {
+                "name": "Incident Response",
+                "slug": "incident-response",
+                "description": "Template for responding to security breaches, system outages, and operational incidents. Tracks detection, containment, eradication, recovery, and lessons learned.",
+                "case_type": "general",
+                "default_priority": "urgent",
+                "structure": {
+                    "default_fields": {
+                        "title": "Incident: ",
+                        "description": "",
+                        "tags": ["incident", "security", "response"],
+                        "metadata": {"category": "security"},
+                    }
+                },
+            },
+            {
+                "name": "Training Needs Assessment",
+                "slug": "training-needs-assessment",
+                "description": "Template for identifying and planning staff training and development needs. Captures skill gaps, proposed training, budget, and priority level.",
+                "case_type": "general",
+                "default_priority": "low",
+                "structure": {
+                    "default_fields": {
+                        "title": "Training Needs: ",
+                        "description": "",
+                        "tags": ["training", "hr", "development"],
+                        "metadata": {"category": "hr"},
+                    }
+                },
+            },
+        ]
+        try:
+            user = User.objects.filter(is_superuser=True).first()
+        except Exception:
+            user = None
+        for data in templates:
+            obj, created = CaseTemplate.objects.get_or_create(
+                slug=data["slug"],
+                defaults={
+                    "name": data["name"],
+                    "description": data["description"],
+                    "case_type": data["case_type"],
+                    "default_priority": data["default_priority"],
+                    "structure": data["structure"],
+                    "is_active": True,
+                    "created_by": user,
+                },
+            )
+            self.stdout.write(f"  {'Created' if created else 'Already exists'}: {obj.name}")
+
+    def _ensure_audit_form_templates(self):
+        """Ensure the three NPA Internal Audit Division form templates."""
+        self.stdout.write(self.style.MIGRATE_HEADING("Ensuring audit form templates"))
+        from django.core.management import call_command
+        call_command("seed_audit_forms")
 
     def _setup_role_permissions(self):
         """Set up default permissions for all system roles."""

@@ -2,6 +2,7 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 import { logError, logInfo } from '@/lib/client-logger';
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { Correspondence, Minute, MinuteSignaturePayload } from '@/lib/npa-structure';
+import type { ApiCorrespondence, ApiMinute } from '@/lib/api/correspondence';
 import { Delegation } from '@/lib/delegation-storage';
 import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -55,7 +56,7 @@ const normalizeId = (value: unknown): string | undefined => {
   return String(value);
 };
 
-export const mapApiCorrespondence = (item: Record<string, unknown>): Correspondence => {
+export const mapApiCorrespondence = (item: ApiCorrespondence): Correspondence => {
   const currentApprover = isRecord(item.current_approver) ? item.current_approver : undefined;
   const createdBy = isRecord(item.created_by) ? item.created_by : undefined;
   const division = isRecord(item.division) ? item.division : undefined;
@@ -128,6 +129,12 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
               : undefined,
             addedAt: asStringOptional(recipient.created_at),
             purpose: asOneOfOptional(recipient.purpose, ['information', 'action'] as const),
+            is_active: recipient.is_active !== false,
+            readAt: asStringOptional(recipient.read_at),
+            readBy: asStringOptional(
+              recipient.read_by_id ??
+                (recipient.read_by as { id?: string } | undefined | null)?.id,
+            ),
           };
         })
     : [];
@@ -156,7 +163,6 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
     typeof routingMetadata.isInternal === 'boolean' &&
     typeof routingMetadata.isExternal === 'boolean' &&
     typeof routingMetadata.should_appear_in_office_inbox === 'boolean' &&
-    typeof routingMetadata.should_appear_in_office_outbox === 'boolean' &&
     typeof routingMetadata.description === 'string'
       ? {
           flowType: routingMetadata.flowType,
@@ -165,7 +171,6 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
           isInternal: routingMetadata.isInternal,
           isExternal: routingMetadata.isExternal,
           should_appear_in_office_inbox: routingMetadata.should_appear_in_office_inbox,
-          should_appear_in_office_outbox: routingMetadata.should_appear_in_office_outbox,
           description: routingMetadata.description,
         }
       : undefined;
@@ -174,6 +179,7 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
     id: asString(item.id),
     referenceNumber: asString(item.reference_number),
     subject: asString(item.subject),
+    bodyHtml: asStringOptional(item.body_html),
     treatmentResponse: asStringOptional(item.treatment_response),
     documentType: asStringOptional(item.document_type),
     senderReference: asStringOptional(item.sender_reference),
@@ -220,6 +226,10 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
     direction: asOneOf(item.direction, ['upward', 'downward'] as const, 'upward'),
     currentApproverName,
     createdByName,
+    isActingSeat: item.is_acting_seat === true,
+    actingAppointmentId: normalizeId(item.acting_appointment_id ?? item.acting_appointment),
+    actingOriginalApproverId: normalizeId(item.acting_original_approver_id ?? item.acting_original_approver),
+    actingPrincipalName: asStringOptional(item.acting_principal_name),
     owningOfficeId: normalizeId(item.owning_office ?? item.owning_office_id),
     owningOfficeName: asStringOptional(item.owning_office_name) ?? (owningOffice ? asStringOptional(owningOffice.name) : undefined),
     currentOfficeId: normalizeId(item.current_office ?? item.current_office_id),
@@ -243,6 +253,21 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
       : null,
     completionSummaryGeneratedAt: asStringOptional(item.completion_summary_generated_at),
     caseId: asStringOptional(item.case_id),
+    hasPhysicalCopy: item.has_physical_copy === true,
+    physicalDocuments: Array.isArray(item.physical_documents)
+      ? item.physical_documents.map((d: Record<string, unknown>) => ({
+          id: asString(d.id),
+          tracking_number: asString(d.tracking_number),
+          status: asString(d.status),
+          location: isRecord(d.location)
+            ? { display_name: asString(d.location.display_name) }
+            : undefined,
+          checked_out_to: isRecord(d.checked_out_to)
+            ? { name: asString(d.checked_out_to.name) }
+            : undefined,
+          created_at: asString(d.created_at),
+        }))
+      : undefined,
     workflowState,
     activeParallelBranches: asNumberOptional(item.active_parallel_branches),
     completedParallelBranches: asNumberOptional(item.completed_parallel_branches),
@@ -252,12 +277,13 @@ export const mapApiCorrespondence = (item: Record<string, unknown>): Corresponde
     isInternal: typeof item.is_internal === 'boolean' ? item.is_internal : undefined,
     isExternal: typeof item.is_external === 'boolean' ? item.is_external : undefined,
     routingMetadata: routingMetadataTyped,
+    isRead: typeof item.is_read === 'boolean' ? item.is_read : undefined,
     createdAt: asStringOptional(item.created_at),
     updatedAt: asStringOptional(item.updated_at),
   };
 };
 
-const mapApiMinute = (item: Record<string, unknown>): Minute => {
+const mapApiMinute = (item: ApiMinute): Minute => {
   const userObj = isRecord(item.user) ? item.user : undefined;
   const performedByObj = isRecord(item.performed_by) ? item.performed_by : undefined;
   const fromOfficeObj = isRecord(item.from_office) ? item.from_office : undefined;
@@ -505,7 +531,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     try {
       // Bootstrap: first page of correspondence for context cache; pages load more as needed.
       const [correspondenceRaw, delegationsRaw] = await Promise.all([
-        apiFetch(`/correspondence/items/?page_size=${DEFAULT_LIST_PAGE_SIZE}&page=1`),
+        apiFetch<{ results: ApiCorrespondence[] } | ApiCorrespondence[]>(`/correspondence/items/?page_size=${DEFAULT_LIST_PAGE_SIZE}&page=1`),
         fetchAllPaginated<Record<string, unknown>>('/correspondence/delegations/'),
       ]);
 
@@ -573,7 +599,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
   const addMinute = useCallback(async (minute: Minute) => {
     try {
       const payload = normalizeMinutePayload(buildMinuteCreatePayload(minute));
-      const response = await apiFetch<Record<string, unknown>>('/correspondence/minutes/', {
+      const response = await apiFetch<ApiMinute>('/correspondence/minutes/', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
@@ -597,7 +623,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
     }
 
     try {
-      const response = await apiFetch<Record<string, unknown>>(`/correspondence/items/${id}/`, {
+      const response = await apiFetch<ApiCorrespondence>(`/correspondence/items/${id}/`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
@@ -616,7 +642,7 @@ export const CorrespondenceProvider = ({ children }: { children: ReactNode }) =>
 
   const addCorrespondence = useCallback(async (newCorr: Correspondence) => {
     try {
-      const response = await apiFetch<Record<string, unknown>>('/correspondence/items/', {
+      const response = await apiFetch<ApiCorrespondence>('/correspondence/items/', {
         method: 'POST',
         body: JSON.stringify(buildCorrespondenceCreatePayload(newCorr)),
       });

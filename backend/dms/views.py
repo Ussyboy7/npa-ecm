@@ -10,6 +10,7 @@ from datetime import datetime
 from django.conf import settings
 from django.db import connection
 from django.db.models import Count, Max, Q
+from django.http import FileResponse, HttpResponse
 from django.utils import timezone
 from django.utils.text import slugify
 from django_filters.rest_framework import DjangoFilterBackend
@@ -40,7 +41,6 @@ from .models import (
     DocumentRightsPolicy,
     DocumentTemplate,
     DocumentVersion,
-    DocumentWorkspace,
 )
 from .serializers import (
     DocumentAccessLogSerializer,
@@ -53,11 +53,11 @@ from .serializers import (
     DocumentSerializer,
     DocumentTemplateSerializer,
     DocumentVersionSerializer,
-    DocumentWorkspaceSerializer,
 )
 from .services import FileUploadService, OCRService, DocumentSummaryService
 from .version_diff import build_version_diff
-from .drm import assert_download_allowed, resolve_document_rights
+from .drm import assert_download_allowed, assert_view_allowed, resolve_document_rights
+from .watermark import apply_text_watermark, is_pdf_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -102,34 +102,11 @@ def _apply_document_tag_search_postgresql(queryset, terms: list[str]):
     return queryset.extra(where=[where_sql], params=params)
 
 
-class DocumentWorkspaceViewSet(viewsets.ModelViewSet):
-    queryset = DocumentWorkspace.objects.prefetch_related("members").annotate(
-        document_count=Count("documents", distinct=True),
-    )
-    serializer_class = DocumentWorkspaceSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["name", "description", "slug"]
-    ordering_fields = ["name", "created_at"]
-
-    def perform_create(self, serializer):
-        slug = serializer.validated_data.get("slug")
-        if not slug:
-            base = slugify(serializer.validated_data.get("name", "workspace")) or "workspace"
-            slug = base
-            idx = 1
-            while DocumentWorkspace.objects.filter(slug=slug).exists():
-                slug = f"{base}-{idx}"
-                idx += 1
-        serializer.save(slug=slug)
-
-
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.none()
     base_queryset = Document.all_objects.select_related(
         "author", "division", "department", "form_document", "drm_policy"
     ).prefetch_related(
-        "workspaces",
         "versions",
         "permissions",
     )
@@ -160,7 +137,6 @@ class DocumentViewSet(viewsets.ModelViewSet):
         date_to = self.request.query_params.get("date_to")
         status_in = self.request.query_params.get("status_in", "").strip()
         document_type_in = self.request.query_params.get("document_type_in", "").strip()
-        workspace = self.request.query_params.get("workspace", "").strip()
         
         # Apply date range filter first (before search to reduce queryset size)
         if date_from:
@@ -187,9 +163,6 @@ class DocumentViewSet(viewsets.ModelViewSet):
             if document_types:
                 queryset = queryset.filter(document_type__in=document_types)
 
-        if workspace:
-            queryset = queryset.filter(workspaces__id=workspace)
-        
         # If there's a search query, search across fields, version content, and tags (PostgreSQL)
         if search_query:
             terms = _document_search_terms(search_query)
@@ -361,7 +334,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if user.is_superuser:
             return qs.distinct()
 
-        visibility_filter = Q(author=user) | Q(workspaces__members=user) | Q(permissions__users=user)
+        visibility_filter = Q(author=user) | Q(permissions__users=user)
 
         if user.division_id:
             visibility_filter |= Q(permissions__divisions=user.division_id)
@@ -685,13 +658,131 @@ class DocumentViewSet(viewsets.ModelViewSet):
 
 
 class DocumentVersionViewSet(viewsets.ModelViewSet):
-    queryset = DocumentVersion.objects.select_related("document", "uploaded_by")
+    queryset = DocumentVersion.objects.select_related(
+        "document", "document__drm_policy", "uploaded_by"
+    )
     serializer_class = DocumentVersionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["document"]
     ordering_fields = ["uploaded_at", "version_number"]
     ordering = ["-version_number"]
+
+    def _load_version_payload(self, version) -> tuple[bytes, str, str]:
+        """Return (bytes, file_name, content_type) for a version file or HTML body."""
+        file_name = version.file_name or f"document-v{version.version_number}"
+        content_type = version.file_type or "application/octet-stream"
+
+        if version.file_url:
+            file_path = resolve_media_path(version.file_url)
+            if file_path.startswith(("http://", "https://")):
+                import requests
+
+                remote = requests.get(file_path, timeout=30)
+                remote.raise_for_status()
+                remote_type = remote.headers.get("Content-Type") or content_type
+                return remote.content, file_name, remote_type
+            if not os.path.isfile(file_path):
+                raise ValidationError({"detail": "Stored file is missing on the server."})
+            with open(file_path, "rb") as handle:
+                return handle.read(), file_name, content_type
+
+        if version.content_html and version.content_html.strip():
+            return (
+                version.content_html.encode("utf-8"),
+                f"{file_name}.html" if not file_name.lower().endswith(".html") else file_name,
+                "text/html; charset=utf-8",
+            )
+
+        raise ValidationError({"detail": "No downloadable content for this version."})
+
+    def _maybe_watermark(self, document, user, payload: bytes, content_type: str) -> tuple[bytes, str]:
+        rights = resolve_document_rights(document, user)
+        watermark = (rights.get("watermark_text") or "").strip()
+        if not watermark:
+            return payload, content_type
+        if not (is_pdf_bytes(payload) or "pdf" in (content_type or "").lower()):
+            return payload, content_type
+        stamped = apply_text_watermark(payload, watermark)
+        return stamped, "application/pdf"
+
+    def _file_response(
+        self, payload: bytes, *, file_name: str, content_type: str, as_attachment: bool
+    ) -> HttpResponse:
+        disposition = "attachment" if as_attachment else "inline"
+        response = HttpResponse(payload, content_type=content_type)
+        response["Content-Disposition"] = f'{disposition}; filename="{file_name}"'
+        response["Content-Length"] = str(len(payload))
+        return response
+
+    def _serve_version(self, request, version, *, as_attachment: bool):
+        document = version.document
+        rights = resolve_document_rights(document, request.user)
+        needs_watermark = bool((rights.get("watermark_text") or "").strip())
+
+        # Stream unmarked local files without buffering.
+        if (
+            not needs_watermark
+            and version.file_url
+            and not resolve_media_path(version.file_url).startswith(("http://", "https://"))
+        ):
+            file_path = resolve_media_path(version.file_url)
+            if not os.path.isfile(file_path):
+                raise ValidationError({"detail": "Stored file is missing on the server."})
+            file_name = version.file_name or f"document-v{version.version_number}"
+            content_type = version.file_type or "application/octet-stream"
+            return FileResponse(
+                open(file_path, "rb"),
+                as_attachment=as_attachment,
+                filename=file_name,
+                content_type=content_type,
+            )
+
+        payload, file_name, content_type = self._load_version_payload(version)
+        payload, content_type = self._maybe_watermark(document, request.user, payload, content_type)
+        return self._file_response(
+            payload, file_name=file_name, content_type=content_type, as_attachment=as_attachment
+        )
+
+    @action(detail=True, methods=["get"], url_path="download")
+    def download(self, request, pk=None):
+        """Stream a version file after DRM download checks (watermark applied when set)."""
+        version = self.get_object()
+        document = version.document
+
+        try:
+            assert_download_allowed(document, request.user)
+        except PermissionDenied:
+            DocumentAccessLog.objects.create(
+                document=document,
+                user=request.user,
+                action=DocumentAccessLog.AccessAction.ATTEMPTED_DOWNLOAD,
+                sensitivity=document.sensitivity,
+            )
+            raise
+
+        DocumentAccessLog.objects.create(
+            document=document,
+            user=request.user,
+            action=DocumentAccessLog.AccessAction.DOWNLOAD,
+            sensitivity=document.sensitivity,
+        )
+        return self._serve_version(request, version, as_attachment=True)
+
+    @action(detail=True, methods=["get"], url_path="content")
+    def content(self, request, pk=None):
+        """Inline stream for preview; view allowed even when download is blocked. Watermarked."""
+        version = self.get_object()
+        document = version.document
+        assert_view_allowed(document, request.user)
+
+        DocumentAccessLog.objects.create(
+            document=document,
+            user=request.user,
+            action=DocumentAccessLog.AccessAction.VIEW,
+            sensitivity=document.sensitivity,
+        )
+        return self._serve_version(request, version, as_attachment=False)
 
     def create(self, request, *args, **kwargs):
         # Create a mutable copy of request data

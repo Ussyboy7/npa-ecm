@@ -320,7 +320,7 @@ export default function LandingPage() {
       <section className="mx-auto mt-24 w-full max-w-5xl px-6">
         <div className="overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-10 text-center shadow-lg backdrop-blur">
           <h2 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
-            Ready to experience the NPA ECM workspace?
+            Ready to transform your ECM workflow?
           </h2>
           <p className="mt-4 text-base text-muted-foreground sm:text-lg">
             Sign in to experience office-based inboxes, linked DMS records, and analytics tailored for MD, ED, GM, and AGM

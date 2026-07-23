@@ -8,11 +8,11 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon, Shield, Paperclip, Download, Eye, ExternalLink, Loader2, Users } from "lucide-react";
+import { Building2, FileText, User, Calendar, MessageSquare, ArrowDown, ArrowUp, Image as ImageIcon, Shield, Paperclip, Download, Eye, ExternalLink, Loader2, Users, ChevronDown } from "lucide-react";
 import { Minute, CorrespondenceAttachment, type Correspondence } from "@/lib/npa-structure";
 import { SealBadge } from '@/components/seals/SealBadge';
 import { DigitalSealPreview } from '@/components/seals/DigitalSealPreview';
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { apiFetch, getStoredAccessToken } from "@/lib/api-client";
 import { useRouter } from "next/navigation";
 import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
@@ -20,6 +20,65 @@ import mammoth from "mammoth";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { logDocumentAccess } from "@/lib/dms-storage";
 import { fetchDocumentById } from "@/lib/dms-storage";
+import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
+import { sanitizeThemedHtml } from '@/lib/sanitize-html';
+import { cn } from '@/lib/utils';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
+/** Short routing note for Treat minutes — full memo lives in treatment response HTML. */
+function getTreatMinuteSummary(minuteText: string): string {
+  const text = minuteText.trim();
+  if (!text) return 'Treatment & response recorded.';
+
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const subjects = lines.filter((l) => /^subject:/i.test(l));
+  if (text.startsWith('[TREATMENT & RESPONSE]')) {
+    return ['Treatment & response', ...subjects.slice(0, 2)].join('\n');
+  }
+  if (text.startsWith('[RESPONSE WITH DOCUMENT]')) {
+    return lines.slice(0, 3).join('\n');
+  }
+  // Fallback: first paragraph only (avoid dumping full memo body)
+  const para = text.split(/\n\n+/)[0]?.trim() || text;
+  if (para.length <= 280) return para;
+  return `${para.slice(0, 277).trimEnd()}…`;
+}
+
+function pickBestResponseCandidate(
+  results: Record<string, unknown>[],
+  sourceMinute: Minute,
+): Record<string, unknown> | undefined {
+  if (!results.length) return undefined;
+  const minuteTime = new Date(sourceMinute.timestamp).getTime();
+  const withScore = results.map((corr) => {
+    const corrCurrentApprover = corr.current_approver as Record<string, unknown> | string | undefined;
+    const corrCurrentApproverId = typeof corrCurrentApprover === 'object'
+      ? String(corrCurrentApprover?.id ?? '')
+      : String(corrCurrentApprover ?? '');
+    const corrCurrentOffice = corr.current_office as Record<string, unknown> | string | undefined;
+    const corrCurrentOfficeId = typeof corrCurrentOffice === 'object'
+      ? String(corrCurrentOffice?.id ?? '')
+      : String(corrCurrentOffice ?? '');
+    const corrDirection = String(corr.direction ?? '');
+    const corrTime = new Date((corr.created_at || corr.createdAt) as string).getTime();
+    const timeDistance = Number.isFinite(corrTime) ? Math.abs(corrTime - minuteTime) : Number.MAX_SAFE_INTEGER;
+
+    let score = 0;
+    if (sourceMinute.toUserId && corrCurrentApproverId === sourceMinute.toUserId) score += 4;
+    if (sourceMinute.toOfficeId && corrCurrentOfficeId === sourceMinute.toOfficeId) score += 3;
+    if (corrDirection === 'upward') score += 1;
+    if (timeDistance <= 60_000) score += 1;
+
+    return { corr, score, timeDistance };
+  });
+
+  return withScore
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.timeDistance - b.timeDistance;
+    })
+    .find((item) => item.score > 0)?.corr ?? (results[results.length - 1] as Record<string, unknown>);
+}
 
 interface MinuteDetailModalProps {
   minute: Minute | null;
@@ -29,7 +88,7 @@ interface MinuteDetailModalProps {
   showDelegationInfo?: boolean; // Only show "Performed by" to the principal
 }
 
-export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, showDelegationInfo = false }: MinuteDetailModalProps) => {
+const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, showDelegationInfo = false }: MinuteDetailModalProps) => {
   const router = useRouter();
   const { currentUser } = useCurrentUser();
   const [responseCorrespondence, setResponseCorrespondence] = useState<Correspondence | null>(null);
@@ -48,42 +107,6 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
   const [signatureImageSrc, setSignatureImageSrc] = useState<string | null>(null);
   const [signatureImageError, setSignatureImageError] = useState(false);
   const signatureObjectUrlRef = useRef<string | null>(null);
-
-  const pickBestResponseCandidate = (
-    results: Record<string, unknown>[],
-    sourceMinute: Minute,
-  ): Record<string, unknown> | undefined => {
-    if (!results.length) return undefined;
-    const minuteTime = new Date(sourceMinute.timestamp).getTime();
-    const withScore = results.map((corr) => {
-      const corrCurrentApprover = corr.current_approver as Record<string, unknown> | string | undefined;
-      const corrCurrentApproverId = typeof corrCurrentApprover === 'object'
-        ? String(corrCurrentApprover?.id ?? '')
-        : String(corrCurrentApprover ?? '');
-      const corrCurrentOffice = corr.current_office as Record<string, unknown> | string | undefined;
-      const corrCurrentOfficeId = typeof corrCurrentOffice === 'object'
-        ? String(corrCurrentOffice?.id ?? '')
-        : String(corrCurrentOffice ?? '');
-      const corrDirection = String(corr.direction ?? '');
-      const corrTime = new Date((corr.created_at || corr.createdAt) as string).getTime();
-      const timeDistance = Number.isFinite(corrTime) ? Math.abs(corrTime - minuteTime) : Number.MAX_SAFE_INTEGER;
-
-      let score = 0;
-      if (sourceMinute.toUserId && corrCurrentApproverId === sourceMinute.toUserId) score += 4;
-      if (sourceMinute.toOfficeId && corrCurrentOfficeId === sourceMinute.toOfficeId) score += 3;
-      if (corrDirection === 'upward') score += 1;
-      if (timeDistance <= 60_000) score += 1;
-
-      return { corr, score, timeDistance };
-    });
-
-    return withScore
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return a.timeDistance - b.timeDistance;
-      })
-      .find((item) => item.score > 0)?.corr ?? (results[results.length - 1] as Record<string, unknown>);
-  };
 
   // Load signature image via API when imageData is a URL (avoids CORS/auth issues with /media/)
   useEffect(() => {
@@ -485,6 +508,13 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
 
   if (!minute) return null;
 
+  const isTreatMinute = minute.actionType === 'treat';
+  const treatmentHtml = responseCorrespondence?.treatmentResponse?.trim() || '';
+  const hasTreatmentMemo = isTreatMinute && Boolean(treatmentHtml);
+  const minuteContentText = isTreatMinute
+    ? getTreatMinuteSummary(minute.minuteText || '')
+    : (minute.minuteText || 'No minute text.');
+
   // Only "For Information" (purpose=information) added by THIS minute (minute_id match). Excludes
   // distribution from other minutes or correspondence-level entries (minute=null) that the user did not add here.
   const ccEntries = (distribution as Record<string, unknown>[]).filter(
@@ -506,7 +536,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent className="max-w-4xl w-[95vw] sm:max-w-4xl sm:w-full max-h-[95vh] overflow-hidden p-4 sm:p-6">
         <DialogDescription id="minute-detail-desc" className="sr-only">
           View minute content, routing, distribution, and related details.
         </DialogDescription>
@@ -517,8 +547,8 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
           </DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[70vh]">
-          <div className="space-y-6 pr-4">
+        <ScrollArea className="mt-2 h-[min(82vh,calc(95vh-7rem))] pr-4">
+          <div className="space-y-6 pr-2">
             {/* Header Info */}
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-2 flex-1">
@@ -577,7 +607,7 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-primary" />
+                    <MessageSquare className="h-4 w-4 text-primary" />
                     Minute Content
                   </h4>
                   {minute.isEdited && (
@@ -586,14 +616,54 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
                     </Badge>
                   )}
                 </div>
-                <div className="p-4 rounded-lg bg-muted/50 border border-border">
+                <div className="rounded-lg border border-border overflow-hidden bg-muted/50 p-4">
                   <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                    {/* For TREAT minutes, show response correspondence treatment response if available */}
-                    {(minute.actionType === 'treat' && responseCorrespondence?.treatmentResponse) 
-                      ? responseCorrespondence.treatmentResponse 
-                      : minute.minuteText}
+                    {minuteContentText}
                   </p>
                 </div>
+                {hasTreatmentMemo && (
+                  <Collapsible className="mt-3 group/treat">
+                    <div className="flex items-center justify-between gap-2">
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+                        >
+                          <ChevronDown className="h-3.5 w-3.5 transition-transform group-data-[state=open]/treat:rotate-180" />
+                          Treatment memo
+                        </Button>
+                      </CollapsibleTrigger>
+                      {responseCorrespondence?.id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1.5"
+                          onClick={() => {
+                            onOpenChange(false);
+                            router.push(`/correspondence/${responseCorrespondence.id}`);
+                          }}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          Open response
+                        </Button>
+                      )}
+                    </div>
+                    <CollapsibleContent className="mt-2 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+                      <div className="rounded-lg border border-border overflow-hidden bg-white text-neutral-900 p-4 max-h-[50vh] overflow-y-auto">
+                        <div
+                          className={cn(
+                            'prose prose-sm max-w-none text-neutral-900',
+                            '[&_*]:!text-neutral-900 [&_a]:!text-blue-700',
+                          )}
+                          dangerouslySetInnerHTML={{
+                            __html: sanitizeThemedHtml(treatmentHtml),
+                          }}
+                        />
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
                 {minute.originalMinuteText && minute.originalMinuteText !== minute.minuteText && (
                   <div className="mt-2 p-3 rounded-lg bg-muted/30 border border-border border-dashed">
                     <p className="text-xs font-semibold text-muted-foreground mb-1">Original Text:</p>
@@ -1118,9 +1188,15 @@ export const MinuteDetailModal = ({ minute, open, onOpenChange, authorName, show
             )}
           </div>
 
-          <div className="h-2" />
         </DialogContent>
       </Dialog>
     </Dialog>
   );
 };
+
+export const MinuteDetailModal = React.memo((props: MinuteDetailModalProps) => (
+  <ModalErrorBoundary onClose={() => props.onOpenChange?.(false)}>
+    <MinuteDetailModalContent {...props} />
+  </ModalErrorBoundary>
+));
+MinuteDetailModal.displayName = 'MinuteDetailModal';

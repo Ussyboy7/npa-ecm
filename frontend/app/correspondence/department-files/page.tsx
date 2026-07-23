@@ -19,7 +19,7 @@ export default function DepartmentFilesRedirectPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-            <p className="text-muted-foreground">Redirecting to Records & Archives...</p>
+            <p className="text-muted-foreground">Redirecting to Archives...</p>
           </CardContent>
         </Card>
       </div>

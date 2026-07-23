@@ -15,12 +15,10 @@ export interface SidebarVisibilityConfig {
   showMyInbox?: boolean;
   showMyOutbox?: boolean;
   showExecutiveApprovals?: boolean;
-  showMyTasksAlerts?: boolean;
 
   // Offices & Registry
   showOfficeInbox?: boolean;
   showRegisterCorrespondence?: boolean;
-  showOfficeOutbox?: boolean;
 
   // Case Management
   showMyCases?: boolean;
@@ -38,7 +36,6 @@ export interface SidebarVisibilityConfig {
   showAnalyticsReports?: boolean;
   showExecutiveDashboard?: boolean;
   showPerformanceAnalytics?: boolean;
-  showReportsIntelligence?: boolean;
 
   // Administration
   showAdministration?: boolean;
@@ -249,12 +246,6 @@ export const AVAILABLE_ROLE_PERMISSIONS: RolePermission[] = [
   
   // Sidebar Visibility Permissions
   {
-    id: 'sidebar_show_my_workspace',
-    label: 'Show My Workspace Section',
-    description: 'Show Dashboard, Inbox, Outbox, Approvals, Tasks',
-    category: 'sidebar',
-  },
-  {
     id: 'sidebar_show_offices_registry',
     label: 'Show Offices & Registry Section',
     description: 'Show Office Inbox, Register Correspondence, Office Outbox',
@@ -318,7 +309,6 @@ export const PERMISSION_PRESETS = [
       can_delete_documents: false,
       can_share_documents: true,
       can_access_approvals: true,
-      can_approve: true,
       can_reject: true,
       can_access_administration: true,
       can_manage_users: false,
@@ -331,13 +321,15 @@ export const PERMISSION_PRESETS = [
   },
   {
     name: 'Manager',
-    description: 'Management-level permissions (AGM, PM)',
+    description: 'Management-level permissions (AGM, Principal Manager, Senior Manager, Manager)',
     permissions: {
       can_register_correspondence: false,
       can_minute_correspondence: true,
       can_treat_correspondence: true,
       can_distribute: true,
-      can_archive: false,
+      can_archive: true,
+      can_archive_department: true,
+      can_archive_division: true,
       can_view_all_correspondence: false,
       can_view_registry: true,
       can_access_document_management: true,
@@ -348,13 +340,16 @@ export const PERMISSION_PRESETS = [
       can_access_approvals: true,
       can_approve: true,
       can_reject: true,
-      can_access_administration: false,
-      can_manage_users: false,
-      can_manage_roles: false,
-      can_manage_org_structure: false,
-      can_access_analytics: false,
-      can_access_reports: false,
+      can_access_administration: true,
+      can_manage_users: true,
+      can_manage_roles: true,
+      can_manage_org_structure: true,
+      can_access_analytics: true,
+      can_access_reports: true,
       can_access_executive_dashboard: false,
+      can_access_records_governance: true,
+      can_access_audit_compliance: true,
+      can_manage_integration: true,
     },
   },
   {
@@ -435,6 +430,35 @@ export const PERMISSION_PRESETS = [
       can_access_approvals: false,
       can_approve: false,
       can_reject: false,
+      can_access_administration: false,
+      can_manage_users: false,
+      can_manage_roles: false,
+      can_manage_org_structure: false,
+      can_access_analytics: false,
+      can_access_reports: false,
+      can_access_executive_dashboard: false,
+    },
+  },
+  {
+    name: 'Assistant',
+    description: 'Administrative assistant permissions',
+    permissions: {
+      can_register_correspondence: false,
+      can_minute_correspondence: true,
+      can_treat_correspondence: true,
+      can_distribute: true,
+      can_archive: true,
+      can_archive_department: true,
+      can_view_all_correspondence: true,
+      can_view_registry: false,
+      can_access_document_management: true,
+      can_create_documents: true,
+      can_edit_documents: true,
+      can_delete_documents: false,
+      can_share_documents: true,
+      can_access_approvals: true,
+      can_approve: true,
+      can_reject: true,
       can_access_administration: false,
       can_manage_users: false,
       can_manage_roles: false,

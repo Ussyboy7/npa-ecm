@@ -16,6 +16,7 @@ import { DocumentPreviewModal } from '@/components/correspondence/DocumentPrevie
 import { LinkDocumentDialog } from '@/components/correspondence/LinkDocumentDialog';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { mapApiCorrespondence } from '@/contexts/CorrespondenceContext';
+import { getPrimaryLinkedDocument } from '@/lib/correspondence-preview-target';
 import type { Correspondence, Minute, User } from '@/lib/npa-structure';
 import type { DocumentRecord } from '@/lib/dms-storage';
 import type { ModalType } from '@/hooks/use-modal-state';
@@ -30,7 +31,7 @@ interface CorrespondenceDetailModalsProps {
   openModal: (modal: ModalType) => void;
   closeModal: () => void;
   onMinuteClose: () => void;
-  onTreatmentClose: () => void;
+  onTreatmentClose: (result?: { createdResponseId?: string }) => void;
   onCompletionClose: () => void;
   onDelegate: (
     assistantId: string,
@@ -77,8 +78,9 @@ export function CorrespondenceDetailModals({
   defaultPreviewAttachmentFileName,
   defaultPreviewAttachmentSource,
 }: CorrespondenceDetailModalsProps) {
+  const primaryDoc = getPrimaryLinkedDocument(linkedDocuments);
   const documentContentHtml =
-    linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1]?.contentHtml;
+    primaryDoc?.versions?.[primaryDoc.versions.length - 1]?.contentHtml;
 
   return (
     <>

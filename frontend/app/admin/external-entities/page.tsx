@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,8 +45,16 @@ import {
   type ExternalEntityType,
 } from "@/lib/external-entities-api";
 import { logError } from "@/lib/client-logger";
-import { Building2, Plus, RefreshCw, Search } from "lucide-react";
+import { Building2, Plus, RefreshCw, Search, Building, Users, UserCheck } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import {
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from "@/components/shared/registry-queue-styles";
 
 const ENTITY_TYPES: { value: ExternalEntityType; label: string }[] = [
   { value: "ministry", label: "Ministry" },
@@ -187,16 +196,45 @@ export default function ExternalEntitiesPage() {
     >
       <ClientErrorBoundary>
         <div className="space-y-4">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search entities…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && void load()}
-            />
+          {/* Stats Cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: "Total Entities", value: entities.length, icon: Building2, bgClass: "bg-primary/10", iconClass: "text-primary" },
+              { label: "Active", value: entities.filter((e) => e.is_active).length, icon: UserCheck, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
+              { label: "Ministries", value: entities.filter((e) => e.entity_type === "ministry").length, icon: Building, bgClass: "bg-violet-500/10", iconClass: "text-violet-600" },
+              { label: "Agencies", value: entities.filter((e) => e.entity_type === "agency").length, icon: Users, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
+            ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+              <Card key={label}>
+                <CardContent className={registryQueueStatCardContentClass}>
+                  <div className="flex items-center gap-4">
+                    <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                      <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                    </div>
+                    <div>
+                      <p className={registryQueueStatLabelClass}>{label}</p>
+                      <p className={registryQueueStatValueClass}>{value}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
+
+          {/* Filter bar */}
+          <Card>
+            <CardContent className="flex flex-wrap items-center gap-2 p-2">
+              <div className="relative min-w-[200px] flex-1 max-w-sm">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="h-8 pl-8 text-xs"
+                  placeholder="Search entities…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && void load()}
+                />
+              </div>
+            </CardContent>
+          </Card>
 
           {loading ? (
             <LoadingState message="Loading external entities…" />

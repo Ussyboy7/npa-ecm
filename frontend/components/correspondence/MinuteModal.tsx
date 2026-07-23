@@ -3,6 +3,7 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { logError, logWarn, logInfo } from '@/lib/client-logger';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -94,7 +95,7 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [purpose, setPurpose] = useState<'action' | 'information' | 'comment' | 'approval'>('action');
   const [forwardTo, setForwardTo] = useState('');
   const [forwardToError, setForwardToError] = useState('');
-  const [_characterCount, setCharacterCount] = useState(0);
+
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [hasDraft, setHasDraft] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -114,7 +115,9 @@ const MinuteModalComponent = ({ correspondence, isOpen, onClose, direction: init
   const [applySignatureManuallySet, setApplySignatureManuallySet] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   // Request cancellation
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal, reset } = useAbortController();
+  const submittingRef = useRef(false);
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 const [minuteTemplates, setMinuteTemplates] = useState<DocumentTemplate[]>([]);
 const [selectedMinuteTemplateId, setSelectedMinuteTemplateId] = useState<string | null>(null);
 const [newTemplateName, setNewTemplateName] = useState('');
@@ -234,6 +237,33 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     }
   }, [isOpen]);
 
+  // Autosave draft after 5s of inactivity
+  useEffect(() => {
+    if (!isOpen) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (!minuteText.trim()) return;
+      const silentSave = async () => {
+        try {
+          const draftData = {
+            correspondenceId: correspondence.id,
+            type: 'minute' as const,
+            content: minuteText,
+            forwardTo,
+            actionType: actionType as 'minute' | 'approve',
+          };
+          await saveDraft(draftData);
+        } catch {
+          // Silent — autosave failures are non-critical
+        }
+      };
+      silentSave();
+    }, 5000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [isOpen, minuteText, forwardTo, actionType, purpose, applySignature, selectedTemplateId]);
+
   // Helper to get SLA days for a priority
   const getSLADays = useCallback((priority: string): number | null => {
     if (!slaTargets) return null;
@@ -324,6 +354,16 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   // Other users (below MD) can choose direction
   const canChooseDirection = !isMD;
 
+  // Only MD can approve
+  const canApprove = isMD;
+
+  // Reset action type to 'minute' if user cannot approve
+  useEffect(() => {
+    if (!canApprove && actionType === 'approve') {
+      setActionType('minute');
+    }
+  }, [canApprove, actionType]);
+
   // Check if user is an executive (for seal preview)
   const executiveGrades = ['MDCS', 'EDCS']; // Managing Director, Executive Director
   const isExecutive = currentUser && executiveGrades.includes(currentUser.gradeLevel);
@@ -338,7 +378,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       getDraftByCorrespondence(correspondence.id, 'minute').then((draft) => {
         if (draft) {
           setMinuteText(draft.content);
-          setCharacterCount(draft.content.length);
           if (draft.forwardTo) setForwardTo(draft.forwardTo);
           if (draft.actionType) setActionType(draft.actionType as 'minute' | 'approve');
           setHasDraft(true);
@@ -347,7 +386,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           setHasDraft(false);
           setDraftId(null);
           setMinuteText('');
-          setCharacterCount(0);
           setForwardTo('');
           setTargetOfficeId('');
           setRouteType('person');
@@ -385,10 +423,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         }
       }
       // Cancel any ongoing requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-          }
+      reset()
     }
     return () => {
       // Cleanup on unmount
@@ -403,9 +438,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
         } catch {
           // ignore
         }
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
       }
     };
   }, [isOpen]);
@@ -507,10 +539,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
     [minuteTemplates, selectedMinuteTemplateId],
   );
 
-  const _canDeleteSelectedTemplate =
-    !!selectedMinuteTemplate &&
-    selectedMinuteTemplate.scope === 'user' &&
-    selectedMinuteTemplate.createdBy === currentUser?.id;
+
 
   // Get previous minute
   const previousMinute = useMemo(() => {
@@ -587,7 +616,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
 
   const handleTextChange = (text: string) => {
     setMinuteText(text);
-    setCharacterCount(text.length);
   };
 
   const handleSaveMinuteTemplate = async () => {
@@ -851,10 +879,11 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       newMinute.toOfficeId = targetOfficeId;
     }
 
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     // Create AbortController for request cancellation
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const signal = getSignal();
     
     try {
       const existingKeys = new Set(
@@ -937,6 +966,8 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             signatureImageUrl: (sealData?.signature_image_url as string | undefined) ?? undefined,
             existingSealImageUrl: (sealData?.seal_image_url as string | undefined) ?? undefined,
           });
+        } else {
+          logWarn('[MinuteModal] No seal_data in create response — seal may not have been generated');
         }
       }
       
@@ -996,23 +1027,24 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           // Handle distribution and parallel routing
           if (canDistribute && newDistributionEntries.length > 0) {
             try {
-              // Separate "For Action" users (parallel routing) from other distribution
-              const actionUsers = newDistributionEntries.filter(
-                (r) => r.type === 'user' && r.purpose === 'action'
+              // Separate "For Action" recipients (parallel routing) from other distribution.
+              // Parallel routing now supports BOTH person (user) and office recipients.
+              const actionRecipients = newDistributionEntries.filter(
+                (r) => r.purpose === 'action'
               );
               const _otherDistribution = newDistributionEntries.filter(
-                (r) => !(r.type === 'user' && r.purpose === 'action')
+                (r) => r.purpose !== 'action'
               );
 
               // Create a map to track which parallel minute belongs to which recipient (defined outside if block for scope)
               const recipientToMinuteMap = new Map<string, string>();
-              
-              // Create parallel minutes for "For Action" users
+
+              // Create parallel minutes for "For Action" recipients
               const parallelMinuteIds: string[] = [];
-              if (actionUsers.length === 1) {
+              if (actionRecipients.length === 1) {
                 toast.error('Parallel routing requires at least two recipients marked For Action.');
-              } else if (actionUsers.length > 0) {
-                logInfo('[MinuteModal] Creating parallel minutes for action users', actionUsers);
+              } else if (actionRecipients.length > 0) {
+                logInfo('[MinuteModal] Creating parallel minutes for action recipients', actionRecipients);
                 
                 // Generate parallel group ID for grouping parallel branches (UUID format)
                 // Use a simple UUID v4 generator
@@ -1026,11 +1058,16 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                 const parallelGroupId = generateUUID();
             
             const parallelMinutes = await Promise.all(
-              actionUsers.map(async (recipient) => {
-                // Get recipient user's office info
-                const recipientUserId = recipient.userId || recipient.id;
-                const recipientOfficeInfo = getUserOfficeInfo(recipientUserId);
-                const recipientOfficeId = recipientOfficeInfo?.office?.id;
+              actionRecipients.map(async (recipient) => {
+                // Resolve recipient identity + target office for both user and office branches
+                const isUserRecipient = recipient.type === 'user';
+                const recipientUserId = isUserRecipient ? (recipient.userId || recipient.id) : undefined;
+                const recipientOfficeInfo = isUserRecipient && recipientUserId ? getUserOfficeInfo(recipientUserId) : undefined;
+                const recipientOfficeId = isUserRecipient
+                  ? recipientOfficeInfo?.office?.id
+                  : recipient.type === 'office'
+                    ? (recipient.officeId || recipient.id)
+                    : undefined;
                 
                 const parallelMinutePayload = {
                   correspondence: correspondence.id,
@@ -1042,7 +1079,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                   step_number: nextStep,
                   from_office_id: currentUserOfficeId || undefined,
                   to_office_id: recipientOfficeId || undefined,
-                  to_user_id: recipientUserId, // Recipient user
+                  to_user_id: recipientUserId, // Recipient user (undefined for office branches)
                   purpose: 'action',
                   requires_response: true,
                   routing_type: 'parallel',
@@ -1070,8 +1107,11 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                     : typeof rawMinuteId === 'number'
                       ? String(rawMinuteId)
                       : undefined;
-                if (minuteId && recipientUserId) {
-                  recipientToMinuteMap.set(recipientUserId, minuteId);
+                if (minuteId) {
+                  const mapKey = isUserRecipient
+                    ? (recipientUserId as string)
+                    : (recipient.officeId || recipient.id);
+                  recipientToMinuteMap.set(mapKey, minuteId);
                 }
                 
                 return minuteId;
@@ -1108,14 +1148,18 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           // Create distribution entries (for all recipients, including action users)
           const distributionResults = await Promise.all(
             newDistributionEntries.map(async (recipient, _index) => {
-              // For action users, link to their parallel minute using the map
+              // For action recipients, link to their parallel minute using the map
               let linkedMinuteId = createdMinuteId;
-              if (recipient.type === 'user' && recipient.purpose === 'action' && recipient.userId) {
-                const parallelMinuteId = recipientToMinuteMap.get(recipient.userId);
+              if (recipient.purpose === 'action') {
+                const mapKey =
+                  recipient.type === 'user'
+                    ? (recipient.userId || recipient.id)
+                    : (recipient.officeId || recipient.id);
+                const parallelMinuteId = recipientToMinuteMap.get(mapKey);
                 if (parallelMinuteId) {
                   linkedMinuteId = parallelMinuteId;
                 } else {
-                  logWarn('[MinuteModal] Could not find parallel minute for user', { userId: recipient.userId });
+                  logWarn('[MinuteModal] Could not find parallel minute for recipient', { mapKey });
                 }
               }
               
@@ -1156,7 +1200,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           
           logInfo('[MinuteModal] Distribution created successfully', distributionResults);
           if (distributionResults.length > 0) {
-            const actionCount = actionUsers.length;
+            const actionCount = actionRecipients.length;
             let message = `Distribution added: ${distributionResults.length} recipient(s) notified.`;
             if (actionCount > 0) {
               message += ` ${actionCount} parallel routing branch(es) created.`;
@@ -1231,6 +1275,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
       setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
@@ -1448,36 +1493,38 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
                     </div>
                   </div>
                   
-                  {/* Approval Option */}
-                  <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
-                    actionType === 'approve' 
-                      ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
-                      : 'border-border hover:bg-muted/50'
-                  }`}>
-                    <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
-                    <div className="flex-1 space-y-1">
-                      <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-emerald-600" />
-                        Executive Approval
-                        {actionType === 'approve' && !isSignatureLoading && !userSignature && (
-                          <AlertCircle className="h-3 w-3 text-destructive" />
-                        )}
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        <strong className="text-emerald-600 dark:text-emerald-400">Formal approval with digital seal.</strong> Requires signature. 
-                        {isExecutive && ' This will apply a digital executive seal to the document.'}
-                      </p>
-                      {actionType === 'approve' && isSignatureLoading && !userSignature && (
-                        <p className="text-xs text-muted-foreground mt-1">Checking signature…</p>
-                      )}
-                      {actionType === 'approve' && !isSignatureLoading && !userSignature && (
-                        <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          Digital signature required for approval
+                  {/* Approval Option — MD only */}
+                  {isMD && (
+                    <div className={`flex items-start space-x-3 p-3 rounded-lg border transition-colors ${
+                      actionType === 'approve' 
+                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
+                        : 'border-border hover:bg-muted/50'
+                    }`}>
+                      <RadioGroupItem value="approve" id="approve-forward" className="mt-1" />
+                      <div className="flex-1 space-y-1">
+                        <Label htmlFor="approve-forward" className="font-medium cursor-pointer flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-emerald-600" />
+                          Executive Approval
+                          {actionType === 'approve' && !isSignatureLoading && !userSignature && (
+                            <AlertCircle className="h-3 w-3 text-destructive" />
+                          )}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          <strong className="text-emerald-600 dark:text-emerald-400">Formal approval with digital seal.</strong> Requires signature. 
+                          This will apply a digital executive seal to the document.
                         </p>
-                      )}
+                        {actionType === 'approve' && isSignatureLoading && !userSignature && (
+                          <p className="text-xs text-muted-foreground mt-1">Checking signature…</p>
+                        )}
+                        {actionType === 'approve' && !isSignatureLoading && !userSignature && (
+                          <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            Digital signature required for approval
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </RadioGroup>
             </div>

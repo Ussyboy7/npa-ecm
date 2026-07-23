@@ -48,8 +48,6 @@ class PhysicalDocumentTests(TestCase):
             "building": "Admin Block",
             "floor": "2nd",
             "room": "201",
-            "shelf": "",
-            "cabinet": "",
         })
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Location.objects.count(), 2)
@@ -109,7 +107,7 @@ class PhysicalDocumentTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         self.physical_doc.refresh_from_db()
-        self.assertEqual(self.physical_doc.status, PhysicalDocument.Status.IN_STORAGE)
+        self.assertEqual(self.physical_doc.status, PhysicalDocument.Status.FILED)
         self.assertIsNone(self.physical_doc.checked_out_to)
 
         self.assertEqual(CheckOutEvent.objects.count(), 2)

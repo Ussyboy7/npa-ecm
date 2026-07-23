@@ -64,7 +64,7 @@ export default function FormTemplateEditorPage() {
       } catch (error: unknown) {
       logError("Error loading template:", error);
       toast.error("Failed to load form template");
-      router.push("/admin/form-templates");
+      router.push("/admin/templates-hub");
     } finally {
       setLoading(false);
     }
@@ -151,8 +151,7 @@ export default function FormTemplateEditorPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => router.push("/admin/form-templates")}
-              className="shrink-0"
+              onClick={() => router.push("/admin/templates-hub")}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back

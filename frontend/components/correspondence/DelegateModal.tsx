@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 // AlertDialog removed - using separate Dialog for confirmation to avoid nesting issues
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { toast } from 'sonner';
 import { 
@@ -14,7 +15,6 @@ import {
   Eye, 
   Forward, 
   MessageSquare, 
-  FileCheck, 
   Shield, 
   Info,
   Clock,
@@ -34,6 +34,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { logError } from '@/lib/client-logger';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import { ModalErrorHandler } from '@/lib/modal-errors';
+import { apiFetch } from '@/lib/api-client';
+import { format } from 'date-fns';
 
 // Permission icons and descriptions
 const PERMISSION_CONFIG: Record<string, { icon: React.ReactNode; label: string; description: string }> = {
@@ -51,11 +53,6 @@ const PERMISSION_CONFIG: Record<string, { icon: React.ReactNode; label: string; 
     icon: <MessageSquare className="h-3.5 w-3.5" />, 
     label: 'Respond', 
     description: 'Can draft and send responses' 
-  },
-  approve: { 
-    icon: <FileCheck className="h-3.5 w-3.5" />, 
-    label: 'Approve', 
-    description: 'Can approve on your behalf' 
   },
   minute: { 
     icon: <MessageSquare className="h-3.5 w-3.5" />, 
@@ -99,6 +96,7 @@ interface DelegateModalProps {
 export const DelegateModal = ({
   open,
   onOpenChange,
+  correspondenceId,
   executiveId,
   onDelegate,
 }: DelegateModalProps) => {
@@ -107,12 +105,21 @@ export const DelegateModal = ({
   const [selectedAssistantError, setSelectedAssistantError] = useState('');
   const [delegationNotes, setDelegationNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   
   // Duration state
   const [delegationDuration, setDelegationDuration] = useState('until_completed');
   const [customExpiryDate, setCustomExpiryDate] = useState('');
   
+  // Delegation activity (audit)
+  const [delegationActivity, setDelegationActivity] = useState<{
+    total_actions: number;
+    first_action_at: string | null;
+    last_action_at: string | null;
+  } | null>(null);
+  const [loadingActivity, setLoadingActivity] = useState(false);
+
   // Assignment mode state
   const [isAssigningMode, setIsAssigningMode] = useState(false);
   const [newAssistantId, setNewAssistantId] = useState('');
@@ -380,11 +387,15 @@ export const DelegateModal = ({
   };
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
     const assignment = availableAssistants.find(a => a.assistantId === selectedAssistant);
     
     if (!assignment) {
       toast.error('Invalid assistant selection');
       setShowConfirmation(false);
+      submittingRef.current = false;
       return;
     }
 
@@ -410,10 +421,33 @@ export const DelegateModal = ({
       setShowConfirmation(false);
     } finally {
       setIsSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
   const selectedAssistantData = availableAssistants.find(a => a.assistantId === selectedAssistant);
+
+  // Fetch delegation activity when assistant is selected
+  useEffect(() => {
+    if (!selectedAssistant || !correspondenceId) {
+      setDelegationActivity(null);
+      return;
+    }
+    setLoadingActivity(true);
+    apiFetch<{
+      total_actions: number;
+      first_action_at: string | null;
+      last_action_at: string | null;
+    }>(`/correspondence/correspondence-delegations/delegation-summary/?assistant_id=${selectedAssistant}&correspondence_id=${correspondenceId}`, {
+      method: 'GET',
+    }).then((data) => {
+      if (data) setDelegationActivity(data);
+    }).catch(() => {
+      setDelegationActivity(null);
+    }).finally(() => {
+      setLoadingActivity(false);
+    });
+  }, [selectedAssistant, correspondenceId]);
 
   const handleTemplateClick = (template: string) => {
     setDelegationNotes(prev => prev ? `${prev}\n\n${template}` : template);
@@ -421,7 +455,7 @@ export const DelegateModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserCheck className="h-5 w-5 text-primary" />
@@ -432,7 +466,8 @@ export const DelegateModal = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <ScrollArea className="max-h-[calc(95vh-220px)] sm:max-h-[calc(90vh-220px)] pr-4">
+          <div className="space-y-4 p-1 pr-0">
           {availableAssistants.length === 0 && !isAssigningMode ? (
             <div className="text-center py-6 space-y-4">
               {isSyncing ? (
@@ -681,6 +716,34 @@ export const DelegateModal = ({
                 </div>
               )}
 
+              {/* Delegation Activity Audit */}
+              {selectedAssistantData && (
+                <div className="p-3 bg-muted/50 border border-border rounded-lg space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Delegation Activity</span>
+                  </div>
+                  {loadingActivity ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Loading activity...
+                    </div>
+                  ) : delegationActivity && delegationActivity.total_actions > 0 ? (
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <p>Actions taken under delegation: <strong>{delegationActivity.total_actions}</strong></p>
+                      {delegationActivity.first_action_at && (
+                        <p>First action: {format(new Date(delegationActivity.first_action_at), 'PPp')}</p>
+                      )}
+                      {delegationActivity.last_action_at && (
+                        <p>Last action: {format(new Date(delegationActivity.last_action_at), 'PPp')}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No delegated actions recorded for this correspondence.</p>
+                  )}
+                </div>
+              )}
+
               {/* Delegation Duration */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
@@ -783,9 +846,10 @@ export const DelegateModal = ({
                   </li>
                 </ul>
               </div>
-            </>
-          )}
-        </div>
+</>
+            )}
+          </div>
+        </ScrollArea>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting} aria-label="Cancel delegation">
@@ -816,7 +880,7 @@ export const DelegateModal = ({
 
       {/* Confirmation Dialog - Using separate Dialog to avoid nesting issues */}
       <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="max-w-md w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+        <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserCheck className="h-5 w-5 text-primary" />
@@ -826,8 +890,9 @@ export const DelegateModal = ({
               You are about to delegate this correspondence
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="space-y-3 py-4">
+
+<ScrollArea className="max-h-[calc(95vh-220px)] sm:max-h-[calc(90vh-220px)] pr-4">
+            <div className="space-y-3 py-4 p-1 pr-0">
             <div className="p-3 bg-muted rounded-lg">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -862,7 +927,8 @@ export const DelegateModal = ({
               The assistant will be notified and can act on your behalf based on their permissions.
             </p>
           </div>
-          
+          </ScrollArea>
+
           <DialogFooter>
             <Button 
               variant="outline" 

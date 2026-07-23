@@ -53,7 +53,6 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
 }) => {
   const router = useRouter();
   const isExecutiveApproval = actionType === 'approve' && isExecutive;
-  const isNonExecutiveApproval = actionType === 'approve' && !isExecutive;
 
   // Filter templates by action type
   const relevantTemplates = signatureTemplates.filter(
@@ -124,12 +123,11 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
     );
   }
 
-  // Digital Signature (for non-executive or non-approve actions)
+  // Digital Signature (for non-approve actions)
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Label>Digital Signature</Label>
-        {isNonExecutiveApproval && <Badge variant="destructive" className="text-[10px]">Required</Badge>}
       </div>
       <Card className="border-dashed">
         <CardContent className="p-4 space-y-4">
@@ -231,26 +229,21 @@ export const SignatureSection: React.FC<SignatureSectionProps> = ({
             <div className="flex items-center gap-2">
               <ImageIcon className="h-4 w-4" />
               <span>
-                {isNonExecutiveApproval
-                  ? 'A digital signature will be applied automatically for this approval.'
-                  : 'Apply your signature to this minute for acknowledgement.'}
+                Apply your signature to this minute for acknowledgement.
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Switch
                 checked={applySignature && !!signature}
                 onCheckedChange={(checked) => {
-                  if (isNonExecutiveApproval) return;
                   onApplySignatureChange(checked && !!signature);
                 }}
-                disabled={!signature || isNonExecutiveApproval || disabled}
+                disabled={!signature || disabled}
               />
               <span className="text-xs">
-                {isNonExecutiveApproval
-                  ? 'Required'
-                  : applySignature && signature
-                    ? 'Will be applied'
-                    : 'Not applied'}
+                {applySignature && signature
+                  ? 'Will be applied'
+                  : 'Not applied'}
               </span>
             </div>
           </div>

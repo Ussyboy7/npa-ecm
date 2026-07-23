@@ -3,7 +3,7 @@
  */
 
 import { apiFetch } from './api-client';
-import { logError } from './client-logger';
+
 
 export interface SearchRequest {
   query?: string;
@@ -82,20 +82,11 @@ export interface SearchHistory {
  * Perform advanced search.
  */
 export const search = async (request: SearchRequest, signal?: AbortSignal): Promise<SearchResponse> => {
-  try {
-    const response = await apiFetch<SearchResponse>('/search/operations/search/', {
-      method: 'POST',
-      body: JSON.stringify(request),
-      signal,
-    });
-    return response;
-      } catch (error: unknown) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw error;
-    }
-    logError('Failed to perform search', error);
-    throw error;
-  }
+  return await apiFetch<SearchResponse>('/search/operations/search/', {
+    method: 'POST',
+    body: JSON.stringify(request),
+    signal,
+  });
 };
 
 /**
@@ -113,27 +104,21 @@ export const searchWithin = async (
   }>;
   total_count: number;
 }> => {
-  try {
-    const response = await apiFetch<{
-      results: Array<{
-        document: Record<string, unknown>;
-        version: Record<string, unknown>;
-        snippet: string;
-        rank: number;
-      }>;
-      total_count: number;
-    }>('/search/operations/search_within/', {
-      method: 'POST',
-      body: JSON.stringify({
-        query,
-        document_ids: documentIds || [],
-      }),
-    });
-    return response;
-      } catch (error: unknown) {
-    logError('Failed to search within documents', error);
-    throw error;
-  }
+  return await apiFetch<{
+    results: Array<{
+      document: Record<string, unknown>;
+      version: Record<string, unknown>;
+      snippet: string;
+      rank: number;
+    }>;
+    total_count: number;
+  }>('/search/operations/search_within/', {
+    method: 'POST',
+    body: JSON.stringify({
+      query,
+      document_ids: documentIds || [],
+    }),
+  });
 };
 
 export interface RelatedSearchItem {
@@ -179,12 +164,11 @@ export const getSearchSuggestions = async (
       }
     );
     return response.suggestions;
-      } catch (error: unknown) {
+  } catch (error: unknown) {
     if (error instanceof Error && error.name === 'AbortError') {
       return [];
     }
-    logError('Failed to get search suggestions', error);
-    return [];
+    throw error;
   }
 };
 
@@ -192,13 +176,7 @@ export const getSearchSuggestions = async (
  * Get saved searches.
  */
 export const getSavedSearches = async (): Promise<SavedSearch[]> => {
-  try {
-    const response = await apiFetch<SavedSearch[]>('/search/saved/');
-    return response;
-      } catch (error: unknown) {
-    logError('Failed to get saved searches', error);
-    throw error;
-  }
+  return await apiFetch<SavedSearch[]>('/search/saved/');
 };
 
 /**
@@ -207,42 +185,25 @@ export const getSavedSearches = async (): Promise<SavedSearch[]> => {
 export const createSavedSearch = async (
   data: Partial<SavedSearch>
 ): Promise<SavedSearch> => {
-  try {
-    const response = await apiFetch<SavedSearch>('/search/saved/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    return response;
-      } catch (error: unknown) {
-    logError('Failed to create saved search', error);
-    throw error;
-  }
+  return await apiFetch<SavedSearch>('/search/saved/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 };
 
 /**
  * Delete a saved search.
  */
 export const deleteSavedSearch = async (id: string): Promise<void> => {
-  try {
-    await apiFetch(`/search/saved/${id}/`, {
-      method: 'DELETE',
-    });
-      } catch (error: unknown) {
-    logError('Failed to delete saved search', error);
-    throw error;
-  }
+  await apiFetch(`/search/saved/${id}/`, {
+    method: 'DELETE',
+  });
 };
 
 /**
  * Get search history.
  */
 export const getSearchHistory = async (limit: number = 50): Promise<SearchHistory[]> => {
-  try {
-    const response = await apiFetch<SearchHistory[]>(`/search/history/?limit=${limit}`);
-    return response;
-      } catch (error: unknown) {
-    logError('Failed to get search history', error);
-    return [];
-  }
+  return await apiFetch<SearchHistory[]>(`/search/history/?limit=${limit}`);
 };
 

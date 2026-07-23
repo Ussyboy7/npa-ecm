@@ -23,13 +23,20 @@ export const CORRESPONDENCE_STATUS_VALUES = [
   "pending",
   "in-progress",
   "completed",
+  "dispatched",
+  "acknowledged",
   "archived",
+  "withdrawn",
 ] as const;
 
 export const CORRESPONDENCE_STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
   { value: "in-progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
+  { value: "dispatched", label: "Dispatched" },
+  { value: "acknowledged", label: "Acknowledged" },
+  { value: "archived", label: "Archived" },
+  { value: "withdrawn", label: "Withdrawn" },
 ] as const;
 
 export const CASE_STATUS_VALUES = [

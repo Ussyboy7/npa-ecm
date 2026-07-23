@@ -119,8 +119,8 @@ class OfficeDispatchedEndpointTests(TestCase):
             status=Correspondence.Status.IN_PROGRESS,
         )
 
-    def test_office_dispatched_returns_dispatched_only(self):
-        url = reverse("api_v1:correspondence-office-dispatched")
+    def test_office_sent_returns_dispatched_items(self):
+        url = reverse("api_v1:correspondence-office-sent")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         refs = {item["reference_number"] for item in response.data["results"]}
@@ -128,16 +128,16 @@ class OfficeDispatchedEndpointTests(TestCase):
         self.assertNotIn(self.pending.reference_number, refs)
         self.assertGreaterEqual(response.data["summary"]["total"], 1)
 
-    def test_sidebar_counts_include_office_dispatched(self):
+    def test_sidebar_counts_include_office_sent(self):
         url = reverse("api_v1:correspondence-sidebar-counts")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("officeDispatched", response.data)
+        self.assertIn("officeSent", response.data)
         self.assertIn("myWork", response.data)
 
-    def test_outbox_count_includes_minuted_items(self):
+    def test_my_sent_count_includes_minuted_items(self):
         other = Correspondence.objects.create(
-            reference_number=f"NPA/OBX/{uuid.uuid4().hex[:8].upper()}",
+            reference_number=f"NPA/SNT/{uuid.uuid4().hex[:8].upper()}",
             subject="Minuted by user",
             sender_name="Sender",
             created_by=self.user,
@@ -152,4 +152,4 @@ class OfficeDispatchedEndpointTests(TestCase):
         url = reverse("api_v1:correspondence-sidebar-counts")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(response.data["outbox"], 2)
+        self.assertGreaterEqual(response.data["mySent"], 2)

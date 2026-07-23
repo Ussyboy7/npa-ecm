@@ -4,6 +4,14 @@ import type { DocumentRecord } from '@/lib/dms-storage';
 
 export type PreviewAttachmentSource = 'attachment' | 'completion-package';
 
+export function getPrimaryLinkedDocument(linkedDocuments: DocumentRecord[]): DocumentRecord | undefined {
+  return (
+    linkedDocuments.find(d => d.role === 'primary') ??
+    linkedDocuments.find(d => d.versions.length > 0) ??
+    linkedDocuments[0]
+  );
+}
+
 export function getCorrespondencePreviewContext(
   correspondence: Correspondence | null | undefined,
   linkedDocuments: DocumentRecord[],
@@ -21,7 +29,8 @@ export function getCorrespondencePreviewContext(
       `${correspondence?.referenceNumber || 'completion-package'}.pdf`
     : undefined;
 
-  const linkedDocumentLatestVersion = linkedDocuments[0]?.versions?.[linkedDocuments[0].versions.length - 1];
+  const primaryDoc = getPrimaryLinkedDocument(linkedDocuments);
+  const linkedDocumentLatestVersion = primaryDoc?.versions?.[primaryDoc.versions.length - 1];
   const linkedDocumentPreviewUrl = buildDownloadUrl(linkedDocumentLatestVersion?.fileUrl);
   const linkedDocumentPreviewFileName = linkedDocumentLatestVersion?.fileName;
 
@@ -65,7 +74,7 @@ export function resolveCorrespondenceDmsAccessTarget(
     return { documentId: correspondence.completionPackage.documentId, sensitivity: 'internal' };
   }
 
-  const linkedDoc = linkedDocuments[0];
+  const linkedDoc = getPrimaryLinkedDocument(linkedDocuments);
   if (linkedDoc?.id) {
     return { documentId: linkedDoc.id, sensitivity: linkedDoc.sensitivity ?? 'internal' };
   }

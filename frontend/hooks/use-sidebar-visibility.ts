@@ -3,7 +3,7 @@ import { useCurrentUser } from './use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useRoleChecks } from './use-role-checks';
 import { useScopeChecks } from './use-scope-checks';
-import { shouldUseWorkspaceHomeForUser } from '@/lib/home-route';
+
 
 export interface SidebarVisibility {
   // My Workspace
@@ -11,33 +11,38 @@ export interface SidebarVisibility {
   showMyInbox: boolean;
   showMyOutbox: boolean;
   showExecutiveApprovals: boolean;
-  showMyTasksAlerts: boolean;
+  showNotifications: boolean;
 
   // Offices & Registry
   showOfficeInbox: boolean;
   showRegisterCorrespondence: boolean;
-  showOfficeOutbox: boolean;
+  showRegisteredCorrespondence: boolean;
   showOfficeDispatched: boolean;
 
   // Case Management
   showMyCases: boolean;
   showOfficeCases: boolean;
   showAllCases: boolean;
+  showCreateCase: boolean;
+  showCaseTemplates: boolean;
 
   // Documents & Records
   showSearchDocuments: boolean;
   showContentCapture: boolean;
+  showFOIA: boolean;
   showFormsLibrary: boolean;
   showVerifySeal: boolean;
   showRecordsArchives: boolean;
   showPhysicalRecords: boolean;
+  showDocumentsList: boolean;
+  showNewDocument: boolean;
   showAssistantCalendar: boolean;
+
 
   // Analytics & Reports
   showAnalyticsReports: boolean;
   showExecutiveDashboard: boolean;
   showPerformanceAnalytics: boolean;
-  showReportsIntelligence: boolean;
 
   // Administration
   showAdministration: boolean;
@@ -47,9 +52,11 @@ export interface SidebarVisibility {
   showRecordsGovernance: boolean;
   showTemplates: boolean;
   showAuditCompliance: boolean;
+  showAuditForms: boolean;
   showSystemHealth: boolean;
   showExternalEntities: boolean;
   showDivisionAnalytics: boolean;
+  showCaseAnalytics: boolean;
 
   // Integration
   showIntegration: boolean;
@@ -80,25 +87,30 @@ export function useSidebarVisibility(): SidebarVisibility {
         showMyInbox: false,
         showMyOutbox: false,
         showExecutiveApprovals: false,
-        showMyTasksAlerts: false,
+        showNotifications: false,
         showOfficeInbox: false,
         showRegisterCorrespondence: false,
-        showOfficeOutbox: false,
+        showRegisteredCorrespondence: false,
         showOfficeDispatched: false,
         showMyCases: false,
         showOfficeCases: false,
         showAllCases: false,
+        showCreateCase: false,
+        showCaseTemplates: false,
         showSearchDocuments: false,
         showContentCapture: false,
+        showFOIA: false,
         showFormsLibrary: false,
         showVerifySeal: false,
         showRecordsArchives: false,
         showPhysicalRecords: false,
+        showDocumentsList: false,
+        showNewDocument: false,
+        showCaseAnalytics: false,
         showAssistantCalendar: false,
         showAnalyticsReports: false,
         showExecutiveDashboard: false,
         showPerformanceAnalytics: false,
-        showReportsIntelligence: false,
         showAdministration: false,
         showOrganizationOffices: false,
         showUsersRoles: false,
@@ -106,6 +118,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showRecordsGovernance: false,
         showTemplates: false,
         showAuditCompliance: false,
+        showAuditForms: false,
         showSystemHealth: false,
         showExternalEntities: false,
         showDivisionAnalytics: false,
@@ -129,25 +142,30 @@ export function useSidebarVisibility(): SidebarVisibility {
         showMyInbox: true,
         showMyOutbox: true,
         showExecutiveApprovals: true,
-        showMyTasksAlerts: true,
+        showNotifications: false,
         showOfficeInbox: true,
         showRegisterCorrespondence: true,
-        showOfficeOutbox: true,
+        showRegisteredCorrespondence: true,
         showOfficeDispatched: true,
         showMyCases: true,
         showOfficeCases: true,
         showAllCases: true,
+        showCreateCase: true,
+        showCaseTemplates: true,
         showSearchDocuments: true,
         showContentCapture: true,
+        showFOIA: true,
         showFormsLibrary: true,
         showVerifySeal: true,
         showRecordsArchives: true,
         showPhysicalRecords: true,
+        showDocumentsList: true,
+        showNewDocument: true,
+        showCaseAnalytics: true,
         showAssistantCalendar: true,
         showAnalyticsReports: true,
         showExecutiveDashboard: true,
         showPerformanceAnalytics: true,
-        showReportsIntelligence: true,
         showAdministration: true,
         showOrganizationOffices: true,
         showUsersRoles: true,
@@ -155,6 +173,7 @@ export function useSidebarVisibility(): SidebarVisibility {
         showRecordsGovernance: true,
         showTemplates: true,
         showAuditCompliance: true,
+        showAuditForms: true,
         showSystemHealth: true,
         showExternalEntities: true,
         showDivisionAnalytics: true,
@@ -187,11 +206,6 @@ export function useSidebarVisibility(): SidebarVisibility {
     const hasOrgUnit = Boolean(
       currentUser.division || currentUser.department || currentUser.directorate,
     );
-    const userOfficeTypes = userOfficeIds
-      .map((officeId) => offices.find((office) => office.id === officeId)?.officeType)
-      .filter((officeType): officeType is string => Boolean(officeType));
-
-    const workspaceOn = section("sidebar_show_my_workspace", true);
     const registryOn = section("sidebar_show_offices_registry", true);
     const casesOn = section("sidebar_show_case_management", true);
     const documentsOn = section("sidebar_show_documents_records", true);
@@ -199,25 +213,37 @@ export function useSidebarVisibility(): SidebarVisibility {
     const adminOn = section("sidebar_show_administration", has("can_access_administration"));
     const integrationOn = section("sidebar_show_integration", has("can_manage_integration"));
 
-    const showDashboard =
-      workspaceOn && shouldUseWorkspaceHomeForUser(currentUser, userOfficeTypes);
-    const showMyInbox = workspaceOn;
-    const showMyOutbox = workspaceOn;
-    const showMyTasksAlerts = workspaceOn;
+    const showDashboard = true;
+    const canAccessCorrespondence =
+      hasOfficeMembership ||
+      has("can_minute_correspondence") ||
+      has("can_treat_correspondence") ||
+      has("can_register_correspondence") ||
+      has("can_access_approvals") ||
+      has("can_view_all_correspondence") ||
+      has("can_view_registry") ||
+      has("can_distribute") ||
+      has("can_archive");
+    const showMyInbox = canAccessCorrespondence;
+    const showMyOutbox = canAccessCorrespondence;
+    const showNotifications = false;
     const showExecutiveApprovals =
-      workspaceOn &&
-      (has("can_access_approvals") || (roleChecks.isSecretary && hasExecutiveAssignment));
+      has("can_access_approvals") || (roleChecks.isSecretary && hasExecutiveAssignment);
 
     const showOfficeInbox = registryOn && hasOfficeMembership;
-    const showOfficeOutbox = registryOn && hasOfficeMembership;
     const showOfficeDispatched = registryOn && hasOfficeMembership;
     const showRegisterCorrespondence =
       registryOn &&
       has("can_register_correspondence") &&
       (hasOfficeMembership || has("can_view_registry") || roleChecks.isRegistry);
+    const showRegisteredCorrespondence =
+      registryOn &&
+      (has("can_view_registry") || has("can_view_all_correspondence") || has("can_register_correspondence"));
 
     const showMyCases = casesOn;
     const showOfficeCases = casesOn && hasOfficeMembership;
+    const showCreateCase = casesOn;
+    const showCaseTemplates = casesOn;
     const showAllCases =
       casesOn &&
       (scopeChecks.caseScope !== "personal" ||
@@ -226,11 +252,14 @@ export function useSidebarVisibility(): SidebarVisibility {
 
     const showSearchDocuments = documentsOn && has("can_access_document_management");
     const showContentCapture = documentsOn && has("can_access_document_management");
+    const showFOIA = documentsOn;
     const showFormsLibrary = documentsOn;
     const showVerifySeal = documentsOn;
     const showRecordsArchives = documentsOn && (hasOfficeMembership || hasOrgUnit);
     const showPhysicalRecords =
       documentsOn && (has("can_archive") || showRecordsArchives || showRegisterCorrespondence);
+    const showDocumentsList = documentsOn && has("can_access_document_management");
+    const showNewDocument = documentsOn && has("can_create_documents");
 
     const isAssistantWithCalendar = assistantAssignments.some(
       (assignment) =>
@@ -244,8 +273,8 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showAnalyticsReports = analyticsOn && has("can_access_analytics");
     const showExecutiveDashboard = analyticsOn && has("can_access_executive_dashboard");
     const showPerformanceAnalytics = showAnalyticsReports;
-    const showReportsIntelligence = analyticsOn && has("can_access_reports");
     const showDivisionAnalytics = showAnalyticsReports;
+    const showCaseAnalytics = analyticsOn && has("can_access_analytics");
 
     const showOrganizationOffices = adminOn && has("can_manage_org_structure");
     const showUsersRoles =
@@ -254,6 +283,7 @@ export function useSidebarVisibility(): SidebarVisibility {
     const showRecordsGovernance = adminOn && has("can_access_records_governance");
     const showTemplates = adminOn && has("can_access_administration");
     const showAuditCompliance = adminOn && has("can_access_audit_compliance");
+    const showAuditForms = adminOn && has("can_access_audit_compliance");
     const showSystemHealth = has("can_access_system_health");
     const showDrmPolicies = has("can_manage_drm_policies");
     const showLegacyImport = has("can_access_system_health");
@@ -286,25 +316,31 @@ export function useSidebarVisibility(): SidebarVisibility {
       showMyInbox,
       showMyOutbox,
       showExecutiveApprovals,
-      showMyTasksAlerts,
+      showNotifications,
       showOfficeInbox,
       showRegisterCorrespondence,
-      showOfficeOutbox,
+      showRegisteredCorrespondence,
       showOfficeDispatched,
       showMyCases,
       showOfficeCases,
       showAllCases,
+      showCreateCase,
+      showCaseTemplates,
       showSearchDocuments,
       showContentCapture,
+      showFOIA,
       showFormsLibrary,
       showVerifySeal,
       showRecordsArchives,
       showPhysicalRecords,
+      showDocumentsList,
+      showNewDocument,
       showAssistantCalendar,
       showAnalyticsReports,
       showExecutiveDashboard,
       showPerformanceAnalytics,
-      showReportsIntelligence,
+      showDivisionAnalytics,
+      showCaseAnalytics,
       showAdministration,
       showOrganizationOffices,
       showUsersRoles,
@@ -312,9 +348,9 @@ export function useSidebarVisibility(): SidebarVisibility {
       showRecordsGovernance,
       showTemplates,
       showAuditCompliance,
+      showAuditForms,
       showSystemHealth,
       showExternalEntities,
-      showDivisionAnalytics,
       showIntegration,
       showIntegrationHub,
       showSettings,

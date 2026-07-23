@@ -59,10 +59,13 @@ export interface CreateDocumentCommentPayload {
   parentId?: string | null;
 }
 
+export type DocumentRole = "primary" | "attachment";
+
 export interface DocumentRecord {
   id: string;
   title: string;
   description?: string;
+  role?: DocumentRole;
   documentType: DocumentType;
   referenceNumber?: string;
   status: DocumentStatus;
@@ -75,7 +78,6 @@ export interface DocumentRecord {
   permissions: DocumentPermission[];
   createdAt: string;
   updatedAt: string;
-  workspaceIds: string[];
   activeEditors: DocumentCollaborator[];
   drmRights?: {
     policy_id?: string | null;
@@ -113,6 +115,15 @@ export interface DocumentRecord {
     };
     notes?: string;
   }>;
+  correspondence_links?: Array<{
+    id: string;
+    correspondence: {
+      id: string;
+      reference_number: string;
+      subject: string;
+    };
+    notes?: string;
+  }>;
 }
 
 export interface DocumentCollection {
@@ -136,15 +147,6 @@ export interface CreateDocumentCollectionInput {
   documentIds?: string[];
   memberIds?: string[];
   isPublic?: boolean;
-}
-
-export interface DocumentWorkspace {
-  id: string;
-  name: string;
-  description?: string;
-  color: string;
-  memberIds: string[];
-  documentCount?: number;
 }
 
 export interface DocumentQueryParams {
@@ -176,7 +178,8 @@ export interface CreateDocumentInput {
   referenceNumber?: string;
   tags?: string[];
   authorId?: string;
-  workspaceIds?: string[];
+  /** DRM policy id; null clears the policy on update */
+  drmPolicyId?: string | null;
 }
 
 export interface CreateDocumentVersionInput {
@@ -249,7 +252,6 @@ export interface ExtendedDocumentQueryParams extends DocumentQueryParams {
   recentDays?: number;
   statusIn?: string[];
   documentTypeIn?: string[];
-  workspaceId?: string;
 }
 
 export interface DocumentStats {
@@ -424,6 +426,7 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
     title: typeof item.title === 'string' ? item.title : 'Untitled Document',
     description: typeof item.description === 'string' ? item.description : undefined,
     documentType: (item.document_type as DocumentType) ?? 'other',
+    role: (item.role as DocumentRole) ?? undefined,
     referenceNumber: typeof item.reference_number === 'string' ? item.reference_number : undefined,
     status: (item.status as DocumentStatus) ?? 'draft',
     sensitivity: (item.sensitivity as DocumentSensitivity) ?? 'internal',
@@ -435,11 +438,6 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
     permissions: Array.isArray(item.permissions) ? item.permissions.map(mapDocumentPermission) : [],
     createdAt: typeof item.created_at === 'string' ? item.created_at : new Date().toISOString(),
     updatedAt: typeof item.updated_at === 'string' ? item.updated_at : new Date().toISOString(),
-    workspaceIds: Array.isArray(item.workspaces)
-      ? item.workspaces.map((workspace: Record<string, unknown>) => String(workspace.id ?? workspace))
-      : Array.isArray(item.workspace_ids)
-        ? item.workspace_ids.map(String)
-        : [],
     activeEditors: Array.isArray(item.active_editors)
       ? mapActiveEditors(item.active_editors)
       : Array.isArray(item.activeEditors)
@@ -479,6 +477,17 @@ export const mapDocument = (item: Record<string, unknown>): DocumentRecord => {
           message: String(item.drm_rights.message ?? ''),
         }
       : undefined,
+    correspondence_links: Array.isArray(item.correspondence_links)
+      ? item.correspondence_links.map((link: Record<string, unknown>) => ({
+          id: String(link.id),
+          correspondence: {
+            id: String((link.correspondence as Record<string, unknown>)?.id ?? ''),
+            reference_number: String((link.correspondence as Record<string, unknown>)?.reference_number ?? ''),
+            subject: String((link.correspondence as Record<string, unknown>)?.subject ?? ''),
+          },
+          notes: typeof link.notes === 'string' ? link.notes : undefined,
+        }))
+      : undefined,
   };
 };
 
@@ -514,15 +523,4 @@ export const mapCollection = (item: Record<string, unknown>): DocumentCollection
   };
 };
 
-export const mapWorkspace = (item: Record<string, unknown>): DocumentWorkspace => ({
-  id: String(item.id as string),
-  name: typeof item.name === 'string' ? item.name : 'Workspace',
-  description: typeof item.description === 'string' ? item.description : undefined,
-  color: typeof item.color === 'string' ? item.color : '#2563eb',
-  memberIds: Array.isArray(item.member_ids)
-    ? item.member_ids.map(String)
-    : Array.isArray(item.members)
-      ? item.members.map((member: Record<string, unknown>) => String(member.id ?? member))
-      : [],
-  documentCount: typeof item.document_count === 'number' ? item.document_count : undefined,
-});
+

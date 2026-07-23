@@ -59,7 +59,7 @@ export function WorkspaceCountsPanel({
     {
       label: 'Sent today',
       value: sentToday,
-      href: '/correspondence/outbox?tab=sent',
+      href: '/correspondence/my-sent',
       icon: Send,
     },
   ];

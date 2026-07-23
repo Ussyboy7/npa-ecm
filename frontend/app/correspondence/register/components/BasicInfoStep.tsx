@@ -2,10 +2,11 @@
 
 import { memo, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, RefreshCcw, Clock, HelpCircle } from 'lucide-react';
+import { ArrowRight, RefreshCcw, Clock, HelpCircle, FileText } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -248,6 +249,17 @@ export const BasicInfoStep = memo(function BasicInfoStep({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="flex items-center space-x-2 pt-2">
+          <Checkbox
+            id="hasPhysicalCopy"
+            checked={formData.hasPhysicalCopy}
+            onCheckedChange={(checked) => onFormDataChange({ hasPhysicalCopy: checked === true })}
+          />
+          <Label htmlFor="hasPhysicalCopy" className="text-sm font-normal cursor-pointer">
+            Physical original exists — track paper copy alongside this record
+          </Label>
         </div>
 
         {flowType === 'inward' ? (

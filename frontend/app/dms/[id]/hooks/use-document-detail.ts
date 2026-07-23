@@ -6,7 +6,6 @@ import { apiFetch, hasTokens } from '@/lib/api-client';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import {
   fetchDocumentById,
-  fetchWorkspaces,
   fetchDocumentRelatedCorrespondence,
   getDocumentComments,
   getDocumentAccessLogs,
@@ -14,7 +13,6 @@ import {
   type DocumentRecord,
   type DocumentComment,
   type DocumentAccessLog,
-  type DocumentWorkspace,
   type DocumentRelatedCorrespondenceItem,
 } from '@/lib/dms-storage';
 
@@ -30,7 +28,6 @@ export function useDocumentDetail(documentId: string | undefined) {
   const [comments, setComments] = useState<DocumentComment[]>([]);
   const [accessLogs, setAccessLogs] = useState<DocumentAccessLog[]>([]);
   const [relatedCorrespondence, setRelatedCorrespondence] = useState<DocumentRelatedCorrespondenceItem[]>([]);
-  const [workspaces, setWorkspaces] = useState<DocumentWorkspace[]>([]);
 
   const refreshDocument = useCallback(async () => {
     if (!documentId) return null;
@@ -80,7 +77,7 @@ export function useDocumentDetail(documentId: string | undefined) {
           }
         }
 
-        const [cmts, logs, related, ws] = await Promise.all([
+        const [cmts, logs, related] = await Promise.all([
           getDocumentComments(documentId).catch((err: unknown) => {
             logWarn('Failed to load document comments', err);
             return [] as DocumentComment[];
@@ -93,17 +90,12 @@ export function useDocumentDetail(documentId: string | undefined) {
             logWarn('Failed to load related correspondence', err);
             return [] as DocumentRelatedCorrespondenceItem[];
           }),
-          fetchWorkspaces().catch((err: unknown) => {
-            logWarn('Failed to load workspaces', err);
-            return [] as DocumentWorkspace[];
-          }),
         ]);
         if (ignore) return;
 
         setComments(cmts);
         setAccessLogs(logs);
         setRelatedCorrespondence(related);
-        setWorkspaces(ws);
 
         void logDocumentAccess({
           documentId,
@@ -148,8 +140,6 @@ export function useDocumentDetail(documentId: string | undefined) {
     accessLogs,
     setAccessLogs,
     relatedCorrespondence,
-    workspaces,
-    setWorkspaces,
     refreshDocument,
   };
 }

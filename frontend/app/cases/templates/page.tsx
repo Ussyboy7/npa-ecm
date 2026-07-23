@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,14 @@ import {
   Loader2,
   Search,
   CheckCircle2,
+  AlertTriangle,
+  FileSearch,
+  HelpCircle,
+  Briefcase,
+  Scale,
+  ClipboardCheck,
+  FileText,
+  ArrowRight,
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
@@ -34,6 +42,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ListRowCard } from "@/components/shared/ListRowCard";
+import {
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from "@/components/shared/registry-queue-styles";
+import { cn } from "@/lib/utils";
 
 export default function CaseTemplatesPage() {
   const router = useRouter();
@@ -41,6 +61,7 @@ export default function CaseTemplatesPage() {
   const [templates, setTemplates] = useState<CaseTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [selectedTemplate, setSelectedTemplate] = useState<CaseTemplate | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -93,17 +114,56 @@ export default function CaseTemplatesPage() {
       router.push(`/cases/${newCase.id}`);
     } catch (err) {
       logError("Failed to create case", err);
-      toast.error("Failed to create case");
+      const apiMessage = (err as Record<string, unknown>).apiMessage as string;
+      toast.error(apiMessage || "Failed to create case from template. The server encountered an error.");
     } finally {
       setCreating(false);
       setShowCreateDialog(false);
     }
   };
 
-  const filteredTemplates = templates.filter((template) =>
-    template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    template.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const caseTypes = Array.from(new Set(templates.map((t) => t.case_type)));
+
+  const filteredTemplates = templates.filter((template) => {
+    const matchesSearch = template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      template.description?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = typeFilter === "all" || template.case_type === typeFilter;
+    return matchesSearch && matchesType;
+  });
+
+  const caseTypeIcon = (type: string) => {
+    switch (type) {
+      case "complaint": return AlertTriangle;
+      case "request": return FileSearch;
+      case "inquiry": return HelpCircle;
+      case "project": return Briefcase;
+      case "legal": return Scale;
+      case "audit": return ClipboardCheck;
+      default: return FileText;
+    }
+  };
+
+  const caseTypeColor = (type: string) => {
+    switch (type) {
+      case "complaint": return { bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400" };
+      case "request": return { bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400" };
+      case "inquiry": return { bg: "bg-teal-500/10", text: "text-teal-600 dark:text-teal-400" };
+      case "project": return { bg: "bg-violet-500/10", text: "text-violet-600 dark:text-violet-400" };
+      case "legal": return { bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400" };
+      case "audit": return { bg: "bg-orange-500/10", text: "text-orange-600 dark:text-orange-400" };
+      default: return { bg: "bg-slate-500/10", text: "text-slate-600 dark:text-slate-400" };
+    }
+  };
+
+  const priorityColor = (priority: string) => {
+    switch (priority) {
+      case "urgent": return "bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-800";
+      case "high": return "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-400 dark:border-orange-800";
+      case "medium": return "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-800";
+      case "low": return "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700";
+      default: return "bg-slate-100 text-slate-700 border-slate-200";
+    }
+  };
 
   if (!currentUser?.id) {
     return null;
@@ -122,71 +182,146 @@ export default function CaseTemplatesPage() {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search templates..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
+        {/* Stats Cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "Total Templates", value: templates.length, icon: FileText, bgClass: "bg-primary/10", iconClass: "text-primary" },
+            { label: "Complaint", value: templates.filter((t) => t.case_type === "complaint").length, icon: AlertTriangle, bgClass: "bg-red-500/10", iconClass: "text-red-600" },
+            { label: "Request", value: templates.filter((t) => t.case_type === "request").length, icon: FileSearch, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
+            { label: "Project", value: templates.filter((t) => t.case_type === "project").length, icon: Briefcase, bgClass: "bg-violet-500/10", iconClass: "text-violet-600" },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        {/* Templates Grid */}
+        {/* Search + filter bar */}
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="relative min-w-[200px] flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search templates..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setTypeFilter("all")}
+                className={`h-8 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  typeFilter === "all"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                All
+              </button>
+              {caseTypes.map((type) => {
+                const colors = caseTypeColor(type);
+                return (
+                  <button
+                    key={type}
+                    onClick={() => setTypeFilter(type)}
+                    className={`h-8 rounded-md px-2.5 text-xs font-medium capitalize transition-colors ${
+                      typeFilter === type
+                        ? `${colors.bg} ${colors.text}`
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {type}
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Templates List */}
         {loading ? (
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-center py-12 gap-2">
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                <span className="text-muted-foreground">Loading templates...</span>
-              </div>
-            </CardContent>
-          </Card>
-        ) : filteredTemplates.length === 0 ? (
-          <Card>
-            <CardContent className="p-6 text-center text-muted-foreground">
-              {searchQuery ? "No templates match your search" : "No templates available"}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredTemplates.map((template) => (
-              <Card key={template.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg">{template.name}</CardTitle>
-                      <CardDescription className="mt-1">
-                        {template.description || "No description"}
-                      </CardDescription>
+          <div className={correspondenceQueueListStackClass}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="p-3">
+                  <div className="flex items-start gap-3 animate-pulse">
+                    <div className="h-9 w-9 rounded-lg bg-muted" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-2/5 rounded bg-muted" />
+                      <div className="h-3 w-4/5 rounded bg-muted" />
+                      <div className="h-3 w-1/3 rounded bg-muted" />
                     </div>
-                    <Badge variant="outline">{template.case_type_display}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Default Priority:</span>
-                      <Badge variant="secondary">{template.default_priority}</Badge>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">Usage Count:</span>
-                      <span className="font-medium">{template.usage_count}</span>
-                    </div>
-                    <Button
-                      className="w-full"
-                      onClick={() => handleCreateFromTemplate(template)}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create Case
-                    </Button>
                   </div>
                 </CardContent>
               </Card>
             ))}
+          </div>
+        ) : filteredTemplates.length === 0 ? (
+          <div className="rounded-lg border border-dashed bg-card p-12 text-center">
+            <FileText className="mx-auto h-8 w-8 text-muted-foreground/40" />
+            <p className="mt-3 text-sm text-muted-foreground">
+              {searchQuery ? "No templates match your search" : "No templates available"}
+            </p>
+          </div>
+        ) : (
+          <div className={correspondenceQueueListStackClass}>
+            {filteredTemplates.map((template) => {
+              const Icon = caseTypeIcon(template.case_type);
+              const colors = caseTypeColor(template.case_type);
+              return (
+                <ListRowCard
+                  key={template.id}
+                  density="compact"
+                  leading={(
+                    <div className={cn(correspondenceQueueLeadingBoxClass, colors.bg)}>
+                      <Icon className={cn(correspondenceQueueLeadingIconClass, colors.text)} />
+                    </div>
+                  )}
+                  actions={(
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCreateFromTemplate(template); }}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Create
+                    </Button>
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-0.5">
+                    <h3 className="text-sm font-semibold text-foreground truncate">{template.name}</h3>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge
+                        variant="outline"
+                        className={cn("h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold capitalize leading-none", colors.text)}
+                      >
+                        {template.case_type_display}
+                      </Badge>
+                      <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium leading-none ${priorityColor(template.default_priority)}`}>
+                        {template.default_priority}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                    {template.description}
+                  </p>
+                  <div className="flex items-center gap-3 mt-1 text-[10px] text-muted-foreground">
+                    <span>{template.usage_count} use{template.usage_count === 1 ? "" : "s"}</span>
+                  </div>
+                </ListRowCard>
+              );
+            })}
           </div>
         )}
 

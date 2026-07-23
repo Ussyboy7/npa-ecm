@@ -18,6 +18,26 @@ let snapshot: OrganizationSnapshot = {
   users: [],
 };
 
+const CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedAt = 0;
+
+export const isOrgCacheStale = (): boolean => {
+  if (cachedAt === 0) return true;
+  return Date.now() - cachedAt > CACHE_TTL_MS;
+};
+
+export const resetOrgCache = (): void => {
+  snapshot = {
+    directorates: [],
+    divisions: [],
+    departments: [],
+    offices: [],
+    officeMemberships: [],
+    users: [],
+  };
+  cachedAt = 0;
+};
+
 export const updateOrganizationCache = (data: Partial<OrganizationSnapshot>) => {
   snapshot = {
     directorates: data.directorates ?? snapshot.directorates,
@@ -27,6 +47,7 @@ export const updateOrganizationCache = (data: Partial<OrganizationSnapshot>) => 
     officeMemberships: data.officeMemberships ?? snapshot.officeMemberships,
     users: data.users ?? snapshot.users,
   };
+  cachedAt = Date.now();
 };
 
 export const getOrganizationSnapshot = (): OrganizationSnapshot => snapshot;

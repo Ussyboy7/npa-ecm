@@ -3,6 +3,7 @@ import { ERROR_UNKNOWN } from '@/lib/constants';
 
 import { logError } from '@/lib/client-logger';
 import { useMemo, useRef, useReducer, useEffect, useCallback, useState, Suspense } from 'react';
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +11,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api-client';
-import { AlertCircle, ArrowLeft, FileText, Users, ArrowRight, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, FileText, Users, ArrowRight, FolderOpen, Loader2, RefreshCw, Edit3 } from 'lucide-react';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useCorrespondence, mapApiCorrespondence, CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
 import { useCurrentUser } from '@/hooks/use-current-user';
@@ -75,11 +76,13 @@ const CorrespondenceRegisterForm = () => {
   );
   const { fetchWithRetry } = useApiRetry();
   const roleChecks = useRoleChecks();
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const editLoadAbortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal, reset } = useAbortController();
+  const { getSignal: getEditLoadSignal, reset: resetEditLoad } = useAbortController();
+  const submittingRef = useRef(false);
   const [loadingCorrespondence, setLoadingCorrespondence] = useState(!!editId);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [dismissedBanner, setDismissedBanner] = useState(false);
   const [validateOnStepChange, _setValidateOnStepChange] = useState(true);
 
   const isSuperAdmin = roleChecks.isSuperAdmin || roleChecks.isSystemAdmin;
@@ -101,21 +104,14 @@ const CorrespondenceRegisterForm = () => {
   const loadCorrespondenceForEdit = useCallback(async () => {
     if (!editId) return;
     
-    // Cancel previous request
-    if (editLoadAbortControllerRef.current) {
-      editLoadAbortControllerRef.current.abort();
-    }
-    
-    // Create new AbortController for this request
-    const controller = new AbortController();
-    editLoadAbortControllerRef.current = controller;
+    const signal = getEditLoadSignal();
     
     try {
       setLoadingCorrespondence(true);
       setLoadError(null);
       const response = await apiFetch<Record<string, unknown>>(
         `/correspondence/items/${editId}/`,
-        { signal: controller.signal }
+        { signal }
       );
       
       if (!response) {
@@ -191,7 +187,7 @@ const CorrespondenceRegisterForm = () => {
         description: editId ? `Could not load correspondence ${editId}` : 'Please try again or contact support',
       });
     } finally {
-      if (!controller.signal.aborted) {
+      if (!signal.aborted) {
         setLoadingCorrespondence(false);
       }
     }
@@ -365,17 +361,7 @@ const CorrespondenceRegisterForm = () => {
     }
   }, [mounted, flowType, formData.owningOfficeId, formData.senderName, activeOffices]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      if (editLoadAbortControllerRef.current) {
-        editLoadAbortControllerRef.current.abort();
-      }
-    };
-  }, []);
+
 
   // Handlers - MUST be called before any early returns
   const handleFormDataChange = useCallback((updates: Partial<FormData>) => {
@@ -444,6 +430,8 @@ const CorrespondenceRegisterForm = () => {
 
   const handleSubmit = useCallback(
     async (event?: React.FormEvent<HTMLFormElement>) => {
+      if (submittingRef.current) return;
+      submittingRef.current = true;
       if (event) event.preventDefault();
 
       // Validate form
@@ -473,9 +461,7 @@ const CorrespondenceRegisterForm = () => {
 
       dispatch({ type: 'SET_SUBMITTING', payload: true });
 
-      // Create AbortController for this request
-      abortControllerRef.current = new AbortController();
-      const signal = abortControllerRef.current.signal;
+      const signal = getSignal();
 
       try {
         const formDataToSubmit = buildSubmissionFormData(formData, flowType, documentFiles, distributions);
@@ -543,7 +529,7 @@ const CorrespondenceRegisterForm = () => {
         setTimeout(() => {
           // Redirect to outbox if editing, otherwise to detail page
           if (editId) {
-            router.push(`/correspondence/outbox/${correspondenceId}`);
+            router.push(`/correspondence/my-sent/${correspondenceId}`);
           } else {
             router.push(`/correspondence/${correspondenceId}`);
           }
@@ -564,7 +550,7 @@ const CorrespondenceRegisterForm = () => {
         logError(editId ? 'Failed to update correspondence' : 'Failed to register correspondence', error);
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: false });
-        abortControllerRef.current = null;
+        submittingRef.current = false;
       }
     },
     [formData, flowType, documentFiles, distributions, fetchWithRetry, clearDraft, router, syncFromApi, editId]
@@ -628,6 +614,33 @@ const CorrespondenceRegisterForm = () => {
           </p>
         </div>
 
+        {hasDraft && !editId && !dismissedBanner && (
+          <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <Edit3 className="h-5 w-5 shrink-0" />
+            <p className="flex-1 text-sm font-medium">
+              You have unsaved drafts. Continue where you left off?
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                document.querySelector('[data-step-tabs]')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="shrink-0"
+            >
+              Continue Editing
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDismissedBanner(true)}
+              className="shrink-0 text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100"
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-3 min-w-0">
           {/* Main Form */}
           <div className="lg:col-span-2 space-y-6 min-w-0">
@@ -664,9 +677,9 @@ const CorrespondenceRegisterForm = () => {
                     The correspondence may have been deleted or you may not have permission to edit it.
                   </p>
                   <div className="flex gap-2 justify-center">
-                    <Button variant="outline" onClick={() => router.push('/correspondence/outbox')}>
+                    <Button variant="outline" onClick={() => router.push('/correspondence/my-sent')}>
                       <ArrowLeft className="h-4 w-4 mr-2" />
-                      Back to Outbox
+                      Back to Sent
                     </Button>
                     <Button variant="outline" onClick={() => {
                       setLoadError(null);
@@ -694,6 +707,7 @@ const CorrespondenceRegisterForm = () => {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <Tabs 
+                    data-step-tabs
                     value={currentStep} 
                     onValueChange={(v) => {
                       const newStep = v as typeof currentStep;

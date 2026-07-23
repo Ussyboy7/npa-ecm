@@ -51,4 +51,9 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute=15),
         "options": {"expires": 60 * 50},
     },
+    "organization-expire-acting-appointments": {
+        "task": "organization.expire_acting_appointments",
+        "schedule": crontab(minute="*/30"),
+        "options": {"expires": 60 * 25},
+    },
 }

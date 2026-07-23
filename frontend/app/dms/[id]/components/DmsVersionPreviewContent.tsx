@@ -1,26 +1,28 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { Download, FileText, Loader2, AlertCircle } from "lucide-react";
 import { useDocumentPreview } from "@/hooks/use-document-preview";
 import { sanitizeRichText } from "@/lib/sanitize-html";
+import {
+  downloadDocumentVersion,
+  fetchDocumentVersionContent,
+} from "@/lib/dms-documents";
+import { SecurePdfCanvasPreview } from "@/components/dms/SecurePdfCanvasPreview";
 import type { DocumentVersion } from "@/lib/dms-storage";
 
 interface DmsVersionPreviewContentProps {
   version: DocumentVersion;
   expanded?: boolean;
+  allowDownload?: boolean;
 }
 
 export function DmsVersionPreviewContent({
   version,
   expanded = false,
+  allowDownload = true,
 }: DmsVersionPreviewContentProps) {
-  const { pdfBlobUrl, wordHtml, isLoading, error } = useDocumentPreview({
-    fileUrl: version.fileUrl,
-    fileName: version.fileName,
-    fileType: version.fileType,
-  });
-
   const minHeight = expanded ? "min-h-[480px]" : "min-h-[200px]";
   const fileName = version.fileName || "Document";
   const isPDF = fileName.toLowerCase().endsWith(".pdf") || version.fileType === "application/pdf";
@@ -29,18 +31,80 @@ export function DmsVersionPreviewContent({
   const isWordDoc = fileName.toLowerCase().endsWith(".doc");
   const hasHtml = Boolean(version.contentHtml && version.contentHtml.trim() !== "");
   const hasFile = Boolean(version.fileUrl && version.fileUrl.trim() !== "");
+  const useDrmPdfStream = Boolean(isPDF && version.id && !hasHtml);
+  // View-only: never expose a blob URL (browser PDF chrome has its own Download).
+  const useSecureCanvas = useDrmPdfStream && !allowDownload;
+
+  const [drmPdfUrl, setDrmPdfUrl] = useState<string | null>(null);
+  const [drmPdfBytes, setDrmPdfBytes] = useState<ArrayBuffer | null>(null);
+  const [drmLoading, setDrmLoading] = useState(false);
+  const [drmError, setDrmError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!useDrmPdfStream || !version.id) {
+      setDrmPdfUrl(null);
+      setDrmPdfBytes(null);
+      setDrmLoading(false);
+      setDrmError(null);
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setDrmLoading(true);
+    setDrmError(null);
+    setDrmPdfUrl(null);
+    setDrmPdfBytes(null);
+
+    fetchDocumentVersionContent(version.id)
+      .then(async (blob) => {
+        if (cancelled) return;
+        if (useSecureCanvas) {
+          const bytes = await blob.arrayBuffer();
+          if (cancelled) return;
+          setDrmPdfBytes(bytes);
+        } else {
+          objectUrl = URL.createObjectURL(blob);
+          setDrmPdfUrl(objectUrl);
+        }
+        setDrmLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : "Failed to load PDF preview";
+        setDrmError(message);
+        setDrmLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [useDrmPdfStream, useSecureCanvas, version.id]);
+
+  const { pdfBlobUrl, wordHtml, isLoading, error } = useDocumentPreview({
+    fileUrl: hasHtml || useDrmPdfStream ? undefined : version.fileUrl,
+    fileName: version.fileName,
+    fileType: version.fileType,
+  });
+
+  const handleDownload = async () => {
+    if (!version.id || !allowDownload) return;
+    await downloadDocumentVersion(version.id, fileName);
+  };
 
   const downloadButton = (label: string) =>
-    hasFile ? (
-      <a
-        href={version.fileUrl as string}
-        target="_blank"
-        rel="noopener noreferrer"
+    version.id && allowDownload ? (
+      <button
+        type="button"
+        onClick={() => {
+          void handleDownload();
+        }}
         className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
       >
         <Download className="h-4 w-4" />
         {label}
-      </a>
+      </button>
     ) : null;
 
   if (hasHtml) {
@@ -66,7 +130,7 @@ export function DmsVersionPreviewContent({
     );
   }
 
-  if (!hasFile) {
+  if (!hasFile && !useDrmPdfStream) {
     return (
       <div className={`flex flex-col items-center justify-center p-8 text-center ${minHeight}`}>
         <FileText className="h-10 w-10 text-muted-foreground/50 mb-3" />
@@ -77,27 +141,44 @@ export function DmsVersionPreviewContent({
   }
 
   if (isPDF) {
-    if (isLoading) {
+    const loading = useDrmPdfStream ? drmLoading : isLoading;
+    const previewError = useDrmPdfStream ? drmError : error;
+    const blobUrl = useDrmPdfStream ? drmPdfUrl : pdfBlobUrl;
+
+    if (loading) {
       return (
         <div className={`flex items-center justify-center ${minHeight}`}>
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       );
     }
-    if (error) {
+    if (previewError) {
       return (
         <div className={`flex flex-col items-center justify-center gap-3 p-8 text-center ${minHeight}`}>
           <AlertCircle className="h-8 w-8 text-destructive" />
-          <p className="text-sm text-muted-foreground">{error}</p>
+          <p className="text-sm text-muted-foreground">{previewError}</p>
           {downloadButton("Download PDF")}
         </div>
       );
     }
-    if (pdfBlobUrl) {
+    if (useSecureCanvas && drmPdfBytes) {
+      return (
+        <div className={expanded ? minHeight : "h-full min-h-0 overflow-auto"}>
+          <p className="px-3 pt-2 text-[11px] text-muted-foreground">
+            View-only — download is disabled by DRM policy.
+          </p>
+          <SecurePdfCanvasPreview
+            data={drmPdfBytes}
+            minHeightClassName={expanded ? "min-h-[480px]" : "min-h-[240px]"}
+          />
+        </div>
+      );
+    }
+    if (blobUrl) {
       return (
         <div className={expanded ? minHeight : "h-full min-h-0"}>
           <iframe
-            src={pdfBlobUrl}
+            src={blobUrl}
             className={
               expanded
                 ? "w-full border-0 h-[calc(100vh-8rem)] min-h-[480px]"
@@ -149,7 +230,19 @@ export function DmsVersionPreviewContent({
     }
     if (wordHtml) {
       return (
-        <div className={`prose prose-sm dark:prose-invert max-w-none p-6 ${expanded ? `overflow-y-auto ${minHeight}` : ""}`}>
+        <div
+          className={`document-print-area bg-white ${expanded ? "overflow-y-auto" : ""} ${expanded ? minHeight : "min-h-full"}`}
+          style={{
+            fontFamily: "Verdana, Geneva, sans-serif",
+            fontSize: "12px",
+            lineHeight: "1.5",
+            color: "#000",
+            padding: expanded ? "40px" : "24px",
+            maxWidth: "800px",
+            margin: "0 auto",
+            textAlign: "left",
+          }}
+        >
           <div dangerouslySetInnerHTML={{ __html: sanitizeRichText(wordHtml) }} />
         </div>
       );

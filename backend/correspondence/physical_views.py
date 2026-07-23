@@ -4,6 +4,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.filters import SearchFilter
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -16,6 +18,8 @@ from .physical_serializers import (
     PhysicalDocumentDetailSerializer,
     CheckOutEventSerializer,
 )
+
+User = get_user_model()
 
 
 class LocationViewSet(viewsets.ModelViewSet):
@@ -33,8 +37,9 @@ class PhysicalDocumentViewSet(viewsets.ModelViewSet):
     )
     permission_classes = [IsAuthenticated]
     pagination_class = StandardPageNumberPagination
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ["status", "correspondence", "location"]
+    search_fields = ["description", "tracking_number", "barcode"]
 
     def get_serializer_class(self):
         if self.action == "retrieve":
@@ -66,8 +71,6 @@ class PhysicalDocumentViewSet(viewsets.ModelViewSet):
         purpose = request.data.get("purpose", "")
         expected_return = request.data.get("expected_return_at")
 
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
         try:
             checked_out_to = User.objects.get(id=user_id) if user_id else request.user
         except User.DoesNotExist:
@@ -113,7 +116,7 @@ class PhysicalDocumentViewSet(viewsets.ModelViewSet):
         notes = request.data.get("notes", "")
         location_id = request.data.get("location_id")
 
-        doc.status = PhysicalDocument.Status.IN_STORAGE
+        doc.status = PhysicalDocument.Status.FILED
         doc.checked_out_to = None
         doc.checked_out_at = None
         doc.expected_return_at = None
@@ -143,6 +146,45 @@ class PhysicalDocumentViewSet(viewsets.ModelViewSet):
         )
 
         serializer = self.get_serializer(doc)
+        return Response(serializer.data)
+
+
+    @action(detail=True, methods=["post"], url_path="update-status")
+    def update_status(self, request, pk=None):
+        doc = self.get_object()
+        new_status = request.data.get("status")
+        valid_statuses = [s.value for s in PhysicalDocument.Status]
+        if new_status not in valid_statuses:
+            return Response(
+                {"detail": f"Invalid status. Valid options: {', '.join(valid_statuses)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        doc.status = new_status
+        if new_status == PhysicalDocument.Status.FILED:
+            doc.checked_out_to = None
+            doc.checked_out_at = None
+            doc.expected_return_at = None
+        doc.save()
+
+        AuditService.log_activity(
+            user=request.user,
+            action="PHYSICAL_DOCUMENT_STATUS_UPDATED",
+            module="physical_tracking",
+            description=f"Updated {doc.tracking_number} status to {new_status}",
+            object_type="physicaldocument",
+            object_id=str(doc.id),
+            object_repr=doc.tracking_number,
+            request=request,
+        )
+
+        serializer = self.get_serializer(doc)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="checkout-events")
+    def checkout_events(self, request, pk=None):
+        doc = self.get_object()
+        events = doc.checkout_events.select_related("user").order_by("-created_at")[:50]
+        serializer = CheckOutEventSerializer(events, many=True)
         return Response(serializer.data)
 
 

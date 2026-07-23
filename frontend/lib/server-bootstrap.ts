@@ -19,12 +19,18 @@ async function fetchWithToken(
   token: string
 ): Promise<unknown> {
   const url = `${BASE_URL}${path}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (error) {
+    // Network errors (backend down, wrong INTERNAL_API_URL, DNS) must not crash RootLayout
+    console.warn(`[server-bootstrap] fetch failed for ${url}:`, error);
+    return null;
+  }
 }
 
 function unwrapResults(payload: unknown): unknown[] {
@@ -49,6 +55,7 @@ async function fetchAllCatalog(
       `${path}${separator}page=${page}&page_size=${pageSize}`,
       token,
     );
+    if (payload == null) break;
     const batch = unwrapResults(payload);
     all.push(...batch);
     if (
@@ -84,7 +91,8 @@ export async function fetchBootstrap(): Promise<BootstrapData | null> {
   const pathname = (await headers()).get("x-pathname") ?? "";
   if (isPublicPath(pathname)) return null;
 
-  const token = cookieStore.get("npa_ecm_access_token")?.value;
+  const token = cookieStore.get("npa_ecm_access_token")?.value
+    ?? cookieStore.get("access_token")?.value;
   if (!token) return null;
 
   try {
@@ -130,8 +138,8 @@ export async function fetchBootstrap(): Promise<BootstrapData | null> {
       assistantAssignments: delegations,
       sidebarCounts,
     };
-  } catch (err) {
-    console.warn("[server-bootstrap] Failed to fetch bootstrap data:", err);
+  } catch (error) {
+    console.warn("[server-bootstrap] bootstrap failed:", error);
     return null;
   }
 }

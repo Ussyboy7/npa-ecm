@@ -3,7 +3,6 @@
  */
 
 import { apiFetch } from './api-client';
-import { logError } from './client-logger';
 
 function unwrapList<T>(response: T[] | { results?: T[] } | unknown): T[] {
   if (Array.isArray(response)) return response;
@@ -199,13 +198,8 @@ export async function createDisposalRequest(data: {
   correspondence: string;
   reason?: string;
 }): Promise<DisposalRequest> {
-  try {
-    return await apiFetch<DisposalRequest>('/records/disposal-requests/', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  } catch (error) {
-    logError('Failed to create disposal request', error);
-    throw error;
-  }
+  return apiFetch<DisposalRequest>('/records/disposal-requests/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }

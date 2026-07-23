@@ -37,6 +37,9 @@ from dms.models import Document, DocumentPermission, DocumentVersion
 from notifications.models import Notification
 from notifications.services import NotificationService
 from organization.models import Office, OfficeMembership
+from rest_framework.exceptions import ValidationError
+
+from common.grade_utils import get_grade_level
 
 
 class CorrespondenceDocumentService:
@@ -59,24 +62,24 @@ class CorrespondenceDocumentService:
         cls,
         correspondence: Correspondence,
         attachments: List[CorrespondenceAttachment] | None = None,
-    ) -> Document:
+        document_title: str | None = None,
+    ) -> list[Document]:
         """
-        Automatically create a DMS Document from a Correspondence.
+        Create DMS Documents from a Correspondence.
+        
+        Creates:
+          - One PRIMARY Document from body_html (the memo / treatment response)
+          - One ATTACHMENT Document per uploaded file
         
         Args:
-            correspondence: The correspondence to create a document from
-            attachments: Optional list of attachments to create DocumentVersions from
+            correspondence: The correspondence to create documents from
+            attachments: Optional list of attachments
+            document_title: Optional custom title for the PRIMARY document
             
         Returns:
-            The created DMS Document
+            List of created DMS Documents (primary first, then attachments)
         """
-        # Check if document already exists
-        existing_link = CorrespondenceDocumentLink.objects.filter(
-            correspondence=correspondence
-        ).select_related('document').first()
-        
-        if existing_link:
-            return existing_link.document
+        created: list[Document] = []
 
         # Map document type
         dms_document_type = cls.DOCUMENT_TYPE_MAP.get(
@@ -100,51 +103,106 @@ class CorrespondenceDocumentService:
             if parent_link:
                 parent_document = parent_link.document
 
-        # Create DMS Document
-        document = Document.objects.create(
-            title=correspondence.subject,
-            description=correspondence.treatment_response or f"Correspondence: {correspondence.reference_number}",
-            document_type=dms_document_type,
-            reference_number=correspondence.reference_number or "",
-            status=Document.DocumentStatus.DRAFT,  # Will be published when correspondence is completed
-            sensitivity=sensitivity,
-            author=correspondence.created_by,
-            division=correspondence.division,
-            department=correspondence.department,
-            tags=correspondence.tags or [],
-            parent_document=parent_document,  # Link to parent document for threading
-        )
+        # Build a clean plain-text description from treatment_response
+        raw = correspondence.treatment_response or ""
+        clean_desc = strip_tags(raw).strip()[:500] if raw else ""
 
-        # Link correspondence to document
-        CorrespondenceDocumentLink.objects.create(
-            correspondence=correspondence,
-            document=document,
-            notes="Auto-created from correspondence registration",
-        )
+        # ---------- PRIMARY document (the memo) ----------
+        has_memo = bool(correspondence.body_html and correspondence.body_html.strip())
+        has_treatment = bool(correspondence.treatment_response and correspondence.treatment_response.strip())
+        if has_memo or has_treatment:
+            primary = Document.objects.create(
+                title=document_title or correspondence.subject,
+                description=clean_desc or f"Correspondence: {correspondence.reference_number}",
+                document_type=dms_document_type,
+                reference_number=correspondence.reference_number or "",
+                status=Document.DocumentStatus.DRAFT,
+                sensitivity=sensitivity,
+                author=correspondence.created_by,
+                division=correspondence.division,
+                department=correspondence.department,
+                tags=correspondence.tags or [],
+                parent_document=parent_document,
+                role=Document.Role.PRIMARY,
+            )
+            if has_memo:
+                cls._create_document_version_from_body(primary, correspondence)
+            elif has_treatment:
+                # Fallback: create version from plain treatment_response text
+                content_text = strip_tags(correspondence.treatment_response) if correspondence.treatment_response else ""
+                DocumentVersion.objects.create(
+                    document=primary,
+                    version_number=1,
+                    file_name=f"{correspondence.reference_number or 'correspondence'}.txt",
+                    file_type="text/plain",
+                    file_size=len(content_text.encode('utf-8')) if content_text else 0,
+                    file_url="",
+                    content_text=content_text,
+                    content_html="",
+                    summary="Correspondence treatment note",
+                    uploaded_by=correspondence.created_by,
+                    notes="Auto-created from correspondence treatment response",
+                )
+            CorrespondenceDocumentLink.objects.create(
+                correspondence=correspondence,
+                document=primary,
+                notes="Primary document (memo)",
+            )
+            created.append(primary)
 
-        # Create DocumentVersions from attachments
+            # Log activity
+            from audit.models import ActivityLog
+            AuditService.log_document_activity(
+                user=correspondence.created_by,
+                action=ActivityLog.ActionType.DOCUMENT_CREATED,
+                document=primary,
+                request=None,
+                description=f"Primary document auto-created from correspondence: {correspondence.reference_number}",
+            )
+
+        # ---------- ATTACHMENT documents (uploaded files) ----------
         if attachments is None:
             attachments = list(correspondence.attachments.all())
-        
-        if attachments:
-            # Create versions from attachments
-            for attachment in attachments:
-                cls._create_document_version_from_attachment(document, attachment)
-        elif correspondence.body_html:
-            # If no attachments but has body_html, create a version from the body
-            cls._create_document_version_from_body(document, correspondence)
 
-        # Log activity
-        from audit.models import ActivityLog
-        AuditService.log_document_activity(
-            user=correspondence.created_by,
-            action=ActivityLog.ActionType.DOCUMENT_CREATED,
-            document=document,
-            request=None,
-            description=f"Auto-created from correspondence: {correspondence.reference_number}",
-        )
+        for attachment in attachments:
+            title = attachment.file_name or f"Attachment – {correspondence.subject}"
+            # Strip extension from title for readability
+            name, _ = os.path.splitext(attachment.file_name) if attachment.file_name else ("Attachment", "")
+            title = name or f"Attachment – {correspondence.subject}"
 
-        return document
+            att_doc = Document.objects.create(
+                title=title,
+                description=clean_desc or f"Attachment for {correspondence.reference_number}",
+                document_type=dms_document_type,
+                reference_number=correspondence.reference_number or "",
+                status=Document.DocumentStatus.DRAFT,
+                sensitivity=sensitivity,
+                author=correspondence.created_by,
+                division=correspondence.division,
+                department=correspondence.department,
+                tags=correspondence.tags or [],
+                parent_document=parent_document,
+                role=Document.Role.ATTACHMENT,
+            )
+            cls._create_document_version_from_attachment(att_doc, attachment)
+            CorrespondenceDocumentLink.objects.create(
+                correspondence=correspondence,
+                document=att_doc,
+                notes=f"Attachment: {attachment.file_name}",
+            )
+            created.append(att_doc)
+
+            # Log activity
+            from audit.models import ActivityLog
+            AuditService.log_document_activity(
+                user=correspondence.created_by,
+                action=ActivityLog.ActionType.DOCUMENT_CREATED,
+                document=att_doc,
+                request=None,
+                description=f"Attachment document auto-created from correspondence: {correspondence.reference_number}",
+            )
+
+        return created
 
     @classmethod
     def _create_document_version_from_attachment(
@@ -222,29 +280,26 @@ class CorrespondenceDocumentService:
     @classmethod
     def update_document_status_on_completion(cls, correspondence: Correspondence) -> None:
         """
-        Update DMS document status to PUBLISHED when correspondence is completed.
-        
-        Args:
-            correspondence: The completed correspondence
+        Update all linked DMS documents to PUBLISHED when correspondence is completed.
         """
-        # Get linked document
-        link = CorrespondenceDocumentLink.objects.filter(
+        links = CorrespondenceDocumentLink.objects.filter(
             correspondence=correspondence
-        ).select_related('document').first()
+        ).select_related('document')
         
-        if link and link.document:
-            link.document.status = Document.DocumentStatus.PUBLISHED
-            link.document.save(update_fields=['status'])
-            
-            # Log activity
-            from audit.models import ActivityLog
-            AuditService.log_document_activity(
-                user=correspondence.current_approver or correspondence.created_by,
-                action=ActivityLog.ActionType.DOCUMENT_UPDATED,
-                document=link.document,
-                request=None,
-                description=f"Document published - correspondence {correspondence.reference_number} completed",
-            )
+        for link in links:
+            if link.document:
+                link.document.status = Document.DocumentStatus.PUBLISHED
+                link.document.save(update_fields=['status'])
+                
+                # Log activity
+                from audit.models import ActivityLog
+                AuditService.log_document_activity(
+                    user=correspondence.current_approver or correspondence.created_by,
+                    action=ActivityLog.ActionType.DOCUMENT_UPDATED,
+                    document=link.document,
+                    request=None,
+                    description=f"Document published - correspondence {correspondence.reference_number} completed",
+                )
 
     @classmethod
     def get_workflow_history_for_document(cls, document: Document) -> List:
@@ -281,40 +336,24 @@ class CorrespondenceDocumentService:
         """
         Automatically grant document access to minute recipients.
         
-        When a minute is created routing to a user/office, automatically grant
-        READ access to the linked document so recipients can access the document
-        they're minuted on.
-        
-        Args:
-            minute: The Minute instance that was just created
+        Grants READ access to ALL documents linked to the correspondence.
         """
-        
-        # Get the linked document
-        link = CorrespondenceDocumentLink.objects.filter(
+        links = CorrespondenceDocumentLink.objects.filter(
             correspondence=minute.correspondence
-        ).select_related('document').first()
+        ).select_related('document')
         
-        if not link:
-            # No document linked to this correspondence
+        if not links:
             return
         
-        document = link.document
-        
-        # Get recipients who should get access
         recipients = []
-        
-        # If minute is routed to a specific user
         if minute.to_user:
             recipients.append(minute.to_user)
-        
-        # If minute is routed to an office, grant access to all active office members
         if minute.to_office:
             from organization.models import OfficeMembership
             office_members = OfficeMembership.objects.filter(
                 office=minute.to_office,
                 is_active=True
             ).select_related('user').values_list('user', flat=True)
-            
             from accounts.models import User
             for user_id in office_members:
                 try:
@@ -324,47 +363,26 @@ class CorrespondenceDocumentService:
                 except User.DoesNotExist:
                     continue
         
-        # If no specific recipients, skip
         if not recipients:
             return
-        
-        # Grant READ access to all recipients
-        # Find or create a permission for this document
-        # Use get_or_create but handle the case where multiple permissions might exist
-        permission = DocumentPermission.objects.filter(
-            document=document,
-            access=DocumentPermission.AccessLevel.READ
-        ).first()
-        
-        if not permission:
-            # Create new permission
-            permission = DocumentPermission.objects.create(
+
+        for link in links:
+            document = link.document
+            permission = DocumentPermission.objects.filter(
                 document=document,
-                access=DocumentPermission.AccessLevel.READ,
-                note=f'Auto-granted access via minute routing (Step {minute.step_number})'
-            )
-            created = True
-        else:
-            created = False
-        
-        # Add recipients to the permission
-        added_count = 0
-        for recipient in recipients:
-            if recipient not in permission.users.all():
-                permission.users.add(recipient)
-                added_count += 1
-        
-        # Log the action
-        if created:
-            logger.info(
-                f"Auto-granted document access: {document.title} (ID: {document.id}) "
-                f"to {len(recipients)} recipient(s) via minute {minute.id}"
-            )
-        elif added_count > 0:
-            logger.info(
-                f"Updated document access: {document.title} (ID: {document.id}) "
-                f"added {added_count} recipient(s) via minute {minute.id}"
-            )
+                access=DocumentPermission.AccessLevel.READ
+            ).first()
+            
+            if not permission:
+                permission = DocumentPermission.objects.create(
+                    document=document,
+                    access=DocumentPermission.AccessLevel.READ,
+                    note=f'Auto-granted access via minute routing (Step {minute.step_number})'
+                )
+            
+            for recipient in recipients:
+                if recipient not in permission.users.all():
+                    permission.users.add(recipient)
 
 
 class CompletionPackageService:
@@ -2263,3 +2281,706 @@ class CaseService:
         # 1. Query active workflow rules for this case type/division
         # 2. Evaluate rule conditions against case state and context
         # 3. Execute matching rule actions (notifications, status updates, etc.)
+
+
+# ──────────────────────────────────────────────
+#  Shared routing helpers
+# ──────────────────────────────────────────────
+
+
+def find_office_recipient(office, preferred_user=None):
+    """
+    Find the appropriate recipient for an office.
+
+    Relaxed behaviour (per product decision):
+    - Caller may select ANY user in the hierarchy, not only strict office members.
+    - If a preferred_user is specified:
+      - If they're a member of the given office, use them.
+      - Otherwise, try to derive their primary office and use that.
+      - If that still fails, fall back to the office head / hierarchy.
+
+    Priority:
+    1. Active ActingAppointment for the office (seat succession) — acting user
+       (if preferred_user is the absent principal, redirect to acting user)
+    2. preferred_user (if resolvable to an office)
+    3. principal
+    4. acting head membership
+    5. highest grade staff
+
+    Returns: (user, is_acting) tuple or (None, False) if no one found
+    """
+    from organization.acting_services import get_active_appointment_for_office
+
+    active_appointment = get_active_appointment_for_office(office)
+    if active_appointment:
+        if preferred_user and preferred_user.id == active_appointment.principal_id:
+            return (active_appointment.acting_user, True)
+        if preferred_user and preferred_user.id == active_appointment.acting_user_id:
+            return (active_appointment.acting_user, True)
+        if preferred_user is None:
+            return (active_appointment.acting_user, True)
+        # Non-principal preferred user: allow explicit routing to that person,
+        # but still prefer acting when the preferred user is unresolved below.
+
+    if preferred_user:
+        user_membership = (
+            OfficeMembership.objects.filter(
+                office=office,
+                user=preferred_user,
+                is_active=True,
+            )
+            .order_by("-is_primary", "-starts_at")
+            .first()
+        )
+
+        if user_membership:
+            is_acting = (
+                user_membership.assignment_role == "acting"
+                or (
+                    active_appointment is not None
+                    and preferred_user.id == active_appointment.acting_user_id
+                )
+            )
+            return (preferred_user, is_acting)
+
+        primary_membership = (
+            OfficeMembership.objects.filter(
+                user=preferred_user,
+                is_active=True,
+                is_primary=True,
+            )
+            .select_related("office")
+            .first()
+        )
+
+        if primary_membership and primary_membership.office:
+            is_acting = (
+                primary_membership.assignment_role == "acting"
+                or (
+                    active_appointment is not None
+                    and preferred_user.id == active_appointment.acting_user_id
+                )
+            )
+            return (preferred_user, is_acting)
+
+    if active_appointment:
+        return (active_appointment.acting_user, True)
+
+    principal = OfficeMembership.objects.filter(
+        office=office,
+        is_active=True,
+        assignment_role='principal'
+    ).select_related('user').first()
+
+    if principal:
+        return (principal.user, False)
+
+    acting = OfficeMembership.objects.filter(
+        office=office,
+        is_active=True,
+        assignment_role='acting'
+    ).select_related('user').order_by('-starts_at').first()
+
+    if acting:
+        return (acting.user, True)
+
+    memberships = OfficeMembership.objects.filter(
+        office=office,
+        is_active=True
+    ).select_related('user').all()
+
+    if memberships.exists():
+        sorted_memberships = sorted(
+            memberships,
+            key=lambda m: get_grade_level(getattr(m.user, 'grade_level', None)),
+            reverse=True,
+        )
+        highest_grade = sorted_memberships[0]
+        return (highest_grade.user, False)
+
+    return (None, False)
+
+
+def route_back_to_origin(correspondence, parallel_group, acting_user):
+    """Route correspondence back to the origin office after a parallel merge.
+
+    Returns True if a route-back actually happened.
+    """
+    origin_office = correspondence.owning_office
+    if not origin_office and parallel_group.created_by_id:
+        _m = OfficeMembership.objects.filter(
+            user_id=parallel_group.created_by_id,
+            is_active=True,
+            is_primary=True,
+        ).select_related("office").first()
+        origin_office = _m.office if _m else None
+
+    if not origin_office:
+        return False
+
+    try:
+        _ru, _ = find_office_recipient(origin_office, None)
+    except ValidationError:
+        _ru = None
+
+    correspondence.current_office = origin_office
+    if _ru and _ru.id != acting_user.id:
+        correspondence.current_approver = _ru
+    correspondence.save(
+        update_fields=[
+            f for f in ["current_office", "current_approver", "updated_at"]
+            if (f != "current_approver" or bool(_ru))
+        ]
+    )
+    logger.info(
+        "Parallel group %s merged - routing back to origin office %s",
+        parallel_group.id,
+        origin_office.name,
+    )
+    return True
+
+
+def _find_or_create_parallel_group(minute):
+    """Look up or lazily create a ParallelRoutingGroup for the given minute."""
+    from correspondence.models import ParallelRoutingGroup as _PRG
+
+    parallel_group = _PRG.objects.filter(id=minute.parallel_group_id).first()
+    if parallel_group:
+        return parallel_group
+
+    _strategy = minute.merge_strategy or "all"
+    parallel_group = _PRG.objects.create(
+        id=minute.parallel_group_id,
+        correspondence=minute.correspondence,
+        created_by=minute.correspondence.created_by or minute.user,
+        merge_strategy=_strategy,
+    )
+    if minute.correspondence.workflow_state != "parallel":
+        minute.correspondence.workflow_state = "parallel"
+        minute.correspondence.save(update_fields=["workflow_state", "updated_at"])
+    return parallel_group
+
+
+# ──────────────────────────────────────────────
+#  MinuteRouterService — action-based routing logic
+# ──────────────────────────────────────────────
+
+
+class MinuteRouterService:
+    """Handles all routing decisions when creating a minute.
+
+    Responsibilities:
+    - Permission gating per action type
+    - Self-loop prevention
+    - Delegation detection (assistant acting on behalf of principal)
+    - Consultation response handling
+    - REJECT / FORWARD / MINUTE / APPROVE office resolution
+    - Correspondence current_office / current_approver updates
+    """
+
+    ACTION_PERMISSION_MAP = {
+        "minute": "can_minute_correspondence",
+        "forward": "can_minute_correspondence",
+        "treat": "can_treat_correspondence",
+        "approve": "can_approve",
+        "reject": "can_reject",
+    }
+
+    @classmethod
+    def check_permissions(cls, user, action_type):
+        """Gate creation by action type."""
+        from organization.permission_utils import require_permission
+
+        permission = cls.ACTION_PERMISSION_MAP.get(action_type)
+        if permission:
+            require_permission(user, permission)
+
+    @classmethod
+    def prevent_self_loop(cls, user, to_user, to_office, from_office):
+        """Raise ValidationError if user routes to themselves or their own office."""
+        if to_user and to_user.id == user.id:
+            raise ValidationError({"detail": "Cannot route correspondence to yourself."})
+        if to_office and from_office and to_office.id == from_office.id:
+            raise ValidationError({"detail": "Cannot route correspondence to the same office."})
+
+    @classmethod
+    def save_minute_with_delegation(cls, serializer, request, correspondence, from_office):
+        """Detect assistant delegation and save the minute under the principal's name.
+
+        Returns the saved Minute instance and a bool indicating whether delegation was active.
+        """
+        from correspondence.models import CorrespondenceDelegation
+
+        active_delegation = CorrespondenceDelegation.objects.filter(
+            correspondence=correspondence,
+            assistant=request.user,
+            status=CorrespondenceDelegation.Status.ACTIVE
+        ).select_related('principal').first()
+
+        if active_delegation:
+            principal = active_delegation.principal
+            minute = serializer.save(
+                user=principal,
+                from_office=from_office,
+                performed_by=request.user,
+                acted_by_assistant=True,
+                assistant_type='PA',
+                dispatched_at=timezone.now(),
+            )
+            logger.info(
+                f"Delegation action: {request.user.get_full_name()} performed minute "
+                f"on behalf of {principal.get_full_name()} for correspondence {correspondence.reference_number}"
+            )
+            return minute, True
+
+        minute = serializer.save(
+            user=request.user,
+            from_office=from_office,
+            dispatched_at=timezone.now(),
+        )
+        return minute, False
+
+    @classmethod
+    def handle_consultation_response(cls, minute, request, correspondence):
+        """Route back to the requesting branch if this is a consultation response.
+
+        Returns True if this was a consultation response (caller should short-circuit).
+        """
+        from correspondence.models import Minute as MinuteModel
+
+        consultation_received = MinuteModel.objects.filter(
+            correspondence=correspondence,
+            is_consultation=True,
+            to_user=request.user,
+            consultation_to_branch__isnull=True,
+        ).first()
+
+        if consultation_received and consultation_received.consultation_from_branch:
+            requesting_branch = consultation_received.consultation_from_branch
+            consultation_received.consultation_to_branch = minute
+            consultation_received.save(update_fields=['consultation_to_branch'])
+
+            requesting_user = requesting_branch.user
+            requesting_office_membership = OfficeMembership.objects.filter(
+                user=requesting_user,
+                is_active=True,
+                is_primary=True
+            ).select_related('office').first()
+
+            if requesting_office_membership:
+                correspondence.current_office = requesting_office_membership.office
+                correspondence.current_approver = requesting_user
+                correspondence.save(update_fields=["current_office", "current_approver", "updated_at"])
+                logger.info(
+                    f"Consultation response - routing back to requesting branch user {requesting_user} "
+                    f"at office {requesting_office_membership.office.name}"
+                )
+                return True
+        return False
+
+    @classmethod
+    def resolve_reject_target(cls, minute, correspondence):
+        """Determine where a REJECT action should route back to.
+
+        Priority: owning_office → previous minute's from_office → creator's office.
+        Sets minute.to_office and returns the recipient user (or None).
+        """
+        from correspondence.models import Minute as MinuteModel
+
+        reject_target_office = None
+        reject_target_user = None
+
+        if correspondence.owning_office:
+            reject_target_office = correspondence.owning_office
+            reject_target_user, _ = find_office_recipient(reject_target_office, None)
+            logger.info(f"REJECT: Routing back to owning office {reject_target_office.name}")
+
+        if not reject_target_office:
+            previous_minute = MinuteModel.objects.filter(
+                correspondence=correspondence,
+                timestamp__lt=minute.timestamp
+            ).exclude(
+                action_type=MinuteModel.ActionType.REJECT
+            ).order_by('-timestamp', '-step_number').first()
+
+            if previous_minute and previous_minute.from_office:
+                reject_target_office = previous_minute.from_office
+                reject_target_user, _ = find_office_recipient(reject_target_office, previous_minute.user)
+                logger.info(f"REJECT: Routing back to previous sender's office {reject_target_office.name}")
+
+        if not reject_target_office and correspondence.created_by:
+            creator_office_membership = OfficeMembership.objects.filter(
+                user=correspondence.created_by,
+                is_active=True,
+                is_primary=True
+            ).select_related('office').first()
+
+            if creator_office_membership:
+                reject_target_office = creator_office_membership.office
+                reject_target_user = correspondence.created_by
+                logger.info(f"REJECT: Routing back to creator's office {reject_target_office.name}")
+
+        if reject_target_office:
+            minute.to_office = reject_target_office
+            minute.save(update_fields=['to_office'])
+            logger.info(f"REJECT: Will route to {reject_target_office.name}")
+            return reject_target_user
+
+        return None
+
+    @classmethod
+    def resolve_forward_target(cls, minute):
+        """Resolve to_office and recipient_user for FORWARD/MINUTE/APPROVE actions.
+
+        Returns (recipient_user, is_acting) tuple.
+        """
+        recipient_user = None
+        is_acting = False
+
+        if minute.to_office:
+            preferred_user = minute.to_user if hasattr(minute, 'to_user') and minute.to_user else None
+            try:
+                recipient_user, is_acting = find_office_recipient(minute.to_office, preferred_user)
+                if is_acting and recipient_user:
+                    logger.info(f"Using acting head {recipient_user} for office {minute.to_office.name}")
+            except ValidationError:
+                logger.warning(f"Preferred user not in office {minute.to_office.name}, will use office head")
+                recipient_user, is_acting = find_office_recipient(minute.to_office, None)
+
+        elif minute.to_user and not minute.to_office:
+            user_office_membership = OfficeMembership.objects.filter(
+                user=minute.to_user,
+                is_active=True,
+                is_primary=True
+            ).select_related('office').first()
+
+            if user_office_membership:
+                minute.to_office = user_office_membership.office
+                recipient_user = minute.to_user
+                minute.save(update_fields=['to_office'])
+                logger.info(f"Derived office {user_office_membership.office.name} from user {minute.to_user}")
+
+        return recipient_user, is_acting
+
+    @classmethod
+    def update_correspondence_routing(cls, minute, correspondence, current_office,
+                                       recipient_user, is_completing_parallel_branch,
+                                       is_top_level_branch):
+        """Update correspondence.current_office and current_approver based on routing.
+
+        Returns (office_updated, approver_updated).
+        """
+        office_updated = False
+        approver_updated = False
+
+        if not is_completing_parallel_branch or minute.action_type == Minute.ActionType.REJECT:
+            if is_top_level_branch:
+                logger.info("Skipping global current_office reassignment for top-level parallel branch %s", minute.id)
+            elif minute.to_office and minute.to_office_id != (current_office.id if current_office else None):
+                correspondence.current_office = minute.to_office
+                office_updated = True
+                logger.info(f"Setting current_office to {minute.to_office.name} (ID: {minute.to_office_id})")
+            elif recipient_user and not minute.to_office:
+                user_office_membership = OfficeMembership.objects.filter(
+                    user=recipient_user,
+                    is_active=True,
+                    is_primary=True
+                ).select_related('office').first()
+
+                if user_office_membership and user_office_membership.office_id != (current_office.id if current_office else None):
+                    correspondence.current_office = user_office_membership.office
+                    office_updated = True
+                    logger.info(f"Setting current_office to {user_office_membership.office.name} from recipient user {recipient_user}")
+
+        if (not is_completing_parallel_branch or minute.action_type == Minute.ActionType.REJECT) and not is_top_level_branch and recipient_user and recipient_user.id != minute.user.id:
+            if correspondence.current_approver_id != recipient_user.id:
+                correspondence.current_approver = recipient_user
+                approver_updated = True
+                logger.info(f"Setting current_approver to {recipient_user} (ID: {recipient_user.id})")
+            from organization.acting_services import apply_acting_markers_if_needed
+
+            target_office = correspondence.current_office or minute.to_office
+            if apply_acting_markers_if_needed(correspondence, recipient_user, office=target_office):
+                approver_updated = True
+
+        return office_updated, approver_updated
+
+
+# ──────────────────────────────────────────────
+#  ParallelBranchService — parallel routing lifecycle
+# ──────────────────────────────────────────────
+
+
+class ParallelBranchService:
+    """Manages parallel routing branch detection, tracking, SLA, and completion."""
+
+    SLA_HOURS = {
+        Correspondence.Priority.URGENT: 24,
+        Correspondence.Priority.HIGH: 72,
+        Correspondence.Priority.MEDIUM: 120,
+        Correspondence.Priority.LOW: 168,
+    }
+
+    @classmethod
+    def inherit_branch_tracking(cls, minute, request, correspondence):
+        """Inherit branch_originator and parallel_group_id from parent parallel minute.
+
+        Also inherits is_parallel_branch flag for sub-routing within a branch.
+        """
+        from django.db.models import Q
+        from correspondence.models import Minute as MinuteModel
+
+        _user_office_ids = list(
+            OfficeMembership.objects.filter(user=request.user, is_active=True).values_list("office_id", flat=True)
+        )
+        parallel_minutes_to_user = MinuteModel.objects.filter(
+            correspondence=correspondence,
+            is_parallel_branch=True,
+        ).filter(
+            Q(to_user=request.user)
+            | Q(to_user__isnull=True, to_office_id__in=_user_office_ids)
+        ).select_related('correspondence', 'branch_originator')
+
+        if parallel_minutes_to_user.exists():
+            parent_parallel_minute = parallel_minutes_to_user.first()
+            if not minute.branch_originator and parent_parallel_minute.branch_originator:
+                minute.branch_originator = parent_parallel_minute.branch_originator
+                minute.save(update_fields=['branch_originator'])
+            if not minute.parallel_group_id and parent_parallel_minute.parallel_group_id:
+                minute.parallel_group_id = parent_parallel_minute.parallel_group_id
+                minute.is_parallel_branch = True
+                minute.save(update_fields=['parallel_group_id', 'is_parallel_branch'])
+
+        return parallel_minutes_to_user
+
+    @classmethod
+    def set_branch_originator(cls, minute):
+        """Set branch originator for top-level office-routed parallel branches."""
+        if (
+            minute.is_parallel_branch
+            and minute.to_office_id
+            and not minute.to_user_id
+            and not minute.branch_originator
+        ):
+            parent_is_branch = bool(
+                minute.parent_minute_id
+                and getattr(minute.parent_minute, "is_parallel_branch", False)
+            )
+            if not parent_is_branch:
+                principal = (
+                    OfficeMembership.objects.filter(
+                        office_id=minute.to_office_id,
+                        assignment_role=OfficeMembership.AssignmentRole.PRINCIPAL,
+                        is_active=True,
+                    )
+                    .select_related("user")
+                    .first()
+                )
+                if principal:
+                    minute.branch_originator = principal.user
+                    minute.save(update_fields=["branch_originator"])
+
+    @classmethod
+    def set_response_deadline(cls, minute, correspondence):
+        """Set SLA response_deadline on top-level parallel branches."""
+        if (
+            minute.is_parallel_branch
+            and not getattr(minute.parent_minute, "is_parallel_branch", False)
+            and not minute.response_deadline
+        ):
+            sla_hours = cls.SLA_HOURS.get(correspondence.priority, 120)
+            minute.response_deadline = timezone.now() + timezone.timedelta(hours=sla_hours)
+            minute.save(update_fields=["response_deadline"])
+
+    @classmethod
+    def find_branch_originator(cls, parallel_minutes_to_user):
+        """Find the branch originator (who should review when the branch completes).
+
+        Returns the user or None.
+        """
+        from correspondence.models import ParallelRoutingGroup, Minute as MinuteModel
+
+        branch_originator_to_route_to = None
+        for parallel_minute in parallel_minutes_to_user:
+            if parallel_minute.branch_originator:
+                branch_originator_to_route_to = parallel_minute.branch_originator
+                break
+
+        if not branch_originator_to_route_to:
+            parallel_group_ids = set(parallel_minutes_to_user.values_list('parallel_group_id', flat=True).distinct())
+            for group_id in parallel_group_ids:
+                if not group_id:
+                    continue
+                try:
+                    parallel_group = ParallelRoutingGroup.objects.get(id=group_id)
+                    first_recipient_minute = parallel_minutes_to_user.filter(parallel_group_id=group_id).first()
+                    if first_recipient_minute and first_recipient_minute.to_user:
+                        branch_originator_to_route_to = first_recipient_minute.to_user
+                        first_recipient_minute.branch_originator = first_recipient_minute.to_user
+                        first_recipient_minute.save(update_fields=['branch_originator'])
+                    break
+                except ParallelRoutingGroup.DoesNotExist:
+                    pass
+
+        return branch_originator_to_route_to
+
+    @classmethod
+    def get_merge_strategy(cls, minute, parallel_minutes_to_user):
+        """Resolve the effective merge strategy."""
+        from correspondence.models import ParallelRoutingGroup
+
+        merge_strategy = "all"
+        if minute.parallel_group_id:
+            try:
+                grp = ParallelRoutingGroup.objects.get(id=minute.parallel_group_id)
+                merge_strategy = grp.merge_strategy
+            except ParallelRoutingGroup.DoesNotExist:
+                pass
+        if merge_strategy == "all" and parallel_minutes_to_user.exists():
+            parent_minute = parallel_minutes_to_user.first()
+            if parent_minute.merge_strategy and parent_minute.merge_strategy != "all":
+                merge_strategy = parent_minute.merge_strategy
+        return merge_strategy
+
+    @classmethod
+    def is_top_level_branch(cls, minute):
+        """Determine if this minute is a top-level parallel branch."""
+        parent_is_parallel = bool(
+            minute.parent_minute_id
+            and getattr(minute.parent_minute, "is_parallel_branch", False)
+        )
+        return bool(
+            minute.is_parallel_branch
+            and (minute.to_office_id or minute.to_user_id)
+            and not parent_is_parallel
+        )
+
+    @classmethod
+    def route_completing_branch(cls, minute, correspondence, branch_originator_to_route_to, user):
+        """Route an 'independent' completing branch back to the branch originator.
+
+        Returns True if routing was applied.
+        """
+        if (
+            not branch_originator_to_route_to
+            or branch_originator_to_route_to.id == user.id
+        ):
+            return False
+
+        is_completing_branch = (
+            (minute.action_type == Minute.ActionType.APPROVE and not minute.to_office)
+            or (minute.action_type in [Minute.ActionType.MINUTE, Minute.ActionType.FORWARD] and not minute.to_office)
+        )
+
+        if not is_completing_branch:
+            return False
+
+        originator_office_membership = OfficeMembership.objects.filter(
+            user=branch_originator_to_route_to,
+            is_active=True,
+            is_primary=True
+        ).select_related('office').first()
+
+        if not originator_office_membership:
+            return False
+
+        correspondence.current_office = originator_office_membership.office
+        correspondence.current_approver = branch_originator_to_route_to
+        logger.info(
+            f"Parallel branch completing - routing up to branch originator {branch_originator_to_route_to} "
+            f"at office {originator_office_membership.office.name} for review"
+        )
+        return True
+
+    @classmethod
+    def check_and_handle_completion(cls, minute, correspondence, user):
+        """Evaluate parallel group completion and handle merge.
+
+        Returns (parallel_group_completed, original_sender).
+        """
+        parallel_group_completed = False
+        original_sender = None
+
+        if minute.parallel_group_id and minute.is_parallel_branch and not cls.is_top_level_branch(minute):
+            parallel_group = _find_or_create_parallel_group(minute)
+            parallel_group.check_and_update_completion()
+            correspondence.refresh_from_db()
+
+            if parallel_group.is_complete and correspondence.workflow_state == "merged":
+                if route_back_to_origin(correspondence, parallel_group, user):
+                    parallel_group_completed = True
+                    original_sender = parallel_group.created_by
+
+        return parallel_group_completed, original_sender
+
+
+# ──────────────────────────────────────────────
+#  MinuteSealService — executive approval digital seal
+# ──────────────────────────────────────────────
+
+
+class MinuteSealService:
+    """Handles digital seal generation for executive approvals."""
+
+    @classmethod
+    def apply_if_eligible(cls, minute, user, correspondence, request, action_type):
+        """Generate and apply a digital seal if the user is an MD with an active signature.
+
+        Returns the seal if applied, else None.
+        """
+        if action_type != "approve":
+            return None
+
+        from accounts.models import ExecutiveSignature
+        from accounts.services import SealGenerationService
+        from audit.models import ActivityLog
+
+        user_grade = user.grade_level
+        user_role_obj = getattr(user, 'system_role', None)
+        user_role = user_role_obj.name.upper() if user_role_obj and user_role_obj.name else ''
+        is_md = (
+            user_grade == 'MDCS'
+            or 'MANAGING DIRECTOR' in user_role
+            or user_role == 'MD'
+        )
+
+        if not is_md:
+            return None
+
+        try:
+            signature = ExecutiveSignature.objects.get(user=user, is_active=True)
+
+            seal, seal_data = SealGenerationService.generate_seal(
+                user=user,
+                correspondence=correspondence,
+                request=request,
+            )
+
+            minute.seal_applied = seal
+            minute.save(update_fields=['seal_applied'])
+
+            AuditService.log_correspondence_activity(
+                user=user,
+                action=ActivityLog.ActionType.CORRESPONDENCE_APPROVED,
+                correspondence=correspondence,
+                request=request,
+                description=f"Applied digital seal {seal.serial_number} on executive approval",
+                metadata={
+                    "seal_id": str(seal.id),
+                    "serial_number": seal.serial_number,
+                },
+            )
+
+            logger.info(
+                "Applied digital seal %s for executive approval on correspondence %s",
+                seal.serial_number,
+                correspondence.reference_number,
+            )
+            return seal
+
+        except ExecutiveSignature.DoesNotExist:
+            logger.warning("Executive %s attempted approval without digital signature", user.username)
+        except Exception as e:
+            logger.error("Failed to apply digital seal: %s", e, exc_info=True)
+
+        return None

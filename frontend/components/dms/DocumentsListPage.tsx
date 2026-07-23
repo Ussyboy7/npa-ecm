@@ -18,17 +18,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { FileText, Clock, Plus, Search, ChevronRight } from 'lucide-react';
+import { FileText, Clock, Plus, Search, ChevronRight, ChevronDown, FolderOpen, FileCheck, Users, FileInput } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { queryDocumentsExtended, type DocumentRecord } from '@/lib/dms-storage';
-import Link from 'next/link';
-import { formatDateShort } from '@/lib/correspondence-helpers';
+import { listFormDocuments, type FormDocument } from '@/lib/api/dms-forms';
+import { getSignatures } from '@/lib/api/forms';
+import { CreateFormDocumentDialog } from '@/components/dms/CreateFormDocumentDialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { formatDateShort, formatDateTime } from '@/lib/correspondence-helpers';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/shared/PaginationControls';
 import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
+import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueDateClass,
@@ -50,6 +54,7 @@ import { cn } from '@/lib/utils';
 
 function MyDocumentsForm() {
   const { currentUser } = useCurrentUser();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('my-documents');
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +70,16 @@ function MyDocumentsForm() {
   const [count, setCount] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
   const documentsRequestRef = useRef(0);
+
+  // Stats
+  const [stats, setStats] = useState({ total: 0, draft: 0, published: 0, archived: 0 });
+
+  // Pending signatures state
+  const [pendingForms, setPendingForms] = useState<FormDocument[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const pendingRequestRef = useRef(0);
+  const [createFormOpen, setCreateFormOpen] = useState(false);
 
   // Re-fetch when page gains focus (user navigates back)
   useEffect(() => {
@@ -156,6 +171,77 @@ function MyDocumentsForm() {
     loadDocuments();
   }, [activeTab, currentUser?.id, debouncedSearch, selectedStatus, selectedType, dateFrom, dateTo, ordering, pagination.page, pagination.pageSize, refreshKey]);
 
+  // Load stats
+  useEffect(() => {
+    if (!currentUser?.id || activeTab !== 'my-documents') return;
+    const loadStats = async () => {
+      const countFor = async (statusIn?: string[]) => {
+        const r = await queryDocumentsExtended({
+          authorId: currentUser.id,
+          page: 1,
+          pageSize: 1,
+          statusIn,
+          search: debouncedSearch || undefined,
+        });
+        return r.count || 0;
+      };
+      const [total, draft, published, archived] = await Promise.all([
+        countFor(),
+        countFor(['draft']),
+        countFor(['published']),
+        countFor(['archived']),
+      ]);
+      setStats({ total, draft, published, archived });
+    };
+    loadStats();
+  }, [currentUser?.id, activeTab, debouncedSearch, refreshKey]);
+
+  // Load pending signatures
+  useEffect(() => {
+    if (activeTab !== 'pending-signatures' || !currentUser?.id) return;
+
+    const requestId = ++pendingRequestRef.current;
+    const loadPending = async () => {
+      setPendingLoading(true);
+      try {
+        const sigs = await getSignatures({ status: 'pending' });
+        const workflowIds = [...new Set(sigs.map(s => s.workflow).filter(Boolean))];
+
+        if (requestId !== pendingRequestRef.current) return;
+
+        if (workflowIds.length === 0) {
+          setPendingForms([]);
+          setPendingCount(0);
+          return;
+        }
+
+        const all = await fetchAllPaginatedResults<FormDocument>(
+          (page, ps) => listFormDocuments({ page, pageSize: ps, status: 'awaiting_signatures' }),
+        );
+
+        if (requestId !== pendingRequestRef.current) return;
+
+        const matched = all.filter(f => {
+          const wid = f.signature_workflow?.id;
+          return wid && workflowIds.includes(wid);
+        });
+        setPendingForms(matched);
+        setPendingCount(matched.length);
+      } catch (err: unknown) {
+        if (requestId === pendingRequestRef.current) {
+          logError('Failed to load pending signatures', err);
+          setPendingForms([]);
+          setPendingCount(0);
+        }
+      } finally {
+        if (requestId === pendingRequestRef.current) setPendingLoading(false);
+      }
+    };
+    loadPending();
+  }, [activeTab, currentUser?.id, refreshKey]);
+
+  const pendingPagination = usePagination({ initialPage: 1, totalCount: pendingCount });
+
   return (
     <>
       <div className="container mx-auto p-6 space-y-6">
@@ -170,11 +256,23 @@ function MyDocumentsForm() {
             <p className="text-sm text-muted-foreground mt-0.5">Create, manage, and find your documents</p>
           </div>
           <div className="flex gap-2">
-            <Button size="sm" asChild>
-              <Link href="/dms/new">
-                <Plus className="h-4 w-4 mr-2" /> Create Document
-              </Link>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-2" /> Create
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => router.push('/dms/new')}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Document
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCreateFormOpen(true)}>
+                  <FileInput className="mr-2 h-4 w-4" />
+                  Form
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <ContextualHelp
               title="Managing your documents"
               description="Switch scope, then narrow the list with search and filters."
@@ -183,7 +281,31 @@ function MyDocumentsForm() {
           </div>
         </div>
 
-        {/* Workspace Guide */}
+        {/* Stats */}
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 w-full">
+              {[
+                { label: 'Total documents', value: stats.total, icon: FileText, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+                { label: 'Draft', value: stats.draft, icon: FileText, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+                { label: 'Published', value: stats.published, icon: FileCheck, bgClass: 'bg-green-500/10', iconClass: 'text-green-600 dark:text-green-400' },
+                { label: 'Archived', value: stats.archived, icon: Clock, bgClass: 'bg-gray-500/10', iconClass: 'text-gray-600 dark:text-gray-400' },
+              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+                <Card key={label}>
+                  <CardContent className="flex items-center gap-4 p-4">
+                    <div className={cn('flex h-10 w-10 items-center justify-center rounded-lg', bgClass)}>
+                      <Icon className={cn('h-5 w-5', iconClass)} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className="text-xl font-bold">{value}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Search + filters bar */}
         <Card>
@@ -216,6 +338,7 @@ function MyDocumentsForm() {
                 <SelectItem value="circular">Circular</SelectItem>
                 <SelectItem value="policy">Policy</SelectItem>
                 <SelectItem value="report">Report</SelectItem>
+                <SelectItem value="form">Form</SelectItem>
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
@@ -247,12 +370,23 @@ function MyDocumentsForm() {
           <TabsList>
             <TabsTrigger value="my-documents" className="text-xs px-2.5 py-1">My Documents</TabsTrigger>
             <TabsTrigger value="shared" className="text-xs px-2.5 py-1">Shared with Me</TabsTrigger>
+            <TabsTrigger value="pending-signatures" className="text-xs px-2.5 py-1 relative">
+              Pending Signatures
+              {pendingCount > 0 && (
+                <Badge variant="destructive" className="ml-1.5 h-4 min-w-[1rem] px-1 text-[10px]">
+                  {pendingCount}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="my-documents" className="mt-6">
             <DocumentList documents={documents} loading={loading} error={error} emptyMessage="You haven't created any documents yet." />
           </TabsContent>
           <TabsContent value="shared" className="mt-6">
             <DocumentList documents={documents} loading={loading} error={error} emptyMessage="No documents have been shared with you." />
+          </TabsContent>
+          <TabsContent value="pending-signatures" className="mt-6">
+            <PendingSignaturesList forms={pendingForms} loading={pendingLoading} />
           </TabsContent>
         </Tabs>
 
@@ -269,6 +403,15 @@ function MyDocumentsForm() {
         </>
       )}
       </div>
+
+      <CreateFormDocumentDialog
+        open={createFormOpen}
+        onOpenChange={setCreateFormOpen}
+        onComplete={(documentId) => {
+          setCreateFormOpen(false);
+          router.push(`/forms/${documentId}`);
+        }}
+      />
     </>
   );
 }
@@ -292,6 +435,64 @@ function DocumentList({
   error: string | null;
   emptyMessage: string;
 }) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Group documents by correspondence
+  const groups = useMemo(() => {
+    const grouped: Array<{
+      key: string;
+      label: string;
+      documents: DocumentRecord[];
+    }> = [];
+    const seen = new Set<string>();
+
+    for (const doc of documents) {
+      const links = doc.correspondence_links;
+      if (links && links.length > 0) {
+        const corr = links[0].correspondence;
+        const key = `corr-${corr.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          grouped.push({
+            key,
+            label: `${corr.reference_number || 'Correspondence'}`,
+            documents: [],
+          });
+        }
+        const group = grouped.find((g) => g.key === key)!;
+        group.documents.push(doc);
+      } else {
+        const key = `singleton-${doc.id}`;
+        seen.add(key);
+        grouped.push({
+          key,
+          label: '',
+          documents: [doc],
+        });
+      }
+    }
+
+    // Sort each group: primary first, then alphabetically
+    for (const group of grouped) {
+      group.documents.sort((a, b) => {
+        if (a.role === 'primary' && b.role !== 'primary') return -1;
+        if (a.role !== 'primary' && b.role === 'primary') return 1;
+        return a.title.localeCompare(b.title);
+      });
+    }
+
+    return grouped;
+  }, [documents]);
+
   if (loading) {
     return <LoadingState message="Loading documents…" />;
   }
@@ -312,14 +513,45 @@ function DocumentList({
 
   return (
     <div className={correspondenceQueueListStackClass}>
-      {documents.map((doc) => (
-        <DocumentCard key={doc.id} doc={doc} />
-      ))}
+      {groups.map((group) => {
+        const isGroup = group.documents.length > 1 || (group.documents.length === 1 && group.documents[0].role);
+        const isExpanded = expandedGroups.has(group.key);
+
+        return (
+          <div key={group.key}>
+            {group.label && (
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.key)}
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors rounded-md mb-1"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                <FolderOpen className="h-3.5 w-3.5" />
+                {group.label}
+                <Badge variant="outline" className="text-[10px] h-4 px-1 ml-auto">
+                  {group.documents.length}
+                </Badge>
+              </button>
+            )}
+            {(!group.label || isExpanded) && (
+              <div className={group.label ? 'ml-4 space-y-1' : 'space-y-1'}>
+                {group.documents.map((doc) => (
+                  <DocumentCard key={doc.id} doc={doc} showRoleBadge={group.documents.length > 1} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function DocumentCard({ doc }: { doc: DocumentRecord }) {
+function DocumentCard({ doc, showRoleBadge }: { doc: DocumentRecord; showRoleBadge?: boolean }) {
   const router = useRouter();
 
   const getStatusColor = (status: string) => {
@@ -403,6 +635,14 @@ function DocumentCard({ doc }: { doc: DocumentRecord }) {
           >
             {doc.status}
           </Badge>
+          {doc.role && showRoleBadge && (
+            <Badge
+              variant={doc.role === 'primary' ? 'default' : 'secondary'}
+              className={cn(correspondenceQueueBadgeClass)}
+            >
+              {doc.role === 'primary' ? 'Primary' : 'Attach'}
+            </Badge>
+          )}
         </div>
         <span className={correspondenceQueueDateClass}>
           {formatDateShort(doc.updatedAt || doc.createdAt)}
@@ -410,7 +650,7 @@ function DocumentCard({ doc }: { doc: DocumentRecord }) {
       </div>
       {doc.description ? (
         <p className="mt-1 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
-          {doc.description}
+          {doc.description.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()}
         </p>
       ) : null}
       <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
@@ -426,5 +666,64 @@ function DocumentCard({ doc }: { doc: DocumentRecord }) {
         </span>
       </div>
     </ListRowCard>
+  );
+}
+
+function PendingSignaturesList({ forms, loading }: { forms: FormDocument[]; loading: boolean }) {
+  const router = useRouter();
+
+  if (loading) {
+    return <LoadingState message="Loading pending signatures…" />;
+  }
+
+  if (forms.length === 0) {
+    return (
+      <EmptyState
+        icon={<FileCheck className={registryQueueEmptyIconClass} />}
+        title="All caught up"
+        message="No documents require your signature."
+        variant="dashed"
+      />
+    );
+  }
+
+  return (
+    <div className={correspondenceQueueListStackClass}>
+      {forms.map((form) => (
+        <ListRowCard
+          key={form.id}
+          density="compact"
+          href={`/forms/${form.document.id}`}
+          leading={(
+            <div className={cn(correspondenceQueueLeadingBoxClass, 'bg-amber-500/10')}>
+              <FileCheck className={cn(correspondenceQueueLeadingIconClass, 'text-amber-600 dark:text-amber-400')} />
+            </div>
+          )}
+        >
+          <h4 className={correspondenceQueueSubjectClass}>{form.document.title}</h4>
+          <p className="text-xs text-muted-foreground truncate mt-0.5">
+            {form.template?.name || 'Form'}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+            <Badge variant="default" className={cn(correspondenceQueueBadgeClass, 'bg-amber-500')}>
+              Action required
+            </Badge>
+            <span className={correspondenceQueueDateClass}>
+              Updated {formatDateTime(form.updated_at)}
+            </span>
+          </div>
+          <div className={cn(correspondenceQueueMetaRowClass, 'mt-1')}>
+            <span className={correspondenceQueueMetaItemClass}>
+              <FileText className={correspondenceQueueMetaIconClass} />
+              <span className="truncate">Form ID: {form.id.slice(0, 8).toUpperCase()}</span>
+            </span>
+            <span className={correspondenceQueueMetaItemClass}>
+              <Users className={correspondenceQueueMetaIconClass} />
+              <span>Awaiting your signature</span>
+            </span>
+          </div>
+        </ListRowCard>
+      ))}
+    </div>
   );
 }

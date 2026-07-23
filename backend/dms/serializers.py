@@ -18,25 +18,9 @@ from .models import (
     DocumentRightsPolicy,
     DocumentTemplate,
     DocumentVersion,
-    DocumentWorkspace,
     FormDocument,
 )
 
-
-class DocumentWorkspaceSerializer(serializers.ModelSerializer):
-    member_ids = serializers.PrimaryKeyRelatedField(
-        source="members",
-        many=True,
-        queryset=DocumentWorkspace._meta.get_field("members").remote_field.model.objects.all(),
-        required=False,
-    )
-    slug = serializers.SlugField(required=False, allow_blank=True, allow_null=True)
-    document_count = serializers.IntegerField(read_only=True)
-
-    class Meta:
-        model = DocumentWorkspace
-        fields = ["id", "slug", "name", "description", "color", "member_ids", "created_at", "updated_at", "document_count"]
-        read_only_fields = ["id", "created_at", "updated_at", "document_count"]
 
 
 class DocumentVersionSerializer(serializers.ModelSerializer):
@@ -197,15 +181,9 @@ class DocumentSerializer(serializers.ModelSerializer):
     department = serializers.PrimaryKeyRelatedField(queryset=Department.objects.all(), allow_null=True, required=False)
     versions = DocumentVersionSerializer(many=True, read_only=True)
     permissions = DocumentPermissionSerializer(many=True, read_only=True)
-    workspace_ids = serializers.PrimaryKeyRelatedField(
-        source="workspaces",
-        many=True,
-        queryset=DocumentWorkspace.objects.all(),
-        required=False,
-        allow_empty=True,
-    )
     form_document = serializers.SerializerMethodField()
     case_links = serializers.SerializerMethodField()
+    correspondence_links = serializers.SerializerMethodField()
     parent_document = serializers.SerializerMethodField()
     parent_document_id = serializers.PrimaryKeyRelatedField(
         source="parent_document",
@@ -229,6 +207,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "description",
+            "role",
             "document_type",
             "reference_number",
             "status",
@@ -238,11 +217,11 @@ class DocumentSerializer(serializers.ModelSerializer):
             "division",
             "department",
             "tags",
-            "workspace_ids",
             "versions",
             "permissions",
             "form_document",
             "case_links",
+            "correspondence_links",
             "parent_document",
             "parent_document_id",
             "drm_policy_id",
@@ -308,6 +287,23 @@ class DocumentSerializer(serializers.ModelSerializer):
                     "caseNumber": link.case.case_number,
                     "title": link.case.title,
                     "status": link.case.status,
+                },
+                "notes": link.notes or "",
+            }
+            for link in links
+        ]
+
+    def get_correspondence_links(self, obj):
+        """Get correspondence links for this document."""
+        from correspondence.models import CorrespondenceDocumentLink
+        links = CorrespondenceDocumentLink.objects.filter(document=obj).select_related('correspondence')
+        return [
+            {
+                "id": str(link.id),
+                "correspondence": {
+                    "id": str(link.correspondence.id),
+                    "reference_number": link.correspondence.reference_number,
+                    "subject": link.correspondence.subject,
                 },
                 "notes": link.notes or "",
             }

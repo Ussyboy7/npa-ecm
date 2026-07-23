@@ -49,6 +49,43 @@ except ImportError:
 from PIL import Image
 
 
+AUTH_ACCESS_COOKIE_NAME = "npa_ecm_access_token"
+AUTH_REFRESH_COOKIE_NAME = "npa_ecm_refresh_token"
+
+
+def _use_secure_auth_cookies(request=None) -> bool:
+    frontend_base_url = getattr(settings, "FRONTEND_BASE_URL", "")
+    frontend_uses_https = str(frontend_base_url).startswith("https://")
+    return bool((request and request.is_secure()) or frontend_uses_https)
+
+
+def set_auth_token_cookies(response, access_token: str, refresh_token: str, request=None) -> None:
+    access_lifetime = settings.SIMPLE_JWT.get("ACCESS_TOKEN_LIFETIME")
+    refresh_lifetime = settings.SIMPLE_JWT.get("REFRESH_TOKEN_LIFETIME")
+    access_max_age = int(access_lifetime.total_seconds()) if access_lifetime else 3600
+    refresh_max_age = int(refresh_lifetime.total_seconds()) if refresh_lifetime else 7 * 24 * 60 * 60
+    secure = _use_secure_auth_cookies(request)
+
+    response.set_cookie(
+        AUTH_ACCESS_COOKIE_NAME,
+        access_token,
+        max_age=access_max_age,
+        secure=secure,
+        httponly=False,
+        samesite="Lax",
+        path="/",
+    )
+    response.set_cookie(
+        AUTH_REFRESH_COOKIE_NAME,
+        refresh_token,
+        max_age=refresh_max_age,
+        secure=secure,
+        httponly=False,
+        samesite="Lax",
+        path="/",
+    )
+
+
 def process_signature_background(image_bytes, threshold=200, fade_width=30):
     """Remove white/light background from a signature image.
 
@@ -614,6 +651,7 @@ class AuthTokenObtainPairView(TokenObtainPairView):
             {"refresh": str(refresh), "access": str(access)},
             status=status.HTTP_200_OK,
         )
+        set_auth_token_cookies(response, str(access), str(refresh), request=request)
 
         if user:
             try:
@@ -695,7 +733,9 @@ class AuthImpersonateView(APIView):
             "user": UserSerializer(target).data,
             "expires_in": expires_in,
         }
-        return Response(data, status=status.HTTP_200_OK)
+        response = Response(data, status=status.HTTP_200_OK)
+        set_auth_token_cookies(response, data["access"], data["refresh"], request=request)
+        return response
 
 
 class ChangePasswordView(APIView):

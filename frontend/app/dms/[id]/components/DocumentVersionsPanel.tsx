@@ -31,6 +31,7 @@ import type { User } from "@/lib/npa-structure";
 import type { CaptureJob } from "@/lib/capture-storage";
 import { DocumentVersionDiffDialog } from "@/components/dms/DocumentVersionDiffDialog";
 import { fetchDocumentVersionDiff, type DocumentVersionDiff } from "@/lib/dms-version-diff";
+import { canDownloadDocument, downloadDocumentVersion } from "@/lib/dms-documents";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
 
@@ -48,6 +49,7 @@ interface DocumentVersionsPanelProps {
   onReplaceVersion: (versionId: string) => void;
   onVersionOCR: (versionId: string) => void;
   onCancelOCR: (versionId: string) => void;
+  onDownloadVersion?: (version: DocumentVersion) => void;
 }
 
 export function DocumentVersionsPanel({
@@ -62,10 +64,29 @@ export function DocumentVersionsPanel({
   onReplaceVersion,
   onVersionOCR,
   onCancelOCR,
+  onDownloadVersion,
 }: DocumentVersionsPanelProps) {
   const [diffOpen, setDiffOpen] = useState(false);
   const [diffLoading, setDiffLoading] = useState(false);
   const [versionDiff, setVersionDiff] = useState<DocumentVersionDiff | null>(null);
+  const canDownload = canDownloadDocument(document);
+
+  const handleDownload = async (version: DocumentVersion) => {
+    if (!canDownload) {
+      toast.error(document.drmRights?.message || "Download blocked by DRM policy");
+      return;
+    }
+    if (onDownloadVersion) {
+      onDownloadVersion(version);
+      return;
+    }
+    try {
+      await downloadDocumentVersion(version.id, version.fileName || "document");
+    } catch (error) {
+      logError("Failed to download version", error);
+      toast.error(error instanceof Error ? error.message : "Download failed");
+    }
+  };
 
   const handleCompareWithPrevious = async (newer: DocumentVersion, older: DocumentVersion) => {
     setDiffOpen(true);
@@ -197,13 +218,11 @@ export function DocumentVersionsPanel({
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
+                        disabled={!canDownload}
+                        title={canDownload ? "Download" : "Download blocked by DRM"}
+                        aria-label={canDownload ? "Download" : "Download blocked by DRM"}
                         onClick={() => {
-                          const link = window.document.createElement("a");
-                          link.href = version.fileUrl as string;
-                          link.download = version.fileName;
-                          window.document.body.appendChild(link);
-                          link.click();
-                          window.document.body.removeChild(link);
+                          void handleDownload(version);
                         }}
                       >
                         <Download className="h-3.5 w-3.5" />

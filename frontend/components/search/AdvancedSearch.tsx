@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,8 +59,8 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
   const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
   const [page, setPage] = useState(0);
   const pageSize = 50;
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const suggestionsAbortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal } = useAbortController();
+  const { getSignal: getSuggestionsSignal, reset: resetSuggestions } = useAbortController();
 
   const debouncedQuery = useDebounce(query, 300);
 
@@ -79,23 +80,15 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
   ]);
 
   useEffect(() => {
-    // Cancel previous suggestions request
-    if (suggestionsAbortControllerRef.current) {
-      suggestionsAbortControllerRef.current.abort();
-    }
-
     if (debouncedQuery && debouncedQuery.length > 2) {
-      const controller = new AbortController();
-      suggestionsAbortControllerRef.current = controller;
-      loadSuggestions(debouncedQuery, controller.signal);
+      const signal = getSuggestionsSignal();
+      loadSuggestions(debouncedQuery, signal);
     } else {
       setSuggestions([]);
     }
 
     return () => {
-      if (suggestionsAbortControllerRef.current) {
-        suggestionsAbortControllerRef.current.abort();
-      }
+      resetSuggestions();
     };
   }, [debouncedQuery]);
 
@@ -184,13 +177,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       return;
     }
 
-    // Cancel previous search request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const signal = getSignal();
 
     try {
       setLoading(true);
@@ -209,9 +196,9 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
             : 'keyword',
       };
 
-      const result: SearchResponse = await search(searchRequest, controller.signal);
+      const result: SearchResponse = await search(searchRequest, signal);
       
-      if (controller.signal.aborted) {
+      if (signal.aborted) {
         return;
       }
       
@@ -249,23 +236,13 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
       logError('Search failed', error);
       toast.error('Search failed. Please try again.');
     } finally {
-      if (!controller.signal.aborted) {
+      if (!signal.aborted) {
         setLoading(false);
       }
     }
   };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      if (suggestionsAbortControllerRef.current) {
-        suggestionsAbortControllerRef.current.abort();
-      }
-    };
-  }, []);
+
 
   const handleSaveSearch = async () => {
     if (!query.trim() && Object.keys(filters || {}).length === 0) {

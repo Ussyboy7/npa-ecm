@@ -21,12 +21,15 @@ export function Providers({
 }: ProvidersProps) {
   const sidebarSeededRef = useRef(false);
   const userSeededRef = useRef(false);
+
+  // Populate module caches during render (before children mount) without notifying
+  // listeners — notify would call setState in already-mounted subscribers.
   if (initialSidebarCounts && !sidebarSeededRef.current) {
-    seedSidebarCounts(initialSidebarCounts);
+    seedSidebarCounts(initialSidebarCounts, { notify: false });
     sidebarSeededRef.current = true;
   }
   if (initialOrgData?.user && !userSeededRef.current) {
-    seedCurrentUserFromApi(initialOrgData.user);
+    seedCurrentUserFromApi(initialOrgData.user, { notify: false });
     userSeededRef.current = true;
   }
 

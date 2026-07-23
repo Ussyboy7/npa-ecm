@@ -2,11 +2,11 @@
 
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import { TemplateManager } from './TemplateManager';
+import { QuillEditor } from '@/components/dms/QuillEditor';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import type { DocumentTemplate } from '@/lib/template-storage';
 
@@ -167,13 +167,21 @@ export const MemoCompositionSection = ({
           </Card>
         )}
 
-        <Textarea
-          id="content"
-          placeholder="Compose your response memo here... Use placeholders like {correspondent}, {subject}, {reference}, {date}, {sender}"
+        <QuillEditor
           value={memoContent}
-          onChange={(e) => onMemoContentChange(e.target.value)}
-          className={`min-h-[200px] resize-none ${memoContentError ? 'border-destructive' : ''}`}
-          maxLength={MODAL_CONSTANTS.MEMO_CONTENT.MAX}
+          onChange={(html) => onMemoContentChange(html)}
+          placeholder="Compose your response memo here..."
+          className={`max-h-[400px] overflow-y-auto ${memoContentError ? 'border-destructive' : ''}`}
+          showCharacterCount={false}
+          showHeader={false}
+          showPageSetup={false}
+          showPageNumbers={false}
+          tokens={[
+            { label: 'Correspondent', value: '{correspondent}' },
+            { label: 'Subject', value: '{subject}' },
+            { label: 'Reference', value: '{reference}' },
+            { label: 'Date', value: '{date}' },
+          ]}
         />
         {memoContentError && (
           <p className="text-xs text-destructive">{memoContentError}</p>

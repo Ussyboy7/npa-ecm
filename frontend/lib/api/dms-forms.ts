@@ -1,7 +1,7 @@
 /** API client for form documents in DMS. */
 
 import { apiFetch } from "@/lib/api-client";
-import { logError, logInfo } from '@/lib/client-logger';
+import { logInfo } from '@/lib/client-logger';
 import type { PaginatedResponse } from '@/lib/pagination-utils';
 import { DEFAULT_LIST_PAGE_SIZE } from '@/lib/pagination-constants';
 import { unwrapResults } from '@/lib/type-utils';
@@ -146,23 +146,18 @@ export async function getFormDocuments(params?: FormDocumentListParams): Promise
 
 export async function getFormDocument(id: string): Promise<FormDocument> {
   logInfo('[dms-forms] Fetching form document:', id);
-  try {
-    const result = await apiFetch<FormDocument>(`${BASE_PATH}/form-documents/${id}/`);
-    logInfo('[dms-forms] Received form document:', { 
-      id: result.id, 
-      hasTemplate: !!result.template,
-      hasDocument: !!result.document,
-      hasVersions: !!result.document?.versions,
-      versionsType: typeof result.document?.versions,
-      versionsIsArray: Array.isArray(result.document?.versions),
-      versionsLength: result.document?.versions?.length,
-      documentStructure: result.document ? Object.keys(result.document) : null,
-    });
-    return result;
-  } catch (error: unknown) {
-    logError('[dms-forms] Error fetching form document:', error);
-    throw error;
-  }
+  const result = await apiFetch<FormDocument>(`${BASE_PATH}/form-documents/${id}/`);
+  logInfo('[dms-forms] Received form document:', { 
+    id: result.id, 
+    hasTemplate: !!result.template,
+    hasDocument: !!result.document,
+    hasVersions: !!result.document?.versions,
+    versionsType: typeof result.document?.versions,
+    versionsIsArray: Array.isArray(result.document?.versions),
+    versionsLength: result.document?.versions?.length,
+    documentStructure: result.document ? Object.keys(result.document) : null,
+  });
+  return result;
 }
 
 export async function createFormDocument(

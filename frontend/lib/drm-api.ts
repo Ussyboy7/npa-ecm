@@ -50,3 +50,9 @@ export async function updateDrmPolicy(
     body: JSON.stringify(data),
   });
 }
+
+export async function deleteDrmPolicy(id: string): Promise<void> {
+  await apiFetch<void>(`/dms/drm-policies/${id}/`, {
+    method: "DELETE",
+  });
+}

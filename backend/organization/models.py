@@ -180,6 +180,15 @@ class Office(UUIDModel, TimeStampedModel):
         help_text="Controls whether this office can route items to peer offices at the same tier.",
     )
 
+    location = models.ForeignKey(
+        "correspondence.Location",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="offices",
+        help_text="Physical location of this office.",
+    )
+
     # =============================================================================
     # DELEGATION FIELDS - COMMENTED OUT FOR FUTURE USE
     # Uncomment these fields and run migrations to enable office delegation
@@ -302,3 +311,169 @@ class ExecutiveCalendarEvent(UUIDModel, TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.executive})"
+
+
+class ActingAppointment(UUIDModel, TimeStampedModel):
+    """Temporary office-seat succession: acting user holds the principal's seat."""
+
+    office = models.ForeignKey(
+        Office,
+        on_delete=models.CASCADE,
+        related_name="acting_appointments",
+    )
+    principal = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="acting_appointments_as_principal",
+        help_text="The office holder who is absent.",
+    )
+    acting_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="acting_appointments_as_acting",
+        help_text="The officer temporarily holding the seat.",
+    )
+    starts_at = models.DateTimeField(db_index=True)
+    ends_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    reason = models.TextField(blank=True)
+    appointed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acting_appointments_created",
+    )
+    ended_at = models.DateTimeField(null=True, blank=True)
+    ended_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acting_appointments_ended",
+    )
+    membership = models.ForeignKey(
+        OfficeMembership,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acting_appointments",
+        help_text="OfficeMembership(role=acting) created or activated for this appointment.",
+    )
+    items_transferred = models.PositiveIntegerField(default=0)
+    items_reclaimed = models.PositiveIntegerField(default=0)
+    transfer_applied = models.BooleanField(
+        default=False,
+        help_text="True after the initial seat-item transfer has been attempted.",
+    )
+
+    class Meta:
+        ordering = ["-starts_at"]
+        indexes = [
+            models.Index(fields=["office", "is_active"]),
+            models.Index(fields=["acting_user", "is_active"]),
+            models.Index(fields=["principal", "is_active"]),
+            models.Index(fields=["ends_at", "is_active"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["office"],
+                condition=models.Q(is_active=True),
+                name="unique_active_acting_appointment_per_office",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Acting: {self.acting_user} for {self.principal} @ {self.office}"
+
+    def is_currently_effective(self) -> bool:
+        from django.utils import timezone
+
+        if not self.is_active:
+            return False
+        now = timezone.now()
+        if self.starts_at and self.starts_at > now:
+            return False
+        if self.ends_at and self.ends_at < now:
+            return False
+        return True
+
+
+class ActingRequest(UUIDModel, TimeStampedModel):
+    """Plan C: office member asks Super Admin to appoint an acting officer."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        FULFILLED = "fulfilled", "Fulfilled"
+        DISMISSED = "dismissed", "Dismissed"
+
+    office = models.ForeignKey(
+        Office,
+        on_delete=models.CASCADE,
+        related_name="acting_requests",
+    )
+    principal = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="acting_requests_as_principal",
+        help_text="The absent seat holder this request is about.",
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="acting_requests_submitted",
+    )
+    suggested_acting_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acting_requests_suggested",
+        help_text="Optional suggested successor.",
+    )
+    reason = models.TextField(
+        help_text="Why an acting appointment is needed (unreachable, leave, backlog, etc.).",
+    )
+    pending_item_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Open seat items counted when the request was filed.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="acting_requests_resolved",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_note = models.TextField(blank=True)
+    appointment = models.ForeignKey(
+        ActingAppointment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="source_requests",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["office", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["office"],
+                condition=models.Q(status="pending"),
+                name="unique_pending_acting_request_per_office",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"ActingRequest {self.office} by {self.requested_by} ({self.status})"

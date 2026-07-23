@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { KeyboardEvent, ReactNode } from "react";
+import React, { type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import {
   correspondenceQueueInnerGapClass,
@@ -22,14 +22,14 @@ type ListRowCardProps = {
   actions?: ReactNode;
   /** Full-width row below main content (e.g. outbox actions). */
   footer?: ReactNode;
-  /** Tighter padding and gaps (office correspondence lists). */
+  /** Padding and spacing. Defaults to compact (p-3) for consistent queue views. */
   density?: "default" | "compact";
 };
 
 /**
  * List row with optional full-row link, link + footer, or link + trailing actions.
  */
-export function ListRowCard({
+const ListRowCard_ = ({
   leading,
   children,
   href,
@@ -37,8 +37,8 @@ export function ListRowCard({
   actions,
   footer,
   className,
-  density = "default",
-}: ListRowCardProps) {
+  density = "compact",
+}: ListRowCardProps) => {
   const shell =
     density === "compact"
       ? correspondenceQueueShellClass
@@ -145,3 +145,5 @@ export function ListRowCard({
     </div>
   );
 }
+
+export const ListRowCard = React.memo(ListRowCard_);

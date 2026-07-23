@@ -149,6 +149,7 @@ export const getNotifications = async (params?: {
   notificationType?: string;
   priority?: string;
   module?: string;
+  search?: string;
 }): Promise<Notification[]> => {
   if (!hasTokens()) return [];
 
@@ -158,6 +159,7 @@ export const getNotifications = async (params?: {
   if (params?.notificationType) queryParams.append('notification_type', params.notificationType);
   if (params?.priority) queryParams.append('priority', params.priority);
   if (params?.module) queryParams.append('module', params.module);
+  if (params?.search) queryParams.append('search', params.search);
 
   const query = queryParams.toString();
   // The router registers 'notifications' under api/notifications/, and the viewset is also 'notifications'
@@ -165,25 +167,20 @@ export const getNotifications = async (params?: {
   // apiFetch adds /api/v1/ prefix, so we need /notifications/notifications/
   const url = `/notifications/notifications/${query ? `?${query}` : ''}`;
   logInfo('[notifications-storage] Fetching notifications from:', url);
-  try {
-    const response = await apiFetch<ApiNotificationListResponse | ApiNotification[]>(url);
-    
-    // Handle paginated response (DRF returns {count, next, previous, results: [...]})
-    let apiNotifications: ApiNotification[] = [];
-    if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
-      apiNotifications = (response as ApiNotificationListResponse).results;
-      logInfo('[notifications-storage] Received paginated response:', { count: apiNotifications.length });
-    } else if (Array.isArray(response)) {
-      apiNotifications = response;
-      logInfo('[notifications-storage] Received array response:', { count: apiNotifications.length });
-    }
-    
-    // Map snake_case API response to camelCase frontend model
-    return apiNotifications.map(mapApiNotification);
-  } catch (error: unknown) {
-    logError('[notifications-storage] Error fetching notifications:', error);
-    throw error;
+  const response = await apiFetch<ApiNotificationListResponse | ApiNotification[]>(url);
+  
+  // Handle paginated response (DRF returns {count, next, previous, results: [...]})
+  let apiNotifications: ApiNotification[] = [];
+  if (response && typeof response === 'object' && 'results' in response && Array.isArray(response.results)) {
+    apiNotifications = (response as ApiNotificationListResponse).results;
+    logInfo('[notifications-storage] Received paginated response:', { count: apiNotifications.length });
+  } else if (Array.isArray(response)) {
+    apiNotifications = response;
+    logInfo('[notifications-storage] Received array response:', { count: apiNotifications.length });
   }
+  
+  // Map snake_case API response to camelCase frontend model
+  return apiNotifications.map(mapApiNotification);
 };
 
 // Singleton state for unread count - only one fetch should happen regardless of how many components call it

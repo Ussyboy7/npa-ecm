@@ -27,7 +27,8 @@ export type FormData = {
   recipientEmail: string;
   recipientPhone: string;
   remarks: string;
-  correspondenceSource?: 'internal' | 'external'; // Explicit override for source type
+  correspondenceSource?: 'internal' | 'external';
+  hasPhysicalCopy: boolean;
 };
 
 export type FlowType = 'inward' | 'outward';
@@ -116,6 +117,7 @@ export const createInitialFormData = (owningOfficeId?: string): FormData => {
     recipientPhone: '',
     remarks: '',
     correspondenceSource: undefined,
+    hasPhysicalCopy: false,
   };
 };
 
@@ -316,6 +318,7 @@ export const buildSubmissionFormData = (
   form.append('direction', direction);
   form.append('owning_office', formData.owningOfficeId);
   form.append('current_office', formData.owningOfficeId);
+  form.append('has_physical_copy', formData.hasPhysicalCopy ? 'true' : 'false');
   documentFiles.forEach((file) => form.append('attachments', file));
 
   return form;

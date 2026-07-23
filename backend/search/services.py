@@ -37,7 +37,7 @@ class SearchService:
         if not user or not user.is_authenticated or user.is_superuser:
             return queryset.distinct()
 
-        visibility_filter = Q(author=user) | Q(workspaces__members=user) | Q(permissions__users=user)
+        visibility_filter = Q(author=user) | Q(permissions__users=user)
 
         if user.division_id:
             visibility_filter |= Q(permissions__divisions=user.division_id)

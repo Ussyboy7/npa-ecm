@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search } from "lucide-react";
+import { Search, FileText, Clock, CheckCircle2 } from "lucide-react";
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
@@ -21,27 +20,21 @@ import { PRIORITY_VALUES } from "@/lib/constants";
 import type { Correspondence } from "@/lib/npa-structure";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
+import { ErrorState } from "@/components/shared/ErrorState";
+import { cn } from "@/lib/utils";
+import {
+  registryQueueStatCardContentClass,
+  registryQueueStatIconBoxClass,
+  registryQueueStatIconClass,
+  registryQueueStatLabelClass,
+  registryQueueStatValueClass,
+} from "@/components/shared/registry-queue-styles";
 
 const statusFilters = ["all", "pending", "in-progress", "completed", "archived"] as const;
 const priorityFilters = ["all", ...PRIORITY_VALUES] as const;
 
 type StatusFilter = (typeof statusFilters)[number];
 type PriorityFilter = (typeof priorityFilters)[number];
-
-const getPriorityBadgeVariant = (priority: Correspondence["priority"]) => {
-  switch (priority) {
-    case "urgent":
-      return "destructive" as const;
-    case "high":
-      return "default" as const;
-    case "medium":
-      return "secondary" as const;
-    case "low":
-      return "outline" as const;
-    default:
-      return "secondary" as const;
-  }
-};
 
 const getStatusBadgeClass = (status: Correspondence["status"]) => {
   switch (status) {
@@ -61,10 +54,12 @@ const getStatusBadgeClass = (status: Correspondence["status"]) => {
 const RegisteredCorrespondencePage = () => {
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
   const permissions = useUserPermissions(currentUser ?? undefined);
-  const {users, divisions, departments: _departments } = useOrganization();
+  const { users, divisions } = useOrganization();
   const [items, setItems] = useState<Correspondence[]>([]);
   const [loading, setLoading] = useState(true);
   const [count, setCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -103,6 +98,7 @@ const RegisteredCorrespondencePage = () => {
   // Server-side data loading
   const loadItems = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const sortPrefix = sortOrder === 'desc' ? '-' : '';
       const params = new URLSearchParams({
@@ -121,10 +117,10 @@ const RegisteredCorrespondencePage = () => {
         params.append('priority', priorityFilter);
       }
       if (dateFrom) {
-        params.append('date_from', dateFrom);
+        params.append('received_date_from', dateFrom);
       }
       if (dateTo) {
-        params.append('date_to', dateTo);
+        params.append('received_date_to', dateTo);
       }
       
       const response = await apiFetch<Record<string, unknown>>(
@@ -134,6 +130,7 @@ const RegisteredCorrespondencePage = () => {
       setItems(results.map(mapApiCorrespondence));
       setCount(typeof response.count === 'number' ? response.count : results.length);
     } catch (_error) {
+      setError("Failed to load registered correspondence. Please try again.");
       setItems([]);
       setCount(0);
     } finally {
@@ -193,15 +190,46 @@ const RegisteredCorrespondencePage = () => {
           </div>
         </div>
 
+        {/* Stats Cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "Total Registered", value: count, icon: FileText, bgClass: "bg-primary/10", iconClass: "text-primary" },
+            { label: "Pending", value: items.filter((c) => c.status === "pending").length, icon: Clock, bgClass: "bg-amber-500/10", iconClass: "text-amber-600" },
+            { label: "In Progress", value: items.filter((c) => c.status === "in-progress").length, icon: FileText, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
+            { label: "Completed", value: items.filter((c) => c.status === "completed").length, icon: CheckCircle2, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
+            ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label} aria-label={label}>
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
         {/* Filter bar */}
         <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
+          <CardContent className="p-2">
+            <div className="md:hidden mb-2">
+              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(!filtersOpen)} className="w-full justify-between">
+                <span className="flex items-center"><Search className="h-3.5 w-3.5 mr-2" /> Filters</span>
+                {hasActiveFilters && <span className="bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">{hasActiveFilters ? 1 : 0}</span>}
+              </Button>
+            </div>
+            <div className={`flex-wrap items-center gap-2${filtersOpen ? ' flex' : ' hidden'} md:flex`}>
             <div className="relative min-w-[200px] flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search by subject, reference..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
+              <Input placeholder="Search by subject, reference..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" aria-label="Search correspondence" />
             </div>
             <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value as StatusFilter); pagination.goToFirstPage(); }}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by status"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>
                 {statusFilters.map((status) => (
                   <SelectItem key={status} value={status}>
@@ -211,7 +239,7 @@ const RegisteredCorrespondencePage = () => {
               </SelectContent>
             </Select>
             <Select value={priorityFilter} onValueChange={(value) => { setPriorityFilter(value as PriorityFilter); pagination.goToFirstPage(); }}>
-              <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Priority" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by priority"><SelectValue placeholder="Priority" /></SelectTrigger>
               <SelectContent>
                 {priorityFilters.map((priority) => (
                   <SelectItem key={priority} value={priority}>
@@ -222,7 +250,7 @@ const RegisteredCorrespondencePage = () => {
             </Select>
             <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
             <Select value={`${sortBy}-${sortOrder}`} onValueChange={(value) => { const [by, order] = value.split('-'); setSortBy(by); setSortOrder(order as 'asc' | 'desc'); }}>
-              <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Sort by"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="received_date-desc">Newest First</SelectItem>
                 <SelectItem value="received_date-asc">Oldest First</SelectItem>
@@ -230,93 +258,149 @@ const RegisteredCorrespondencePage = () => {
               </SelectContent>
             </Select>
             {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Table card */}
-        <Card>
-          <CardContent className="p-0">
-            <ScrollArea className="max-h-[70vh]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-12">#</TableHead>
-                    <TableHead>Reference</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Division</TableHead>
-                    <TableHead>Registered By</TableHead>
-                    <TableHead>Current Owner</TableHead>
-                    <TableHead>Received</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Priority</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                        Loading registered correspondence...
-                      </TableCell>
-                    </TableRow>
-                  ) : paginatedCorrespondence.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
-                        No correspondence matches the current filters.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    paginatedCorrespondence.map((item, index) => {
+        {/* Table */}
+        <div aria-live="polite">
+          {error ? (
+            <ErrorState message={error} variant="inline" />
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <div className="hidden md:block overflow-x-auto">
+                  <Table className="table-fixed" role="table" aria-label="Registered correspondence">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[16%]">Reference</TableHead>
+                        <TableHead className="w-[30%]">Subject</TableHead>
+                        <TableHead className="w-[17%] hidden lg:table-cell">Division</TableHead>
+                        <TableHead className="w-[15%] hidden lg:table-cell">Registered By</TableHead>
+                        <TableHead className="w-[12%]">Status</TableHead>
+                        <TableHead className="w-[10%]">Received</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                          Loading registered correspondence...
+                        </TableCell>
+                      </TableRow>
+                    ) : paginatedCorrespondence.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                          No correspondence matches the current filters.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paginatedCorrespondence.map((item) => {
+                        const division = item.divisionId
+                          ? divisions.find((d) => d.id === item.divisionId)
+                          : undefined;
+                        const registeredBy = item.createdById
+                          ? users.find((user) => user.id === item.createdById)
+                          : undefined;
+                        const registeredByName = registeredBy?.name ?? item.createdByName ?? '—';
+
+                        const urgency = item.priority === 'urgent' || item.priority === 'high';
+
+                        return (
+                          <TableRow key={item.id as string} className="hover:bg-muted/50">
+                            <TableCell className="truncate">
+                              <div className="flex items-center gap-1.5">
+                                <Link
+                                  href={`/correspondence/${item.id as string}`}
+                                  className="text-primary hover:underline font-medium text-sm truncate"
+                                >
+                                  {item.referenceNumber}
+                                </Link>
+                                {urgency && (
+                                  <span className="h-2 w-2 rounded-full bg-destructive shrink-0" title={`${item.priority} priority`} />
+                                )}
+                                {item.hasPhysicalCopy && (
+                                  <FileText className="h-3 w-3 text-muted-foreground shrink-0" aria-label="Physical copy exists" />
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <p className="truncate text-sm" title={item.subject}>
+                                {item.subject}
+                              </p>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                              <span className="truncate block" title={division?.name}>{division?.name ?? "—"}</span>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell text-sm text-muted-foreground truncate">
+                              {registeredByName}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={cn("font-normal", getStatusBadgeClass(item.status as 'pending' | 'in-progress' | 'completed' | 'archived'))}>
+                                {(item.status as string).replace("-", " ")}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {formatDateShort(item.receivedDate)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+                </div>
+
+                {/* Mobile cards */}
+                {!loading && paginatedCorrespondence.length > 0 && (
+                  <div className="md:hidden divide-y divide-border">
+                    {paginatedCorrespondence.map((item) => {
                       const division = item.divisionId
-                        ? divisions.find((divisionItem) => divisionItem.id === item.divisionId)
+                        ? divisions.find((d) => d.id === item.divisionId)
                         : undefined;
                       const registeredBy = item.createdById
                         ? users.find((user) => user.id === item.createdById)
                         : undefined;
-                      const currentOwner = item.currentApproverId
-                        ? users.find((user) => user.id === item.currentApproverId)
-                        : undefined;
                       const registeredByName = registeredBy?.name ?? item.createdByName ?? '—';
-                      const currentOwnerName = currentOwner?.name ?? item.currentApproverName ?? '—';
+                      const urgency = item.priority === 'urgent' || item.priority === 'high';
 
                       return (
-                        <TableRow key={item.id as string} className="hover:bg-muted/50">
-                          <TableCell className="font-medium">{(pagination.page - 1) * pagination.pageSize + index + 1}</TableCell>
-                          <TableCell>
-                            <Link
-                              href={`/correspondence/${item.id as string}`}
-                              className="text-primary hover:underline font-medium"
-                            >
-                              {item.referenceNumber}
-                            </Link>
-                          </TableCell>
-                          <TableCell className="max-w-xs">
-                            <p className="truncate" title={item.subject}>
-                              {item.subject}
-                            </p>
-                          </TableCell>
-                          <TableCell>{division?.name ?? "—"}</TableCell>
-                          <TableCell>{registeredByName}</TableCell>
-                          <TableCell>{currentOwnerName}</TableCell>
-                          <TableCell>{formatDateShort(item.receivedDate)}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={getStatusBadgeClass(item.status as 'pending' | 'in-progress' | 'completed' | 'archived')}>
+                        <Link
+                          key={item.id as string}
+                          href={`/correspondence/${item.id as string}`}
+                          className="block p-3 hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="text-primary font-medium text-sm truncate">
+                                {item.referenceNumber}
+                              </span>
+                              {urgency && (
+                                <span className="h-2 w-2 rounded-full bg-destructive shrink-0" />
+                              )}
+                              {item.hasPhysicalCopy && (
+                                <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                              )}
+                            </div>
+                            <Badge variant="outline" className={cn("font-normal shrink-0", getStatusBadgeClass(item.status as 'pending' | 'in-progress' | 'completed' | 'archived'))}>
                               {(item.status as string).replace("-", " ")}
                             </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={getPriorityBadgeVariant(item.priority)}>
-                              {item.priority.toUpperCase()}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
+                          </div>
+                          <p className="text-sm mt-1 line-clamp-2">{item.subject}</p>
+                          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-xs text-muted-foreground">
+                            {division?.name && <span>{division.name}</span>}
+                            <span>By: {registeredByName}</span>
+                            <span>{formatDateShort(item.receivedDate)}</span>
+                          </div>
+                        </Link>
                       );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          </CardContent>
-        </Card>
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         {/* Pagination */}
         {count > 0 && (

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useCallback, useReducer, useRef, useState } from 'react';
-import { logError, logWarn, logInfo } from '@/lib/client-logger';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useCallback, useReducer, useRef, useState, Suspense } from 'react';
+import { logError, logWarn } from '@/lib/client-logger';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { CorrespondenceProvider, useCorrespondence } from '@/contexts/CorrespondenceContext';
 import { toast } from 'sonner';
 import { MessageSquare, CheckCircle, Send } from 'lucide-react';
@@ -21,13 +21,18 @@ import { CorrespondenceWorkspace, CorrespondenceMobileTabBar } from './component
 import { CorrespondenceDetailModals } from './components/CorrespondenceDetailModals';
 import { MobileStickyActionBar } from './components/MobileStickyActionBar';
 import { CompactStatusStrip } from '@/components/correspondence/CompactStatusStrip';
+import { PhysicalCopySection } from './components/PhysicalCopySection';
 import { useCorrespondenceDetailData } from './hooks/use-correspondence-detail-data';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { useAccessExplanation } from '@/hooks/use-access-explanation';
+import { isCorrespondenceClosed } from '@/lib/correspondence-helpers';
 
 const CorrespondenceDetailContent = () => {
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
   const { getCorrespondenceById, refreshData, syncFromApi, mergeMinutes } = useCorrespondence();
   const cachedCorrespondence = id ? getCorrespondenceById(id) : null;
@@ -38,6 +43,35 @@ const CorrespondenceDetailContent = () => {
     officeMemberships,
     refreshOrganizationData,
   } = useOrganization();
+
+  // Current user's own office memberships, fetched directly (filtered by user)
+  // to avoid depending on the paginated global officeMemberships list, which
+  // may not include this user's office on the first page.
+  const [myOfficeIds, setMyOfficeIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (!activeUser?.id) {
+      setMyOfficeIds([]);
+      return;
+    }
+    let cancelled = false;
+    apiFetch<{ results: Array<{ office?: string | null; is_active?: boolean }> }>(
+      `/organization/office-memberships/?user=${activeUser.id}`
+    )
+      .then((res) => {
+        if (cancelled) return;
+        setMyOfficeIds(
+          (res.results ?? [])
+            .filter((m) => m.is_active !== false && m.office)
+            .map((m) => m.office as string)
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setMyOfficeIds([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeUser?.id]);
   
   // Use reducer for related state groups
   const [state, dispatch] = useReducer(correspondenceDetailReducer, initialState);
@@ -51,52 +85,41 @@ const CorrespondenceDetailContent = () => {
     linkedDocuments,
     selectedMinute,
     selectedAttachmentIndex,
+    selectedLinkedDocumentId,
     mobileActiveTab,
     attachmentSearchQuery,
     selectedLinkedDocVersion,
     isPreviewFullscreen,
+    documentFocus,
   } = state;
   
-  // Helper functions for dispatch
-  const setMinutes = useCallback((minutes: Minute[]) => {
-    dispatch({ type: 'SET_MINUTES', payload: minutes });
-  }, []);
-  const setRemoteCorrespondence = useCallback((corr: Correspondence | null) => {
-    dispatch({ type: 'SET_REMOTE_CORRESPONDENCE', payload: corr });
-  }, []);
-  const setDetailLoading = useCallback((loading: boolean) => {
-    dispatch({ type: 'SET_DETAIL_LOADING', payload: loading });
-  }, []);
-  const setBackendDelegation = useCallback((del: typeof backendDelegation) => {
-    dispatch({ type: 'SET_BACKEND_DELEGATION', payload: del });
-  }, []);
-  const setLinkedDocuments = useCallback((docs: DocumentRecord[]) => {
-    dispatch({ type: 'SET_LINKED_DOCUMENTS', payload: docs });
-  }, []);
-  const setSelectedMinute = useCallback((minute: Minute | null) => {
-    dispatch({ type: 'SET_SELECTED_MINUTE', payload: minute });
-  }, []);
-  const setSelectedAttachmentIndex = useCallback((index: number | null) => {
-    dispatch({ type: 'SET_SELECTED_ATTACHMENT_INDEX', payload: index });
-  }, []);
-  const setMobileActiveTab = useCallback((tab: 'document' | 'routing') => {
-    dispatch({ type: 'SET_MOBILE_ACTIVE_TAB', payload: tab });
-  }, []);
-  const setAttachmentSearchQuery = useCallback((query: string) => {
-    dispatch({ type: 'SET_ATTACHMENT_SEARCH_QUERY', payload: query });
-  }, []);
-  const _setSelectedLinkedDocVersion = useCallback((version: Record<string, number>) => {
-    dispatch({ type: 'SET_SELECTED_LINKED_DOC_VERSION', payload: version });
-  }, []);
-  const setIsPreviewFullscreen = useCallback((fullscreen: boolean) => {
-    dispatch({ type: 'SET_PREVIEW_FULLSCREEN', payload: fullscreen });
-  }, []);
+  // Stable dispatch helpers (useMemo avoids individual useCallback sprawl)
+  const [setMinutes, setRemoteCorrespondence, setDetailLoading, setBackendDelegation,
+    setLinkedDocuments, setSelectedMinute, setSelectedAttachmentIndex,
+    setSelectedLinkedDocumentId,
+    setMobileActiveTab, setAttachmentSearchQuery, setSelectedLinkedDocVersion,
+    setIsPreviewFullscreen, setDocumentFocus] = useMemo(() => [
+    (m: Minute[]) => dispatch({ type: 'SET_MINUTES', payload: m }),
+    (c: Correspondence | null) => dispatch({ type: 'SET_REMOTE_CORRESPONDENCE', payload: c }),
+    (l: boolean) => dispatch({ type: 'SET_DETAIL_LOADING', payload: l }),
+    (d: typeof backendDelegation) => dispatch({ type: 'SET_BACKEND_DELEGATION', payload: d }),
+    (d: DocumentRecord[]) => dispatch({ type: 'SET_LINKED_DOCUMENTS', payload: d }),
+    (m: Minute | null) => dispatch({ type: 'SET_SELECTED_MINUTE', payload: m }),
+    (i: number | null) => dispatch({ type: 'SET_SELECTED_ATTACHMENT_INDEX', payload: i }),
+    (id: string | null) => dispatch({ type: 'SET_SELECTED_LINKED_DOCUMENT_ID', payload: id }),
+    (t: 'document' | 'routing') => dispatch({ type: 'SET_MOBILE_ACTIVE_TAB', payload: t }),
+    (q: string) => dispatch({ type: 'SET_ATTACHMENT_SEARCH_QUERY', payload: q }),
+    (v: Record<string, number>) => dispatch({ type: 'SET_SELECTED_LINKED_DOC_VERSION', payload: v }),
+    (f: boolean) => dispatch({ type: 'SET_PREVIEW_FULLSCREEN', payload: f }),
+    (f: boolean) => dispatch({ type: 'SET_DOCUMENT_FOCUS', payload: f }),
+  ], [dispatch]);
   
   const searchParams = useSearchParams();
   const statusParam = searchParams?.get('status');
   const initialStatus = statusParam ?? cachedCorrespondence?.status;
   const correspondence = remoteCorrespondence ?? cachedCorrespondence;
-  const isCompleted = (remoteCorrespondence?.status ?? initialStatus) === 'completed';
+  // Closed = completed / dispatched / acknowledged / archived / withdrawn (not only status===completed)
+  const isCompleted = isCorrespondenceClosed(remoteCorrespondence?.status ?? initialStatus ?? correspondence?.status);
 
   // Use modal state hook to consolidate modal states
   const { openModal, closeModal, isOpen } = useModalState();
@@ -110,7 +133,7 @@ const CorrespondenceDetailContent = () => {
     accessDenied,
   );
 
-  const { refreshMinutes } = useCorrespondenceDetailData({
+  const { refreshMinutes, refreshDetail } = useCorrespondenceDetailData({
     id,
     correspondence,
     minutes,
@@ -128,11 +151,16 @@ const CorrespondenceDetailContent = () => {
     setAccessDenied,
   });
 
-  const handleModalRefreshClose = () => {
+  const handleModalRefreshClose = (result?: { createdResponseId?: string }) => {
     closeModal();
+    if (result?.createdResponseId) {
+      window.location.href = `/correspondence/${result.createdResponseId}`;
+      return;
+    }
     refreshData();
     void syncFromApi();
     void refreshMinutes();
+    void refreshDetail();
   };
 
   const handleDelegate = async (
@@ -142,10 +170,7 @@ const CorrespondenceDetailContent = () => {
     duration?: string,
     expiresAt?: string
   ) => {
-    logInfo('[page.tsx handleDelegate] Called with', { assistantId, assistantType, notes, duration, expiresAt });
-    
     if (!correspondence || !activeUser) {
-      logWarn('[page.tsx handleDelegate] Early return - no correspondence or activeUser');
       return;
     }
 
@@ -157,8 +182,6 @@ const CorrespondenceDetailContent = () => {
       notes: notes || '',
       expires_at: expiresAt || null,
     };
-    
-    logInfo('[page.tsx handleDelegate] Sending API request with payload', payload);
 
     try {
       // Create the correspondence delegation (sends notification to assistant)
@@ -170,8 +193,6 @@ const CorrespondenceDetailContent = () => {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      
-      logInfo('[page.tsx handleDelegate] API response', response);
 
       // Backend handles delegation storage - no need for localStorage
       await refreshOrganizationData();
@@ -202,13 +223,6 @@ const CorrespondenceDetailContent = () => {
   };
 
   // Check if user is executive (MDCS, EDCS, GMCS, AGMCS)
-  // Must be called before early returns to maintain hook order
-  const isExecutive = useMemo(() => {
-    if (!activeUser?.gradeLevel) return false;
-    const executiveGrades = ['MDCS', 'EDCS', 'GMCS', 'AGMCS'];
-    return executiveGrades.includes(activeUser.gradeLevel);
-  }, [activeUser?.gradeLevel]);
-
   // Check if current user received a minute with "For Information" purpose
   // Must be called before early returns to maintain hook order
   const isForInformationOnly = useMemo(() => {
@@ -223,6 +237,44 @@ const CorrespondenceDetailContent = () => {
     );
     return !!infoMinute || userMinutes.some((m) => m.purpose === 'information');
   }, [minutes, activeUser?.id, correspondence]);
+
+  // Find the distribution entry that targets the current user, either directly
+  // (user-type) or via an office they belong to (office-type CC).
+  const userDistribution = useMemo(() => {
+    if (!activeUser?.id || !correspondence?.distribution) return undefined;
+    const userOfficeIds = [
+      ...myOfficeIds,
+      ...officeMemberships
+        .filter((m) => m.userId === activeUser.id && m.isActive)
+        .map((m) => m.officeId),
+    ];
+    const found = correspondence.distribution.find(
+      (d) =>
+        (d.type === 'user' && d.userId === activeUser.id) ||
+        (d.type === 'office' && d.officeId != null && userOfficeIds.includes(d.officeId))
+    );
+    return found;
+  }, [correspondence?.distribution, activeUser?.id, myOfficeIds, officeMemberships]);
+
+  // A CC recipient has a distribution entry targeting them (user- or office-type).
+  const isCCRecipient = !!userDistribution;
+  const distributionPurpose: 'action' | 'information' = (userDistribution?.purpose as 'action' | 'information') ?? 'action';
+  const distributionEntryId = userDistribution?.id ?? null;
+
+  const handleMarkRead = useCallback(async () => {
+    if (!distributionEntryId) return;
+    try {
+      await apiFetch(`/correspondence/distribution/${distributionEntryId}/mark_read/`, {
+        method: 'POST',
+      });
+      toast.success('Marked as read');
+      await syncFromApi();
+      await refreshDetail();
+    } catch (err) {
+      logError('Failed to mark as read', err);
+      toast.error('Failed to mark as read');
+    }
+  }, [distributionEntryId, syncFromApi, refreshDetail]);
 
   const previewContext = useMemo(
     () => getCorrespondencePreviewContext(correspondence, linkedDocuments, selectedAttachmentIndex, isCompleted),
@@ -306,7 +358,11 @@ const CorrespondenceDetailContent = () => {
   
   // If routing was reverted after recall, enable actions for the sender
   const actionsDisabled = detailLoading || (isCompleted && !isRecalledAndReverted) || isForInformationOnly;
-  const turnRestrictedDisabled = actionsDisabled || (!isCurrentUserTurn && !isRecalledAndReverted);
+  // CC recipients (user has a distribution entry) can always act on what was
+  // circulated to them — the "your turn" restriction only applies to routed users.
+  const turnRestrictedDisabled = isCCRecipient
+    ? false
+    : (actionsDisabled || (!isCurrentUserTurn && !isRecalledAndReverted));
   const completionPackageUrl = previewContext.completionPackageUrl;
   const completionGeneratedAt =
     correspondence?.completionPackage?.generatedAt ??
@@ -383,19 +439,23 @@ const CorrespondenceDetailContent = () => {
   }, [openModal, setSelectedMinute]);
 
   const openFullscreenPreview = useCallback(() => openModal('document-preview'), [openModal]);
+  const openPrintPreview = useCallback(() => openModal('print-preview'), [openModal]);
 
   const documentPanelProps = {
     linkedDocuments,
     selectedLinkedDocVersion,
     selectedAttachmentIndex,
+    selectedLinkedDocumentId,
     attachmentSearchQuery,
     isPreviewFullscreen,
     isCompleted,
     onSetAttachmentSearchQuery: setAttachmentSearchQuery,
     onSetIsPreviewFullscreen: setIsPreviewFullscreen,
     onSetSelectedAttachmentIndex: setSelectedAttachmentIndex,
+    onSetSelectedLinkedDocumentId: setSelectedLinkedDocumentId,
     onOpenLinkDocument: () => openModal('link-document'),
     onOpenDocumentPreview: openFullscreenPreview,
+    onOpenPrintPreview: openPrintPreview,
     onSyncFromApi: syncFromApi,
   };
 
@@ -406,7 +466,8 @@ const CorrespondenceDetailContent = () => {
     isCompleted,
     isCurrentUserTurn,
     isForInformationOnly,
-    isExecutive,
+    distributionPurpose,
+    distributionEntryId,
     turnRestrictedDisabled,
     completionPackageUrl,
     completionGeneratedAt,
@@ -416,7 +477,6 @@ const CorrespondenceDetailContent = () => {
     officeMemberships,
     lookupUser,
     getActionIcon,
-    onOpenParallelRouteModal: () => openModal('parallel-route'),
     onOpenLinkCaseModal: () => openModal('link-case'),
     onOpenMinuteModal: () => openModal('minute'),
     onOpenTreatmentModal: () => openModal('treatment'),
@@ -444,17 +504,24 @@ const CorrespondenceDetailContent = () => {
             backLabel="Back to Inbox"
           />
         ) : (
-        <div className="flex items-center justify-center h-full">
+        <div className="flex items-center justify-center h-full min-h-[50vh] p-6 animate-in fade-in duration-300">
           {detailLoading ? (
-            <p className="text-sm text-muted-foreground">Loading correspondence…</p>
+            <LoadingState message="Loading correspondence…" size="md" />
           ) : (
-            <p>Correspondence not found</p>
+            <EmptyState
+              icon="file"
+              title="Correspondence not found"
+              message="This item may have been removed, or you may not have access."
+              actionLabel="Back to Inbox"
+              onAction={() => router.push('/correspondence/inbox')}
+              variant="dashed"
+            />
           )}
         </div>
         )
       ) : !activeUser ? (
-        <div className="flex items-center justify-center h-full min-h-[40vh]">
-          <p className="text-sm text-muted-foreground">Loading session…</p>
+        <div className="flex items-center justify-center h-full min-h-[40vh] p-6 animate-in fade-in duration-300">
+          <LoadingState message="Loading session…" size="md" />
         </div>
       ) : (
         <>
@@ -465,13 +532,25 @@ const CorrespondenceDetailContent = () => {
             correspondence={correspondence}
             minutes={minutes}
             linkedDocuments={linkedDocuments}
-            onOpenFullscreenPreview={openFullscreenPreview}
-            onOpenPrintPreview={() => openModal('print-preview')}
+            onOpenPrimaryAction={
+              isCompleted && !isRecalledAndReverted
+                ? undefined
+                : () => openModal('minute')
+            }
+            primaryActionLabel={
+              activeUser.gradeLevel === 'MDCS'
+                ? 'Minute & Approve'
+                : correspondence.direction === 'downward'
+                  ? 'Minute'
+                  : 'Endorse'
+            }
+            primaryActionDisabled={turnRestrictedDisabled}
             onCaseUnlinked={async () => {
               await refreshData();
               await syncFromApi();
             }}
             onOpenLinkCaseModal={() => openModal('link-case')}
+            onOpenPrintPreview={openPrintPreview}
             onDistributionShared={async () => {
               await refreshData();
               await syncFromApi();
@@ -489,7 +568,12 @@ const CorrespondenceDetailContent = () => {
           status={correspondence.status}
           receivedDate={correspondence.receivedDate}
           direction={correspondence.direction as 'upward' | 'downward' | 'lateral' | 'internal' | undefined}
+          priority={correspondence.priority}
           currentOffice={correspondence.currentOfficeName}
+          senderName={correspondence.senderName}
+          senderOrganization={correspondence.senderOrganization}
+          attachmentCount={correspondence.attachments?.length ?? 0}
+          hasPhysicalCopy={Boolean(correspondence.hasPhysicalCopy)}
           daysPending={
             correspondence.receivedDate
               ? Math.floor(
@@ -501,10 +585,14 @@ const CorrespondenceDetailContent = () => {
           acknowledgedCount={minutes.filter((m) => !m.isRecalled && m.acknowledgedAt).length}
         />
 
+        <PhysicalCopySection documents={correspondence.physicalDocuments ?? []} />
+
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
           <CorrespondenceWorkspace
             correspondence={correspondence}
             mobileActiveTab={mobileActiveTab}
+            documentFocus={documentFocus}
+            onSetDocumentFocus={setDocumentFocus}
             documentPanelProps={documentPanelProps}
             routingPanelProps={routingPanelProps}
           />
@@ -537,9 +625,10 @@ const CorrespondenceDetailContent = () => {
         defaultPreviewAttachmentSource={defaultPreviewAttachmentSource}
       />
 
-      {!isCompleted && isCurrentUserTurn && (
+      {!isCompleted && (isCurrentUserTurn || isCCRecipient) && (
         <MobileStickyActionBar
           isForInformationOnly={isForInformationOnly}
+          distributionPurpose={distributionPurpose}
           onMinute={() => {
             goToRoutingTab();
             openModal('minute');
@@ -556,6 +645,11 @@ const CorrespondenceDetailContent = () => {
             goToRoutingTab();
             openModal('delegate');
           }}
+          onForward={() => {
+            goToRoutingTab();
+            openModal('link-document');
+          }}
+          onMarkRead={handleMarkRead}
         />
       )}
         </>
@@ -567,7 +661,13 @@ const CorrespondenceDetailContent = () => {
 const CorrespondenceDetailPage = () => (
   <ClientErrorBoundary>
     <CorrespondenceProvider>
-      <CorrespondenceDetailContent />
+      <Suspense fallback={
+        <div className="flex items-center justify-center h-full min-h-[50vh] p-8">
+          <LoadingState message="Loading correspondence…" />
+        </div>
+      }>
+        <CorrespondenceDetailContent />
+      </Suspense>
     </CorrespondenceProvider>
   </ClientErrorBoundary>
 );

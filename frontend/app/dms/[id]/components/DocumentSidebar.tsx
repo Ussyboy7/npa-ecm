@@ -7,7 +7,6 @@ import { DocumentCommentsCard } from "@/components/dms/DocumentCommentsCard";
 import { DocumentThreadCard } from "@/components/dms/DocumentThreadCard";
 import type {
   DocumentRecord,
-  DocumentWorkspace,
   DocumentComment,
   DocumentAccessLog,
 } from "@/lib/dms-storage";
@@ -23,25 +22,19 @@ import type { OCRState } from "@/app/dms/[id]/hooks/use-document-ocr";
 export interface DocumentSidebarProps {
   document: DocumentRecord;
   versions: DocumentVersion[];
-  documentWorkspaces: DocumentWorkspace[];
-  workspaces: DocumentWorkspace[];
   comments: DocumentComment[];
   accessLogs: DocumentAccessLog[];
   relatedCorrespondence: Array<{ correspondence: Correspondence; minutes: Minute[]; linkNotes?: string }>;
   userLookup: Map<string, User>;
   uploadUser: User | null;
   ocrState: OCRState;
-  workspaceManageOpen: boolean;
-  onWorkspaceManageOpenChange: (open: boolean) => void;
   onQuickVersionUpload: () => void;
   onCreateVersion?: () => void;
-  onAddWorkspace: (workspaceId: string) => Promise<void>;
-  onRemoveWorkspace: (workspaceId: string) => Promise<void>;
-  onWorkspacesRefreshed: () => Promise<void>;
   onOpenCommentsDialog: () => void;
   onViewActivityDetails: (log: DocumentAccessLog) => void;
   onRefreshAccessLogs: () => Promise<void>;
   onPreviewVersion: (version: DocumentVersion) => void;
+  onDownloadVersion?: (version: DocumentVersion) => void;
   onReplaceVersion: (versionId: string) => void;
   onVersionOCR: (versionId: string) => void;
   onCancelOCR: (versionId: string) => void;
@@ -51,25 +44,19 @@ export interface DocumentSidebarProps {
 export function DocumentSidebar({
   document,
   versions,
-  documentWorkspaces,
-  workspaces,
   comments,
   accessLogs,
   relatedCorrespondence,
   userLookup,
   uploadUser,
   ocrState,
-  workspaceManageOpen,
-  onWorkspaceManageOpenChange,
   onQuickVersionUpload,
   onCreateVersion,
-  onAddWorkspace,
-  onRemoveWorkspace,
-  onWorkspacesRefreshed,
   onOpenCommentsDialog,
   onViewActivityDetails,
   onRefreshAccessLogs,
   onPreviewVersion,
+  onDownloadVersion,
   onReplaceVersion,
   onVersionOCR,
   onCancelOCR,
@@ -107,20 +94,10 @@ export function DocumentSidebar({
         onCreateVersion={onCreateVersion}
         onQuickVersionUpload={onQuickVersionUpload}
         onPreviewVersion={onPreviewVersion}
+        onDownloadVersion={onDownloadVersion}
         onReplaceVersion={onReplaceVersion}
         onVersionOCR={onVersionOCR}
         onCancelOCR={onCancelOCR}
-      />
-
-      <CollaborationPanel
-        document={document}
-        documentWorkspaces={documentWorkspaces}
-        workspaces={workspaces}
-        onAddWorkspace={onAddWorkspace}
-        onRemoveWorkspace={onRemoveWorkspace}
-        workspaceManageOpen={workspaceManageOpen}
-        onWorkspaceManageOpenChange={onWorkspaceManageOpenChange}
-        onWorkspacesRefreshed={onWorkspacesRefreshed}
       />
 
       <DocumentCommentsCard

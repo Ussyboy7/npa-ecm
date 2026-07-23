@@ -35,7 +35,7 @@ import { getStoredRedirectPath } from "@/lib/auth-errors";
 const ALLOWED_REDIRECT_PREFIXES = [
   "/inbox", "/dashboard", "/correspondence", "/cases", "/admin", "/analytics",
   "/approvals", "/audit", "/dms", "/documents", "/forms", "/help", "/integrations",
-  "/notifications", "/records", "/seal-preview", "/search", "/settings", "/tasks",
+  "/notifications", "/records", "/seal-preview", "/search", "/settings",
 ];
 
 const DEFAULT_POST_LOGIN_PATH = "/dashboard";

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { storeTokens } from "@/lib/api-client";
+import { hasTokens, storeTokens } from "@/lib/api-client";
 import { LoadingState } from "@/components/shared/LoadingState";
 
 export default function AuthCallbackPage() {
@@ -21,6 +21,11 @@ export default function AuthCallbackPage() {
 
     if (access && refresh) {
       storeTokens(access, refresh);
+      router.replace("/dashboard");
+      return;
+    }
+
+    if (hasTokens()) {
       router.replace("/dashboard");
       return;
     }

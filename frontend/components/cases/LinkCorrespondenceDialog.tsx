@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import { useAbortController } from '@/hooks/use-abort-controller';
 import {
   Dialog,
   DialogContent,
@@ -49,7 +50,7 @@ export function LinkCorrespondenceDialog({
   caseNumber,
   onLinked,
 }: LinkCorrespondenceDialogProps) {
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal } = useAbortController();
   const [searchQuery, setSearchQuery] = useState("");
   const [correspondence, setCorrespondence] = useState<CorrespondenceItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,20 +81,15 @@ export function LinkCorrespondenceDialog({
       setIsPrimary(false);
     }
     
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, caseId]);
 
   const fetchLinkedIds = async () => {
     
     try {
-      abortControllerRef.current = new AbortController();
+      const signal = getSignal();
       const response = await apiFetch<Record<string, unknown>>(`/correspondence/cases/${caseId}/`, {
-        signal: abortControllerRef.current.signal,
+        signal,
       });
       const linked = ((response.correspondence as Record<string, unknown>[]) || []).map((link: Record<string, unknown>) =>
         (link.correspondence_id || (link.correspondence as Record<string, unknown>)?.id) as string
@@ -111,13 +107,7 @@ export function LinkCorrespondenceDialog({
       return;
     }
     
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const signal = getSignal();
     
     setLoading(true);
     try {

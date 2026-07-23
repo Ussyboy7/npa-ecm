@@ -474,23 +474,18 @@ export const fetchSLATargets = async (force = false): Promise<SLATargets> => {
   }
 
   slaTargetsPromise = (async () => {
-    try {
-      const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
-      const targets = {
-        urgent: asNumber(response.urgent, 48),
-        high: asNumber(response.high, 72),
-        medium: asNumber(response.medium, 120),
-        low: asNumber(response.low, 168),
-      };
-      slaTargetsCache = targets;
-      slaTargetsCachedAt = Date.now();
-      return targets;
-    } catch {
-      return { urgent: 48, high: 72, medium: 120, low: 168 };
-    } finally {
-      slaTargetsPromise = null;
-    }
+    const response = await apiFetch<Record<string, unknown>>('/analytics/sla-config/targets/');
+    const targets = {
+      urgent: asNumber(response.urgent, 48),
+      high: asNumber(response.high, 72),
+      medium: asNumber(response.medium, 120),
+      low: asNumber(response.low, 168),
+    };
+    slaTargetsCache = targets;
+    slaTargetsCachedAt = Date.now();
+    return targets;
   })();
+  slaTargetsPromise.finally(() => { slaTargetsPromise = null; });
 
   return slaTargetsPromise;
 };

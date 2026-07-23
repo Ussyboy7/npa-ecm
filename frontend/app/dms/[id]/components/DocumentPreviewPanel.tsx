@@ -19,6 +19,7 @@ interface DocumentPreviewPanelProps {
   selectedVersion: DocumentVersion | null;
   onSelectVersion: (version: DocumentVersion) => void;
   onDownload?: (version: DocumentVersion) => void;
+  canDownload?: boolean;
 }
 
 function fileTypeLabel(version: DocumentVersion): string {
@@ -38,13 +39,14 @@ export function DocumentPreviewPanel({
   selectedVersion,
   onSelectVersion,
   onDownload,
+  canDownload = true,
 }: DocumentPreviewPanelProps) {
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const isForm = document.documentType === "form";
   const showVersionStrip = versions.length > 1;
 
   const handleDownload = () => {
-    if (!selectedVersion) return;
+    if (!selectedVersion || !canDownload) return;
     if (onDownload) {
       onDownload(selectedVersion);
       return;
@@ -106,8 +108,9 @@ export function DocumentPreviewPanel({
                         size="icon"
                         className="h-7 w-7"
                         onClick={handleDownload}
-                        title="Download"
-                        aria-label="Download"
+                        disabled={!canDownload}
+                        title={canDownload ? "Download" : "Download blocked by DRM"}
+                        aria-label={canDownload ? "Download" : "Download blocked by DRM"}
                       >
                         <Download className="h-3.5 w-3.5" />
                       </Button>
@@ -144,6 +147,7 @@ export function DocumentPreviewPanel({
                   <DmsVersionPreviewContent
                     version={selectedVersion}
                     expanded={isPreviewFullscreen}
+                    allowDownload={canDownload}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full min-h-[200px] text-sm text-muted-foreground">

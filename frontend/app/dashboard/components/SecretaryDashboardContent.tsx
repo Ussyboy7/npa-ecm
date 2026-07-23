@@ -226,7 +226,7 @@ const SecretaryDashboardContent = () => {
   };
 
   if (!currentUser?.id) {
-    return <LoadingState message="Loading secretary workspace…" />;
+    return <LoadingState message="Loading secretary data…" />;
   }
 
   if (loading) {
@@ -279,7 +279,7 @@ const SecretaryDashboardContent = () => {
               <Button variant="outline" size="sm" onClick={() => router.push('/cases')}>
                 Manage cases
               </Button>
-              <Button variant="outline" size="sm" onClick={() => router.push('/forms')}>
+              <Button variant="outline" size="sm" onClick={() => router.push('/dms')}>
                 Manage forms
               </Button>
             </div>

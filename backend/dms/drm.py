@@ -59,6 +59,12 @@ def resolve_document_rights(document, user=None) -> dict:
     }
 
 
+def assert_view_allowed(document, user=None) -> None:
+    rights = resolve_document_rights(document, user)
+    if rights["expired"]:
+        raise PermissionDenied(rights["message"] or "Document access expired.")
+
+
 def assert_download_allowed(document, user=None) -> None:
     rights = resolve_document_rights(document, user)
     if rights["expired"]:

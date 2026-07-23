@@ -26,7 +26,7 @@ This document lists work **not yet complete** at contract start (~65–70% platf
 |-------|--------|--------|------------------------|------------|
 | **9** | Compliance & diff | 🟡 Partial | Tamper-evident audit compliance export; document version diff API + UI | Legal sign-off on bundle format; diff for non-text/binary formats |
 | **10** | Records & calendar | 🟡 Partial | eDiscovery export (legal hold ZIP); executive/PA calendar API + UI; `/dms` canonical route | Calendar rollout per PA assignment; eDiscovery legal workflow |
-| **11** | Quality & ops | 🟡 Partial | WCAG prep (skip link, focus styles, checklist); DRM **policy** layer; legacy import command + admin; helpdesk UI + national rollout runbooks; semantic search **MVP** (no vectors); landing page copy aligned | Full WCAG 2.1 AA remediation; DRM byte-level watermark; pgvector + Ollama |
+| **11** | Quality & ops | 🟡 Partial | WCAG prep (skip link, focus styles, checklist); DRM **policy** + serve-time PDF watermark; legacy import command + admin; helpdesk UI + national rollout runbooks; semantic search **MVP** (no vectors); landing page copy aligned | Full WCAG 2.1 AA remediation; pgvector + Ollama |
 
 ### Infrastructure notes (June 2026 audit)
 
@@ -48,7 +48,7 @@ Items promised in the proposal, landing page, or procurement matrix that need ex
 | "My Work" officer home | 🟡 | `/tasks` priority queue exists; polish and badge parity with inbox | 1.02 | P1 |
 | ICT Admin dashboard | 🟡 | System Health page shipped; full onboarding portal not built | 1.02 | P1 |
 | ICT onboarding portal | 🔵 | No admin wizard for staff onboarding | 4.01, 4.02 | P1 |
-| DRM policies | 🟡 | Policy model, admin UI, download enforcement, banner; **no** PDF byte-level watermark | 5.02 | P2 |
+| DRM policies | 🟡 | Policy model, admin UI, download enforcement, banner, **byte-level PDF watermark on serve** | 5.02 | P2 |
 | Live co-authoring | 🟡 | `DocumentEditorSession` = lock/session only, not real-time co-edit | 1.03 | P2 |
 | Semantic / AI search | 🟡 | MVP: synonym expansion + hash re-rank on FTS; **no** pgvector/Ollama | 1.03 | P2 |
 | AI document classification | 🔵 | Deferred with AI infrastructure | 6.02 * | P2 |
@@ -196,9 +196,9 @@ Retention/disposal reports, HRMS sync, IMAP ingestion, real ERP connector, Celer
 
 ### P2 — Polish & parity
 
-pgvector + Ollama (deferred until AI host), DRM byte-level watermark, AI summarization via LLM, AI document classification, semantic search upgrade from MVP, BPM designer, DR automation.
+pgvector + Ollama (deferred until AI host), AI summarization via LLM, AI document classification, semantic search upgrade from MVP, BPM designer, DR automation.
 
-**Completed in Phase 9–11 (no longer backlog blockers):** tamper-evident audit export, document version diff, eDiscovery export MVP, assistant calendar, `/dms` route consolidation, helpdesk UI, legacy import tooling, WCAG prep, DRM policy layer, semantic search MVP (non-vector).
+**Completed in Phase 9–11 (no longer backlog blockers):** tamper-evident audit export, document version diff, eDiscovery export MVP, assistant calendar, `/dms` route consolidation, helpdesk UI, legacy import tooling, WCAG prep, DRM policy layer + PDF watermark on serve, semantic search MVP (non-vector).
 
 ---
 

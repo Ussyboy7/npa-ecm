@@ -18,6 +18,7 @@ docs/
 │   ├── auth-seal.md
 │   ├── correspondence.md
 │   ├── dms.md
+│   ├── forms.md
 │   ├── inbox.md
 │   ├── search.md
 │   └── workflow.md
@@ -62,8 +63,7 @@ docs/
 ## Key Documents
 
 ### For Developers
-- **[Sprint S1 — Stability & permissions](./sprints/S1_STABILITY_AND_PERMISSIONS.md)**: Current sprint (SSR + explainability)
-- **[Feature Docs](./features/)**: Living documentation per feature area (DMS, correspondence, inbox, search, etc.)
+- **[Feature Docs](./features/)**: Living documentation per feature area (DMS, correspondence, forms, inbox, search, etc.)
 - **[Architecture Docs](./architecture/)**: System architecture and design documentation
 - **[ADR](./adr/)**: Architecture Decision Records
 - **[🧩 Component Reference](./components/COMPONENTS_REFERENCE.md)**: Component index and props (updated June 2026)
@@ -86,3 +86,27 @@ docs/
 - **[Remaining Work Backlog](./procurement/REMAINING_WORK_BACKLOG.md)**: Itemized P0/P1/P2 backlog with BOQ mapping; Phase 9–11 MVP status (v1.1, June 2026)
 - **[ECM Price Comparison](./procurement/ECM_PRICE_COMPARISON.md)**: 5-year TCO vs top-10 vendors (840 & 3,000 users)
 - **[ECM Comparison Matrix](./procurement/ECM_COMPARISON_MATRIX.md)**: Feature comparison vs. top-10 ECM vendors
+
+## Removed Pages
+The following standalone pages were removed or replaced in recent refactoring:
+
+| Old Page | Status | Replacement |
+|----------|--------|-------------|
+| `/forms` (Forms Library) | Redirects to `/dms` | Access forms via DMS "My Documents" (filter type=Form) or "Pending Signatures" tab |
+| `/workspaces` | Redirects to `/dashboard` | Dashboard replaces workspace concept |
+| `/workspaces/[id]` | Redirects to `/dashboard` | Dashboard replaces workspace concept |
+| `/correspondence/outbox` | Deleted | Replaced by `/correspondence/my-sent` |
+| `/correspondence/office-outbox` | Deleted | Replaced by `/correspondence/office-sent` |
+| `/correspondence/office-dispatched` | Deleted | Replaced by `/correspondence/office-sent` |
+| `/correspondence/archived` | Deleted | Folded into `/correspondence/records` |
+| `/analytics/reports` | Deleted | Replaced by `/analytics/cases` |
+| `/tasks` | Deleted | Folded into inbox/notifications |
+| `/help` | Deleted | Help content migrated to ContextualHelp components |
+
+## Recent Architecture Changes
+- **Auth**: Tokens migrated from `localStorage` to HTTP-only secure cookies
+- **Correspondence**: Outbox → Sent; parallel routing with branches; physical copy tracking; scope enforcement
+- **DMS**: `DocumentWorkspace` model removed; form documents merged into DMS
+- **Forms**: Standalone page removed, now accessed via DMS; 3 audit form templates + PDF generators
+- **Organization**: Office `location` FK; Locations CRUD; new role presets (AGM, Principal Manager)
+- **Sidebar**: Renamed/regrouped sections (My Workspace, Tools); removed Forms Library

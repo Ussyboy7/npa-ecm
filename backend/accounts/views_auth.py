@@ -6,6 +6,10 @@ import base64
 import logging
 from io import BytesIO
 
+from django.conf import settings
+from django.http import HttpResponseRedirect
+import pyotp
+import qrcode
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -34,6 +38,7 @@ from accounts.oidc import (
     pop_oidc_state,
     resolve_username_from_claims,
 )
+from accounts.views import set_auth_token_cookies
 from organization.permission_utils import explain_access_context, explain_permission_denial
 from organization.permissions_catalog import get_permission_catalog
 
@@ -228,7 +233,9 @@ class LoginMFAVerifyView(APIView):
         except Exception as exc:
             logger.warning("Failed to audit MFA login: %s", exc)
 
-        return Response(tokens)
+        response = Response(tokens)
+        set_auth_token_cookies(response, tokens["access"], tokens["refresh"], request=request)
+        return response
 
 
 class LoginMFARequestEmailView(APIView):
@@ -325,8 +332,6 @@ class OIDCCallbackView(APIView):
 
         tokens = issue_tokens_for_user(user)
         frontend = settings.FRONTEND_BASE_URL.rstrip("/")
-        redirect_url = (
-            f"{frontend}/auth/callback"
-            f"?access={tokens['access']}&refresh={tokens['refresh']}"
-        )
-        return HttpResponseRedirect(redirect_url)
+        response = HttpResponseRedirect(f"{frontend}/auth/callback")
+        set_auth_token_cookies(response, tokens["access"], tokens["refresh"], request=request)
+        return response

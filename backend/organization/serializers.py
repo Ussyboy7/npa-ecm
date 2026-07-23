@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from .models import Department, Directorate, Division, Office, OfficeMembership, Role
+from .models import ActingAppointment, ActingRequest, Department, Directorate, Division, Office, OfficeMembership, Role
 
 
 class DirectorateSerializer(serializers.ModelSerializer):
@@ -93,6 +93,7 @@ class OfficeSerializer(serializers.ModelSerializer):
     division_name = serializers.CharField(source="division.name", read_only=True)
     department_name = serializers.CharField(source="department.name", read_only=True)
     parent_name = serializers.CharField(source="parent.name", read_only=True)
+    location_name = serializers.CharField(source="location.display_name", read_only=True)
 
     class Meta:
         model = Office
@@ -109,6 +110,8 @@ class OfficeSerializer(serializers.ModelSerializer):
             "department_name",
             "parent",
             "parent_name",
+            "location",
+            "location_name",
             "description",
             "is_active",
             "allow_external_intake",
@@ -191,4 +194,137 @@ class OfficeMembershipSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at"]
+
+
+class ActingAppointmentSerializer(serializers.ModelSerializer):
+    office_name = serializers.CharField(source="office.name", read_only=True)
+    office_code = serializers.CharField(source="office.code", read_only=True)
+    principal_name = serializers.SerializerMethodField()
+    acting_user_name = serializers.SerializerMethodField()
+    appointed_by_name = serializers.SerializerMethodField()
+    ended_by_name = serializers.SerializerMethodField()
+    is_currently_effective = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ActingAppointment
+        fields = [
+            "id",
+            "office",
+            "office_name",
+            "office_code",
+            "principal",
+            "principal_name",
+            "acting_user",
+            "acting_user_name",
+            "starts_at",
+            "ends_at",
+            "is_active",
+            "is_currently_effective",
+            "reason",
+            "appointed_by",
+            "appointed_by_name",
+            "ended_at",
+            "ended_by",
+            "ended_by_name",
+            "membership",
+            "items_transferred",
+            "items_reclaimed",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "is_active",
+            "appointed_by",
+            "ended_at",
+            "ended_by",
+            "membership",
+            "items_transferred",
+            "items_reclaimed",
+            "created_at",
+            "updated_at",
+        ]
+
+    def _user_name(self, user) -> str:
+        if not user:
+            return ""
+        return user.get_full_name() or user.username
+
+    def get_principal_name(self, obj) -> str:
+        return self._user_name(obj.principal)
+
+    def get_acting_user_name(self, obj) -> str:
+        return self._user_name(obj.acting_user)
+
+    def get_appointed_by_name(self, obj) -> str:
+        return self._user_name(obj.appointed_by)
+
+    def get_ended_by_name(self, obj) -> str:
+        return self._user_name(obj.ended_by)
+
+    def get_is_currently_effective(self, obj) -> bool:
+        return obj.is_currently_effective()
+
+
+class ActingRequestSerializer(serializers.ModelSerializer):
+    office_name = serializers.CharField(source="office.name", read_only=True)
+    office_code = serializers.CharField(source="office.code", read_only=True)
+    principal_name = serializers.SerializerMethodField()
+    requested_by_name = serializers.SerializerMethodField()
+    suggested_acting_user_name = serializers.SerializerMethodField()
+    resolved_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ActingRequest
+        fields = [
+            "id",
+            "office",
+            "office_name",
+            "office_code",
+            "principal",
+            "principal_name",
+            "requested_by",
+            "requested_by_name",
+            "suggested_acting_user",
+            "suggested_acting_user_name",
+            "reason",
+            "pending_item_count",
+            "status",
+            "resolved_by",
+            "resolved_by_name",
+            "resolved_at",
+            "resolution_note",
+            "appointment",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "requested_by",
+            "pending_item_count",
+            "status",
+            "resolved_by",
+            "resolved_at",
+            "resolution_note",
+            "appointment",
+            "created_at",
+            "updated_at",
+        ]
+
+    def _user_name(self, user) -> str:
+        if not user:
+            return ""
+        return user.get_full_name() or user.username
+
+    def get_principal_name(self, obj) -> str:
+        return self._user_name(obj.principal)
+
+    def get_requested_by_name(self, obj) -> str:
+        return self._user_name(obj.requested_by)
+
+    def get_suggested_acting_user_name(self, obj) -> str:
+        return self._user_name(obj.suggested_acting_user)
+
+    def get_resolved_by_name(self, obj) -> str:
+        return self._user_name(obj.resolved_by)
 

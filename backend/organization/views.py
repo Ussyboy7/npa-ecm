@@ -409,7 +409,7 @@ class RoleViewSet(viewsets.ModelViewSet):
 
 
 class OfficeViewSet(OrgStructureAdminMixin, viewsets.ModelViewSet):
-    queryset = Office.objects.select_related("directorate", "division", "department", "parent")
+    queryset = Office.objects.select_related("directorate", "division", "department", "parent", "location")
     serializer_class = OfficeSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = CatalogPageNumberPagination

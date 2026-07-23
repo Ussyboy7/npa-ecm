@@ -2,11 +2,20 @@
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from accounts.serializers import UserSerializer
 from .models import Location, PhysicalDocument, CheckOutEvent
 
 User = get_user_model()
+
+
+def generate_tracking_number():
+    today = timezone.now().date()
+    count = PhysicalDocument.objects.filter(
+        created_at__date=today
+    ).count()
+    return f"NPA/PHYS/{today.strftime('%Y%m%d')}/{count + 1:04d}"
 
 
 class LocationSerializer(serializers.ModelSerializer):
@@ -17,8 +26,6 @@ class LocationSerializer(serializers.ModelSerializer):
             "building",
             "floor",
             "room",
-            "shelf",
-            "cabinet",
             "description",
             "is_active",
             "display_name",
@@ -61,10 +68,15 @@ class PhysicalDocumentSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = [
-            "id", "tracking_number", "checked_out_to",
+            "id", "checked_out_to",
             "checked_out_at", "created_at",
             "location_name", "correspondence_ref",
         ]
+
+    def create(self, validated_data):
+        if "tracking_number" not in validated_data or not validated_data.get("tracking_number"):
+            validated_data["tracking_number"] = generate_tracking_number()
+        return super().create(validated_data)
 
 
 class PhysicalDocumentDetailSerializer(PhysicalDocumentSerializer):

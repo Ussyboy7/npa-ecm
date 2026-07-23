@@ -8,10 +8,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle, Send, User, AlertCircle, Users } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { CheckCircle, Send, User, AlertCircle, Users, Paperclip, Eye } from 'lucide-react';
 
 interface DistributionRecipient {
   id?: string;
@@ -38,6 +38,7 @@ interface ConfirmationDialogProps {
     onBehalfOf?: string;
     direction?: 'upward' | 'downward';
     distribution?: DistributionRecipient[];
+    fileAttachments?: { name: string; size: number; url?: string }[];
   };
   disabled?: boolean;
 }
@@ -57,7 +58,7 @@ export const ConfirmationDialog = ({
         if (!open) onClose();
       }}
     >
-      <AlertDialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <AlertDialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-y-auto p-4 sm:p-6">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-accent" />
@@ -164,12 +165,38 @@ export const ConfirmationDialog = ({
             <p className="text-sm font-semibold mb-2">Content Preview</p>
             <Card>
               <CardContent className="p-4">
-                <p className="text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
-                  {data.content}
-                </p>
+                <div
+                  className="prose prose-sm dark:prose-invert max-w-none max-h-80 overflow-y-auto"
+                  dangerouslySetInnerHTML={{ __html: data.content }}
+                />
               </CardContent>
             </Card>
           </div>
+
+          {data.fileAttachments && data.fileAttachments.length > 0 && (
+            <>
+              <Separator />
+              <div className="flex items-start gap-2">
+                <Paperclip className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Attachments ({data.fileAttachments.length})</p>
+                  <div className="mt-1 space-y-1">
+                    {data.fileAttachments.map((f, i) => (
+                      <div key={i} className="text-sm text-muted-foreground flex items-center gap-2">
+                        <span className="flex-1 truncate">{f.name}</span>
+                        <span className="text-xs flex-shrink-0">({(f.size / 1024).toFixed(1)} KB)</span>
+                        {f.url && (
+                          <a href={f.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                            <Eye className="h-3.5 w-3.5 text-primary hover:text-primary/80" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         <AlertDialogFooter>

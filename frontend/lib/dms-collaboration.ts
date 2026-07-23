@@ -149,58 +149,48 @@ export const getActiveEditorSessions = async (documentId: string): Promise<Edito
     return [];
   }
 
-  try {
-    const payload = await apiFetch<unknown>(`/dms/editor-sessions/?document=${documentId}&is_active=true`);
-    const results = unwrapResults(payload) as Record<string, unknown>[];
+  const payload = await apiFetch<unknown>(`/dms/editor-sessions/?document=${documentId}&is_active=true`);
+  const results = unwrapResults(payload) as Record<string, unknown>[];
 
-    logInfo('getActiveEditorSessions API response:', { payload, results, documentId });
+  logInfo('getActiveEditorSessions API response:', { payload, results, documentId });
 
-    const sessions = results.map((item: Record<string, unknown>) => {
-      const user = item.user as Record<string, unknown> | undefined;
-      const session = {
-        id: String(item.id as string),
-        documentId: String(item.document ?? item.document_id ?? documentId),
-        userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? ''),
-        since: typeof item.since === 'string' ? item.since : (typeof item.created_at === 'string' ? item.created_at : new Date().toISOString()),
-        note: typeof item.note === 'string' ? item.note : undefined,
-        isActive: typeof item.is_active === 'boolean' ? item.is_active : true,
-      };
-      logInfo('Mapped editor session:', session, 'from item:', item);
-      return session;
-    });
+  const sessions = results.map((item: Record<string, unknown>) => {
+    const user = item.user as Record<string, unknown> | undefined;
+    const session = {
+      id: String(item.id as string),
+      documentId: String(item.document ?? item.document_id ?? documentId),
+      userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? ''),
+      since: typeof item.since === 'string' ? item.since : (typeof item.created_at === 'string' ? item.created_at : new Date().toISOString()),
+      note: typeof item.note === 'string' ? item.note : undefined,
+      isActive: typeof item.is_active === 'boolean' ? item.is_active : true,
+    };
+    logInfo('Mapped editor session:', session, 'from item:', item);
+    return session;
+  });
 
-    logInfo('Returning active editor sessions:', sessions);
-    return sessions;
-  } catch (error: unknown) {
-    logError('Error fetching active editor sessions:', error);
-    return [];
-  }
+  logInfo('Returning active editor sessions:', sessions);
+  return sessions;
 };
 
 export const getEditorSessionForUser = async (documentId: string, userId: string): Promise<EditorSession | null> => {
   if (!hasTokens()) return null;
 
-  try {
-    const payload = await apiFetch<unknown>(`/dms/editor-sessions/?document=${documentId}&user=${userId}`);
-    const results = unwrapResults(payload) as Record<string, unknown>[];
+  const payload = await apiFetch<unknown>(`/dms/editor-sessions/?document=${documentId}&user=${userId}`);
+  const results = unwrapResults(payload) as Record<string, unknown>[];
 
-    if (results.length > 0) {
-      const item = results[0] as Record<string, unknown>;
-      const user = item.user as Record<string, unknown> | undefined;
-      return {
-        id: String(item.id as string),
-        documentId: String(item.document ?? item.document_id ?? documentId),
-        userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? userId),
-        since: typeof item.since === 'string' ? item.since : (typeof item.created_at === 'string' ? item.created_at : new Date().toISOString()),
-        note: typeof item.note === 'string' ? item.note : undefined,
-        isActive: typeof item.is_active === 'boolean' ? item.is_active : true,
-      };
-    }
-    return null;
-  } catch (error: unknown) {
-    logError('Failed to get editor session for user', error);
-    return null;
+  if (results.length > 0) {
+    const item = results[0] as Record<string, unknown>;
+    const user = item.user as Record<string, unknown> | undefined;
+    return {
+      id: String(item.id as string),
+      documentId: String(item.document ?? item.document_id ?? documentId),
+      userId: String((user && 'id' in user) ? user.id : item.user_id ?? item.user ?? userId),
+      since: typeof item.since === 'string' ? item.since : (typeof item.created_at === 'string' ? item.created_at : new Date().toISOString()),
+      note: typeof item.note === 'string' ? item.note : undefined,
+      isActive: typeof item.is_active === 'boolean' ? item.is_active : true,
+    };
   }
+  return null;
 };
 
 export const createEditorSession = async (documentId: string, userId: string, note?: string): Promise<EditorSession> => {

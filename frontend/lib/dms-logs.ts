@@ -1,11 +1,10 @@
 import { ERROR_AUTHENTICATION_REQUIRED } from '@/lib/constants';
 import { apiFetch, hasTokens } from './api-client';
-import { logError } from '@/lib/client-logger';
 import { unwrapResults } from '@/lib/type-utils';
-import type { User } from './npa-structure';
 import type { DocumentAccessLog, CreateAccessLogPayload, DocumentRecord, DocumentQueryParams, PaginatedDocuments } from './dms-types';
 import { fetchDocumentById, userHasPermission } from './dms-documents';
 import { queryDocumentsExtended } from './dms-operations';
+import type { User } from './npa-structure';
 
 export const getDocumentAccessLogs = async (documentId: string): Promise<DocumentAccessLog[]> => {
   if (!hasTokens()) return [];
@@ -84,51 +83,44 @@ export const logDocumentAccess = async (payload: CreateAccessLogPayload): Promis
   };
 };
 
-export const getAccessLogsForDocument = async () => [] as never[];
-
 /**
  * Get recent documents accessed by the current user (last 30 days)
  */
 export const getRecentDocuments = async (userId: string, limit: number = 50): Promise<DocumentRecord[]> => {
   if (!hasTokens()) return [];
 
-  try {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const payload = await apiFetch<unknown>(`/dms/access-logs/?user=${userId}&action=view&ordering=-timestamp`);
-    const logs = unwrapResults(payload) as Record<string, unknown>[];
+  const payload = await apiFetch<unknown>(`/dms/access-logs/?user=${userId}&action=view&ordering=-timestamp`);
+  const logs = unwrapResults(payload) as Record<string, unknown>[];
 
-    const documentIds = Array.from(
-      new Set(
-        logs
-          .filter((log: Record<string, unknown>) => {
-            const timestamp = typeof log.timestamp === 'string' ? log.timestamp : (typeof log.created_at === 'string' ? log.created_at : '');
-            const logDate = new Date(timestamp);
-            return !isNaN(logDate.getTime()) && logDate >= thirtyDaysAgo;
-          })
-          .map((log: Record<string, unknown>) => String(log.document ?? log.document_id ?? ''))
-          .filter(Boolean),
-      ),
-    ).slice(0, limit);
+  const documentIds = Array.from(
+    new Set(
+      logs
+        .filter((log: Record<string, unknown>) => {
+          const timestamp = typeof log.timestamp === 'string' ? log.timestamp : (typeof log.created_at === 'string' ? log.created_at : '');
+          const logDate = new Date(timestamp);
+          return !isNaN(logDate.getTime()) && logDate >= thirtyDaysAgo;
+        })
+        .map((log: Record<string, unknown>) => String(log.document ?? log.document_id ?? ''))
+        .filter(Boolean),
+    ),
+  ).slice(0, limit);
 
-    if (documentIds.length === 0) return [];
+  if (documentIds.length === 0) return [];
 
-    const documents = await Promise.all(
-      documentIds.map(async (docId) => {
-        try {
-          return await fetchDocumentById(docId);
-        } catch {
-          return null;
-        }
-      }),
-    );
+  const documents = await Promise.all(
+    documentIds.map(async (docId) => {
+      try {
+        return await fetchDocumentById(docId);
+      } catch {
+        return null;
+      }
+    }),
+  );
 
-    return documents.filter((doc): doc is DocumentRecord => doc !== null);
-  } catch (error: unknown) {
-    logError('Failed to get recent documents', error);
-    return [];
-  }
+  return documents.filter((doc): doc is DocumentRecord => doc !== null);
 };
 
 /**
@@ -142,15 +134,10 @@ export const getSharedDocuments = async (
     return { results: [], count: 0, next: null, previous: null };
   }
 
-  try {
-    return await queryDocumentsExtended({
-      ...params,
-      sharedWithMe: true,
-    });
-  } catch (error: unknown) {
-    logError('Failed to get shared documents', error);
-    return { results: [], count: 0, next: null, previous: null };
-  }
+  return await queryDocumentsExtended({
+    ...params,
+    sharedWithMe: true,
+  });
 };
 
 /**

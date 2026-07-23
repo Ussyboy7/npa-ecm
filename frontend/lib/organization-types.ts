@@ -43,6 +43,18 @@ export interface Office {
   isActive: boolean;
   allowExternalIntake: boolean;
   allowLateralRouting: boolean;
+  locationId?: string | null;
+  locationName?: string | null;
+}
+
+export interface Location {
+  id: string;
+  building: string;
+  floor: string;
+  room: string;
+  description: string;
+  isActive: boolean;
+  displayName: string;
 }
 
 export interface OfficeMembership {
@@ -99,7 +111,7 @@ export interface OrganizationContextType {
   users: User[];
   roles: Role[];
   addRole: (role: CreateRoleInput) => Promise<Role>;
-  updateRole: (id: string, updates: UpdateRoleInput) => Promise<Role | null>;
+  updateRole: (id: string, updates: UpdateRoleInput) => Promise<Role>;
   deleteRole: (id: string) => Promise<void>;
   addDirectorate: (directorate: CreateDirectorateInput) => Promise<Directorate>;
   updateDirectorate: (id: string, updates: UpdateDirectorateInput) => Promise<Directorate | null>;

@@ -65,3 +65,21 @@ export const sanitizeText = (text: string): string => {
   return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 };
 
+/**
+ * Strip authoring colors/backgrounds so rich HTML can inherit theme text
+ * (Quill memos often ship black text that is invisible on dark surfaces).
+ */
+export const stripInlineColorStyles = (html: string): string => {
+  if (!html) return html;
+  return html
+    .replace(/\s*(?:color|background|background-color)\s*:\s*[^;"']+;?/gi, '')
+    .replace(/\s*style\s*=\s*(["'])\s*\1/gi, '')
+    .replace(/\s*color\s*=\s*(["'])[^"']*\1/gi, '');
+};
+
+/** Sanitize + neutralize hard-coded colors for themed UI surfaces. */
+export const sanitizeThemedHtml = (html: string): string => {
+  return sanitizeRichText(stripInlineColorStyles(html));
+};
+
+

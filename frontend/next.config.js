@@ -3,7 +3,7 @@ import withBundleAnalyzer from '@next/bundle-analyzer';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: [],
+  transpilePackages: ['pdfjs-dist'],
   output: 'standalone',
   images: {
     remotePatterns: [

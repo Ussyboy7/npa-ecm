@@ -9,8 +9,9 @@ System analytics for correspondence, cases, SLA performance, and division perfor
 | Cases Analytics | `/analytics/cases` | Case volume, turnaround, completion rates |
 | Executive Dashboard | `/analytics/executive` | High-level KPIs for leadership |
 | Performance | `/analytics/performance` | SLA compliance, turnaround times |
-| Reports | `/analytics/reports` | Custom report builder |
 | PA / Executive Calendar | `/assistant/calendar` | PA schedule and executive meetings (Phase 10) |
+
+> **Note:** The standalone "Reports" module (`/analytics/reports`) was removed. Reporting is now handled through the Cases Analytics and Performance dashboards.
 
 ## Key Models
 - `analytics/` - `ReportSnapshot`, `UsageMetric`, `DivisionPerformanceSnapshot`, `StaffPerformanceSnapshot`

@@ -140,6 +140,8 @@ const mapApiOffice = (item: Record<string, unknown>): Office => ({
   isActive: asBoolean(item.is_active, true),
   allowExternalIntake: asBoolean(item.allow_external_intake, true),
   allowLateralRouting: asBoolean(item.allow_lateral_routing, true),
+  locationId: normalizeId(item.location ?? item.location_id),
+  locationName: asString(item.location_name),
 });
 
 const mapApiOfficeMembership = (item: Record<string, unknown>): OfficeMembership => ({

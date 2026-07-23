@@ -5,6 +5,7 @@ import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
@@ -24,8 +25,25 @@ import {
   Search,
   Layers,
   FolderTree,
+  MapPin,
+  Save,
+  X,
 } from "lucide-react";
-import { useOrganization, type Directorate, type Division, type Department } from "@/contexts/OrganizationContext";
+import { useOrganization, type Directorate, type Division, type Department, type Office } from "@/contexts/OrganizationContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   registryQueueStatCardContentClass,
   registryQueueStatIconBoxClass,
@@ -47,6 +65,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -54,11 +73,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { apiFetch } from "@/lib/api-client";
+import type { Location } from "@/lib/organization-types";
 
 import { cn } from "@/lib/utils";
 
 type EntityType = "directorate" | "division" | "department";
-type OrganizationTab = "structure" | "offices" | "memberships";
+type OrganizationTab = "structure" | "offices" | "memberships" | "locations";
 
 interface DeactivateTarget {
   type: EntityType;
@@ -78,6 +99,7 @@ const OrganizationStructurePage = () => {
     deleteDirectorate,
     deleteDivision,
     deleteDepartment,
+    refreshOrganizationData,
   } = useOrganization();
 
   const [mounted, setMounted] = useState(false);
@@ -107,10 +129,99 @@ const OrganizationStructurePage = () => {
   const [deactivateTarget, setDeactivateTarget] = useState<DeactivateTarget | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Location management
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [locationFormOpen, setLocationFormOpen] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [locationForm, setLocationForm] = useState({ building: "", floor: "", room: "", description: "" });
+  const [savingLocation, setSavingLocation] = useState(false);
+
+  // Office edit
+  const [editingOffice, setEditingOffice] = useState<Office | null>(null);
+  const [officeEditOpen, setOfficeEditOpen] = useState(false);
+  const [officeLocationId, setOfficeLocationId] = useState<string>("");
+  const [savingOffice, setSavingOffice] = useState(false);
+
+  const fetchLocations = async () => {
+    try {
+      const data = await apiFetch<unknown>('/correspondence/locations/');
+      const results = Array.isArray(data) ? data : (data as Record<string, unknown>).results ?? [];
+      setLocations((results as Record<string, unknown>[]).map((item) => ({
+        id: item.id as string,
+        building: item.building as string,
+        floor: (item.floor as string) ?? "",
+        room: (item.room as string) ?? "",
+        description: (item.description as string) ?? "",
+        isActive: item.is_active as boolean,
+        displayName: (item.display_name as string) ?? "",
+      })));
+    } catch { /* ignore */ }
+  };
+
+  const handleEditOffice = (office: Office) => {
+    setEditingOffice(office);
+    setOfficeLocationId(office.locationId ?? "__none__");
+    setOfficeEditOpen(true);
+  };
+
+  const handleSaveOfficeLocation = async () => {
+    if (!editingOffice) return;
+    setSavingOffice(true);
+    try {
+      await apiFetch(`/organization/offices/${editingOffice.id}/`, {
+        method: "PATCH",
+        body: JSON.stringify({ location: officeLocationId === "__none__" ? null : officeLocationId }),
+      });
+      toast({ title: "Success", description: "Office location updated" });
+      setOfficeEditOpen(false);
+      setEditingOffice(null);
+      // Refresh offices via context
+      refreshOrganizationData();
+    } catch {
+      toast({ title: "Error", description: "Failed to update office location", variant: "destructive" });
+    } finally {
+      setSavingOffice(false);
+    }
+  };
+
+  const handleCreateLocation = async () => {
+    if (!locationForm.building.trim()) {
+      toast({ title: "Error", description: "Building is required", variant: "destructive" });
+      return;
+    }
+    setSavingLocation(true);
+    try {
+      await apiFetch("/correspondence/locations/", {
+        method: "POST",
+        body: JSON.stringify(locationForm),
+      });
+      toast({ title: "Success", description: editingLocation ? "Location updated" : "Location created" });
+      setLocationFormOpen(false);
+      setEditingLocation(null);
+      setLocationForm({ building: "", floor: "", room: "", description: "" });
+      await fetchLocations();
+    } catch {
+      toast({ title: "Error", description: "Failed to save location", variant: "destructive" });
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
+  const handleDeleteLocation = async (location: Location) => {
+    try {
+      await apiFetch(`/correspondence/locations/${location.id}/`, { method: "DELETE" });
+      toast({ title: "Success", description: "Location deleted" });
+      await fetchLocations();
+    } catch {
+      toast({ title: "Error", description: "Failed to delete location", variant: "destructive" });
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
     // Expand all by default for better UX
     setExpandedDirectorates(new Set(directorates.map(d => d.id)));
+    void fetchLocations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -357,6 +468,7 @@ const OrganizationStructurePage = () => {
   const searchPlaceholder = useMemo(() => {
     if (activeTab === "offices") return "Search offices by name, code, or type...";
     if (activeTab === "memberships") return "Search memberships by office, user, or role...";
+    if (activeTab === "locations") return "Search locations by building, floor, or room...";
     return "Search directorates, divisions, or departments...";
   }, [activeTab]);
 
@@ -366,6 +478,9 @@ const OrganizationStructurePage = () => {
     }
     if (activeTab === "memberships") {
       return "Link users to offices with register, route, and approve permissions.";
+    }
+    if (activeTab === "locations") {
+      return "Manage physical buildings, floors, and rooms where offices are situated.";
     }
     return "Build the hierarchy from directorates down to departments, then assign leadership.";
   }, [activeTab]);
@@ -454,6 +569,7 @@ const OrganizationStructurePage = () => {
               <TabsTrigger value="structure" className="text-xs px-2.5 py-1">Structure</TabsTrigger>
               <TabsTrigger value="offices" className="text-xs px-2.5 py-1">Offices</TabsTrigger>
               <TabsTrigger value="memberships" className="text-xs px-2.5 py-1">Memberships</TabsTrigger>
+              <TabsTrigger value="locations" className="text-xs px-2.5 py-1">Locations</TabsTrigger>
             </TabsList>
 
             <TabsContent value="structure" className="mt-6 focus-visible:outline-none">
@@ -787,6 +903,45 @@ const OrganizationStructurePage = () => {
                             <span className="font-medium">{office.name}</span>
                             <Badge variant="outline" className="text-xs">{office.code}</Badge>
                             <Badge variant="secondary" className="text-xs">{office.officeType}</Badge>
+                            {office.locationName && (
+                              <Badge variant="outline" className="text-xs text-muted-foreground flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {office.locationName}
+                              </Badge>
+                            )}
+                            <div className="ml-auto flex gap-1">
+                              <Dialog open={officeEditOpen && editingOffice?.id === office.id} onOpenChange={(open) => { if (!open) { setOfficeEditOpen(false); setEditingOffice(null); } }}>
+                                <DialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditOffice(office)} title="Edit location">
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-md">
+                                  <DialogHeader>
+                                    <DialogTitle>Edit {office.name}</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4 py-4">
+                                    <div className="space-y-2">
+                                      <Label htmlFor="office-location">Physical location</Label>
+                                      <Select value={officeLocationId} onValueChange={setOfficeLocationId}>
+                                        <SelectTrigger id="office-location">
+                                          <SelectValue placeholder="Select a location..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {locations.map((loc) => (
+                                            <SelectItem key={loc.id} value={loc.id}>{loc.displayName}</SelectItem>
+                                          ))}
+                                          <SelectItem value="__none__">None</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <Button className="w-full" onClick={() => void handleSaveOfficeLocation()} disabled={savingOffice}>
+                                      {savingOffice ? "Saving..." : "Save"}
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
                           </div>
                           {office.description ? (
                             <p className="mt-1 text-xs text-muted-foreground">{office.description}</p>
@@ -839,6 +994,113 @@ const OrganizationStructurePage = () => {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            <TabsContent value="locations" className="mt-6 focus-visible:outline-none">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <MapPin className="h-5 w-5 text-primary" />
+                      Physical Locations
+                    </span>
+                    <Dialog open={locationFormOpen} onOpenChange={(open) => { setLocationFormOpen(open); if (!open) { setEditingLocation(null); setLocationForm({ building: "", floor: "", room: "", description: "" }); } }}>
+                      <DialogTrigger asChild>
+                        <Button size="sm" onClick={() => { setEditingLocation(null); setLocationForm({ building: "", floor: "", room: "", description: "" }); }}>
+                          <Plus className="h-4 w-4 mr-2" /> Add Location
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>{editingLocation ? "Edit Location" : "New Location"}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="building">Building *</Label>
+                            <Input id="building" value={locationForm.building} onChange={(e) => setLocationForm({ ...locationForm, building: e.target.value })} placeholder="e.g. NPA Headquarters" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="floor">Floor</Label>
+                              <Input id="floor" value={locationForm.floor} onChange={(e) => setLocationForm({ ...locationForm, floor: e.target.value })} placeholder="e.g. 3rd Floor" />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="room">Room / Office</Label>
+                              <Input id="room" value={locationForm.room} onChange={(e) => setLocationForm({ ...locationForm, room: e.target.value })} placeholder="e.g. Room 310" />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="loc-desc">Description</Label>
+                            <Input id="loc-desc" value={locationForm.description} onChange={(e) => setLocationForm({ ...locationForm, description: e.target.value })} placeholder="Optional notes about this location" />
+                          </div>
+                          <Button className="w-full" onClick={() => void handleCreateLocation()} disabled={savingLocation}>
+                            {savingLocation ? "Saving..." : editingLocation ? "Update Location" : "Create Location"}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {locations.length === 0 ? (
+                    <EmptyState
+                      icon={<MapPin className={registryQueueEmptyIconClass} />}
+                      title="No locations yet"
+                      message="Locations represent physical buildings, floors, and rooms where offices are situated."
+                      variant="dashed"
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {locations.map((loc) => (
+                        <div key={loc.id} className="rounded-lg border border-border p-3 flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{loc.displayName}</p>
+                            {loc.description && <p className="text-xs text-muted-foreground mt-0.5">{loc.description}</p>}
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost" size="icon" className="h-8 w-8"
+                              onClick={() => {
+                                setEditingLocation(loc);
+                                setLocationForm({ building: loc.building, floor: loc.floor, room: loc.room, description: loc.description });
+                                setLocationFormOpen(true);
+                              }}
+                              title="Edit"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete location?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete <strong>{loc.displayName}</strong>. Offices assigned to this location will have their location reset.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    onClick={() => void handleDeleteLocation(loc)}
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
           </Tabs>
         </AdminPageShell>
         )}

@@ -38,74 +38,6 @@ const quickStartSteps = [
   },
 ];
 
-const workspaceHighlights = [
-  {
-    icon: FileText,
-    title: "Correspondence",
-    description:
-      "Register, route, minute, approve, distribute (CC), print, download, and archive memos with end-to-end visibility.",
-    links: [
-      { label: "Inbox", href: "/correspondence/inbox" },
-      { label: "Register New", href: "/correspondence/register" },
-      { label: "Archived", href: "/correspondence/archived" },
-    ],
-  },
-  {
-    icon: Layers,
-    title: "Document Management",
-    description:
-      "Create, upload, version, tag metadata, collaborate, compare drafts, and link documents directly back to correspondence.",
-    links: [
-      { label: "My Documents", href: "/documents" },
-      { label: "My Documents", href: "/documents" },
-    ],
-  },
-  {
-    icon: Building2,
-    title: "Office Queues",
-    description:
-      "See what is currently sitting with MD, ED, GM, and AGM offices—acting officers inherit the same queue automatically.",
-    links: [
-      { label: "Correspondence Inbox", href: "/correspondence/inbox" },
-      { label: "Register Office Items", href: "/correspondence/register" },
-    ],
-  },
-  {
-    icon: ShieldCheck,
-    title: "Digital Signatures & Templates",
-    description:
-      "Manage signatures, template formats, organization defaults, personal overrides, and auto-apply rules for approvals.",
-    links: [
-      { label: "Signature Settings", href: "/settings" },
-      { label: "Admin Templates", href: "/admin/templates-hub" },
-    ],
-  },
-  {
-    icon: Users,
-    title: "Administration",
-    description:
-      "Maintain directorates, divisions, departments, assistants, and user assignments aligned with the real NPA structure.",
-    links: [
-      { label: "Directorates", href: "/admin/directorates" },
-      { label: "Divisions", href: "/admin/divisions" },
-      { label: "Departments", href: "/admin/departments" },
-      { label: "Assistants", href: "/admin/users-roles?tab=assistants" },
-      { label: "User Management", href: "/admin/users-roles?tab=users" },
-    ],
-  },
-  {
-    icon: HelpCircle,
-    title: "Analytics & Executive Dashboards",
-    description:
-      "Surface heatmaps, turnaround SLAs, delayed approvals, sensitivity breakdowns, and drill-down exports for leadership.",
-    links: [
-      { label: "Performance Analytics", href: "/analytics" },
-      { label: "Executive Dashboard", href: "/analytics/executive" },
-      { label: "Reports", href: "/analytics/reports" },
-    ],
-  },
-];
-
 type HelpGuide = {
   id: string;
   title: string;
@@ -349,35 +281,6 @@ export default function HelpAndGuidePage() {
               </CardContent>
             </Card>
           ))}
-        </section>
-
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Workspace Highlights</h2>
-            <p className="text-sm text-muted-foreground">
-              Jump directly into key ECM modules and understand what each area delivers.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {workspaceHighlights.map((highlight) => (
-              <Card key={highlight.title} className="border-border/60 bg-background/70 shadow-sm backdrop-blur">
-                <CardHeader className="space-y-3">
-                  <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <highlight.icon className="h-5 w-5" />
-                  </div>
-                  <CardTitle className="text-lg font-semibold">{highlight.title}</CardTitle>
-                  <CardDescription>{highlight.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
-                  {highlight.links.map((link, linkIndex) => (
-                    <Button key={`${link.href}-${link.label}-${linkIndex}`} variant="secondary" size="sm" asChild>
-                      <Link href={link.href}>{link.label}</Link>
-                    </Button>
-                  ))}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         </section>
 
         <section className="space-y-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +13,7 @@ import type { CaseDetail } from '@/lib/npa-structure';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface TimelineActivity {
@@ -41,7 +42,7 @@ interface CaseTimelineProps {
 
 export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
   const { currentUser } = useCurrentUser();
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal } = useAbortController();
   const [activities, setActivities] = useState<TimelineActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [auditError, setAuditError] = useState<string | null>(null);
@@ -64,13 +65,7 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
       return;
     }
 
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const signal = getSignal();
 
     const loadTimeline = async () => {
       setLoading(true);
@@ -277,12 +272,6 @@ export const CaseTimeline = ({ caseId, caseData }: CaseTimelineProps) => {
     };
 
     void loadTimeline();
-    
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
   }, [caseId, caseData]);
 
   const getActivityIcon = (type: TimelineActivity['type']) => {

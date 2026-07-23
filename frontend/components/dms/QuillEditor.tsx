@@ -80,6 +80,7 @@ export function QuillEditor({
   const [imageHeight, setImageHeight] = useState<number>(0);
   const [lockAspectRatio, setLockAspectRatio] = useState(true);
   const aspectRatioRef = useRef(1);
+  const initialContentSet = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -87,7 +88,8 @@ export function QuillEditor({
 
   useEffect(() => {
     if (!mounted || !editorRef.current) return;
-    if (value !== htmlValue) {
+    if (!initialContentSet.current || value !== htmlValue) {
+      initialContentSet.current = true;
       setHtmlValue(value ?? "");
       editorRef.current.innerHTML = value ?? "";
     }

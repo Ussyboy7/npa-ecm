@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { logError } from '@/lib/client-logger';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -22,6 +22,13 @@ import {
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
+import { ListRowCard } from '@/components/shared/ListRowCard';
+import {
+  correspondenceQueueLeadingBoxClass,
+  correspondenceQueueLeadingIconClass,
+  correspondenceQueueListStackClass,
+} from '@/components/shared/registry-queue-styles';
+import { cn } from '@/lib/utils';
 
 interface DelegatedItem {
   id: string;
@@ -192,81 +199,90 @@ const DelegatedInbox = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4">
+          <div className={correspondenceQueueListStackClass}>
             {filteredItems.map((item) => (
-              <Card key={item.id as string} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-2">
-                        <Badge variant={getPriorityColor(item.correspondence.priority)}>
-                          {item.correspondence.priority.toUpperCase()}
-                        </Badge>
-                        <Badge variant="outline" className="gap-1">
-                          <FileText className="h-3 w-3" />
-                          {item.correspondence.correspondence_type}
-                        </Badge>
-                        {item.expires_at && (
-                          <Badge variant="secondary" className="gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Expires: {formatDateShort(item.expires_at)}
-                          </Badge>
-                        )}
-                      </div>
-                      <CardTitle className="text-lg">
-                        {item.correspondence.subject}
-                      </CardTitle>
-                      <CardDescription className="mt-1">
-                        Ref: {item.correspondence.reference_number}
-                      </CardDescription>
-                    </div>
-                    <div className="text-right text-sm text-muted-foreground">
-                      <p>Delegated</p>
-                      <p className="font-medium">{formatDateShort(item.delegated_at)}</p>
-                    </div>
+              <ListRowCard
+                key={item.id as string}
+                density="compact"
+                href={`/correspondence/${item.correspondence.id}`}
+                leading={(
+                  <div className={cn(correspondenceQueueLeadingBoxClass, "bg-amber-500/10")}>
+                    <Users2 className={cn(correspondenceQueueLeadingIconClass, "text-amber-600 dark:text-amber-400")} />
                   </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="bg-muted/50 rounded-lg p-4 mb-4">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                      <UserIcon className="h-4 w-4" />
-                      <span>Delegated by:</span>
-                      <span className="font-medium text-foreground">
-                        {item.principal.first_name} {item.principal.last_name}
-                      </span>
-                    </div>
-                    {item.notes && (
-                      <div className="mt-3 pt-3 border-t border-border">
-                        <p className="text-sm font-medium mb-1">Instructions:</p>
-                        <p className="text-sm text-muted-foreground italic">"{item.notes}"</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
+                )}
+                footer={(
+                  <div className="flex items-center gap-2 pt-2">
                     <Button
-                      onClick={() => router.push(`/correspondence/${item.correspondence.id}`)}
-                      className="flex-1"
+                      size="sm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        router.push(`/correspondence/${item.correspondence.id}`);
+                      }}
+                      className="flex-1 h-8 text-xs"
                     >
-                      <Mail className="h-4 w-4 mr-2" />
-                      View & Handle Correspondence
+                      <Mail className="h-3 w-3 mr-1" />
+                      View & Handle
                     </Button>
                     <Button
+                      size="sm"
                       variant="outline"
-                      onClick={() => handleMarkComplete(item.id as string)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleMarkComplete(item.id as string);
+                      }}
                       disabled={completingIds.has(item.id as string)}
-                      className="text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10"
+                      className="h-8 text-xs text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-500/10"
                     >
                       {completingIds.has(item.id as string) ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                       ) : (
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
                       )}
                       Mark Complete
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
+                )}
+              >
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant={getPriorityColor(item.correspondence.priority)} className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none">
+                      {item.correspondence.priority.toUpperCase()}
+                    </Badge>
+                    <Badge variant="outline" className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none gap-1">
+                      <FileText className="h-3 w-3" />
+                      {item.correspondence.correspondence_type}
+                    </Badge>
+                    {item.expires_at && (
+                      <Badge variant="secondary" className="h-5 rounded-md border px-1.5 py-0 text-[10px] font-semibold leading-none gap-1">
+                        <Calendar className="h-3 w-3" />
+                        Expires: {formatDateShort(item.expires_at)}
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                    {formatDateShort(item.delegated_at)}
+                  </span>
+                </div>
+                <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
+                  {item.correspondence.subject}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Ref: {item.correspondence.reference_number}
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 border-t border-border/60 pt-1.5 text-[11px] leading-tight text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <UserIcon className="h-3 w-3 shrink-0 opacity-80" />
+                    <span>Delegated by: {item.principal.first_name} {item.principal.last_name}</span>
+                  </span>
+                  {item.notes && (
+                    <span className="inline-flex items-center gap-1 italic max-w-full truncate">
+                      “{item.notes}”
+                    </span>
+                  )}
+                </div>
+              </ListRowCard>
             ))}
           </div>
         )}

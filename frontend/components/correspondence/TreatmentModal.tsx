@@ -2,6 +2,7 @@
 
 import { logError } from '@/lib/client-logger';
 import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { useAbortController } from '@/hooks/use-abort-controller';
 import { startTransition } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -81,7 +82,7 @@ import { formatDate } from '@/lib/correspondence-helpers';
 interface TreatmentModalProps {
   correspondence: Correspondence;
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (result?: { createdResponseId?: string }) => void;
 }
 
 // UploadedFile type is now imported from use-file-upload hook
@@ -96,6 +97,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [responseType, setResponseType] = useState<'memo' | 'existing-document' | 'new-document'>('memo');
   const [memoSubject, setMemoSubject] = useState(`Re: ${correspondence.subject}`);
   const [memoSubjectError, setMemoSubjectError] = useState('');
+  const [documentTitle, setDocumentTitle] = useState(`Re: ${correspondence.subject}`);
   const [memoContent, setMemoContent] = useState('');
   const [memoContentError, setMemoContentError] = useState('');
   const [forwardTo, setForwardTo] = useState('');
@@ -155,7 +157,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const [_isDragActive, _setIsDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Request cancellation
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal, reset } = useAbortController();
 
   const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
 
@@ -202,17 +204,11 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     if (!isOpen) {
       restoreBodyInteractivity();
       // Cancel any ongoing requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
+      reset()
     }
     return () => {
       // Cleanup on unmount
       restoreBodyInteractivity();
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
     };
   }, [isOpen, restoreBodyInteractivity]);
 
@@ -223,7 +219,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     getDraftByCorrespondence(correspondence.id, 'treatment').then((draft) => {
       if (draft) {
         setMemoContent(draft.content);
-        setCharacterCount(draft.content.length);
+        setCharacterCount(draft.content.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().length);
         if (draft.subject) setMemoSubject(draft.subject);
         if (draft.forwardTo) setForwardTo(draft.forwardTo);
         if (draft.onBehalfOf) setOnBehalfOf(draft.onBehalfOf);
@@ -369,7 +365,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     if (!currentUser) return [];
     return getSuggestedApprovers({
       currentUser,
-      direction: 'upward', // Treatment responses are always upward
+      direction: correspondence.direction,
       correspondence,
       existingMinutes,
       offices,
@@ -425,9 +421,11 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     return 'text-muted-foreground';
   };
 
-  const handleContentChange = (text: string) => {
-    setMemoContent(text);
-    setCharacterCount(text.length);
+  const handleContentChange = (html: string) => {
+    setMemoContent(html);
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    setCharacterCount((div.textContent || '').trim().length);
     if (memoContentError) setMemoContentError('');
   };
 
@@ -492,7 +490,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   };
 
   const handleUseSuggestedNote = () => {
-    setMemoContent(suggestedCoveringNote);
+    const html = `<p>${suggestedCoveringNote}</p>`;
+    setMemoContent(html);
     setCharacterCount(suggestedCoveringNote.length);
     setShowSuggestedNote(false);
     toast.success('Covering note added');
@@ -520,7 +519,9 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       content = content.replace(/\{date\}/g, new Date().toLocaleDateString());
       
       setMemoContent(content);
-      setCharacterCount(content.length);
+      const div = document.createElement('div');
+      div.innerHTML = content;
+      setCharacterCount((div.textContent || '').trim().length);
       toast.success('Template applied');
   };
 
@@ -530,13 +531,17 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       return;
     }
     
+    const div = document.createElement('div');
+    div.innerHTML = content;
+    const plainText = (div.textContent || '').trim();
+    
     const template = await saveTemplate({
       id: generateId('template'),
       scope: 'user',
       scopeId: currentUser.id,
       title: name.trim(),
       contentHtml: content,
-      contentText: content,
+      contentText: plainText,
       createdBy: currentUser.id,
       updatedBy: currentUser.id,
       templateType: 'treatment',
@@ -619,7 +624,9 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
 
     // Validate based on response type
     if (responseType === 'memo') {
-      const trimmedContent = memoContent.trim();
+      const div = document.createElement('div');
+      div.innerHTML = memoContent;
+      const trimmedContent = (div.textContent || '').trim();
       if (!trimmedContent) {
         setMemoContentError('Memo content is required');
         return false;
@@ -679,8 +686,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     setShowConfirmation(false);
     setIsSubmitting(true);
     // Create AbortController for request cancellation
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const signal = getSignal();
     
     // Determine recipient - use person if selected, otherwise use office primary member
     let recipient = forwardTo ? findUserById(forwardTo) : null;
@@ -729,13 +735,18 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       const nextStep = getNextStepNumber(existingMinutes);
 
       // Build minute text based on response type
+      const stripHtml = (html: string) => {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        return (div.textContent || '').trim();
+      };
       let minuteText = '';
       if (responseType === 'memo') {
         // Include memo subject in minute text
-        minuteText = `[TREATMENT & RESPONSE]\n\nSubject: ${correspondence.subject}\nSubject: ${memoSubject.trim()}\n\n${memoContent.trim()}`;
+        minuteText = `[TREATMENT & RESPONSE]\n\nSubject: ${correspondence.subject}\nSubject: ${memoSubject.trim()}\n\n${stripHtml(memoContent)}`;
       } else if (responseType === 'existing-document') {
         const selectedDoc = documents.find(d => d.id === selectedDocumentId);
-        minuteText = `[RESPONSE WITH DOCUMENT]\n\nResponse sent with document: ${selectedDoc?.title || 'Document'}\n\n${memoContent.trim() || 'See attached document for details.'}`;
+        minuteText = `[RESPONSE WITH DOCUMENT]\n\nResponse sent with document: ${selectedDoc?.title || 'Document'}\n\n${stripHtml(memoContent) || 'See attached document for details.'}`;
       }
       
       if (purpose === 'approval' && applySignature && selectedSignatureTemplateId) {
@@ -754,7 +765,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           grade_level: currentUser.gradeLevel,
           action_type: 'treat',
           minute_text: minuteText,
-          direction: 'upward',
+          direction: correspondence.direction,
           step_number: nextStep,
           from_office_id: currentUserOfficeId || undefined,
           to_office_id: recipientOfficeId || targetOfficeId || undefined,
@@ -767,7 +778,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       // Update original correspondence - auto-complete when treating and responding
       // This marks the original as completed since a response has been created
       const correspondenceUpdate: Record<string, unknown> = {
-        direction: 'upward',
+        direction: correspondence.direction,
         status: 'completed',
       };
       
@@ -794,7 +805,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       const responseFormData = new FormData();
       responseFormData.append('reference_number', generateReferenceNumber(division?.code || 'NPA'));
       responseFormData.append('subject', memoSubject.trim());
-      
+      responseFormData.append('document_title', documentTitle.trim());
+
       // Include content based on response type
       if (responseType === 'memo') {
         responseFormData.append('body_html', memoContent.trim());
@@ -814,21 +826,11 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       responseFormData.append('status', 'pending');
       responseFormData.append('priority', correspondence.priority);
 
-      // Only send org IDs that still exist in backend to avoid "Invalid pk ... does not exist".
-      const validDivisionIds = new Set(divisions.map((d) => d.id));
-      const validDepartmentIds = new Set(departments.map((d) => d.id));
-
       const selectedOffice = targetOfficeId ? offices.find((office) => office.id === targetOfficeId) : undefined;
-      const divisionIdToSend =
-        (recipient?.division && validDivisionIds.has(recipient.division) ? recipient.division : undefined) ??
-        (selectedOffice?.divisionId && validDivisionIds.has(selectedOffice.divisionId) ? selectedOffice.divisionId : undefined) ??
-        (correspondence.divisionId && validDivisionIds.has(correspondence.divisionId) ? correspondence.divisionId : undefined);
+      const divisionIdToSend = recipient?.division ?? selectedOffice?.divisionId ?? correspondence.divisionId;
       if (divisionIdToSend) responseFormData.append('division', divisionIdToSend);
 
-      const departmentIdToSend =
-        (recipient?.department && validDepartmentIds.has(recipient.department) ? recipient.department : undefined) ??
-        (selectedOffice?.departmentId && validDepartmentIds.has(selectedOffice.departmentId) ? selectedOffice.departmentId : undefined) ??
-        (correspondence.departmentId && validDepartmentIds.has(correspondence.departmentId) ? correspondence.departmentId : undefined);
+      const departmentIdToSend = recipient?.department ?? selectedOffice?.departmentId ?? correspondence.departmentId;
       if (departmentIdToSend) responseFormData.append('department', departmentIdToSend);
       // Set recipient - prefer person, fallback to office primary member
       if (forwardTo) {
@@ -842,7 +844,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         }
         responseFormData.append('current_office', targetOfficeId);
       }
-      responseFormData.append('direction', 'upward');
+      responseFormData.append('direction', correspondence.direction);
       responseFormData.append('parent_correspondence_id', correspondence.id);
       
       // Add attachments to response correspondence
@@ -900,7 +902,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       // Close modal
       bumpSidebarCounts();
       setTimeout(() => {
-        onClose();
+        onClose({ createdResponseId: createdResponseCorrespondenceId ?? undefined });
         setTimeout(() => resetForm(), 100);
       }, 200);
 
@@ -947,7 +949,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
     } finally {
       setIsSubmitting(false);
       // Clear AbortController after request completes
-      abortControllerRef.current = null;
+      reset()
     }
   };
 
@@ -973,6 +975,8 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         subject: memoSubject,
         forwardTo,
         onBehalfOf: onBehalfOf !== 'none' ? onBehalfOf : undefined,
+        applySignature: purpose === 'approval' ? applySignature : undefined,
+        selectedSignatureTemplateId: purpose === 'approval' ? (selectedSignatureTemplateId ?? undefined) : undefined,
         files: fileMetadata.length > 0 ? fileMetadata : undefined,
       });
 
@@ -1001,7 +1005,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
       }}
     >
       <DialogContent 
-        className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6"
+        className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-4 sm:p-6"
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -1021,7 +1025,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[calc(95vh-220px)] sm:max-h-[calc(90vh-220px)] pr-4">
+        <div className="overflow-y-auto flex-1 min-h-0 pr-4">
           <div className="space-y-6 py-2">
             {/* Original Correspondence Card */}
             <Card className="bg-muted/50">
@@ -1310,6 +1314,17 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
             {/* Memo Composition Section - Only for memo response type */}
             {responseType === 'memo' && (
               <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="document-title">Document Title</Label>
+                  <Input
+                    id="document-title"
+                    value={documentTitle}
+                    onChange={(e) => setDocumentTitle(e.target.value)}
+                    placeholder="Title for the DMS document"
+                    maxLength={200}
+                  />
+                  <p className="text-xs text-muted-foreground">This will be the title of the document created in DMS.</p>
+                </div>
                 <MemoCompositionSection
               memoSubject={memoSubject}
               onMemoSubjectChange={(subject) => {
@@ -1450,7 +1465,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
               />
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <Button variant="outline" onClick={handleSaveDraft} disabled={isSubmitting}>
@@ -1480,11 +1495,12 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         type="treatment"
         data={{
           currentUserName: currentUser?.name || '',
-          recipientName: selectedRecipient?.name || '',
+          recipientName: selectedRecipient?.name || (targetOfficeId ? offices.find(o => o.id === targetOfficeId)?.name || 'Office' : ''),
           subject: memoSubject,
-          content: memoContent,
+          content: memoContent.replace(/\s*(?:color|background|background-color)\s*:\s*[^;"']+;?\s*/gi, ''),
+          fileAttachments: uploadedFiles.map(f => ({ name: f.name, size: f.size, url: f.preview || URL.createObjectURL(f.file) })),
           onBehalfOf: actingFor?.name,
-          direction: 'upward',
+          direction: correspondence.direction,
         }}
         disabled={isSubmitting}
       />

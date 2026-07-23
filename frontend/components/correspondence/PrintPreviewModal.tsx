@@ -1,5 +1,6 @@
 "use client";
 
+import React from 'react';
 import { logError } from '@/lib/client-logger';
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -8,6 +9,7 @@ import { Printer } from 'lucide-react';
 import { generateDocumentHTML, downloadAsPDF } from '@/lib/document-generator';
 import type { Correspondence, Minute } from '@/lib/npa-structure';
 import mammoth from 'mammoth';
+import { ModalErrorBoundary } from '@/components/shared/ModalErrorBoundary';
 
 interface PrintPreviewModalProps {
   correspondence: Correspondence;
@@ -19,7 +21,7 @@ interface PrintPreviewModalProps {
   attachmentFileName?: string;
 }
 
-export const PrintPreviewModal = ({ 
+const PrintPreviewModalContent = ({ 
   correspondence, 
   minutes, 
   isOpen, 
@@ -269,3 +271,10 @@ export const PrintPreviewModal = ({
     </Dialog>
   );
 };
+
+export const PrintPreviewModal = React.memo((props: PrintPreviewModalProps) => (
+  <ModalErrorBoundary onClose={props.onClose}>
+    <PrintPreviewModalContent {...props} />
+  </ModalErrorBoundary>
+));
+PrintPreviewModal.displayName = 'PrintPreviewModal';

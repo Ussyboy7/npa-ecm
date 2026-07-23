@@ -581,6 +581,30 @@ function ApprovalsForm() {
           </div>
         </div>
 
+        {/* Summary stats */}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            { label: 'Total Approvals', value: statistics.total, icon: Shield, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
+            { label: 'Valid (this page)', value: statistics.valid, icon: CheckCircle2, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
+            { label: 'Invalid (this page)', value: statistics.invalid, icon: XCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
+            { label: 'This month (this page)', value: statistics.thisMonth, icon: TrendingUp, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
+          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
+            <Card key={label}>
+              <CardContent className={registryQueueStatCardContentClass}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
+                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
+                  </div>
+                  <div>
+                    <p className={registryQueueStatLabelClass}>{label}</p>
+                    <p className={registryQueueStatValueClass}>{value}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
         {/* Inline filter bar */}
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-2">
@@ -618,30 +642,6 @@ function ApprovalsForm() {
             {hasActiveFilters && <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 text-xs">Clear</Button>}
           </CardContent>
         </Card>
-
-        {/* Summary stats */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: 'Total Approvals', value: statistics.total, icon: Shield, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-            { label: 'Valid (this page)', value: statistics.valid, icon: CheckCircle2, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
-            { label: 'Invalid (this page)', value: statistics.invalid, icon: XCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-            { label: 'This month (this page)', value: statistics.thisMonth, icon: TrendingUp, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
 
         {loading && !refreshing ? (
           <LoadingState message="Loading executive approvals…" />

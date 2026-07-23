@@ -1,5 +1,4 @@
 import { nanoid } from 'nanoid';
-import { logError } from '@/lib/client-logger';
 import type { User } from './npa-structure';
 import * as templateApi from './api/templates';
 import { hasTokens } from './api-client';
@@ -58,9 +57,6 @@ export const loadTemplates = async (force = false): Promise<DocumentTemplate[]> 
       const data = await templateApi.getTemplates({ isActive: true });
       templatesCache = { data, timestamp: Date.now() };
       return data;
-    } catch (error: unknown) {
-      logError('Failed to load templates from backend:', error);
-      throw error;
     } finally {
       templatesPromise = null;
     }
@@ -79,51 +75,46 @@ export const saveTemplate = async (template: DocumentTemplate): Promise<Document
     throw new Error('Authentication required to save templates');
   }
 
-  try {
-    if (template.id && template.id.startsWith('temp_')) {
-      const created = await templateApi.createTemplate({
-        scope: template.scope,
-        scopeId: template.scopeId,
-        title: template.title,
-        description: template.description,
-        contentHtml: template.contentHtml,
-        contentText: updatedTemplate.contentText,
-        templateType: template.templateType,
-        actionType: template.actionType,
-        isDefault: template.isDefault,
-      });
-      invalidateTemplatesCache();
-      return created;
-    }
+  if (template.id && template.id.startsWith('temp_')) {
+    const created = await templateApi.createTemplate({
+      scope: template.scope,
+      scopeId: template.scopeId,
+      title: template.title,
+      description: template.description,
+      contentHtml: template.contentHtml,
+      contentText: updatedTemplate.contentText,
+      templateType: template.templateType,
+      actionType: template.actionType,
+      isDefault: template.isDefault,
+    });
+    invalidateTemplatesCache();
+    return created;
+  }
 
-    try {
-      const updated = await templateApi.updateTemplate(template.id, {
-        title: template.title,
-        description: template.description,
-        contentHtml: template.contentHtml,
-        contentText: updatedTemplate.contentText,
-        isDefault: template.isDefault,
-      });
-      invalidateTemplatesCache();
-      return updated;
-    } catch (_error: unknown) {
-      const created = await templateApi.createTemplate({
-        scope: template.scope,
-        scopeId: template.scopeId,
-        title: template.title,
-        description: template.description,
-        contentHtml: template.contentHtml,
-        contentText: updatedTemplate.contentText,
-        templateType: template.templateType,
-        actionType: template.actionType,
-        isDefault: template.isDefault,
-      });
-      invalidateTemplatesCache();
-      return created;
-    }
-  } catch (error: unknown) {
-    logError('Failed to save template to backend:', error);
-    throw error;
+  try {
+    const updated = await templateApi.updateTemplate(template.id, {
+      title: template.title,
+      description: template.description,
+      contentHtml: template.contentHtml,
+      contentText: updatedTemplate.contentText,
+      isDefault: template.isDefault,
+    });
+    invalidateTemplatesCache();
+    return updated;
+  } catch {
+    const created = await templateApi.createTemplate({
+      scope: template.scope,
+      scopeId: template.scopeId,
+      title: template.title,
+      description: template.description,
+      contentHtml: template.contentHtml,
+      contentText: updatedTemplate.contentText,
+      templateType: template.templateType,
+      actionType: template.actionType,
+      isDefault: template.isDefault,
+    });
+    invalidateTemplatesCache();
+    return created;
   }
 };
 
@@ -148,13 +139,8 @@ export const deleteTemplate = async (id: string): Promise<void> => {
     return;
   }
 
-  try {
     await templateApi.deleteTemplate(id);
     invalidateTemplatesCache();
-  } catch (error: unknown) {
-    logError('Failed to delete template from backend:', error);
-    throw error;
-  }
 };
 
 export const getTemplatesByScope = async (scope: TemplateScope, scopeId?: string | null, templateType: TemplateType = 'document'): Promise<DocumentTemplate[]> => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useAbortController } from "@/hooks/use-abort-controller";
 
 interface CaseCommentsProps {
   caseId: string;
@@ -39,7 +40,7 @@ interface CaseCommentsProps {
 export function CaseComments({ caseId }: CaseCommentsProps) {
   const { currentUser } = useCurrentUser();
   const { users } = useOrganization();
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const { getSignal } = useAbortController();
   const [comments, setComments] = useState<CaseComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -58,13 +59,7 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
       return;
     }
 
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-    
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+    const signal = getSignal();
     
     const loadComments = async () => {
       setLoading(true);
@@ -86,12 +81,6 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
     };
     
     void loadComments();
-    
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
   }, [caseId]);
 
   const handleSubmitComment = async () => {
@@ -222,8 +211,7 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
   const handleSaveEdit = async (commentId: string) => {
     
     try {
-      abortControllerRef.current = new AbortController();
-      const signal = abortControllerRef.current.signal;
+      const signal = getSignal();
       
       const updated = await updateCaseComment(commentId, editContent, signal);
       
@@ -253,8 +241,7 @@ export function CaseComments({ caseId }: CaseCommentsProps) {
     }
     
     try {
-      abortControllerRef.current = new AbortController();
-      const signal = abortControllerRef.current.signal;
+      const signal = getSignal();
       
       await deleteCaseComment(commentId, signal);
       
