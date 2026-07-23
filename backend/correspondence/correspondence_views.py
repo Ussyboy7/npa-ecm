@@ -14,6 +14,7 @@ from django.db import models, IntegrityError
 from django.db.models import Exists, Prefetch, Q, OuterRef, Subquery, CharField, Count, Case as DBCase, When, IntegerField
 from django.utils import timezone
 from django.db import transaction
+from django.shortcuts import get_object_or_404
 
 from django_filters.rest_framework import DjangoFilterBackend
 
@@ -300,7 +301,7 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
                             ).values_list('correspondence_id', flat=True).distinct()
                         )
 
-                    base_q = Q(id__in=parallel_ids) | Q(id__in=dist_ids)
+                    base_q = Q(id__in=parallel_ids) | Q(id__in=dist_ids) | Q(created_by=user) | Q(current_approver=user)
                     user_office_ids = list(user_offices)
                     if user_office_ids:
                         base_q |= Q(current_office_id__in=user_office_ids) | Q(owning_office_id__in=user_office_ids)
@@ -798,7 +799,11 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="cancel-draft")
     def cancel_draft(self, request, pk=None):
-        correspondence = self.get_object()
+        # Look up without visibility scoping so creators get 403 (not 404) when denied.
+        correspondence = get_object_or_404(
+            self.base_queryset.filter(is_deleted=False),
+            pk=pk,
+        )
         user = request.user
 
         if correspondence.status != Correspondence.Status.PENDING:
@@ -849,7 +854,10 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="resend-draft")
     def resend_draft(self, request, pk=None):
-        correspondence = self.get_object()
+        correspondence = get_object_or_404(
+            self.base_queryset.filter(is_deleted=False),
+            pk=pk,
+        )
         user = request.user
 
         if correspondence.status != Correspondence.Status.WITHDRAWN:
@@ -2223,97 +2231,94 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="my-sent")
     def my_sent(self, request):
+        """Correspondence the current user has routed or formally dispatched."""
         user = request.user
+        sent_type = request.query_params.get("sent_type", "all").lower()
 
-        correspondence_ids_from_minutes = Minute.objects.filter(
+        routed_ids = Minute.objects.filter(
             user=user,
-            action_type__in=['minute', 'forward', 'approve', 'treat', 'reject']
-        ).values_list('correspondence_id', flat=True).distinct()
+            is_recalled=False,
+            action_type__in=["minute", "forward", "approve", "treat"],
+            dispatched_at__isnull=False,
+        ).values_list("correspondence_id", flat=True).distinct()
 
-        correspondence_ids_from_dispatch = DispatchRecord.objects.filter(
-            dispatched_by=user,
-        ).values_list('correspondence_id', flat=True).distinct()
+        external_dispatch_ids = DispatchRecord.objects.filter(
+            dispatched_by=user
+        ).values_list("correspondence_id", flat=True).distinct()
 
-        queryset = self.base_queryset.filter(
-            is_deleted=False,
-        ).filter(
-            Q(created_by=user) |
-            Q(id__in=correspondence_ids_from_minutes) |
-            Q(id__in=correspondence_ids_from_dispatch)
-        ).distinct()
+        acted_ids = Minute.objects.filter(
+            user=user,
+            is_recalled=False,
+            action_type__in=["minute", "forward", "approve", "treat"],
+        ).values_list("correspondence_id", flat=True).distinct()
 
-        statuses = request.query_params.getlist("status")
-        if statuses:
-            queryset = queryset.filter(status__in=statuses)
+        ownership = Q(created_by=user) | Q(id__in=acted_ids) | Q(id__in=external_dispatch_ids)
 
-        priorities = request.query_params.getlist("priority")
-        if priorities:
-            queryset = queryset.filter(priority__in=priorities)
+        sent_statuses = [
+            Correspondence.Status.COMPLETED,
+            Correspondence.Status.DISPATCHED,
+            Correspondence.Status.ACKNOWLEDGED,
+            Correspondence.Status.ARCHIVED,
+        ]
+        sent_filter = Q(id__in=routed_ids) | Q(status__in=sent_statuses)
 
-        search_term = request.query_params.get("search")
-        if search_term:
+        queryset = self.base_queryset.filter(is_deleted=False).filter(ownership & sent_filter).exclude(
+            status__in=[Correspondence.Status.PENDING, Correspondence.Status.IN_PROGRESS]
+        )
+
+        if sent_type == "internal":
+            queryset = queryset.filter(id__in=routed_ids).exclude(
+                status__in=[
+                    Correspondence.Status.DISPATCHED,
+                    Correspondence.Status.ACKNOWLEDGED,
+                    Correspondence.Status.PENDING,
+                    Correspondence.Status.IN_PROGRESS,
+                ]
+            )
+        elif sent_type == "external":
             queryset = queryset.filter(
-                Q(reference_number__icontains=search_term)
-                | Q(subject__icontains=search_term)
-                | Q(sender_name__icontains=search_term)
-                | Q(sender_organization__icontains=search_term)
-                | Q(current_office__name__icontains=search_term)
-                | Q(division__name__icontains=search_term)
-                | Q(current_approver__first_name__icontains=search_term)
-                | Q(current_approver__last_name__icontains=search_term)
+                Q(status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED])
+                | Q(id__in=external_dispatch_ids)
             )
 
-        date_from = request.query_params.get("date_from")
-        date_to = request.query_params.get("date_to")
-        if date_from:
-            queryset = queryset.filter(created_at__gte=date_from)
-        if date_to:
-            queryset = queryset.filter(created_at__lte=date_to)
-
-        sort_by = request.query_params.get("sort_by", "updated")
-        sort_order = request.query_params.get("sort_order", "desc")
-        order_prefix = "-" if sort_order == "desc" else ""
-
-        if sort_by == "priority":
-            queryset = queryset.annotate(
-                priority_order=DBCase(
-                    When(priority=Correspondence.Priority.URGENT, then=0),
-                    When(priority=Correspondence.Priority.HIGH, then=1),
-                    When(priority=Correspondence.Priority.MEDIUM, then=2),
-                    When(priority=Correspondence.Priority.LOW, then=3),
-                    default=99,
-                    output_field=IntegerField(),
-                )
-            ).order_by(f"{order_prefix}priority_order", "-created_at")
-        elif sort_by == "created":
-            queryset = queryset.order_by(f"{order_prefix}created_at")
-        elif sort_by == "updated":
-            queryset = queryset.order_by(f"{order_prefix}updated_at")
-        elif sort_by == "subject":
-            queryset = queryset.order_by(f"{'' if sort_order == 'asc' else '-'}subject")
-        elif sort_by == "reference":
-            queryset = queryset.order_by(f"{order_prefix}reference_number")
-        else:
-            queryset = queryset.order_by("-updated_at")
+        queryset = self._apply_correspondence_queue_filters(
+            queryset, request, default_sort_by="dispatch_date"
+        )
 
         total_count = queryset.count()
-        urgent_count = queryset.filter(priority=Correspondence.Priority.URGENT).count()
-        pending_count = queryset.filter(status=Correspondence.Status.PENDING).count()
-        in_progress_count = queryset.filter(status=Correspondence.Status.IN_PROGRESS).count()
-
-        paginator = StandardPageNumberPagination()
-        page = paginator.paginate_queryset(queryset, request)
-        serializer = self.get_serializer(page, many=True)
-        response = paginator.get_paginated_response(serializer.data)
+        internal_count = (
+            self.base_queryset.filter(is_deleted=False)
+            .filter(ownership)
+            .filter(id__in=routed_ids)
+            .exclude(
+                status__in=[
+                    Correspondence.Status.DISPATCHED,
+                    Correspondence.Status.ACKNOWLEDGED,
+                    Correspondence.Status.PENDING,
+                    Correspondence.Status.IN_PROGRESS,
+                ]
+            )
+            .count()
+        )
+        external_count = (
+            self.base_queryset.filter(is_deleted=False)
+            .filter(ownership)
+            .filter(
+                Q(status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED])
+                | Q(id__in=external_dispatch_ids)
+            )
+            .count()
+        )
 
         summary = {
             "total": total_count,
-            "urgent": urgent_count,
-            "pending": pending_count,
-            "in_progress": in_progress_count,
+            "internal": internal_count,
+            "external": external_count,
+            "urgent": queryset.filter(priority=Correspondence.Priority.URGENT).count(),
+            "pending": queryset.filter(status=Correspondence.Status.PENDING).count(),
+            "in_progress": queryset.filter(status=Correspondence.Status.IN_PROGRESS).count(),
         }
-        response.data["summary"] = summary
-        return response
+        return self._paginate_correspondence_queue(request, queryset, summary)
 
     def _apply_correspondence_queue_filters(self, queryset, request, *, default_sort_by="updated"):
         statuses = request.query_params.getlist("status")
