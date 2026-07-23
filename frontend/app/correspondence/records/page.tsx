@@ -12,15 +12,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   Archive,
   Search,
-  Calendar,
-  User as UserIcon,
-  CheckCircle2,
   RefreshCw,
   Download,
   MoreVertical,
@@ -44,17 +40,12 @@ import { RecordCard } from './components/RecordCard';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { DateRangePicker } from '@/components/shared/DateRangePicker';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
   correspondenceQueueListStackClass,
   registryQueueEmptyIconClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-  registryQueueSearchStatsShellContentClass,
 } from '@/components/shared/registry-queue-styles';
-import { cn } from '@/lib/utils';
 
 // Grade levels that can see directorate-wide records
 const DIRECTORATE_GRADES = new Set(['MDCS', 'EDCS', 'MD', 'ED']);
@@ -508,69 +499,48 @@ const RecordsArchiveForm = () => {
   return (
     <ErrorBoundary>
       <>
-        <div className="container mx-auto p-6 space-y-6">
-          {!currentUser ? (
+        {!currentUser ? (
+          <QueuePageShell
+            title="Archives"
+            subtitle={`Review completed and archived correspondence in your ${getScopeLabel().toLowerCase()} scope.`}
+          >
             <LoadingState message="Loading records…" />
-          ) : (
-            <>
-          {/* Header */}
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-bold">Archives</h1>
-              <p className="text-muted-foreground mt-1">
-                Review completed and archived correspondence in your {getScopeLabel().toLowerCase()} scope.
-              </p>
-            </div>
-          <div className="flex gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <MoreVertical className="h-4 w-4 mr-2" />
-                  More
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleRefresh} disabled={loading || refreshing}>
-                  <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || records.length === 0}>
-                  <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
-                  {exporting ? 'Exporting...' : 'Export'}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Summary stats */}
-        <Card>
-          <CardContent className={registryQueueSearchStatsShellContentClass}>
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-              {[
-                { label: 'Total Records', value: summary.total, icon: Archive, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-                { label: 'This Year', value: summary.thisYear, icon: Calendar, bgClass: 'bg-secondary/50', iconClass: 'text-muted-foreground' },
-                { label: 'Completed', value: summary.completed, icon: CheckCircle2, bgClass: 'bg-success/10', iconClass: 'text-success' },
-                { label: 'Archived', value: summary.archived, icon: Archive, bgClass: 'bg-muted', iconClass: 'text-muted-foreground' },
-              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-                <Card key={label} aria-label={label}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className="flex items-center gap-4">
-                      <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                      </div>
-                      <div>
-                        <p className={registryQueueStatLabelClass}>{label}</p>
-                        <p className={registryQueueStatValueClass}>{value}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
+          </QueuePageShell>
+        ) : (
+          <QueuePageShell
+            title="Archives"
+            subtitle={`Review completed and archived correspondence in your ${getScopeLabel().toLowerCase()} scope.`}
+            actions={(
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <MoreVertical className="h-4 w-4 mr-2" />
+                    More
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleRefresh} disabled={loading || refreshing}>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || records.length === 0}>
+                    <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
+                    {exporting ? 'Exporting...' : 'Export'}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            stats={(
+              <StatStrip
+                items={[
+                  { key: 'total', label: 'Total records', value: summary.total },
+                  { key: 'thisYear', label: 'This year', value: summary.thisYear },
+                  { key: 'completed', label: 'Completed', value: summary.completed },
+                  { key: 'archived', label: 'Archived', value: summary.archived },
+                ]}
+              />
+            )}
+          >
         {/* Inline filter bar */}
         <Card>
           <CardContent className="p-2">
@@ -704,10 +674,9 @@ const RecordsArchiveForm = () => {
             className="border-t border-border/60 pt-4"
           />
         )}
-        </>
-      )}
-      </div>
-    </>
+          </QueuePageShell>
+        )}
+      </>
     </ErrorBoundary>
   );
 };

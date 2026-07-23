@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { ScanDialog } from "@/components/capture/ScanDialog";
 import { BatchUploadDialog } from "@/components/capture/BatchUploadDialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,6 +30,8 @@ import {
 } from "@/lib/capture-storage";
 import { logError } from "@/lib/client-logger";
 import { ListRowCard } from "@/components/shared/ListRowCard";
+import { QueuePageShell } from "@/components/shared/QueuePageShell";
+import { StatStrip } from "@/components/shared/StatStrip";
 import {
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
@@ -103,18 +105,11 @@ function CaptureHubContent() {
   const completedJobs = jobs.filter((j) => j.status === "completed").slice(0, 20);
 
   return (
-    <div className="container mx-auto space-y-6 p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="flex items-center gap-3 text-3xl font-bold text-foreground">
-            <Scan className="h-8 w-8 shrink-0 text-primary" />
-            Content Capture
-          </h1>
-          <p className="mt-1 max-w-2xl text-muted-foreground">
-            Scan documents, run batch uploads, and track OCR processing jobs.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <QueuePageShell
+      title="Content Capture"
+      subtitle="Scan documents, run batch uploads, and track OCR processing jobs."
+      actions={(
+        <>
           <Button variant="outline" size="sm" onClick={() => void loadData()} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -127,32 +122,18 @@ function CaptureHubContent() {
             <Upload className="mr-2 h-4 w-4" />
             Batch upload
           </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active jobs</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-bold">{activeJobs.length}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-bold">
-            {jobs.filter((j) => j.status === "completed").length}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Batch uploads</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-bold">{batches.length}</CardContent>
-        </Card>
-      </div>
-
+        </>
+      )}
+      stats={(
+        <StatStrip
+          items={[
+            { key: 'active', label: 'Active jobs', value: activeJobs.length },
+            { key: 'completed', label: 'Completed', value: jobs.filter((j) => j.status === "completed").length },
+            { key: 'batches', label: 'Batch uploads', value: batches.length },
+          ]}
+        />
+      )}
+    >
       <Tabs defaultValue="jobs" className="space-y-4">
         <TabsList>
           <TabsTrigger value="jobs">
@@ -320,7 +301,7 @@ function CaptureHubContent() {
         onOpenChange={setBatchOpen}
         onComplete={() => void loadData()}
       />
-    </div>
+    </QueuePageShell>
   );
 }
 

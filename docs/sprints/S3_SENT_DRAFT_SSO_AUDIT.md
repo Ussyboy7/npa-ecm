@@ -1,9 +1,11 @@
-# Sprint S3 — Outbox APIs, SSO/MFA Staging & Audit RBAC
+# Sprint S3 — Sent draft APIs, SSO/MFA Staging & Audit RBAC
 
 **Sprint:** Phase 1, Month 4 (S3)  
 **Status:** Complete (June 2026)  
-**Last updated:** June 2026  
+**Last updated:** July 2026  
 **Related:** [REMAINING_WORK_BACKLOG.md](../procurement/REMAINING_WORK_BACKLOG.md) §8 P0
+
+> Product queues are **My Sent** / **Office Sent**.
 
 ---
 
@@ -11,7 +13,7 @@
 
 | # | Goal | Exit criteria |
 |---|------|----------------|
-| 1 | **Outbox cancel / resend draft** | Dedicated APIs + UI for cancel → edit → resend loop |
+| 1 | **Sent draft cancel / resend** | Dedicated APIs + UI for cancel → edit → resend loop |
 | 2 | **SSO staging readiness** | OIDC status endpoint; login hides AD button when unconfigured |
 | 3 | **Login MFA** | Already implemented (S2 backend + settings UI); document rollout |
 | 4 | **Audit log RBAC** | Activity log queryset uses permission keys, not grade names |
@@ -20,7 +22,7 @@
 
 ## Delivered
 
-### Outbox draft APIs
+### Sent draft APIs
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -29,9 +31,9 @@
 | `POST …/withdraw/` | Legacy; still supports pending + in-progress |
 | `POST …/resend-reminder/` | Reminder to current approver (unchanged) |
 
-Frontend: outbox list, detail, and office-outbox use `cancel-draft`; withdrawn rows show **Resend Draft**.
+Frontend: **My Sent** (and related detail) use `cancel-draft`; withdrawn rows show **Resend Draft**.
 
-Tests: `correspondence/tests/test_outbox_draft_actions.py`
+Tests: `correspondence/tests/test_sent_draft_actions.py`
 
 ### SSO / OIDC staging
 
@@ -79,7 +81,7 @@ Login flow: password → MFA challenge → `/auth/token/mfa/` (existing).
 | Task | Status |
 |------|--------|
 | `cancel-draft` + `resend-draft` APIs | ✅ |
-| Frontend outbox wiring | ✅ |
+| Frontend My Sent draft wiring | ✅ |
 | OIDC status + conditional login button | ✅ |
 | Audit log permission scoping | ✅ |
 | Sprint doc (this file) | ✅ |
@@ -91,8 +93,8 @@ Login flow: password → MFA challenge → `/auth/token/mfa/` (existing).
 ## Verification
 
 ```bash
-# Outbox draft tests (Postgres)
-make test-backend TESTS=correspondence.tests.test_outbox_draft_actions
+# Sent draft cancel/resend tests (Postgres)
+make test-backend TESTS=correspondence.tests.test_sent_draft_actions
 
 # OIDC status (local)
 curl -s http://localhost:8002/api/v1/accounts/auth/oidc/status/
@@ -102,7 +104,7 @@ cd frontend && npm run build
 ```
 
 Manual:
-1. Create pending correspondence → Outbox → Cancel draft → row shows withdrawn → Resend draft → pending again
+1. Create pending correspondence → My Sent → Cancel draft → row shows withdrawn → Resend draft → pending again
 2. With `OIDC_ENABLED=false`, login has no AD button; set env true → button appears
 3. User without `can_access_audit_compliance` sees only own audit entries
 

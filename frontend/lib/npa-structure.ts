@@ -465,6 +465,8 @@ export type CaseFormLink = {
   id: string;
   caseId: string;
   formDocumentId: string;
+  /** DMS Document id for /forms/{id} navigation */
+  documentId?: string;
   formTitle?: string;
   notes?: string;
   createdAt: string;

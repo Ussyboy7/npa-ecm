@@ -222,7 +222,7 @@ export function HRMSConnectorManager() {
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent size="md" height="fill">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit HRMS Connector" : "New HRMS Connector"}</DialogTitle>
             <DialogDescription>API credentials are encrypted at rest.</DialogDescription>

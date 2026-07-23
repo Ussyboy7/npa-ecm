@@ -479,7 +479,7 @@ export const SLAConfigurationTab = forwardRef<
 
         {/* Add/Edit Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-lg">
+          <DialogContent size="md">
             <DialogHeader>
               <DialogTitle>
                 {editingConfig ? 'Edit SLA Rule' : 'Create SLA Rule'}

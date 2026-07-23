@@ -5,6 +5,8 @@ import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { appType } from "@/lib/app-type";
 import { WorkflowTemplateForm } from "@/components/admin/WorkflowTemplateForm";
 import { WorkflowStepsBuilder } from "@/components/admin/WorkflowStepsBuilder";
 import {
@@ -197,10 +199,10 @@ function WorkflowTemplateEditorPageContent() {
                   Back
                 </Button>
                 <div>
-                  <h1 className="text-3xl font-bold">
+                  <h1 className={appType.pageTitleList}>
                     {isNew ? "Create Workflow Template" : isClone ? "Clone Workflow Template" : "Edit Workflow Template"}
                   </h1>
-                  <p className="text-sm sm:text-base text-muted-foreground mt-1">
+                  <p className={cn(appType.pageSubtitle)}>
                     {isNew
                       ? "Create a new reusable workflow template"
                       : isClone

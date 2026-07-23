@@ -153,7 +153,7 @@ export function SealBadge({ sealData, size = "sm", showDetails = false }: SealBa
           Sealed
         </Badge>
       </DialogTrigger>
-      <DialogContent className="max-w-lg w-[95vw] sm:w-full max-h-[90vh] overflow-hidden flex flex-col p-4 sm:p-6">
+      <DialogContent size="md" height="fill">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-emerald-600" />

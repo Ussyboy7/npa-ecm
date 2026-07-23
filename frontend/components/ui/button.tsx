@@ -19,8 +19,13 @@ const buttonVariants = cva(
       size: {
         default: "h-10 px-4 py-2",
         sm: "h-9 rounded-md px-3",
+        /** Detail / rail primary actions */
+        compact: "h-9 rounded-xl px-3.5 text-[13px] font-medium",
+        /** Quiet list-style action row */
+        quiet: "h-9 w-full justify-start rounded-lg px-2.5 text-[13px] font-normal text-muted-foreground hover:text-foreground",
         lg: "h-11 rounded-md px-8",
         icon: "h-10 w-10",
+        "icon-sm": "h-7 w-7",
       },
     },
     defaultVariants: {

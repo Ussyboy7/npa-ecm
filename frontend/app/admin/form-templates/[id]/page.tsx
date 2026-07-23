@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, Save } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { appType } from "@/lib/app-type";
 import {
   getFormTemplate,
   createFormTemplate,
@@ -157,10 +159,10 @@ export default function FormTemplateEditorPage() {
               Back
             </Button>
             <div>
-              <h1 className="text-3xl font-bold">
+              <h1 className={appType.pageTitleList}>
                 {isNew ? "Create Form Template" : "Edit Form Template"}
               </h1>
-              <p className="text-sm sm:text-base text-muted-foreground mt-1">
+              <p className={cn(appType.pageSubtitle)}>
                 {isNew
                   ? "Create a new reusable form template"
                   : "Edit form template details and structure"}

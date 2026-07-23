@@ -1814,16 +1814,6 @@ class CorrespondenceViewSet(viewsets.ModelViewSet):
             draft_type=CorrespondenceDraft.DraftType.REGISTRATION,
         ).count()
 
-        office_dispatched_count = 0
-        if office_ids or user.is_superuser:
-            dispatched_filter = Q(is_deleted=False) & Q(
-                status__in=[Correspondence.Status.DISPATCHED, Correspondence.Status.ACKNOWLEDGED]
-            )
-            if user.is_superuser and not office_ids:
-                office_dispatched_count = Correspondence.objects.filter(
-                    dispatched_filter
-                ).filter(dispatch_records__isnull=False).distinct().count()
-
         result = {
             "officeInbox": office_inbox_count,
             "unreadInboxCount": unread_inbox_count,

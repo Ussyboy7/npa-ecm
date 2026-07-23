@@ -1,38 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAbortController } from '@/hooks/use-abort-controller';
+import { useCallback, useEffect, useState } from "react";
+import { useAbortController } from "@/hooks/use-abort-controller";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CaseTimeline } from "@/components/cases/CaseTimeline";
-import { CaseComments } from "@/components/cases/CaseComments";
 import { LinkCorrespondenceDialog } from "@/components/cases/LinkCorrespondenceDialog";
 import { LinkDocumentDialog } from "@/components/cases/LinkDocumentDialog";
 import { LinkFormDialog } from "@/components/cases/LinkFormDialog";
 import { CaseHeader } from "./components/CaseHeader";
+import { CaseStatusStrip } from "./components/CaseStatusStrip";
+import { CaseMobileTabBar, CaseWorkspace } from "./components/CaseWorkspace";
+import { CaseMobileStickyBar } from "./components/CaseMobileStickyBar";
+import { CaseCommentsDialog } from "./components/CaseCommentsDialog";
+import { CaseFormPreviewDialog } from "./components/CaseFormPreviewDialog";
+import { DocumentVersionPreviewModal } from "@/components/dms/DocumentVersionPreviewModal";
+import { DocumentPreviewModal } from "@/components/correspondence/DocumentPreviewModal";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getCaseById, updateCaseStatus, generateCaseCompletionPackage, unlinkCorrespondenceFromCase, unlinkDocumentFromCase, unlinkFormFromCase, importCases, getCaseSLAStatus } from "@/lib/api/cases";
-import type { CaseDetail } from "@/lib/npa-structure";
-import { logError } from "@/lib/client-logger";
+import {
+  getCaseById,
+  updateCaseStatus,
+  generateCaseCompletionPackage,
+  unlinkCorrespondenceFromCase,
+  unlinkDocumentFromCase,
+  unlinkFormFromCase,
+  importCases,
+  getCaseSLAStatus,
+  getCaseComments,
+} from "@/lib/api/cases";
+import type { CaseDetail, Correspondence } from "@/lib/npa-structure";
+import {
+  canDownloadDocument,
+  fetchDocumentById,
+  type DocumentRecord,
+  type DocumentVersion,
+} from "@/lib/dms-storage";
+import { apiFetch } from "@/lib/api-client";
+import { mapApiCorrespondence } from "@/contexts/CorrespondenceContext";
+import type { ApiCorrespondence } from "@/lib/api/correspondence";
+import { isCorrespondenceClosed } from "@/lib/correspondence-helpers";
+import {
+  getCorrespondencePreviewContext,
+  getPrimaryLinkedDocument,
+} from "@/lib/correspondence-preview-target";
+import { logError, logWarn } from "@/lib/client-logger";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { ListRowCard } from "@/components/shared/ListRowCard";
-import {
-  FileText,
-  Link as LinkIcon,
-  Clock,
-  Trash2,
-  MessageSquare,
-  FileCheck,
-  Mail,
-} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -45,15 +59,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  correspondenceQueueLeadingBoxClass,
-  correspondenceQueueLeadingIconClass,
-  correspondenceQueueSubjectClass,
-  correspondenceQueueBadgeClass,
-  correspondenceQueueListStackClass,
-  registryQueueEmptyIconClass,
-} from "@/components/shared/registry-queue-styles";
-import { cn } from "@/lib/utils";
 
 const CaseDetailPage = () => {
   const params = useParams();
@@ -61,7 +66,7 @@ const CaseDetailPage = () => {
   const caseId = params.id as string;
   const { currentUser, hydrated } = useCurrentUser();
   const { offices, users } = useOrganization();
-  const { getSignal, reset } = useAbortController();
+  const { getSignal } = useAbortController();
 
   const [caseData, setCaseData] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,7 +79,7 @@ const CaseDetailPage = () => {
     name: string;
   } | null>(null);
   const [slaStatus, setSlaStatus] = useState<{
-    status: 'ok' | 'warning' | 'critical' | 'breach';
+    status: "ok" | "warning" | "critical" | "breach";
     target_date: string;
     target_days: number;
     breached: boolean;
@@ -84,7 +89,23 @@ const CaseDetailPage = () => {
   const [showLinkCorrespondenceDialog, setShowLinkCorrespondenceDialog] = useState(false);
   const [showLinkDocumentDialog, setShowLinkDocumentDialog] = useState(false);
   const [showLinkFormDialog, setShowLinkFormDialog] = useState(false);
+  const [commentsDialogOpen, setCommentsDialogOpen] = useState(false);
+  const [commentsCount, setCommentsCount] = useState(0);
+  const [commentsRefreshKey, setCommentsRefreshKey] = useState(0);
+  const [mobileActiveTab, setMobileActiveTab] = useState<"overview" | "details">("overview");
+  const [overviewFocus, setOverviewFocus] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [previewDocument, setPreviewDocument] = useState<DocumentRecord | null>(null);
+  const [previewVersion, setPreviewVersion] = useState<DocumentVersion | null>(null);
+  const [corrPreview, setCorrPreview] = useState<{
+    correspondence: Correspondence;
+    documentContentHtml?: string;
+    attachmentUrl?: string;
+    attachmentFileName?: string;
+    attachmentSource: "attachment" | "completion-package";
+  } | null>(null);
+  const [formPreviewId, setFormPreviewId] = useState<string | null>(null);
+  const [formPreviewTitle, setFormPreviewTitle] = useState<string | null>(null);
 
   useEffect(() => {
     if (!caseId || !currentUser?.id) {
@@ -99,31 +120,28 @@ const CaseDetailPage = () => {
       setSlaError(null);
       try {
         const data = await getCaseById(caseId, signal);
-        
+
         if (signal.aborted) return;
-        
+
         setCaseData(data);
-        
-        // Load SLA status with proper error handling
+
         try {
           const sla = await getCaseSLAStatus(caseId, signal);
-          
           if (signal.aborted) return;
-          
           setSlaStatus(sla);
         } catch (err: unknown) {
-          if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
-          // Log error and show user-friendly message
+          if (err && typeof err === "object" && "name" in err && err.name === "AbortError") return;
           logError("Failed to load SLA status", err);
           setSlaError("SLA status unavailable");
-          // Don't set slaStatus to null, just show error
         }
       } catch (err: unknown) {
-        if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return;
+        if (err && typeof err === "object" && "name" in err && err.name === "AbortError") return;
         logError("Failed to load case", err);
         const status = (err as Record<string, unknown>).status;
         if (status === 404) {
-          setError("Case not found. It may have been deleted or you may have followed an invalid link.");
+          setError(
+            "Case not found. It may have been deleted or you may have followed an invalid link.",
+          );
         } else {
           setError("Failed to load case. Please try again.");
         }
@@ -135,9 +153,23 @@ const CaseDetailPage = () => {
     };
 
     void fetchCase();
-    
-    return () => {};
-  }, [hydrated, currentUser?.id, caseId, refreshKey]);
+  }, [hydrated, currentUser?.id, caseId, refreshKey, getSignal]);
+
+  useEffect(() => {
+    if (!caseId || !currentUser?.id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const comments = await getCaseComments(caseId);
+        if (!cancelled) setCommentsCount(comments.length);
+      } catch {
+        if (!cancelled) setCommentsCount(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, currentUser?.id, commentsRefreshKey, refreshKey]);
 
   const handleStatusUpdate = async (newStatus: CaseDetail["status"]) => {
     if (!caseData) return;
@@ -173,13 +205,13 @@ const CaseDetailPage = () => {
       const text = await file.text();
       const data = JSON.parse(text);
       const result = await importCases(data);
-      
+
       if (result.imported > 0) {
         toast.success(`Successfully imported ${result.imported} case(s)`);
         if (result.failed > 0) {
           toast.warning(`${result.failed} case(s) failed to import`);
         }
-        router.push('/cases');
+        router.push("/cases");
       } else {
         toast.error("No cases were imported");
       }
@@ -192,7 +224,7 @@ const CaseDetailPage = () => {
   const handleUnlinkClick = (
     type: "correspondence" | "document" | "form",
     id: string,
-    name: string
+    name: string,
   ) => {
     setItemToUnlink({ type, id, name });
     setShowUnlinkConfirm(true);
@@ -210,10 +242,11 @@ const CaseDetailPage = () => {
         await unlinkFormFromCase(caseData.id, itemToUnlink.id);
       }
 
-      // Reload case data
       const updated = await getCaseById(caseData.id);
       setCaseData(updated);
-      toast.success(`${itemToUnlink.type.charAt(0).toUpperCase() + itemToUnlink.type.slice(1)} unlinked successfully`);
+      toast.success(
+        `${itemToUnlink.type.charAt(0).toUpperCase() + itemToUnlink.type.slice(1)} unlinked successfully`,
+      );
       setShowUnlinkConfirm(false);
       setItemToUnlink(null);
     } catch (err) {
@@ -224,7 +257,6 @@ const CaseDetailPage = () => {
 
   const handleItemLinked = async () => {
     if (!caseData) return;
-    // Reload case data to show newly linked items
     try {
       const updated = await getCaseById(caseData.id);
       setCaseData(updated);
@@ -232,429 +264,315 @@ const CaseDetailPage = () => {
       logError("Failed to reload case data", err);
     }
   };
-  
+
+  const handleCommentsCountChange = useCallback((count: number) => {
+    setCommentsCount(count);
+  }, []);
+
+  const handlePreviewDocument = useCallback(async (documentId: string) => {
+    const toastId = toast.loading("Opening document…");
+    try {
+      const doc = await fetchDocumentById(documentId);
+      const version = doc.versions?.[0];
+      if (!version) {
+        toast.error("This document has no file version to preview", { id: toastId });
+        return;
+      }
+      setPreviewDocument(doc);
+      setPreviewVersion(version);
+      toast.dismiss(toastId);
+    } catch (err) {
+      logError("Failed to load document for preview", err);
+      toast.error("Could not open document preview", { id: toastId });
+    }
+  }, []);
+
+  const closeDocumentPreview = useCallback(() => {
+    setPreviewVersion(null);
+    setPreviewDocument(null);
+  }, []);
+
+  const handlePreviewCorrespondence = useCallback(async (correspondenceId: string) => {
+    const toastId = toast.loading("Opening correspondence…");
+    try {
+      const raw = await apiFetch<ApiCorrespondence>(`/correspondence/items/${correspondenceId}/`);
+      const correspondence = mapApiCorrespondence(raw);
+      const linkedIds = correspondence.linkedDocumentIds ?? [];
+      const linkedDocs = (
+        await Promise.all(
+          linkedIds.map(async (docId) => {
+            try {
+              return await fetchDocumentById(docId);
+            } catch (err) {
+              logWarn(`Failed to load linked document ${docId}`, err);
+              return null;
+            }
+          }),
+        )
+      ).filter((doc): doc is DocumentRecord => Boolean(doc));
+
+      const isCompleted = isCorrespondenceClosed(correspondence.status);
+      const preview = getCorrespondencePreviewContext(
+        correspondence,
+        linkedDocs,
+        null,
+        isCompleted,
+      );
+      const primaryDoc = getPrimaryLinkedDocument(linkedDocs);
+      const documentContentHtml =
+        primaryDoc?.versions?.[primaryDoc.versions.length - 1]?.contentHtml;
+
+      if (!preview.previewUrl && !documentContentHtml?.trim() && !correspondence.treatmentResponse?.trim()) {
+        toast.error("No file available to preview for this correspondence", { id: toastId });
+        return;
+      }
+
+      setCorrPreview({
+        correspondence,
+        documentContentHtml,
+        attachmentUrl: preview.previewUrl,
+        attachmentFileName: preview.previewFileName,
+        attachmentSource: preview.source,
+      });
+      toast.dismiss(toastId);
+    } catch (err) {
+      logError("Failed to load correspondence for preview", err);
+      toast.error("Could not open correspondence preview", { id: toastId });
+    }
+  }, []);
+
+  const closeCorrespondencePreview = useCallback(() => {
+    setCorrPreview(null);
+  }, []);
+
   if (!currentUser?.id) {
     return null;
   }
 
-  const owningOffice = caseData ? offices.find((o) => o.id === caseData.owningOfficeId) : undefined;
+  const owningOffice = caseData
+    ? offices.find((o) => o.id === caseData.owningOfficeId)
+    : undefined;
   const assignedTo = caseData ? users.find((u) => u.id === caseData.assignedToId) : undefined;
   const createdBy = caseData ? users.find((u) => u.id === caseData.createdById) : undefined;
 
-  return (
-    <>
-      {loading ? (
-        <div className="px-4 md:px-6 py-6">
-          <LoadingState message="Loading case…" />
-        </div>
-      ) : error || !caseData ? (
-        <div className="px-4 md:px-6 py-6">
-          <ErrorState
-            message={error || "Case not found"}
-            onRetry={error && error.includes("not found") ? undefined : () => setRefreshKey((k) => k + 1)}
-          />
-          <div className="flex justify-center mt-4">
-            <Button variant="outline" onClick={() => router.push("/cases/my")}>
-              Back to Cases
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <ErrorBoundary>
-          <CaseHeader
-          caseData={caseData}
-          slaStatus={slaStatus}
-          slaError={slaError}
-          updatingStatus={updatingStatus}
-          onStatusUpdate={handleStatusUpdate}
-          onGenerateCompletionPackage={handleGenerateCompletionPackage}
-          onImport={() => setShowImportDialog(true)}
-          owningOffice={owningOffice || null}
-          assignedTo={assignedTo || null}
-          createdBy={createdBy || null}
-        />
-        
-        <div className="px-4 md:px-6 py-6 space-y-6">
-
-        {/* Help Guide */}
-
-        {/* Case Description */}
-        {caseData.description && (
-          <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-4">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Description</h3>
-            <div className="text-sm whitespace-pre-wrap leading-relaxed">{caseData.description}</div>
-          </div>
-        )}
-
-        {/* Tabs for Related Items */}
-        <Tabs defaultValue="correspondence" className="space-y-4">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 w-6 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
-            <div className="absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
-          <div className="overflow-x-auto -mx-1">
-            <TabsList className="inline-flex flex-nowrap w-max min-w-0">
-            <TabsTrigger value="correspondence" className="gap-2 shrink-0">
-              <FileText className="h-4 w-4" />
-              Correspondence
-              <Badge variant="secondary" className="ml-1">
-                {caseData.correspondence?.length || 0}
-              </Badge>
-            </TabsTrigger>
-            <TabsTrigger value="documents" className="gap-2 shrink-0">
-              <FileText className="h-4 w-4" />
-              Documents
-              <Badge variant="secondary" className="ml-1">
-                {caseData.documents?.length || 0}
-              </Badge>
-            </TabsTrigger>
-            <TabsTrigger value="forms" className="gap-2 shrink-0">
-              <FileText className="h-4 w-4" />
-              Forms
-              <Badge variant="secondary" className="ml-1">
-                {caseData.forms?.length || 0}
-              </Badge>
-            </TabsTrigger>
-            <TabsTrigger value="comments" className="gap-2 shrink-0">
-              <MessageSquare className="h-4 w-4" />
-              Comments
-            </TabsTrigger>
-            <TabsTrigger value="timeline" className="gap-2 shrink-0">
-              <Clock className="h-4 w-4" />
-              Timeline & History
-            </TabsTrigger>
-          </TabsList>
-          </div>
-          </div>
-
-          <TabsContent value="correspondence">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Related Correspondence</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowLinkCorrespondenceDialog(true)}
-                    aria-label="Link correspondence to case"
-                  >
-                    <LinkIcon className="h-4 w-4 mr-2" />
-                    Link Correspondence
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!caseData.correspondence || caseData.correspondence.length === 0 ? (
-                  <EmptyState
-                    icon={<Mail className={registryQueueEmptyIconClass} />}
-                    title="No correspondence linked"
-                    message="Link correspondence to build the case file."
-                    actionLabel="Link Correspondence"
-                    onAction={() => setShowLinkCorrespondenceDialog(true)}
-                  />
-                ) : (
-                  <div className={correspondenceQueueListStackClass}>
-                    {caseData.correspondence.map((link) => (
-                      <ListRowCard
-                        key={link.id}
-                        density="compact"
-                        href={link.correspondence ? `/correspondence/${link.correspondence.id}` : undefined}
-                        leading={
-                          <div className={cn(correspondenceQueueLeadingBoxClass, "bg-primary/10")}>
-                            <Mail className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
-                          </div>
-                        }
-                        actions={
-                          <div className="flex items-center gap-1">
-                            {link.correspondence && (
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link href={`/correspondence/${link.correspondence.id}`}>View</Link>
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                link.correspondence &&
-                                handleUnlinkClick(
-                                  "correspondence",
-                                  link.correspondence.id,
-                                  link.correspondence.referenceNumber || link.correspondence.subject || "correspondence"
-                                )
-                              }
-                              className="text-destructive hover:text-destructive"
-                              title="Unlink correspondence"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        }
-                      >
-                        <h4 className={correspondenceQueueSubjectClass}>
-                          {link.correspondence?.subject || "—"}
-                        </h4>
-                        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                            <Badge variant="outline" className={cn(correspondenceQueueBadgeClass, "font-mono")}>
-                              {link.correspondence?.referenceNumber || "—"}
-                            </Badge>
-                            <Badge variant="outline" className={correspondenceQueueBadgeClass}>
-                              {link.correspondence?.status || "—"}
-                            </Badge>
-                            {link.isPrimary && <Badge variant="default" className={correspondenceQueueBadgeClass}>Primary</Badge>}
-                          </div>
-                        </div>
-                      </ListRowCard>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="documents">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Related Documents</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowLinkDocumentDialog(true)}
-                    aria-label="Link document to case"
-                  >
-                    <LinkIcon className="h-4 w-4 mr-2" />
-                    Link Document
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!caseData.documents || caseData.documents.length === 0 ? (
-                  <EmptyState
-                    icon={<FileText className={registryQueueEmptyIconClass} />}
-                    title="No documents linked"
-                    message="Link documents to build the case file."
-                    actionLabel="Link Document"
-                    onAction={() => setShowLinkDocumentDialog(true)}
-                  />
-                ) : (
-                  <div className={correspondenceQueueListStackClass}>
-                    {caseData.documents.map((link) => (
-                      <ListRowCard
-                        key={link.id}
-                        density="compact"
-                        href={link.documentId ? `/dms/${link.documentId}` : undefined}
-                        leading={
-                          <div className={cn(correspondenceQueueLeadingBoxClass, "bg-primary/10")}>
-                            <FileText className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
-                          </div>
-                        }
-                        actions={
-                          <div className="flex items-center gap-1">
-                            {link.documentId ? (
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link href={`/dms/${link.documentId}`}>View</Link>
-                              </Button>
-                            ) : (
-                              <Button variant="ghost" size="sm" disabled title="Document ID is missing">
-                                View
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                link.documentId &&
-                                handleUnlinkClick("document", link.documentId, link.documentTitle || "document")
-                              }
-                              disabled={!link.documentId}
-                              className="text-destructive hover:text-destructive"
-                              title={link.documentId ? "Unlink document" : "Cannot unlink: missing document ID"}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        }
-                      >
-                        <h4 className={correspondenceQueueSubjectClass}>{link.documentTitle || "—"}</h4>
-                        {link.notes && (
-                          <p className="mt-1 text-sm text-muted-foreground line-clamp-1">{link.notes}</p>
-                        )}
-                        {!link.documentId && (
-                          <Badge variant="destructive" className="mt-1 text-xs">Missing ID</Badge>
-                        )}
-                      </ListRowCard>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="forms">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Related Forms</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowLinkFormDialog(true)}
-                    aria-label="Link form to case"
-                  >
-                    <LinkIcon className="h-4 w-4 mr-2" />
-                    Link Form
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {!caseData.forms || caseData.forms.length === 0 ? (
-                  <EmptyState
-                    icon={<FileCheck className={registryQueueEmptyIconClass} />}
-                    title="No forms linked"
-                    message="Link forms to build the case file."
-                    actionLabel="Link Form"
-                    onAction={() => setShowLinkFormDialog(true)}
-                  />
-                ) : (
-                  <div className={correspondenceQueueListStackClass}>
-                    {caseData.forms.map((link) => (
-                      <ListRowCard
-                        key={link.id}
-                        density="compact"
-                        href={link.formDocumentId ? `/forms/${link.formDocumentId}` : undefined}
-                        leading={
-                          <div className={cn(correspondenceQueueLeadingBoxClass, "bg-primary/10")}>
-                            <FileCheck className={cn(correspondenceQueueLeadingIconClass, "text-primary")} />
-                          </div>
-                        }
-                        actions={
-                          <div className="flex items-center gap-1">
-                            {link.formDocumentId ? (
-                              <Button variant="ghost" size="sm" asChild>
-                                <Link href={`/forms/${link.formDocumentId}`}>View</Link>
-                              </Button>
-                            ) : (
-                              <Button variant="ghost" size="sm" disabled title="Form document ID is missing">
-                                View
-                              </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                link.formDocumentId &&
-                                handleUnlinkClick("form", link.formDocumentId, link.formTitle || "form")
-                              }
-                              disabled={!link.formDocumentId}
-                              className="text-destructive hover:text-destructive"
-                              title={link.formDocumentId ? "Unlink form" : "Cannot unlink: missing form document ID"}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        }
-                      >
-                        <h4 className={correspondenceQueueSubjectClass}>{link.formTitle || "—"}</h4>
-                        {link.notes && (
-                          <p className="mt-1 text-sm text-muted-foreground line-clamp-1">{link.notes}</p>
-                        )}
-                        {!link.formDocumentId && (
-                          <Badge variant="destructive" className="mt-1 text-xs">Missing ID</Badge>
-                        )}
-                      </ListRowCard>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="comments">
-            <CaseComments caseId={caseId} />
-          </TabsContent>
-          <TabsContent value="timeline">
-            <CaseTimeline caseId={caseId} caseData={caseData} />
-          </TabsContent>
-        </Tabs>
-
-        {/* Import Dialog */}
-        <AlertDialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Import Cases</AlertDialogTitle>
-              <AlertDialogDescription>
-                Select a JSON file exported from the case management system to import cases.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="py-4">
-              <input
-                type="file"
-                accept=".json"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    handleImport(file);
-                    setShowImportDialog(false);
-                  }
-                }}
-                className="w-full"
-              />
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Link Dialogs */}
-        {caseData && (
-          <>
-            <LinkCorrespondenceDialog
-              open={showLinkCorrespondenceDialog}
-              onOpenChange={setShowLinkCorrespondenceDialog}
-              caseId={caseData.id}
-              caseNumber={caseData.caseNumber}
-              onLinked={handleItemLinked}
-            />
-            <LinkDocumentDialog
-              open={showLinkDocumentDialog}
-              onOpenChange={setShowLinkDocumentDialog}
-              caseId={caseData.id}
-              caseNumber={caseData.caseNumber}
-              onLinked={handleItemLinked}
-            />
-            <LinkFormDialog
-              open={showLinkFormDialog}
-              onOpenChange={setShowLinkFormDialog}
-              caseId={caseData.id}
-              caseNumber={caseData.caseNumber}
-              onLinked={handleItemLinked}
-            />
-          </>
-        )}
-
-        {/* Unlink Confirmation Dialog */}
-        <AlertDialog open={showUnlinkConfirm} onOpenChange={setShowUnlinkConfirm}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Unlink</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to unlink <strong>{itemToUnlink?.name}</strong> from case{" "}
-                <strong>{caseData?.caseNumber}</strong>? This action can be undone by linking it again.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleUnlinkConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                Unlink
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+  if (loading) {
+    return (
+      <div className="px-4 md:px-6 py-6">
+        <LoadingState message="Loading case…" />
       </div>
-      </ErrorBoundary>
-      )}
-    </>
+    );
+  }
+
+  if (error || !caseData) {
+    return (
+      <div className="px-4 md:px-6 py-6">
+        <ErrorState
+          message={error || "Case not found"}
+          onRetry={
+            error && error.includes("not found")
+              ? undefined
+              : () => setRefreshKey((k) => k + 1)
+          }
+        />
+        <div className="flex justify-center mt-4">
+          <Button variant="outline" onClick={() => router.push("/cases/my")}>
+            Back to Cases
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ErrorBoundary>
+      <div className="flex flex-col min-w-0 flex-1 min-h-0 overflow-hidden">
+        <div className="flex-shrink-0">
+          <CaseHeader
+            caseData={caseData}
+            updatingStatus={updatingStatus}
+            onStatusUpdate={handleStatusUpdate}
+            onGenerateCompletionPackage={handleGenerateCompletionPackage}
+            onImport={() => setShowImportDialog(true)}
+          />
+          <CaseStatusStrip
+            caseData={caseData}
+            slaStatus={slaStatus}
+            slaError={slaError}
+            owningOfficeName={owningOffice?.name}
+            assignedToName={assignedTo?.name}
+          />
+          <CaseMobileTabBar
+            commentsCount={commentsCount}
+            mobileActiveTab={mobileActiveTab}
+            onSetMobileActiveTab={setMobileActiveTab}
+          />
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+          <CaseWorkspace
+            mobileActiveTab={mobileActiveTab}
+            overviewFocus={overviewFocus}
+            onSetOverviewFocus={setOverviewFocus}
+            overviewProps={{
+              caseData,
+              onLinkCorrespondence: () => setShowLinkCorrespondenceDialog(true),
+              onLinkDocument: () => setShowLinkDocumentDialog(true),
+              onLinkForm: () => setShowLinkFormDialog(true),
+            }}
+            sidebarProps={{
+              caseId,
+              caseData,
+              commentsCount,
+              commentsRefreshKey,
+              onCommentsCountChange: handleCommentsCountChange,
+              onOpenCommentsDialog: () => setCommentsDialogOpen(true),
+              onLinkCorrespondence: () => setShowLinkCorrespondenceDialog(true),
+              onLinkDocument: () => setShowLinkDocumentDialog(true),
+              onLinkForm: () => setShowLinkFormDialog(true),
+              onUnlink: handleUnlinkClick,
+              onPreviewDocument: (documentId) => {
+                void handlePreviewDocument(documentId);
+              },
+              onPreviewCorrespondence: (correspondenceId) => {
+                void handlePreviewCorrespondence(correspondenceId);
+              },
+              onPreviewForm: (formDocumentId, title) => {
+                setFormPreviewId(formDocumentId);
+                setFormPreviewTitle(title ?? null);
+              },
+              slaStatus,
+              slaError,
+              owningOfficeName: owningOffice?.name,
+              assignedToName: assignedTo?.name,
+              createdByName: createdBy?.name ?? caseData.createdByName,
+            }}
+          />
+        </div>
+
+        <CaseMobileStickyBar
+          canPackage={caseData.status === "closed" && !caseData.completionPackage}
+          packageHref={caseData.completionPackage?.fileUrl}
+          onPackage={handleGenerateCompletionPackage}
+          onLink={() => setShowLinkCorrespondenceDialog(true)}
+          onComments={() => setCommentsDialogOpen(true)}
+        />
+      </div>
+
+      <CaseCommentsDialog
+        open={commentsDialogOpen}
+        onOpenChange={(open) => {
+          setCommentsDialogOpen(open);
+          if (!open) setCommentsRefreshKey((k) => k + 1);
+        }}
+        caseId={caseId}
+      />
+
+      {previewVersion && previewDocument ? (
+        <DocumentVersionPreviewModal
+          version={previewVersion}
+          isOpen
+          onClose={closeDocumentPreview}
+          documentId={previewDocument.id}
+          allowDownload={canDownloadDocument(previewDocument)}
+        />
+      ) : null}
+
+      {corrPreview ? (
+        <DocumentPreviewModal
+          correspondence={corrPreview.correspondence}
+          minutes={[]}
+          isOpen
+          onClose={closeCorrespondencePreview}
+          documentContentHtml={corrPreview.documentContentHtml}
+          attachmentUrl={corrPreview.attachmentUrl}
+          attachmentFileName={corrPreview.attachmentFileName}
+          attachmentSource={corrPreview.attachmentSource}
+        />
+      ) : null}
+
+      <CaseFormPreviewDialog
+        open={Boolean(formPreviewId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setFormPreviewId(null);
+            setFormPreviewTitle(null);
+          }
+        }}
+        formDocumentId={formPreviewId}
+        titleHint={formPreviewTitle}
+      />
+
+      <AlertDialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import Cases</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select a JSON file exported from the case management system to import cases.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <input
+              type="file"
+              accept=".json"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  void handleImport(file);
+                  setShowImportDialog(false);
+                }
+              }}
+              className="w-full"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <LinkCorrespondenceDialog
+        open={showLinkCorrespondenceDialog}
+        onOpenChange={setShowLinkCorrespondenceDialog}
+        caseId={caseData.id}
+        caseNumber={caseData.caseNumber}
+        onLinked={handleItemLinked}
+      />
+      <LinkDocumentDialog
+        open={showLinkDocumentDialog}
+        onOpenChange={setShowLinkDocumentDialog}
+        caseId={caseData.id}
+        caseNumber={caseData.caseNumber}
+        onLinked={handleItemLinked}
+      />
+      <LinkFormDialog
+        open={showLinkFormDialog}
+        onOpenChange={setShowLinkFormDialog}
+        caseId={caseData.id}
+        caseNumber={caseData.caseNumber}
+        onLinked={handleItemLinked}
+      />
+
+      <AlertDialog open={showUnlinkConfirm} onOpenChange={setShowUnlinkConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Unlink</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to unlink <strong>{itemToUnlink?.name}</strong> from case{" "}
+              <strong>{caseData.caseNumber}</strong>? This action can be undone by linking it again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleUnlinkConfirm()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Unlink
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </ErrorBoundary>
   );
 };
 

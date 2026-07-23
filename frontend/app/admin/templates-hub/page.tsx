@@ -11,13 +11,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { QuillEditor } from "@/components/dms/QuillEditor";
+import { RichTextEditor } from "@/components/dms/RichTextEditor";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { AdminPageShell } from "@/components/shared/AdminPageShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ListRowCard } from "@/components/shared/ListRowCard";
+import { StatStrip } from "@/components/shared/StatStrip";
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueLeadingBoxClass,
@@ -27,11 +28,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
 } from "@/components/shared/registry-queue-styles";
 import { cn } from "@/lib/utils";
 import {
@@ -673,7 +669,7 @@ function TemplatesHubForm() {
     const sortedSteps = [...workflowPreview.steps].sort((a, b) => a.order - b.order);
     return (
       <Dialog open={workflowPreviewId !== null} onOpenChange={(open) => { if (!open) setWorkflowPreviewId(null); }}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent size="md" height="scroll">
           <DialogHeader>
             <DialogTitle>{workflowPreview.name}</DialogTitle>
           </DialogHeader>
@@ -726,7 +722,7 @@ function TemplatesHubForm() {
     const fieldCount = formPreview.structure?.fields?.length || 0;
     return (
       <Dialog open={formPreviewId !== null} onOpenChange={(open) => { if (!open) setFormPreviewId(null); }}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent size="md" height="scroll">
           <DialogHeader>
             <DialogTitle>{formPreview.name}</DialogTitle>
           </DialogHeader>
@@ -860,7 +856,7 @@ function TemplatesHubForm() {
             )}
 
             <Dialog open={templateEditorOpen} onOpenChange={(open) => { if (!open) { setTemplateEditorOpen(false); setSelectedTemplateId(null); } }}>
-              <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogContent size="lg" height="scroll">
                 <DialogHeader>
                   <DialogTitle>
                     {selectedTemplateId ? "Edit template" : "New template"}
@@ -889,7 +885,7 @@ function TemplatesHubForm() {
                       />
                     ) : (
                       <div className="border rounded-lg bg-background">
-                        <QuillEditor value={contentHtml} onChange={(html) => setContentHtml(html)} showCharacterCount={false} />
+                        <RichTextEditor value={contentHtml} onChange={(html) => setContentHtml(html)} showCharacterCount={false} />
                       </div>
                     )}
                   </div>
@@ -938,32 +934,18 @@ function TemplatesHubForm() {
             icon={LayoutTemplate}
             actions={headerActions}
           >
-          <div className={cn("grid gap-4", canAccessAdvancedTemplates ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-2")}>
-            {[
-              { label: "Document templates", value: documentCount, icon: FileEdit, bgClass: "bg-primary/10", iconClass: "text-primary" },
-              { label: "Minute templates", value: minuteCount, icon: MessageSquare, bgClass: "bg-info/10", iconClass: "text-info" },
+          <StatStrip
+            items={[
+              { key: "documents", label: "Document templates", value: documentCount },
+              { key: "minutes", label: "Minute templates", value: minuteCount },
               ...(canAccessAdvancedTemplates
                 ? [
-                    { label: "Workflow templates", value: workflowStats.total, icon: GitBranch, bgClass: "bg-success/10", iconClass: "text-success" },
-                    { label: "Form templates", value: formTemplates.length, icon: FormInput, bgClass: "bg-warning/10", iconClass: "text-warning" },
+                    { key: "workflows", label: "Workflow templates", value: workflowStats.total },
+                    { key: "forms", label: "Form templates", value: formTemplates.length },
                   ]
                 : []),
-            ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-              <Card key={label}>
-                <CardContent className={registryQueueStatCardContentClass}>
-                  <div className="flex items-center gap-4">
-                    <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                      <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                    </div>
-                    <div>
-                      <p className={registryQueueStatLabelClass}>{label}</p>
-                      <p className={registryQueueStatValueClass}>{value}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+            ]}
+          />
 
           {(activeTab === "workflows" || activeTab === "forms" || activeTab === "documents" || activeTab === "minutes") ? (
             <Card>
@@ -1246,7 +1228,7 @@ function TemplatesHubForm() {
 
         {/* Create Form Dialog */}
         <Dialog open={showFormCreate} onOpenChange={setShowFormCreate}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent size="sm">
             <DialogHeader>
               <DialogTitle>Create Form Template</DialogTitle>
             </DialogHeader>

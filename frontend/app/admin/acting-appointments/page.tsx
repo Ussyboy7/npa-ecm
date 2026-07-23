@@ -272,7 +272,7 @@ export default function ActingAppointmentsPage() {
                 Appoint acting
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent size="md">
               <DialogHeader>
                 <DialogTitle>Appoint acting officer</DialogTitle>
               </DialogHeader>

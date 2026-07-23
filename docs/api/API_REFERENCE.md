@@ -178,17 +178,18 @@ interface InboxCounts {
 
 **Used by:** `useSidebarCounts` hook
 
-### Outbox Counts
+### Sent counts (via sidebar-counts)
 
-#### GET /correspondence/outbox/counts/
-Retrieves outbox counts for sidebar display.
+Sent badge counts are included on `GET /correspondence/items/sidebar-counts/` as `mySent` and `officeSent`.
 
 ```typescript
-interface OutboxCounts {
-  my: number;
-  office: number;
+interface SidebarSentCounts {
+  mySent: number;
+  officeSent: number;
 }
 ```
+
+List endpoints: `GET /correspondence/items/my-sent/`, `GET /correspondence/items/office-sent/`.
 
 ### Case Counts
 
@@ -368,9 +369,9 @@ interface InboxCounts {
   secretary: number;
 }
 
-interface OutboxCounts {
-  my: number;
-  office: number;
+interface SentSidebarCounts {
+  mySent: number;
+  officeSent: number;
 }
 
 interface CaseCounts {
@@ -584,7 +585,7 @@ describe('API Client', () => {
 | Area | Endpoint | Notes |
 |------|----------|-------|
 | Search | `GET /api/v1/search/?q=…&search_mode=semantic` | MVP semantic re-rank (no pgvector) |
-| DMS diff | `GET /api/v1/dms/document-versions/{id}/diff/?compare_with={id}` | Text version comparison |
+| DMS diff | `GET /api/v1/dms/versions/{id}/diff/?compare_with={id}` | Text version comparison |
 | Audit | `GET /api/v1/audit/activity-logs/compliance-export/` | Tamper-evident bundle |
 | Records | `GET /api/v1/records/legal-holds/{id}/ediscovery-export/` | Legal hold ZIP |
 | DRM | `GET /api/v1/dms/documents/{id}/drm-rights/` | Effective rights for user |

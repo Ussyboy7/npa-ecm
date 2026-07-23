@@ -253,7 +253,7 @@ export const FileUploadArea: React.FC<FileUploadAreaProps> = ({
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={closePreview}>
-        <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden p-4 sm:p-6">
+        <DialogContent size="2xl" height="fill">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {previewFile && (() => {

@@ -6,6 +6,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { CaseAnalyticsTab } from '@/components/analytics/CaseAnalyticsTab';
+import { cn } from '@/lib/utils';
+import { appType } from '@/lib/app-type';
 
 export default function CaseAnalyticsPage() {
   const {currentUser, hydrated: _hydrated } = useCurrentUser();
@@ -22,8 +24,8 @@ export default function CaseAnalyticsPage() {
             {/* Header */}
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-3xl font-bold">Case Analytics</h1>
-                <p className="text-muted-foreground mt-1">Analytics and insights for case management</p>
+                <h1 className={appType.pageTitleList}>Case Analytics</h1>
+                <p className={cn(appType.pageSubtitle)}>Analytics and insights for case management</p>
               </div>
               <div className="flex gap-2">
                 <ContextualHelp
@@ -47,4 +49,3 @@ export default function CaseAnalyticsPage() {
   </>
   );
 }
-

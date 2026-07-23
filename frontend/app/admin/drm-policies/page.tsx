@@ -178,7 +178,7 @@ export default function DrmPoliciesPage() {
                 <Plus className="h-4 w-4 mr-2" /> New Policy
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent size="md">
               <DialogHeader>
                 <DialogTitle>{editing ? "Edit Policy" : "New Policy"}</DialogTitle>
               </DialogHeader>
@@ -303,7 +303,7 @@ export default function DrmPoliciesPage() {
                                 <Eye className="h-3.5 w-3.5" />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="sm:max-w-lg">
+                            <DialogContent size="md">
                               <DialogHeader>
                                 <DialogTitle>{policy.name}</DialogTitle>
                               </DialogHeader>

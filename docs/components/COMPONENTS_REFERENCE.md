@@ -1,6 +1,6 @@
 # NPA ECM Component Reference
 
-**Last updated:** June 2026
+**Last updated:** July 2026
 
 Living reference for notable frontend components. For feature-level docs see `docs/features/`. Props below reflect current TypeScript interfaces — verify in source when upgrading.
 
@@ -10,14 +10,20 @@ Living reference for notable frontend components. For feature-level docs see `do
 |-----------|------|------|
 | CompletionSummaryModal | `components/correspondence/CompletionSummaryModal.tsx` | Correspondence |
 | ActionsPanel | `app/correspondence/[id]/components/ActionsPanel.tsx` | Correspondence |
+| MemoCompositionSection | `components/correspondence/MemoCompositionSection.tsx` | Correspondence |
 | DocumentUploadDialog | `components/dms/DocumentUploadDialog.tsx` | DMS |
 | DocumentVersionDiffDialog | `components/dms/DocumentVersionDiffDialog.tsx` | DMS (Phase 9) |
 | DocumentDrmBanner | `components/dms/DocumentDrmBanner.tsx` | DMS / DRM (Phase 11) |
 | DocumentSummaryCard | `components/dms/DocumentSummaryCard.tsx` | DMS (extractive summary) |
+| DocumentStatusStrip | `components/dms/DocumentStatusStrip.tsx` | DMS detail |
+| RichTextEditor | `components/dms/RichTextEditor.tsx` | DMS / Correspondence / Templates |
+| CaseWorkspace | `app/cases/[id]/components/CaseWorkspace.tsx` | Cases detail |
 | RelatedItemsPanel | `components/search/RelatedItemsPanel.tsx` | Search |
 | AdvancedSearch | `components/search/AdvancedSearch.tsx` | Search |
 | SkipToContent | `components/shared/SkipToContent.tsx` | Accessibility (WCAG) |
 | ListRowCard | `components/shared/ListRowCard.tsx` | Shared lists |
+| DetailStatusStrip | `components/shared/DetailStatusStrip.tsx` | Shared detail |
+| QueuePageShell | `components/shared/QueuePageShell.tsx` | Shared queues |
 | ErrorBoundary | `components/shared/ErrorBoundary.tsx` | Error handling |
 | IntegrationLogsViewer | `components/integrations/IntegrationLogsViewer.tsx` | Integrations |
 | NotificationBell | `components/notifications/NotificationBell.tsx` | Notifications |
@@ -27,6 +33,7 @@ Living reference for notable frontend components. For feature-level docs see `do
 
 - `DelegatedInboxContent`, `ExecutiveSupportInboxContent`, `OfficeInboxContent` — removed; use `/inbox`, `/correspondence/inbox`, `/tasks`
 - Duplicate inbox filter constants — use `lib/constants.ts`
+- Do not introduce new `contentEditable` editors — use `RichTextEditor` (`QuillEditor` is a deprecated re-export only)
 
 ---
 
@@ -58,11 +65,46 @@ Key props: `correspondence`, `minutes`, `activeUser`, `isCompleted`, `isCurrentU
 
 ---
 
+## RichTextEditor
+
+**Path:** `frontend/components/dms/RichTextEditor.tsx`  
+**Docs:** `docs/features/rich-text-editor.md`
+
+Custom rich-text compose (not Quill.js). Used by upload/replace, memo composition, templates hub.
+
+```typescript
+interface RichTextEditorProps {
+  value?: string;
+  onChange?: (html: string, json: unknown) => void;
+  placeholder?: string;
+  className?: string;
+  tokens?: { label: string; value: string }[];
+  showCharacterCount?: boolean;
+  showHeader?: boolean;
+  signatureImageUrl?: string;
+  showPageSetup?: boolean;
+  showPageNumbers?: boolean;
+}
+```
+
+Compat: `import { QuillEditor } from '@/components/dms/QuillEditor'` still works as a thin re-export.
+
+---
+
+## CaseWorkspace
+
+**Path:** `frontend/app/cases/[id]/components/CaseWorkspace.tsx`  
+**Docs:** `docs/features/cases.md`
+
+Cases detail shell aligned with DMS: case file + rail (Links / Chat / Activity / Info), mobile tabs + sticky bar. Sibling components: `CaseOverviewPanel`, `CaseSidebar`, `CaseLinksPanel`, `CaseCommentsDialog`, `CaseFormPreviewDialog`, etc.
+
+---
+
 ## DocumentUploadDialog
 
 **Path:** `frontend/components/dms/DocumentUploadDialog.tsx`
 
-Upload new documents or versions with validation and progress.
+Upload new documents or versions with validation and progress. Compose mode uses `RichTextEditor`.
 
 ```typescript
 interface DocumentUploadDialogProps {
@@ -82,7 +124,7 @@ interface DocumentUploadDialogProps {
 ## DocumentVersionDiffDialog
 
 **Path:** `frontend/components/dms/DocumentVersionDiffDialog.tsx`  
-**API:** `lib/dms-version-diff.ts` → `GET /api/v1/dms/document-versions/{id}/diff/`
+**API:** `lib/dms-version-diff.ts` → `GET /api/v1/dms/versions/{id}/diff/`
 
 ```typescript
 interface DocumentVersionDiffDialogProps {
@@ -107,7 +149,7 @@ Shows effective DRM policy on document detail when `drm_rights.policy_name` is s
 { rights?: DocumentDrmRights | null }
 ```
 
-Policy admin: `/admin/drm-policies`. Enforcement is download-level (not byte-level PDF watermark).
+Policy admin: `/admin/drm-policies`. Download enforcement plus serve-time PDF watermark (`dms/watermark.py`).
 
 ---
 
@@ -116,6 +158,14 @@ Policy admin: `/admin/drm-policies`. Enforcement is download-level (not byte-lev
 **Path:** `frontend/components/dms/DocumentSummaryCard.tsx`
 
 Extractive document summary in DMS sidebar. Optional remote LLM when configured; default is extractive fallback.
+
+---
+
+## DocumentStatusStrip
+
+**Path:** `frontend/components/dms/DocumentStatusStrip.tsx`
+
+DMS detail state strip (status / sensitivity / DRM cues) under the document header. Prefer shared `DetailStatusStrip` patterns from `DESIGN.md`.
 
 ---
 
@@ -139,7 +189,7 @@ interface RelatedItemsPanelProps {
 
 **Path:** `frontend/components/search/AdvancedSearch.tsx`
 
-Unified search UI with facets and **semantic** toggle (`search_mode=semantic` — MVP re-rank, not vector DB).
+Unified search UI with facets and **semantic** toggle (`search_mode=semantic` — MVP re-rank, not vector DB). Result counts announced via `role="status"` + `aria-live="polite"`.
 
 ---
 
@@ -197,6 +247,8 @@ Visibility rules: `hooks/use-sidebar-visibility.ts`.
 
 ### Modal state
 
+Prefer Dialog `size` / `height` / `density` tokens — see `docs/guides/DESIGN.md`.
+
 ```typescript
 const [open, setOpen] = useState(false);
 <CompletionSummaryModal open={open} onOpenChange={setOpen} correspondence={item} />
@@ -210,14 +262,19 @@ Use `apiFetch` from `lib/api-client.ts` with `hasTokens()` — do not duplicate 
 
 `use-pagination` hook + `fetchAllPaginated` for list pages.
 
+### HTML sanitize
+
+Use `sanitizeRichText` / `sanitizeHtml` from `lib/sanitize-html.ts` for any user or template HTML before render or editor emit.
+
 ---
 
 ## Accessibility
 
 - `SkipToContent` + `#main-content` landmark
 - `:focus-visible` rings in `globals.css`
-- Audit checklist: `docs/guides/WCAG_AUDIT_CHECKLIST.md`
+- Audit checklist + July 2026 high remediations: `docs/guides/WCAG_AUDIT_CHECKLIST.md`
 - Prefer `ListRowCard` `onRowClick` over wrapping rows in `<button>`
+- Compose UI: `RichTextEditor` toolbar toggles use `aria-pressed`
 
 ---
 

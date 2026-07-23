@@ -180,7 +180,7 @@ export const WebhookManager = () => {
                 New Webhook
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+            <DialogContent size="lg" height="fill">
               <DialogHeader>
                 <DialogTitle>
                   {editingWebhook ? 'Edit Webhook' : 'Create Webhook'}

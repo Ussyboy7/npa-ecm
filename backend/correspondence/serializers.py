@@ -1096,19 +1096,35 @@ class CaseDocumentLinkSerializer(serializers.ModelSerializer):
 
 class CaseFormLinkSerializer(serializers.ModelSerializer):
     form_document_id = serializers.SerializerMethodField()
+    document_id = serializers.SerializerMethodField()
     form_title = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = CaseFormLink
-        fields = ["id", "case", "form_document_id", "form_title", "notes", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "case",
+            "form_document_id",
+            "document_id",
+            "form_title",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["id", "created_at", "updated_at"]
-    
+
     def get_form_document_id(self, obj):
-        """Get form document ID, handling soft-deleted documents."""
-        if obj.form_document and obj.form_document.document:
-            return str(obj.form_document.document.id)
+        """FormDocument PK — used for link/unlink and form-document APIs."""
+        if obj.form_document_id:
+            return str(obj.form_document_id)
         return None
-    
+
+    def get_document_id(self, obj):
+        """Underlying DMS Document PK — used for /forms/{id} and /dms/{id} navigation."""
+        if obj.form_document and obj.form_document.document_id:
+            return str(obj.form_document.document_id)
+        return None
+
     def get_form_title(self, obj):
         """Get form title, handling soft-deleted documents."""
         if obj.form_document and obj.form_document.document:

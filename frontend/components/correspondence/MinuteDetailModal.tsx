@@ -536,7 +536,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl w-[95vw] sm:max-w-4xl sm:w-full max-h-[95vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent size="2xl" height="fill">
         <DialogDescription id="minute-detail-desc" className="sr-only">
           View minute content, routing, distribution, and related details.
         </DialogDescription>
@@ -1067,7 +1067,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
 
       {/* Attachment Preview Modal (Quick Preview) */}
       <Dialog open={!!previewAttachment} onOpenChange={() => setPreviewAttachment(null)}>
-        <DialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden p-4 sm:p-6">
+        <DialogContent size="2xl" height="fill">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Paperclip className="h-5 w-5" />
@@ -1124,7 +1124,7 @@ const MinuteDetailModalContent = ({ minute, open, onOpenChange, authorName, show
 
       {/* Document View Modal (Full Document View) */}
       <Dialog open={!!viewAttachment} onOpenChange={() => setViewAttachment(null)}>
-        <DialogContent className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0 overflow-hidden">
+        <DialogContent size="full" height="fill" density="flush">
           <DialogHeader className="px-4 pt-3 pb-1 flex-shrink-0">
             <DialogTitle className="text-sm font-medium truncate">
               {viewAttachment?.fileName || 'Document'}

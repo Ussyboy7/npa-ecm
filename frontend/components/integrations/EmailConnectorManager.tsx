@@ -239,7 +239,7 @@ export function EmailConnectorManager() {
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent size="md" height="fill">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Email Connector" : "New Email Connector"}</DialogTitle>
             <DialogDescription>Credentials are encrypted at rest on the server.</DialogDescription>

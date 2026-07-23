@@ -5,6 +5,8 @@ import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { PermissionGate } from "@/components/shared/PermissionGate";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { DivisionAnalyticsTab } from "@/components/analytics/DivisionAnalyticsTab";
+import { cn } from "@/lib/utils";
+import { appType } from "@/lib/app-type";
 
 export default function DivisionAnalyticsPage() {
   return (
@@ -19,8 +21,8 @@ export default function DivisionAnalyticsPage() {
             <div className="space-y-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <h1 className="text-3xl font-bold">Division & Port Analytics</h1>
-                  <p className="text-muted-foreground mt-1">
+                  <h1 className={appType.pageTitleList}>Division & Port Analytics</h1>
+                  <p className={cn(appType.pageSubtitle)}>
                     SLA compliance, workload, and throughput by division and port
                   </p>
                 </div>

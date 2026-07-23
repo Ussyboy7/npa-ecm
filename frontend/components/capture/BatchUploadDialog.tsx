@@ -360,7 +360,7 @@ export const BatchUploadDialog = ({ open, onOpenChange, onComplete }: BatchUploa
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent size="xl" height="fill">
         <DialogHeader>
           <DialogTitle>Batch Document Upload</DialogTitle>
           <DialogDescription>

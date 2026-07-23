@@ -11,9 +11,10 @@ import type { DocumentRecord } from "@/lib/dms-storage";
 interface DocumentSummaryCardProps {
   document: DocumentRecord;
   onSummaryGenerated?: (summary: string) => void;
+  compact?: boolean;
 }
 
-export function DocumentSummaryCard({ document, onSummaryGenerated }: DocumentSummaryCardProps) {
+export function DocumentSummaryCard({ document, onSummaryGenerated, compact = false }: DocumentSummaryCardProps) {
   const existingSummary = document.versions?.[document.versions.length - 1]?.summary;
   const [summary, setSummary] = useState(existingSummary || "");
   const [loading, setLoading] = useState(false);
@@ -31,6 +32,31 @@ export function DocumentSummaryCard({ document, onSummaryGenerated }: DocumentSu
       setLoading(false);
     }
   };
+
+  if (compact) {
+    return (
+      <div className="rounded-xl bg-muted/30 px-3 py-2.5 space-y-2 min-w-0 overflow-hidden">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <p className="text-[13px] font-semibold tracking-tight flex items-center gap-1.5 min-w-0 truncate">
+            <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+            Summary
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs shrink-0"
+            onClick={() => void handleGenerate()}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : summary ? "Regen" : "Generate"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words line-clamp-6">
+          {summary || "No summary yet."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <Card className="border-border/50">

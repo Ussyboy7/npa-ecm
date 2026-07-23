@@ -19,10 +19,8 @@ import {
   Pencil,
   Scan,
   Loader2,
-  Clock,
-  User as UserIcon,
-  FileText,
   GitCompare,
+  MoreVertical,
 } from "lucide-react";
 import { formatDateTime } from "@/lib/correspondence-helpers";
 import { formatFileSize } from "@/lib/file-utils";
@@ -50,6 +48,8 @@ interface DocumentVersionsPanelProps {
   onVersionOCR: (versionId: string) => void;
   onCancelOCR: (versionId: string) => void;
   onDownloadVersion?: (version: DocumentVersion) => void;
+  /** Dense layout for narrow detail rail */
+  compact?: boolean;
 }
 
 export function DocumentVersionsPanel({
@@ -65,6 +65,7 @@ export function DocumentVersionsPanel({
   onVersionOCR,
   onCancelOCR,
   onDownloadVersion,
+  compact = false,
 }: DocumentVersionsPanelProps) {
   const [diffOpen, setDiffOpen] = useState(false);
   const [diffLoading, setDiffLoading] = useState(false);
@@ -104,6 +105,200 @@ export function DocumentVersionsPanel({
     }
   };
 
+  const addButton = onCreateVersion ? (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!uploadUser}
+          className="h-7 shrink-0 text-xs rounded-full gap-1 px-2.5"
+        >
+          <FilePlus className="h-3.5 w-3.5" />
+          Add
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onCreateVersion} disabled={!uploadUser}>
+          <PenTool className="h-4 w-4 mr-2" />
+          Create Version
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onQuickVersionUpload} disabled={!uploadUser}>
+          <FilePlus className="h-4 w-4 mr-2" />
+          Upload Version
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onQuickVersionUpload}
+      disabled={!uploadUser}
+      className="h-7 shrink-0 text-xs rounded-full gap-1 px-2.5"
+    >
+      <FilePlus className="h-3.5 w-3.5" />
+      Upload
+    </Button>
+  );
+
+  const versionList = (
+    <div className={compact ? "space-y-1" : "space-y-2"}>
+      {versions.length === 0 ? (
+        <div className="text-center py-6 text-muted-foreground border border-dashed rounded-xl text-xs">
+          No versions yet.
+        </div>
+      ) : (
+        versions.map((version, index) => {
+          const uploader = userLookup.get(version.uploadedBy);
+          const isLatest = index === 0;
+          const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
+          const versionOCR = ocrState?.[version.id];
+          const isProcessing = versionOCR?.isProcessing || false;
+          const hasOCRText = Boolean(version.ocrText && version.ocrText.trim() !== "");
+          const canShowOCR =
+            (version.fileUrl &&
+              version.fileUrl.trim() !== "" &&
+              (version.fileType?.startsWith("image/") ||
+                version.fileType === "application/pdf" ||
+                version.fileType ===
+                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+                version.fileType === "application/msword" ||
+                version.fileName?.toLowerCase().endsWith(".docx") ||
+                version.fileName?.toLowerCase().endsWith(".doc"))) ||
+            Boolean(version.contentHtml && version.contentHtml.trim() !== "");
+          const olderVersion = index < versions.length - 1 ? versions[index + 1] : null;
+
+          return (
+            <div
+              key={version.id}
+              className={`px-2.5 py-2 rounded-xl text-xs min-w-0 overflow-hidden ${
+                isLatest ? "bg-primary/6" : "hover:bg-muted/40"
+              }`}
+            >
+              <div className="flex items-start gap-1.5 min-w-0">
+                <div className="min-w-0 flex-1 overflow-hidden space-y-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Badge
+                      variant={isLatest ? "default" : "outline"}
+                      className="text-[10px] flex-shrink-0"
+                    >
+                      v{version.versionNumber}
+                    </Badge>
+                    {fileSize ? (
+                      <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                        {fileSize}
+                      </span>
+                    ) : null}
+                    {isLatest ? (
+                      <span className="text-[10px] text-muted-foreground shrink-0">latest</span>
+                    ) : null}
+                  </div>
+                  <p
+                    className="font-medium text-[12px] leading-snug break-all line-clamp-2"
+                    title={version.fileName}
+                  >
+                    {version.fileName || `Version ${version.versionNumber}`}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">
+                    {formatDateTime(version.uploadedAt)}
+                    {uploader ? ` · ${uploader.name}` : ""}
+                  </p>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0">
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    {(version.fileName || version.contentHtml?.trim()) && (
+                      <DropdownMenuItem onClick={() => onPreviewVersion(version)}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        Preview / OCR tools
+                      </DropdownMenuItem>
+                    )}
+                    {olderVersion && (
+                      <DropdownMenuItem
+                        onClick={() => void handleCompareWithPrevious(version, olderVersion)}
+                      >
+                        <GitCompare className="h-4 w-4 mr-2" />
+                        Compare to v{olderVersion.versionNumber}
+                      </DropdownMenuItem>
+                    )}
+                    {version.fileUrl?.trim() && (
+                      <DropdownMenuItem
+                        disabled={!canDownload}
+                        onClick={() => void handleDownload(version)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </DropdownMenuItem>
+                    )}
+                    {canShowOCR && (
+                      <DropdownMenuItem
+                        onClick={() =>
+                          isProcessing ? onCancelOCR(version.id) : onVersionOCR(version.id)
+                        }
+                      >
+                        {isProcessing ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Scan className="h-4 w-4 mr-2" />
+                        )}
+                        {isProcessing ? "Cancel OCR" : "Run OCR"}
+                      </DropdownMenuItem>
+                    )}
+                    {uploadUser &&
+                      (uploadUser.id === version.uploadedBy ||
+                        uploadUser.id === document.authorId) && (
+                        <DropdownMenuItem onClick={() => onReplaceVersion(version.id)}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Replace file
+                        </DropdownMenuItem>
+                      )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              {hasOCRText && (
+                <button
+                  type="button"
+                  className="mt-1.5 text-[10px] text-primary hover:underline"
+                  onClick={() => onPreviewVersion(version)}
+                >
+                  OCR text available — view
+                </button>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <div className="space-y-3 min-w-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <p className="text-[13px] font-semibold tracking-tight">Versions</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+              Upload, OCR, replace
+            </p>
+          </div>
+          {addButton}
+        </div>
+        {versionList}
+        <DocumentVersionDiffDialog
+          open={diffOpen}
+          onOpenChange={setDiffOpen}
+          diff={versionDiff}
+          loading={diffLoading}
+        />
+      </div>
+    );
+  }
+
   return (
     <Card className="border-border/50">
       <CardHeader className="pb-3">
@@ -115,161 +310,10 @@ export function DocumentVersionsPanel({
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">Upload, OCR, and manage versions</CardDescription>
           </div>
-          {onCreateVersion ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" disabled={!uploadUser} className="h-8 text-xs">
-                  <FilePlus className="h-3.5 w-3.5 mr-1" />
-                  Add
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onCreateVersion} disabled={!uploadUser}>
-                  <PenTool className="h-4 w-4 mr-2" />
-                  Create Version
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onQuickVersionUpload} disabled={!uploadUser}>
-                  <FilePlus className="h-4 w-4 mr-2" />
-                  Upload Version
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button variant="outline" size="sm" onClick={onQuickVersionUpload} disabled={!uploadUser} className="h-8 text-xs">
-              <FilePlus className="h-3.5 w-3.5 mr-1" />
-              Upload
-            </Button>
-          )}
+          {addButton}
         </div>
       </CardHeader>
-      <CardContent className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-        {versions.length === 0 ? (
-          <div className="text-center py-6 text-muted-foreground border border-dashed rounded-lg text-xs">
-            No versions yet.
-          </div>
-        ) : (
-          versions.map((version, index) => {
-            const uploader = userLookup.get(version.uploadedBy);
-            const isLatest = index === 0;
-            const fileSize = version.fileSize ? formatFileSize(version.fileSize) : null;
-            const versionOCR = ocrState?.[version.id];
-            const isProcessing = versionOCR?.isProcessing || false;
-            const hasOCRText = Boolean(version.ocrText && version.ocrText.trim() !== "");
-            const canShowOCR =
-              (version.fileUrl &&
-                version.fileUrl.trim() !== "" &&
-                (version.fileType?.startsWith("image/") ||
-                  version.fileType === "application/pdf" ||
-                  version.fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-                  version.fileType === "application/msword" ||
-                  version.fileName?.toLowerCase().endsWith(".docx") ||
-                  version.fileName?.toLowerCase().endsWith(".doc"))) ||
-              Boolean(version.contentHtml && version.contentHtml.trim() !== "");
-            const olderVersion = index < versions.length - 1 ? versions[index + 1] : null;
-
-            return (
-              <div
-                key={version.id}
-                className={`p-2.5 border rounded-lg text-xs ${
-                  isLatest ? "border-primary/40 bg-primary/5" : "border-border"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Badge variant={isLatest ? "default" : "outline"} className="text-[10px]">
-                        v{version.versionNumber}
-                      </Badge>
-                      <span className="font-medium truncate" title={version.fileName}>
-                        {version.fileName}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground mt-1">
-                      {fileSize ? <span>{fileSize}</span> : null}
-                      <Clock className="h-3 w-3" />
-                      <span>{formatDateTime(version.uploadedAt)}</span>
-                      {uploader ? (
-                        <>
-                          <UserIcon className="h-3 w-3" />
-                          <span>{uploader.name}</span>
-                        </>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    {(version.fileName || version.contentHtml?.trim()) && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onPreviewVersion(version)}>
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                    {olderVersion ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        title={`Compare to v${olderVersion.versionNumber}`}
-                        onClick={() => void handleCompareWithPrevious(version, olderVersion)}
-                      >
-                        <GitCompare className="h-3.5 w-3.5" />
-                      </Button>
-                    ) : null}
-                    {version.fileUrl?.trim() && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        disabled={!canDownload}
-                        title={canDownload ? "Download" : "Download blocked by DRM"}
-                        aria-label={canDownload ? "Download" : "Download blocked by DRM"}
-                        onClick={() => {
-                          void handleDownload(version);
-                        }}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                    {canShowOCR && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => (isProcessing ? onCancelOCR(version.id) : onVersionOCR(version.id))}
-                        disabled={isProcessing && versionOCR?.currentJob?.status === "processing"}
-                      >
-                        {isProcessing ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Scan className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    )}
-                    {uploadUser &&
-                      (uploadUser.id === version.uploadedBy || uploadUser.id === document.authorId) && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => onReplaceVersion(version.id)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                  </div>
-                </div>
-                {hasOCRText && (
-                  <div className="flex items-center gap-2 mt-2 p-1.5 bg-muted/50 rounded text-[10px]">
-                    <FileText className="h-3 w-3 text-primary" />
-                    <span className="text-muted-foreground flex-1">OCR text available</span>
-                    <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => onPreviewVersion(version)}>
-                      View
-                    </Button>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </CardContent>
+      <CardContent className="space-y-2 max-h-[360px] overflow-y-auto pr-1">{versionList}</CardContent>
       <DocumentVersionDiffDialog
         open={diffOpen}
         onOpenChange={setDiffOpen}

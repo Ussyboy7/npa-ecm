@@ -20,7 +20,7 @@ import { validateFileType, validateFileSize, MAX_FILE_SIZE_MB } from '@/lib/file
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
 import { FileUploadZone } from './FileUploadZone';
-import { QuillEditor } from './QuillEditor';
+import { RichTextEditor } from './RichTextEditor';
 import { Loader2, AlertTriangle, PenTool, Upload as UploadIcon } from 'lucide-react';
 import type { DocumentRecord } from '@/lib/dms-storage';
 
@@ -149,7 +149,7 @@ export const ReplaceVersionDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent size="3xl" height="fill">
         <DialogHeader>
           <DialogTitle>Edit Version {version.versionNumber}</DialogTitle>
           <DialogDescription>
@@ -184,7 +184,7 @@ export const ReplaceVersionDialog = ({
 
             {composeMode ? (
               <div className="min-h-[400px] border rounded-lg overflow-hidden">
-                <QuillEditor
+                <RichTextEditor
                   value={editorHtml}
                   onChange={(html: string) => setEditorHtml(html)}
                   placeholder="Edit the document content..."

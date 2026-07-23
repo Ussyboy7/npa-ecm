@@ -23,6 +23,8 @@ import { useCurrentUser } from '@/hooks/use-current-user';
 import { formatDateShort } from '@/lib/correspondence-helpers';
 import { apiFetch } from '@/lib/api-client';
 import { ListRowCard } from '@/components/shared/ListRowCard';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
@@ -121,41 +123,41 @@ const DelegatedInbox = () => {
   return (
     <>
       {!currentUser?.id ? (
-        <div className="container mx-auto p-6 space-y-6">
+        <QueuePageShell
+          title="Delegated to Me"
+          subtitle="Correspondence items delegated to you by executives for handling on their behalf"
+        >
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
               Loading...
             </CardContent>
           </Card>
-        </div>
+        </QueuePageShell>
       ) : !currentUser ? (
-        <div className="container mx-auto p-6 space-y-6">
-        </div>
+        <QueuePageShell
+          title="Delegated to Me"
+          subtitle="Correspondence items delegated to you by executives for handling on their behalf"
+        >
+          {null}
+        </QueuePageShell>
       ) : (
-        <div className="container mx-auto p-6 space-y-6">
-        {/* Back Button and Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-        </div>
-
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <Users2 className="h-8 w-8 text-amber-600" />
-              <h1 className="text-3xl font-bold">Delegated to Me</h1>
-            </div>
-            <p className="text-muted-foreground">
-              Correspondence items delegated to you by executives for handling on their behalf
-            </p>
-          </div>
-          <Badge variant="secondary" className="text-lg px-4 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-            {delegatedItems.length} Active
-          </Badge>
-        </div>
-
+        <QueuePageShell
+          title="Delegated to Me"
+          subtitle="Correspondence items delegated to you by executives for handling on their behalf"
+          actions={(
+            <Button variant="ghost" size="sm" onClick={() => router.back()}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+          )}
+          stats={(
+            <StatStrip
+              items={[
+                { key: 'active', label: 'Active', value: delegatedItems.length },
+              ]}
+            />
+          )}
+        >
         {/* Search */}
         <div className="relative max-w-xl">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -286,7 +288,7 @@ const DelegatedInbox = () => {
             ))}
           </div>
         )}
-        </div>
+        </QueuePageShell>
       )}
     </>
   );

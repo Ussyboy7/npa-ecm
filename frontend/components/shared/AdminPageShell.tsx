@@ -1,5 +1,7 @@
-import type { LucideIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { appType } from "@/lib/app-type";
 
 interface AdminPageShellProps {
   title: string;
@@ -8,9 +10,11 @@ interface AdminPageShellProps {
   actions?: ReactNode;
   tabs?: ReactNode;
   children: ReactNode;
+  className?: string;
+  stats?: ReactNode;
 }
 
-/** Shared layout shell for Administration section pages. */
+/** Shared layout shell for Administration section pages (tokens aligned). */
 export function AdminPageShell({
   title,
   subtitle,
@@ -18,19 +22,24 @@ export function AdminPageShell({
   actions,
   tabs,
   children,
+  className,
+  stats,
 }: AdminPageShellProps) {
   return (
-    <div className="container mx-auto space-y-6 p-6">
+    <div className={cn("container mx-auto space-y-5 p-4 md:p-6", className)}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="flex items-center gap-3 text-3xl font-bold text-foreground">
-            <Icon className="h-8 w-8 shrink-0 text-primary" />
+        <div className="min-w-0">
+          <h1 className={cn(appType.pageTitleList, "flex items-center gap-2.5")}>
+            <Icon className="h-6 w-6 shrink-0 text-primary" />
             {title}
           </h1>
-          <p className="mt-1 max-w-2xl text-muted-foreground">{subtitle}</p>
+          <p className={cn(appType.pageSubtitle, "max-w-2xl")}>{subtitle}</p>
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>
+        ) : null}
       </div>
+      {stats}
       {tabs}
       {children}
     </div>

@@ -249,7 +249,7 @@ export function SecuritySection({
 
       {/* 2FA Setup Dialog */}
       <Dialog open={showSetup2FA} onOpenChange={onSetup2FADialogChange}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {twoFactorMethod === 'totp' ? (
@@ -409,7 +409,7 @@ export function SecuritySection({
 
       {/* Backup Codes Dialog */}
       <Dialog open={showBackupCodes} onOpenChange={onBackupCodesDialogChange}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Key className="h-5 w-5" />

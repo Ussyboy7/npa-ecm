@@ -155,7 +155,7 @@ All routes use the `/api/v1/` prefix. See [API Reference](./docs/api/API_REFEREN
 
 #### Documents (DMS)
 - `GET /api/v1/dms/documents/` - List documents
-- `GET /api/v1/dms/document-versions/{id}/diff/` - Version diff
+- `GET /api/v1/dms/versions/{id}/diff/` - Version diff
 
 #### Search
 - `GET /api/v1/search/` - Unified search (`search_mode=semantic` for MVP re-rank)

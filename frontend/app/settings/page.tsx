@@ -7,6 +7,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import { appType } from '@/lib/app-type';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Image from 'next/image';
@@ -457,8 +459,8 @@ export default function SettingsPage() {
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className={appType.pageTitleList}>Settings</h1>
+          <p className={cn(appType.pageSubtitle)}>
             Manage your account settings and preferences
           </p>
         </div>
@@ -580,7 +582,7 @@ export default function SettingsPage() {
             setOtpSent(false);
           }
         }}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent size="sm">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {twoFactorMethod === 'totp' ? (
@@ -741,7 +743,7 @@ export default function SettingsPage() {
 
         {/* Backup Codes Dialog */}
         <Dialog open={showBackupCodes} onOpenChange={setShowBackupCodes}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent size="sm">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Key className="h-5 w-5" />

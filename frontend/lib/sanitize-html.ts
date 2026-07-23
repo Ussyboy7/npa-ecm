@@ -67,7 +67,7 @@ export const sanitizeText = (text: string): string => {
 
 /**
  * Strip authoring colors/backgrounds so rich HTML can inherit theme text
- * (Quill memos often ship black text that is invisible on dark surfaces).
+ * (Legacy memo HTML often ships black text that is invisible on dark surfaces).
  */
 export const stripInlineColorStyles = (html: string): string => {
   if (!html) return html;

@@ -21,7 +21,6 @@ import {
   Trash2,
   Users,
   Network,
-  UserCircle2,
   Search,
   Layers,
   FolderTree,
@@ -44,14 +43,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-  registryQueueEmptyIconClass,
-} from "@/components/shared/registry-queue-styles";
+import { registryQueueEmptyIconClass } from "@/components/shared/registry-queue-styles";
+import { StatStrip } from "@/components/shared/StatStrip";
 import { DirectorateFormModal } from "@/components/admin/DirectorateFormModal";
 import { DirectorateLeadershipDialog } from "@/components/admin/DirectorateLeadershipDialog";
 import { DivisionFormModal } from "@/components/admin/DivisionFormModal";
@@ -485,12 +478,12 @@ const OrganizationStructurePage = () => {
     return "Build the hierarchy from directorates down to departments, then assign leadership.";
   }, [activeTab]);
 
-  const orgStatCards = [
-    { label: "Directorates", value: stats.directorates, icon: Building2, bgClass: "bg-primary/10", iconClass: "text-primary" },
-    { label: "Divisions", value: stats.divisions, icon: Network, bgClass: "bg-emerald-500/10", iconClass: "text-emerald-600 dark:text-emerald-400" },
-    { label: "Departments", value: stats.departments, icon: Layers, bgClass: "bg-blue-500/10", iconClass: "text-blue-600 dark:text-blue-400" },
-    { label: "With Leadership", value: stats.withLeadership, icon: UserCircle2, bgClass: "bg-amber-500/10", iconClass: "text-amber-600 dark:text-amber-400" },
-  ] as const;
+  const orgStatItems = [
+    { key: "directorates", label: "Directorates", value: stats.directorates },
+    { key: "divisions", label: "Divisions", value: stats.divisions },
+    { key: "departments", label: "Departments", value: stats.departments },
+    { key: "leadership", label: "With Leadership", value: stats.withLeadership },
+  ];
 
   return (
     <ClientErrorBoundary>
@@ -522,23 +515,7 @@ const OrganizationStructurePage = () => {
             </>
           }
         >
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {orgStatCards.map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-              <Card key={label}>
-                <CardContent className={registryQueueStatCardContentClass}>
-                  <div className="flex items-center gap-4">
-                    <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                      <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                    </div>
-                    <div>
-                      <p className={registryQueueStatLabelClass}>{label}</p>
-                      <p className={registryQueueStatValueClass}>{value}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <StatStrip items={orgStatItems} />
 
           <Card>
             <CardContent className="flex flex-wrap items-center gap-2 p-2">
@@ -916,7 +893,7 @@ const OrganizationStructurePage = () => {
                                     <Edit3 className="h-3.5 w-3.5" />
                                   </Button>
                                 </DialogTrigger>
-                                <DialogContent className="sm:max-w-md">
+                                <DialogContent size="sm">
                                   <DialogHeader>
                                     <DialogTitle>Edit {office.name}</DialogTitle>
                                   </DialogHeader>
@@ -1009,7 +986,7 @@ const OrganizationStructurePage = () => {
                           <Plus className="h-4 w-4 mr-2" /> Add Location
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="sm:max-w-md">
+                      <DialogContent size="sm">
                         <DialogHeader>
                           <DialogTitle>{editingLocation ? "Edit Location" : "New Location"}</DialogTitle>
                         </DialogHeader>

@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
 import { FormDocumentEditor } from "@/components/dms/FormDocumentEditor";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { fetchDocumentById } from "@/lib/dms-storage";
 import { apiFetch } from "@/lib/api-client";
 import { logError } from "@/lib/client-logger";
+import { appType } from "@/lib/app-type";
 
 const FormDetailPage = () => {
   const params = useParams<{ id: string }>();
@@ -63,31 +63,40 @@ const FormDetailPage = () => {
 
   return (
     <>
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between gap-2">
-          <Button variant="outline" size="sm" onClick={() => router.push("/dms")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Documents
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => router.push(`/dms/${params.id}`)}>
+      <div className="container mx-auto p-4 md:p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4 min-w-0">
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => router.push("/dms")}
+                aria-label="Back to Documents"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <h1 className={appType.pageTitleList}>Form Editor</h1>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push(`/dms/${params.id}`)}
+          >
             <ExternalLink className="h-4 w-4 mr-2" />
             Open in DMS
           </Button>
         </div>
 
         {loading ? (
-          <Card>
-            <CardContent className="p-10 text-center text-sm text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-              Loading form...
-            </CardContent>
-          </Card>
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-10 text-center">
+            <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-muted-foreground" />
+            <p className={appType.meta}>Loading form...</p>
+          </div>
         ) : error || !formDocumentId ? (
-          <Card>
-            <CardContent className="p-10 text-center text-sm text-muted-foreground">
-              {error || "Form document not found."}
-            </CardContent>
-          </Card>
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-10 text-center">
+            <p className={appType.meta}>{error || "Form document not found."}</p>
+          </div>
         ) : (
           <FormDocumentEditor documentId={params.id} formDocumentId={formDocumentId} />
         )}

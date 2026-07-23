@@ -11,11 +11,11 @@ from correspondence.models import Correspondence
 User = get_user_model()
 
 
-class OutboxDraftActionTests(TestCase):
+class SentDraftActionTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_user(
-            username="outboxuser",
+            username="sentuser",
             password="testpass123",
         )
         self.other = User.objects.create_user(

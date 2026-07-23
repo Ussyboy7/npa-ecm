@@ -1,6 +1,6 @@
 # NPA ECM — Quick Start Guide
 
-**Last updated:** June 2026
+**Last updated:** July 2026
 
 ## Start the full stack (recommended)
 
@@ -50,22 +50,26 @@ scripts/local/env-manager.sh seed
 | Search | `/search` | Full-text + semantic toggle |
 | Notifications | `/notifications` | In-app alerts |
 
-### Correspondence
+### Correspondence & cases
 | Page | URL |
 |------|-----|
 | Register | `/correspondence/register` |
-| My Inbox | `/correspondence/inbox` |
-| Outbox | `/correspondence/outbox` |
-| Cases | `/analytics/cases` |
+| Inbox | `/correspondence/inbox` |
+| My Sent | `/correspondence/my-sent` |
+| Office Sent | `/correspondence/office-sent` |
+| Cases | `/cases` |
+| Case detail | `/cases/[id]` |
 | FOIA | `/foia` |
 
 ### Documents
 | Page | URL |
 |------|-----|
 | Document library | `/dms` (canonical; `/documents` redirects) |
+| Document detail | `/dms/[id]` |
 | Capture hub | `/capture` |
-| Workspaces | `/workspaces` |
 | Physical records | `/physical-documents` |
+
+(`/workspaces` redirects to `/dashboard` — workspaces removed.)
 
 ### Support & admin
 | Page | URL | Who |
@@ -74,6 +78,7 @@ scripts/local/env-manager.sh seed
 | Support Queue | `/admin/helpdesk` | ICT / helpdesk staff |
 | Records governance | `/admin/records-governance` | Records admins |
 | DRM policies | `/admin/drm-policies` | ICT / system admin |
+| Templates hub | `/admin/templates-hub` | Template authors |
 | Legacy import | `/admin/legacy-import` | ICT |
 | System Health | `/admin/system-health` | ICT |
 | Audit & compliance | `/audit` | Compliance officers |
@@ -114,6 +119,9 @@ curl -s http://localhost:8002/api/v1/health/live/
 ## Further reading
 
 - [NPA ECM Setup Guide](./NPA_ECM_SETUP_GUIDE.md) — org structure and access levels
+- [DESIGN.md](./DESIGN.md) — detail shells and modal tokens
+- [Rich text editor](../features/rich-text-editor.md) — compose editor (not Quill.js)
+- [WCAG checklist](./WCAG_AUDIT_CHECKLIST.md) — accessibility remediations
 - [Backend README](../../backend/README.md) — API auth and tests
 - [AGENTS.md](../../AGENTS.md) — conventions for contributors
 - [Remaining Work Backlog](../procurement/REMAINING_WORK_BACKLOG.md) — what's still open

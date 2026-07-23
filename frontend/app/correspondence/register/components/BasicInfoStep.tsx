@@ -356,7 +356,7 @@ export const BasicInfoStep = memo(function BasicInfoStep({
       </div>
 
       <div className="flex justify-end pt-4">
-        <Button type="button" onClick={onNext}>
+        <Button type="button" size="compact" onClick={onNext}>
           Next: Parties
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>

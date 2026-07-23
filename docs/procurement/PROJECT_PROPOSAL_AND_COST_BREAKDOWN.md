@@ -222,7 +222,7 @@ Scope of Delivery (This Contract):
 
 #### 📌 Module 05 — Correspondence & Memo Module | ₦25,000,000
 
-**Current platform:** Registration wizard, office inboxes/outbox, minute threads, CC/distribution, correspondence register, templates and drafts, dispatch records, case linkage, FOIA request management, physical document checkout, department files, completion summaries.
+**Current platform:** Registration wizard, office inboxes/Sent, minute threads, CC/distribution, correspondence register, templates and drafts, dispatch records, case linkage, FOIA request management, physical document checkout, department files, completion summaries.
 
 ```
 Scope of Delivery (This Contract):

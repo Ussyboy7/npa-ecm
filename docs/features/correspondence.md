@@ -11,7 +11,7 @@ Handles letters, memos, official communications with approval workflows, digital
 - Delegation and recall
 - Physical copy tracking (`has_physical_copy`)
 - Office-scoped visibility (division/department/directorate/office)
-- My Sent / Office Sent (replaces old outbox/office-outbox)
+- My Sent / Office Sent
 
 ## Architecture
 - **Backend**: `correspondence/` app with `Correspondence`, `Minute`, `Case`, `Delegation`, `Distribution`, `ParallelBranch` models
@@ -27,14 +27,17 @@ Handles letters, memos, official communications with approval workflows, digital
 - `Delegation` — Temporary authority delegation
 
 ## Key Components
-- `CorrespondenceRegisterForm` — Multi-step registration wizard with `hasPhysicalCopy` checkbox
-- `MinuteModal` / `MinuteDetailModal` — Approval with parallel branch deadline/group selection
+- Registration wizard — `app/correspondence/register/page.tsx` with step components (`BasicInfoStep` includes `hasPhysicalCopy`)
+- `MinuteModal` / `MinuteDetailModal` — Approval with parallel branch deadline/group selection (a11y: help/error ids, `role="alert"` on minute text errors)
+- `MemoCompositionSection` — Memo body via `RichTextEditor` (see `docs/features/rich-text-editor.md`)
+- `DelegateModal` — Delegation with accessible custom expiry date labelling
 - `ActionsPanel` — Context-aware actions (document generation, workspace removed)
 - `TreatmentModal` — Parallel treatment options, branch routing toggle
 - `RoutingPanel` — Parallel routing tree visualization with branch status badges, force-complete for originators
 - `ParallelRoutingStatusPanel` — Tree visualization with deadline tracking, branch status, force-complete flow
 - `WorkflowProgressIndicator` — Step labels with physical copy indicator
 - `DistributionSelector` — Routing with parallel branches
+- Detail page — DMS-aligned workspace (header / status strip / body / rail); see `docs/guides/DESIGN.md`
 
 ## Key Services
 - `correspondence/services.py` — `CorrespondenceService`, `SealGenerationService`, `create_document_from_correspondence` (now returns `list[Document]` for primary + attachments), parallel routing branching logic
@@ -46,19 +49,17 @@ Handles letters, memos, official communications with approval workflows, digital
 | Route | Description |
 |-------|-------------|
 | `/correspondence/inbox` | Incoming correspondence |
-| `/correspondence/my-sent` | Sent by me (replaces `/correspondence/outbox`) |
-| `/correspondence/office-sent` | Sent by my office (replaces `/correspondence/office-dispatched`, `/correspondence/office-outbox`) |
+| `/correspondence/my-sent` | Sent by me |
+| `/correspondence/office-sent` | Sent by my office |
 | `/correspondence/registered` | Registered correspondence |
-| `/correspondence/records` | Archived records (replaces `/correspondence/archived`) |
+| `/correspondence/records` | Archived records |
 | `/correspondence/[id]` | Detail view with routing/minutes/documents |
 
-## Deleted Pages
+## Legacy redirects
 | Old Route | Replaced By |
 |-----------|-------------|
-| `/correspondence/outbox` | `/correspondence/my-sent` |
-| `/correspondence/office-outbox` | `/correspondence/office-sent` |
-| `/correspondence/office-dispatched` | `/correspondence/office-sent` |
-| `/correspondence/archived` | `/correspondence/records` |
+| `/correspondence/archived` | Redirect → `/correspondence/records` |
+| `/correspondence/archives` | Redirect → `/correspondence/records` |
 
 ## Seal Flow
 See `architecture/signature-seal-flow.md` for complete flow:
@@ -83,10 +84,18 @@ Shared statuses: `pending` → `in-progress` → `completed`, then flow-specific
 
 ## Recent Changes
 - **Status flow**: Inward completed → archive only; outward completed → dispatch; closed-state UI fixed
-- **Outbox → Sent**: `/correspondence/outbox` → `/correspondence/my-sent`, `/correspondence/office-outbox`/`office-dispatched` → `/correspondence/office-sent`
+- **Sent queues**: `/correspondence/my-sent`, `/correspondence/office-sent`
 - **Parallel routing**: `ParallelBranch` model, branch tree visualization, force-complete, deadline tracking
 - **Physical copies**: `has_physical_copy` on register form, indicator in detail views
 - **Read tracking**: `read_at`/`read_by` on `Distribution`
 - **Scope enforcement**: Org-scope filtering for correspondence visibility
 - **Document generation**: `create_document_from_correspondence` returns `list[Document]` (primary + attachments)
 - **Archived removed**: Folded into `/correspondence/records`
+- **July 2026 a11y**: MinuteModal / PartiesStep / DelegateModal high fixes; memo compose via `RichTextEditor`
+- **Detail UX**: Correspondence detail aligned to header / strip / body / rail (`docs/guides/DESIGN.md`)
+
+## Related Docs
+- `docs/features/cases.md` — Case detail workspace
+- `docs/features/rich-text-editor.md` — Memo / compose editor
+- `docs/guides/WCAG_AUDIT_CHECKLIST.md` — Accessibility remediations
+- `architecture/signature-seal-flow.md` — Seal flow

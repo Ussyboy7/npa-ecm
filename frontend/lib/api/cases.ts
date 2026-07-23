@@ -187,6 +187,7 @@ interface ApiCaseFormLink {
   id: string;
   case: string;
   form_document_id: string;
+  document_id?: string;
   form_title?: string;
   notes?: string;
   created_at: string;
@@ -245,6 +246,7 @@ function transformApiFormLink(api: ApiCaseFormLink): CaseFormLink {
     id: api.id,
     caseId: api.case,
     formDocumentId: api.form_document_id,
+    documentId: api.document_id,
     formTitle: api.form_title,
     notes: api.notes,
     createdAt: api.created_at,

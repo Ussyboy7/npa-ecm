@@ -5,7 +5,7 @@ import { logError } from '@/lib/client-logger';
 import { useMemo, useRef, useReducer, useEffect, useCallback, useState, Suspense } from 'react';
 import { useAbortController } from '@/hooks/use-abort-controller';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,6 +22,7 @@ import { handleAuthenticationError } from '@/lib/auth-errors';
 import { PermissionDeniedCard } from '@/components/shared/PermissionDeniedCard';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { usePermissionCheck } from '@/hooks/use-permission-check';
+import { appType } from '@/lib/app-type';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -527,9 +528,9 @@ const CorrespondenceRegisterForm = () => {
         });
 
         setTimeout(() => {
-          // Redirect to outbox if editing, otherwise to detail page
+          // Redirect to My Sent if editing, otherwise to detail page
           if (editId) {
-            router.push(`/correspondence/my-sent/${correspondenceId}`);
+            router.push(`/correspondence/${correspondenceId}`);
           } else {
             router.push(`/correspondence/${correspondenceId}`);
           }
@@ -601,13 +602,13 @@ const CorrespondenceRegisterForm = () => {
         </div>
       ) : (
         <ErrorBoundary>
-          <div className="container mx-auto p-6 space-y-6 flex-1">
+          <div className="container mx-auto p-4 md:p-6 space-y-5 flex-1">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold">
+          <h1 className={appType.pageTitleList}>
             {editId ? 'Edit Correspondence' : 'Register Correspondence'}
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className={appType.pageSubtitle}>
             {editId 
               ? 'Update correspondence details and dispatch'
               : 'Capture and initiate inward or outward correspondence from your office'}
@@ -693,19 +694,19 @@ const CorrespondenceRegisterForm = () => {
               </Card>
             ) : (
               <form onSubmit={handleSubmit}>
-                <Card>
-                  <CardHeader className="pb-4">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">
+                <Card className="border-border/60 shadow-none">
+                  <CardHeader className="pb-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className={appType.panelTitle}>
                         {editId ? 'Edit Correspondence' : 'Registration Details'}
-                      </CardTitle>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span>{completionPercentage}% complete</span>
+                      </h2>
+                      <span className={appType.meta}>
+                        {completionPercentage}% complete
+                      </span>
                     </div>
-                  </div>
-                  <Progress value={completionPercentage} className="h-1" />
-                </CardHeader>
-                <CardContent className="space-y-6">
+                    <Progress value={completionPercentage} className="h-1" />
+                  </CardHeader>
+                  <CardContent className="space-y-5">
                   <Tabs 
                     data-step-tabs
                     value={currentStep} 
@@ -723,14 +724,14 @@ const CorrespondenceRegisterForm = () => {
                       dispatch({ type: 'SET_STEP', payload: newStep });
                     }}
                   >
-                    <TabsList className="grid w-full grid-cols-4">
+                    <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
                       {FORM_STEPS.map((step) => (
-                        <TabsTrigger key={step.id} value={step.id} className="gap-2">
-                          {step.id === 'basics' && <FileText className="h-4 w-4" />}
-                          {step.id === 'sender' && <Users className="h-4 w-4" />}
-                          {step.id === 'routing' && <ArrowRight className="h-4 w-4" />}
-                          {step.id === 'documents' && <FolderOpen className="h-4 w-4" />}
-                          <span className="hidden sm:inline">{step.label}</span>
+                        <TabsTrigger key={step.id} value={step.id} className="gap-1.5 sm:gap-2">
+                          {step.id === 'basics' && <FileText className="h-4 w-4 shrink-0" />}
+                          {step.id === 'sender' && <Users className="h-4 w-4 shrink-0" />}
+                          {step.id === 'routing' && <ArrowRight className="h-4 w-4 shrink-0" />}
+                          {step.id === 'documents' && <FolderOpen className="h-4 w-4 shrink-0" />}
+                          <span className="truncate">{step.label}</span>
                         </TabsTrigger>
                       ))}
                     </TabsList>

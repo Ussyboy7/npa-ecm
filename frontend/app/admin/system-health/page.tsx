@@ -21,25 +21,14 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { fetchSystemStatus, type SystemStatus } from "@/lib/system-status-api";
 import { logError } from "@/lib/client-logger";
+import { StatStrip } from "@/components/shared/StatStrip";
 import {
   Activity,
-  AlertTriangle,
   CheckCircle2,
   Clock,
-  Database,
-  Mail,
   RefreshCw,
-  Server,
-  Users,
   XCircle,
 } from "lucide-react";
-import {
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from "@/components/shared/registry-queue-styles";
 
 function serviceBadge(status: string) {
   if (status === "healthy") {
@@ -131,80 +120,38 @@ export default function SystemHealthPage() {
               </span>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {Object.entries(status.services).map(([name, value]) => (
-                <Card key={name}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className="flex items-center gap-4">
-                      <div className={`${registryQueueStatIconBoxClass} bg-primary/10`}>
-                        <Server className={`${registryQueueStatIconClass} text-primary`} />
-                      </div>
-                      <div>
-                        <p className={registryQueueStatLabelClass}>{name.replace(/_/g, " ")}</p>
-                        <div className="mt-1">{serviceBadge(value)}</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              <Card>
-                <CardContent className={registryQueueStatCardContentClass}>
-                  <div className="flex items-center gap-4">
-                    <div className={`${registryQueueStatIconBoxClass} bg-blue-500/10`}>
-                      <Users className={`${registryQueueStatIconClass} text-blue-600`} />
-                    </div>
-                    <div>
-                      <p className={registryQueueStatLabelClass}>Active Users</p>
-                      <p className={registryQueueStatValueClass}>{status.users.active_total}</p>
-                      <p className="text-xs text-muted-foreground">{status.users.logged_in_last_24h} logged in (24h)</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className={registryQueueStatCardContentClass}>
-                  <div className="flex items-center gap-4">
-                    <div className={`${registryQueueStatIconBoxClass} bg-amber-500/10`}>
-                      <Mail className={`${registryQueueStatIconClass} text-amber-600`} />
-                    </div>
-                    <div>
-                      <p className={registryQueueStatLabelClass}>Active Correspondence</p>
-                      <p className={registryQueueStatValueClass}>{status.correspondence.active}</p>
-                      <p className="text-xs text-muted-foreground">{status.correspondence.completed_last_24h} completed (24h)</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className={registryQueueStatCardContentClass}>
-                  <div className="flex items-center gap-4">
-                    <div className={`${registryQueueStatIconBoxClass} bg-destructive/10`}>
-                      <AlertTriangle className={`${registryQueueStatIconClass} text-destructive`} />
-                    </div>
-                    <div>
-                      <p className={registryQueueStatLabelClass}>Pending Escalations</p>
-                      <p className={registryQueueStatValueClass}>{status.escalations_pending}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className={registryQueueStatCardContentClass}>
-                  <div className="flex items-center gap-4">
-                    <div className={`${registryQueueStatIconBoxClass} bg-green-500/10`}>
-                      <Database className={`${registryQueueStatIconClass} text-green-600`} />
-                    </div>
-                    <div>
-                      <p className={registryQueueStatLabelClass}>Celery Beat Tasks</p>
-                      <p className={registryQueueStatValueClass}>
-                        {status.celery_beat.enabled}/{status.celery_beat.total}
-                      </p>
-                      <p className="text-xs text-muted-foreground">enabled schedules</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            <StatStrip
+              items={[
+                ...Object.entries(status.services).map(([name, value]) => ({
+                  key: `svc-${name}`,
+                  label: name.replace(/_/g, " "),
+                  value: serviceBadge(value),
+                })),
+                {
+                  key: "users",
+                  label: "Active Users",
+                  value: status.users.active_total,
+                  hint: `${status.users.logged_in_last_24h} logged in (24h)`,
+                },
+                {
+                  key: "corr",
+                  label: "Active Correspondence",
+                  value: status.correspondence.active,
+                  hint: `${status.correspondence.completed_last_24h} completed (24h)`,
+                },
+                {
+                  key: "escalations",
+                  label: "Pending Escalations",
+                  value: status.escalations_pending,
+                },
+                {
+                  key: "celery",
+                  label: "Celery Beat Tasks",
+                  value: `${status.celery_beat.enabled}/${status.celery_beat.total}`,
+                  hint: "enabled schedules",
+                },
+              ]}
+            />
 
             <Card>
               <CardHeader>

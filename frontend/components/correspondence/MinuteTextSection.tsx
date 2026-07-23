@@ -121,9 +121,17 @@ export const MinuteTextSection: React.FC<MinuteTextSectionProps> = ({
         aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
         aria-required="true"
         aria-invalid={!!minuteTextError}
-        aria-describedby="minute-text-help minute-text-error"
+        aria-describedby={
+          minuteTextError ? "minute-text-help minute-text-error" : "minute-text-help"
+        }
         disabled={disabled}
       />
+
+      <p id="minute-text-help" className="text-xs text-muted-foreground">
+        {actionType === 'approve'
+          ? "Comments are recorded with the executive seal."
+          : "Required. Keep instructions clear for the next officer."}
+      </p>
 
       {/* Character count and error */}
       <div className="flex justify-between text-xs">

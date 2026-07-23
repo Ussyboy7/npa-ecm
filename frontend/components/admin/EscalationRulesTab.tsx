@@ -624,7 +624,7 @@ export const EscalationRulesTab = forwardRef<
 
         {/* Add/Edit Rule Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogContent size="lg" height="fill">
             <DialogHeader>
               <DialogTitle>
                 {editingRule ? 'Edit Escalation Rule' : 'Create Escalation Rule'}

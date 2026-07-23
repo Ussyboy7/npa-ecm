@@ -182,7 +182,7 @@ CI and `docker-entrypoint.sh` run `setup_role_permissions` on promote.
 | Refresh | POST | `/api/v1/accounts/auth/token/refresh/` |
 | Profile | GET | `/api/v1/accounts/auth/me/` |
 | Documents | GET/POST | `/api/v1/dms/documents/` |
-| Version diff | GET | `/api/v1/dms/document-versions/{id}/diff/?compare_with={id}` |
+| Version diff | GET | `/api/v1/dms/versions/{id}/diff/?compare_with={id}` |
 | Search | GET | `/api/v1/search/?q=…&search_mode=semantic` |
 | Compliance export | GET | `/api/v1/audit/activity-logs/compliance-export/` |
 | eDiscovery | GET | `/api/v1/records/legal-holds/{id}/ediscovery-export/` |
@@ -231,7 +231,8 @@ Full schema: http://localhost:8002/api/docs/
 ## Related documentation
 
 - [QUICK_START.md](./QUICK_START.md)
+- [DESIGN.md](./DESIGN.md)
 - [API_REFERENCE.md](../api/API_REFERENCE.md)
 - [REMAINING_WORK_BACKLOG.md](../procurement/REMAINING_WORK_BACKLOG.md)
-- [Feature docs](../features/)
+- [Feature docs](../features/) (incl. [rich-text-editor.md](../features/rich-text-editor.md), [cases.md](../features/cases.md))
 - [WCAG_AUDIT_CHECKLIST.md](./WCAG_AUDIT_CHECKLIST.md)

@@ -264,7 +264,7 @@ export default function ActingSelfServicePage() {
                 Appoint acting officer
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent size="md">
               <DialogHeader>
                 <DialogTitle>Appoint acting for your seat</DialogTitle>
               </DialogHeader>
@@ -344,7 +344,7 @@ export default function ActingSelfServicePage() {
                 Request acting appointment
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent size="md">
               <DialogHeader>
                 <DialogTitle>Request acting appointment</DialogTitle>
               </DialogHeader>

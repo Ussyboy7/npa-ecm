@@ -44,6 +44,9 @@ function PartiesStepComponent({
                   if (errors.senderOrganization) onErrorClear("senderOrganization");
                 }}
                 aria-invalid={!!errors.senderOrganization}
+                aria-describedby={
+                  errors.senderOrganization ? "senderOrganization-error" : undefined
+                }
                 className={errors.senderOrganization ? "border-destructive" : ""}
               />
               {errors.senderOrganization && (
@@ -173,9 +176,9 @@ function PartiesStepComponent({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="senderOrganization">External Recipient Org</Label>
+              <Label htmlFor="externalRecipientOrganization">External Recipient Org</Label>
               <Input
-                id="senderOrganization"
+                id="externalRecipientOrganization"
                 placeholder="Destination organization (optional)"
                 value={formData.senderOrganization}
                 onChange={(e) => onFormDataChange({ senderOrganization: e.target.value })}
@@ -186,11 +189,11 @@ function PartiesStepComponent({
       </div>
 
       <div className="flex justify-between pt-4">
-        <Button type="button" variant="outline" onClick={onPrev}>
+        <Button type="button" variant="ghost" size="sm" onClick={onPrev}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-        <Button type="button" onClick={onNext}>
+        <Button type="button" size="compact" onClick={onNext}>
           Next: Routing
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>

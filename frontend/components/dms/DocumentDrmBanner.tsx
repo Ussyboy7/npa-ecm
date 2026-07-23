@@ -2,28 +2,44 @@
 
 import { DocumentDrmRights } from "@/lib/drm-api";
 import { Shield } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-export function DocumentDrmBanner({ rights }: { rights?: DocumentDrmRights | null }) {
+/** One-line DRM notice for narrow detail rails / status strips. */
+export function DocumentDrmBanner({
+  rights,
+  className,
+}: {
+  rights?: DocumentDrmRights | null;
+  className?: string;
+}) {
   if (!rights?.policy_name) return null;
+
+  const hint = rights.expired
+    ? "Access expired"
+    : rights.view_only
+      ? "View only"
+      : "Restricted";
 
   return (
     <div
-      className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs space-y-1"
+      className={cn(
+        "flex items-center gap-2 min-w-0 rounded-full px-2.5 py-1 text-[11px]",
+        "bg-amber-500/10 text-amber-900 dark:text-amber-200",
+        className,
+      )}
       role="status"
       aria-live="polite"
+      title={
+        rights.watermark_text
+          ? `${rights.policy_name} · Watermark: ${rights.watermark_text}`
+          : rights.policy_name
+      }
     >
-      <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
-        <Shield className="h-3.5 w-3.5" aria-hidden="true" />
-        DRM: {rights.policy_name}
-      </div>
-      {rights.expired ? (
-        <p className="text-muted-foreground">Access expired under policy.</p>
-      ) : (
-        <p className="text-muted-foreground">
-          {rights.view_only ? "View only — download and print disabled." : "Restricted sharing may apply."}
-          {rights.watermark_text ? ` Watermark: ${rights.watermark_text}` : ""}
-        </p>
-      )}
+      <Shield className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+      <span className="truncate font-medium">
+        DRM · {rights.policy_name}
+        <span className="font-normal text-muted-foreground"> · {hint}</span>
+      </span>
     </div>
   );
 }

@@ -9,7 +9,7 @@ export interface SidebarVisibility {
   // My Workspace
   showDashboard: boolean;
   showMyInbox: boolean;
-  showMyOutbox: boolean;
+  showMySent: boolean;
   showExecutiveApprovals: boolean;
   showNotifications: boolean;
 
@@ -17,7 +17,7 @@ export interface SidebarVisibility {
   showOfficeInbox: boolean;
   showRegisterCorrespondence: boolean;
   showRegisteredCorrespondence: boolean;
-  showOfficeDispatched: boolean;
+  showOfficeSent: boolean;
 
   // Case Management
   showMyCases: boolean;
@@ -85,13 +85,13 @@ export function useSidebarVisibility(): SidebarVisibility {
       return {
         showDashboard: false,
         showMyInbox: false,
-        showMyOutbox: false,
+        showMySent: false,
         showExecutiveApprovals: false,
         showNotifications: false,
         showOfficeInbox: false,
         showRegisterCorrespondence: false,
         showRegisteredCorrespondence: false,
-        showOfficeDispatched: false,
+        showOfficeSent: false,
         showMyCases: false,
         showOfficeCases: false,
         showAllCases: false,
@@ -140,13 +140,13 @@ export function useSidebarVisibility(): SidebarVisibility {
       return {
         showDashboard: true,
         showMyInbox: true,
-        showMyOutbox: true,
+        showMySent: true,
         showExecutiveApprovals: true,
         showNotifications: false,
         showOfficeInbox: true,
         showRegisterCorrespondence: true,
         showRegisteredCorrespondence: true,
-        showOfficeDispatched: true,
+        showOfficeSent: true,
         showMyCases: true,
         showOfficeCases: true,
         showAllCases: true,
@@ -225,13 +225,13 @@ export function useSidebarVisibility(): SidebarVisibility {
       has("can_distribute") ||
       has("can_archive");
     const showMyInbox = canAccessCorrespondence;
-    const showMyOutbox = canAccessCorrespondence;
+    const showMySent = canAccessCorrespondence;
     const showNotifications = false;
     const showExecutiveApprovals =
       has("can_access_approvals") || (roleChecks.isSecretary && hasExecutiveAssignment);
 
     const showOfficeInbox = registryOn && hasOfficeMembership;
-    const showOfficeDispatched = registryOn && hasOfficeMembership;
+    const showOfficeSent = registryOn && hasOfficeMembership;
     const showRegisterCorrespondence =
       registryOn &&
       has("can_register_correspondence") &&
@@ -314,13 +314,13 @@ export function useSidebarVisibility(): SidebarVisibility {
     return {
       showDashboard,
       showMyInbox,
-      showMyOutbox,
+      showMySent,
       showExecutiveApprovals,
       showNotifications,
       showOfficeInbox,
       showRegisterCorrespondence,
       showRegisteredCorrespondence,
-      showOfficeDispatched,
+      showOfficeSent,
       showMyCases,
       showOfficeCases,
       showAllCases,

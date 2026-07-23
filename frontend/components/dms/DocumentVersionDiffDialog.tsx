@@ -26,7 +26,7 @@ export function DocumentVersionDiffDialog({
 }: DocumentVersionDiffDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+      <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>Version comparison</DialogTitle>
           <DialogDescription>

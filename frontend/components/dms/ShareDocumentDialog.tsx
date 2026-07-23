@@ -965,7 +965,7 @@ const ShareDocumentDialogContent = ({
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-full h-[95vh] sm:h-[90vh] overflow-hidden p-0 flex flex-col">
+      <DialogContent size="xl" height="screen" density="flush">
         <DialogHeader className="px-4 sm:px-6 pt-4 sm:pt-6 pb-3 border-b">
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />

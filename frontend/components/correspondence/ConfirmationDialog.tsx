@@ -58,7 +58,7 @@ export const ConfirmationDialog = ({
         if (!open) onClose();
       }}
     >
-      <AlertDialogContent className="max-w-4xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-y-auto p-4 sm:p-6">
+      <AlertDialogContent size="2xl" height="scroll">
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-accent" />

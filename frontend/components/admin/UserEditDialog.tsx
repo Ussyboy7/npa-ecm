@@ -343,7 +343,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent size="lg" height="fill">
         <DialogHeader>
           <DialogTitle>{user ? 'Edit User Access' : 'Create New User'}</DialogTitle>
           <DialogDescription>
@@ -718,7 +718,7 @@ export const UserEditDialog = ({ open, onOpenChange, user }: UserEditDialogProps
                   <div>
                     <h3 className="text-sm font-semibold mb-1">Office Memberships</h3>
                     <p className="text-xs text-muted-foreground">
-                      Office Inbox/Outbox and Office Cases visibility depends on having an active office membership.
+                      Office Inbox/Sent and Office Cases visibility depends on having an active office membership.
                     </p>
                   </div>
                   <Button

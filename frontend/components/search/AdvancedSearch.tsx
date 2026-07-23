@@ -707,7 +707,7 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>
+              <CardTitle id="search-results-heading">
                 Search Results ({results.total_count} found)
               </CardTitle>
               {results.results.length > 0 && (
@@ -724,6 +724,18 @@ export const AdvancedSearch = ({ onResultSelect, context }: AdvancedSearchProps)
             </div>
           </CardHeader>
           <CardContent>
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="sr-only"
+            >
+              {loading
+                ? "Searching…"
+                : results.results.length === 0
+                  ? "No results found."
+                  : `${results.total_count} search result${results.total_count === 1 ? "" : "s"} found.`}
+            </div>
             {loading ? (
               <div className="text-center py-12">
                 <Loader2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50 animate-spin" />

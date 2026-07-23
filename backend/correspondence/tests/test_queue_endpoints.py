@@ -86,18 +86,18 @@ class MySentEndpointTests(TestCase):
         self.assertNotIn(self.routed_corr.reference_number, refs)
 
 
-class OfficeDispatchedEndpointTests(TestCase):
+class OfficeSentEndpointTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = User.objects.create_superuser(
-            username="dispatchoffice",
+            username="officesentuser",
             password="testpass123",
         )
         self.client.force_authenticate(user=self.user)
 
         self.dispatched = Correspondence.objects.create(
             reference_number=f"NPA/OFD/{uuid.uuid4().hex[:8].upper()}",
-            subject="Office dispatch log item",
+            subject="Office sent log item",
             sender_name="Sender",
             created_by=self.user,
             status=Correspondence.Status.DISPATCHED,
@@ -113,7 +113,7 @@ class OfficeDispatchedEndpointTests(TestCase):
 
         self.pending = Correspondence.objects.create(
             reference_number=f"NPA/PND/{uuid.uuid4().hex[:8].upper()}",
-            subject="Not dispatched yet",
+            subject="Not sent yet",
             sender_name="Sender",
             created_by=self.user,
             status=Correspondence.Status.IN_PROGRESS,

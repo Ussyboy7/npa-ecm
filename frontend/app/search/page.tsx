@@ -7,6 +7,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Mail, Briefcase } from 'lucide-react';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { appType } from '@/lib/app-type';
 
 function SearchForm() {
   const router = useRouter();
@@ -38,8 +39,8 @@ function SearchForm() {
       <>
         <div className="container mx-auto p-6">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold">Search</h1>
-            <p className="text-muted-foreground mt-1">
+            <h1 className={appType.pageTitleList}>Search</h1>
+            <p className={appType.pageSubtitle}>
               Find the exact document, correspondence, or case you need using filters and full-text search.
             </p>
           </div>

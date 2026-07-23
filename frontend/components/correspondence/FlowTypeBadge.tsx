@@ -56,33 +56,33 @@ export function FlowTypeBadge({
         return {
           label: 'Inward (Internal)',
           icon: ArrowDown,
-          iconClass: 'text-blue-600 dark:text-blue-400',
-          bgClass: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800',
-          textClass: 'text-blue-700 dark:text-blue-300',
+          iconClass: 'text-sky-900 dark:text-sky-100',
+          bgClass: 'bg-sky-50 dark:bg-sky-950 border-sky-700/40 dark:border-sky-400/40',
+          textClass: 'text-sky-900 dark:text-sky-100',
         };
       case 'inward-external':
         return {
           label: 'Inward (External)',
           icon: ArrowDown,
-          iconClass: 'text-purple-600 dark:text-purple-400',
-          bgClass: 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800',
-          textClass: 'text-purple-700 dark:text-purple-300',
+          iconClass: 'text-violet-900 dark:text-violet-100',
+          bgClass: 'bg-violet-50 dark:bg-violet-950 border-violet-700/40 dark:border-violet-400/40',
+          textClass: 'text-violet-900 dark:text-violet-100',
         };
       case 'outward-internal':
         return {
           label: 'Outward (Internal)',
           icon: ArrowUp,
-          iconClass: 'text-green-600 dark:text-green-400',
-          bgClass: 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800',
-          textClass: 'text-green-700 dark:text-green-300',
+          iconClass: 'text-emerald-900 dark:text-emerald-100',
+          bgClass: 'bg-emerald-50 dark:bg-emerald-950 border-emerald-700/40 dark:border-emerald-400/40',
+          textClass: 'text-emerald-900 dark:text-emerald-100',
         };
       case 'outward-external':
         return {
           label: 'Outward (External)',
           icon: ArrowUp,
-          iconClass: 'text-orange-600 dark:text-orange-400',
-          bgClass: 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800',
-          textClass: 'text-orange-700 dark:text-orange-300',
+          iconClass: 'text-amber-950 dark:text-amber-100',
+          bgClass: 'bg-amber-50 dark:bg-amber-950 border-amber-700/40 dark:border-amber-400/40',
+          textClass: 'text-amber-950 dark:text-amber-100',
         };
       default:
         return null;

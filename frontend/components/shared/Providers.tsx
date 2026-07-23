@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { ThemeProvider } from "next-themes";
+import { Toaster } from "sonner";
 import { OrganizationProvider } from "@/contexts/OrganizationContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { BootstrapData } from "@/lib/server-bootstrap";
@@ -38,6 +39,17 @@ export function Providers({
       <OrganizationProvider initialData={initialOrgData}>
         <TooltipProvider>
           {children}
+          <Toaster
+            richColors
+            closeButton
+            position="top-right"
+            toastOptions={{
+              // Sonner uses role="status" / aria-live="polite" by default for announcements (WCAG 4.1.3).
+              classNames: {
+                toast: "text-sm",
+              },
+            }}
+          />
         </TooltipProvider>
       </OrganizationProvider>
     </ThemeProvider>

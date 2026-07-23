@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { QueuePageShell } from "@/components/shared/QueuePageShell";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatStrip } from "@/components/shared/StatStrip";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { InboxSummaryCards } from "@/app/inbox/components/InboxSummaryCards";
@@ -30,13 +30,6 @@ import {
   Clock,
   Inbox,
 } from "lucide-react";
-import {
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from "@/components/shared/registry-queue-styles";
 
 const calculateDaysPending = (item: Correspondence): number => {
   if (!item.receivedDate) return 0;
@@ -179,6 +172,7 @@ const Dashboard = () => {
   if (!currentUser) {
     return (
       <div className="container mx-auto p-6">
+        <h1 className="sr-only">Dashboard</h1>
         <p className="text-sm text-muted-foreground">
           Use the Role Switcher in Settings to choose a user context after signing in.
         </p>
@@ -206,41 +200,34 @@ const Dashboard = () => {
         <div className="space-y-6">
           <InboxSummaryCards summary={summary} />
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {quickLinks.map((link) => (
-              <Card key={link.label} className="hover:border-primary/40 transition-colors">
-                <CardContent className={registryQueueStatCardContentClass}>
-                  <Link href={link.href} className="flex items-center gap-4 w-full">
-                    <div className={`${registryQueueStatIconBoxClass} ${link.bg}`}>
-                      <link.icon className={`${registryQueueStatIconClass} ${link.tone}`} />
-                    </div>
-                    <div className="flex-1">
-                      <p className={registryQueueStatLabelClass}>{link.label}</p>
-                      <p className={registryQueueStatValueClass}>{link.count}</p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                  </Link>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <StatStrip
+            items={quickLinks.map((link) => ({
+              key: link.label,
+              label: link.label,
+              value: link.count,
+              onClick: () => router.push(link.href),
+              hint: `Open ${link.label}`,
+            }))}
+          />
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Inbox className="h-5 w-5" /> Priority Inbox
-                  </CardTitle>
-                  <CardDescription>Overdue, due soon, and urgent correspondence</CardDescription>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="rounded-xl border border-border/50 bg-muted/15 p-4 space-y-3 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold tracking-tight flex items-center gap-2">
+                    <Inbox className="h-4 w-4" /> Priority Inbox
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Overdue, due soon, and urgent
+                  </p>
                 </div>
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/inbox">View all</Link>
                 </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
+              </div>
+              <div className="space-y-2">
                 {priorityItems.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">No priority items right now.</p>
+                  <p className="text-sm text-muted-foreground py-4 text-center">No priority items right now.</p>
                 ) : (
                   priorityItems.map((item) => (
                     <InboxItemCard
@@ -251,24 +238,26 @@ const Dashboard = () => {
                     />
                   ))
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5" /> Pending Approvals
-                  </CardTitle>
-                  <CardDescription>Minutes and actions awaiting your sign-off</CardDescription>
+            <div className="rounded-xl border border-border/50 bg-muted/15 p-4 space-y-3 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold tracking-tight flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" /> Pending Approvals
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Awaiting your sign-off
+                  </p>
                 </div>
                 <Button variant="ghost" size="sm" asChild>
                   <Link href="/approvals">View all</Link>
                 </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
+              </div>
+              <div className="space-y-2">
                 {pendingApprovals.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-6 text-center">No pending approvals.</p>
+                  <p className="text-sm text-muted-foreground py-4 text-center">No pending approvals.</p>
                 ) : (
                   pendingApprovals.map((approval) => (
                     <InboxApprovalCard
@@ -278,8 +267,8 @@ const Dashboard = () => {
                     />
                   ))
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">

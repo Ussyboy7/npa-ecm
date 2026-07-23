@@ -5,7 +5,7 @@ A modern React-based frontend application for the NPA Electronic Content Managem
 ## 🚀 Features
 
 - **Document Management**: Upload, version diff, DRM policies, `/dms` library
-- **Correspondence System**: Office routing, minutes, seals, outbox
+- **Correspondence System**: Office routing, minutes, seals, My Sent / Office Sent
 - **Advanced Search**: Full-text + semantic re-rank toggle (MVP)
 - **Helpdesk**: User tickets (`/helpdesk`) and admin queue
 - **Real-time Notifications**: WebSocket-powered notifications and updates

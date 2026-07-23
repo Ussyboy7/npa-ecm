@@ -213,7 +213,7 @@ export const RoleFormModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent size="2xl" height="fill">
         <DialogHeader>
           <DialogTitle>
             {existingRole ? "Edit Role" : "Create New Role"}

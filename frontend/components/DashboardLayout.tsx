@@ -20,6 +20,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps) => (
         <main
           id="main-content"
           tabIndex={-1}
+          aria-label="Main content"
           className="flex-1 min-h-0 min-w-0 overflow-auto overscroll-contain flex flex-col focus:outline-none"
         >
           {children}

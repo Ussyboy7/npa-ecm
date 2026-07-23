@@ -1,9 +1,8 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { MessageSquare, ExternalLink } from 'lucide-react';
-import type { DocumentComment } from '@/lib/dms-storage';
+import { Button } from "@/components/ui/button";
+import { MessageSquare } from "lucide-react";
+import type { DocumentComment } from "@/lib/dms-storage";
 
 interface DocumentCommentsCardProps {
   comments: DocumentComment[];
@@ -21,41 +20,24 @@ export const DocumentCommentsCard = ({
   const unresolved = comments.filter((c) => !c.resolved).length;
 
   return (
-    <Card className="border-border/50">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-primary" />
-              Comments
-            </CardTitle>
-            <CardDescription className="mt-1">Discuss, annotate, and collaborate on this document</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <p className="text-[10px] text-muted-foreground">Unresolved</p>
-              <p className="text-sm font-semibold">{unresolved}</p>
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground">Total</p>
-              <p className="text-sm font-semibold">{comments.length}</p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full gap-1.5 text-xs"
-            onClick={onOpenCommentsDialog}
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            {comments.length > 0 ? 'View Comments' : 'Add Comment'}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="rounded-xl bg-muted/30 px-3 py-2.5 space-y-2 min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <p className="text-[13px] font-semibold tracking-tight flex items-center gap-1.5 min-w-0 truncate">
+          <MessageSquare className="h-3.5 w-3.5 text-primary shrink-0" />
+          Comments
+        </p>
+        <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
+          {unresolved > 0 ? `${unresolved} open` : `${comments.length}`}
+        </span>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full h-7 text-xs"
+        onClick={onOpenCommentsDialog}
+      >
+        {comments.length > 0 ? "Open comments" : "Add comment"}
+      </Button>
+    </div>
   );
 };

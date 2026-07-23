@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
   Bar,
   BarChart,
@@ -22,7 +23,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Clock, Target, FileText, AlertTriangle } from 'lucide-react';
 import { fetchPerformanceAnalytics, type PerformanceAnalytics } from '@/lib/analytics-client';
 import { fetchSLATargets, type SLATargets } from '@/lib/sla-client';
 
@@ -114,68 +114,37 @@ export const PerformanceAnalyticsTab = () => {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">SLA Compliance</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{slaMetrics.complianceRate}%</div>
-              <Progress value={slaMetrics.complianceRate} className="mt-2" />
-              <p className="text-xs text-muted-foreground mt-2">
-                {slaMetrics.compliant} of {slaMetrics.total} within SLA
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Turnaround</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{turnaroundMetrics.average.toFixed(1)} days</div>
-              <div className="flex items-center gap-2 mt-2">
-                {turnaroundMetrics.average <= avgSLATargetDays ? (
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                ) : (
-                  <TrendingDown className="h-4 w-4 text-red-500" />
-                )}
-                <p className="text-xs text-muted-foreground">Target: {avgSLATargetDays} days</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">SLA Breached</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{slaMetrics.breached}</div>
-              <p className="text-xs text-muted-foreground mt-2">
-                {slaMetrics.total > 0 
+        <StatStrip
+          items={[
+            {
+              key: "compliance",
+              label: "SLA Compliance",
+              value: `${slaMetrics.complianceRate}%`,
+              hint: `${slaMetrics.compliant} of ${slaMetrics.total} within SLA`,
+            },
+            {
+              key: "turnaround",
+              label: "Avg Turnaround",
+              value: `${turnaroundMetrics.average.toFixed(1)} days`,
+              hint: `Target: ${avgSLATargetDays} days`,
+            },
+            {
+              key: "breached",
+              label: "SLA Breached",
+              value: slaMetrics.breached,
+              hint:
+                slaMetrics.total > 0
                   ? `${((slaMetrics.breached / slaMetrics.total) * 100).toFixed(1)}% of total`
-                  : 'No items'}
-              </p>
-              {slaMetrics.breached > 0 && (
-                <Badge variant="destructive" className="mt-2">Action required</Badge>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Items</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{slaMetrics.total}</div>
-              <p className="text-xs text-muted-foreground mt-2">Correspondence processed</p>
-            </CardContent>
-          </Card>
-        </div>
+                  : "No items",
+            },
+            {
+              key: "total",
+              label: "Total Items",
+              value: slaMetrics.total,
+              hint: "Correspondence processed",
+            },
+          ]}
+        />
 
         <Tabs defaultValue="sla" className="space-y-4">
           <TabsList>

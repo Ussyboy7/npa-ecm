@@ -72,7 +72,7 @@
 | Office Online / WOPI integration | ❌ | ✅ | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 | ✅ | ❌ | 🟡 | 🟡 |
 | Digital asset management (DAM) | ❌ | 🟡 | 🟡 | 🟡 | 🟡 | ❌ | ❌ | 🟡 | ✅ | ❌ | 🟡 |
 
-**NPA-ECM notes:** DMS includes workspaces, collections, versions, version diff UI, permissions, DRM policies, comments, discussion threads, form documents, and access logs (`backend/dms/`). Real-time collaboration is limited to comments/WebSocket presence — not live co-editing.
+**NPA-ECM notes:** DMS includes collections, versions, version diff UI, permissions, DRM policies, comments, discussion threads, form documents, and access logs (`backend/dms/`). Compose uses hardened custom `RichTextEditor` (not Quill.js). Real-time collaboration is limited to comments/WebSocket presence/session lock — **not** live co-editing (TipTap + Yjs deferred; backlog P2).
 
 ---
 
@@ -87,7 +87,7 @@
 | Delegation & acting officer | ✅ | 🟡 | ✅ | ✅ | ✅ | ✅ | 🟡 | ❌ | ❌ | 🟡 | 🟡 |
 | Executive digital seal | ✅ | ❌ | 🟡 | 🟡 | 🟡 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Seal verification (public) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Dispatch / outbox tracking | ✅ | 🟡 | ✅ | ✅ | ✅ | ✅ | 🟡 | ❌ | ❌ | ✅ | 🟡 |
+| Dispatch / Sent tracking | ✅ | 🟡 | ✅ | ✅ | ✅ | ✅ | 🟡 | ❌ | ❌ | ✅ | 🟡 |
 | Case management linked to correspondence | ✅ | 🟡 | ✅ | ✅ | ✅ | ✅ | 🟡 | ❌ | ❌ | ✅ | 🟡 |
 | Workflow templates & designer | 🟡 | ✅ | ✅ | ✅ | ✅ | ✅ | 🟡 | 🟡 | ✅ | ✅ | ✅ |
 | Visual BPM designer | 🟡 | 🟡 | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | 🟡 | 🟡 | 🟡 |

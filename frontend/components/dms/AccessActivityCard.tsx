@@ -25,6 +25,7 @@ interface AccessActivityCardProps {
   onViewActivityDetails?: (log: DocumentAccessLog) => void;
   onRefresh?: () => Promise<void>;
   isLoading?: boolean;
+  compact?: boolean;
 }
 
 type SortOption = 'recent' | 'oldest' | 'user' | 'action';
@@ -37,6 +38,7 @@ export const AccessActivityCard = ({
   onViewActivityDetails,
   onRefresh,
   isLoading = false,
+  compact = false,
 }: AccessActivityCardProps) => {
   const [accessLogFilter, setAccessLogFilter] = useState<'all' | 'view' | 'download' | 'attempted-download'>('all');
   const [accessLogDateFilter, setAccessLogDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -211,6 +213,45 @@ export const AccessActivityCard = ({
 
   return (
     <>
+      {compact ? (
+        <div className="rounded-xl bg-muted/30 px-3 py-2.5 space-y-2 min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <p className="text-[13px] font-semibold tracking-tight flex items-center gap-1.5 min-w-0 truncate">
+              <Activity className="h-3.5 w-3.5 text-primary shrink-0" />
+              Activity
+            </p>
+            <Badge variant="outline" className="text-[10px] h-5 shrink-0">
+              {accessLogs.length}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-4 gap-1 text-center min-w-0">
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground truncate">Views</p>
+              <p className="text-xs font-semibold tabular-nums">{stats.views}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground truncate">DL</p>
+              <p className="text-xs font-semibold tabular-nums">{stats.downloads}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground truncate">Tried</p>
+              <p className="text-xs font-semibold tabular-nums">{stats.attempted}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground truncate">Users</p>
+              <p className="text-xs font-semibold tabular-nums">{stats.users}</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full h-7 text-xs"
+            onClick={() => setLogsDialogOpen(true)}
+          >
+            View logs
+          </Button>
+        </div>
+      ) : (
       <Card className="border-border/50">
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
@@ -294,9 +335,10 @@ export const AccessActivityCard = ({
           </div>
         </CardContent>
       </Card>
+      )}
 
       <Dialog open={logsDialogOpen} onOpenChange={setLogsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+        <DialogContent size="xl">
           <DialogHeader>
             <DialogTitle>Access Activity Logs</DialogTitle>
             <DialogDescription>

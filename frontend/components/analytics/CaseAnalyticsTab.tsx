@@ -5,9 +5,11 @@ import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Clock, Users, Building2, FileText, AlertCircle, Target } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
+import { Loader2, Users, Building2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { StatStrip } from '@/components/shared/StatStrip';
+import { appType } from '@/lib/app-type';
+import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api-client';
 import { logError } from '@/lib/client-logger';
 import { toast } from 'sonner';
@@ -121,72 +123,42 @@ export const CaseAnalyticsTab = () => {
           </Select>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Cases</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.summary.total_cases}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Cases opened in the last {rangeDays} days
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Resolution Rate</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.summary.total_cases > 0 
+        <StatStrip
+          items={[
+            {
+              key: "total",
+              label: "Total Cases",
+              value: stats.summary.total_cases,
+              hint: `Cases opened in the last ${rangeDays} days`,
+            },
+            {
+              key: "resolution",
+              label: "Resolution Rate",
+              value:
+                stats.summary.total_cases > 0
                   ? `${((stats.summary.resolved_cases / stats.summary.total_cases) * 100).toFixed(1)}%`
-                  : '0%'}
-              </div>
-              <Progress 
-                value={stats.summary.total_cases > 0 
-                  ? (stats.summary.resolved_cases / stats.summary.total_cases) * 100 
-                  : 0} 
-                className="mt-2" 
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {stats.summary.resolved_cases} of {stats.summary.total_cases} resolved
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Open Cases</CardTitle>
-              <AlertCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.summary.open_cases}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {stats.summary.total_cases > 0 
+                  : "0%",
+              hint: `${stats.summary.resolved_cases} of ${stats.summary.total_cases} resolved`,
+            },
+            {
+              key: "open",
+              label: "Open Cases",
+              value: stats.summary.open_cases,
+              hint:
+                stats.summary.total_cases > 0
                   ? `${((stats.summary.open_cases / stats.summary.total_cases) * 100).toFixed(1)}% of total`
-                  : 'Currently open'}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Resolution</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.summary.avg_resolution_days ? `${stats.summary.avg_resolution_days.toFixed(1)} days` : 'N/A'}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Average time to resolve</p>
-            </CardContent>
-          </Card>
-        </div>
+                  : "Currently open",
+            },
+            {
+              key: "avg",
+              label: "Avg Resolution",
+              value: stats.summary.avg_resolution_days
+                ? `${stats.summary.avg_resolution_days.toFixed(1)} days`
+                : "N/A",
+              hint: "Average time to resolve",
+            },
+          ]}
+        />
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="breakdown" className="space-y-4">
@@ -326,7 +298,7 @@ export const CaseAnalyticsTab = () => {
                   <CardDescription>Cases with generated completion packages</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{stats.summary.cases_with_packages}</div>
+                  <div className={cn(appType.statValue, "text-xl")}>{stats.summary.cases_with_packages}</div>
                   <p className="text-xs text-muted-foreground mt-1">
                     {stats.summary.total_cases > 0
                       ? `${((stats.summary.cases_with_packages / stats.summary.total_cases) * 100).toFixed(1)}% of total cases`

@@ -1,61 +1,78 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { formatFileSize } from "@/lib/file-utils";
+import { FolderOpen } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { DocumentVersion } from "@/lib/dms-storage";
 
 interface DocumentVersionStripProps {
   versions: DocumentVersion[];
   selectedVersionId: string | null;
   onSelectVersion: (version: DocumentVersion) => void;
+  /** Opens full version management (upload / OCR / replace). */
+  onManageVersions?: () => void;
 }
 
-/** Version picker — only shown when there are 2+ versions. */
+/** Quiet version switcher under preview — manage lives in Preview → Versions. */
 export function DocumentVersionStrip({
   versions,
   selectedVersionId,
   onSelectVersion,
+  onManageVersions,
 }: DocumentVersionStripProps) {
-  if (versions.length <= 1) {
+  if (versions.length <= 1 && !onManageVersions) {
     return null;
   }
 
   return (
-    <div className="border border-border border-t-0 rounded-b-lg bg-muted/30 shrink-0">
-      <ScrollArea className="w-full">
-        <div className="flex items-center gap-2 px-3 py-2">
-          {versions.map((version, index) => {
-            const isLatest = index === 0;
-            const isSelected = version.id === selectedVersionId;
-            return (
-              <button
-                key={version.id}
-                type="button"
-                onClick={() => onSelectVersion(version)}
-                className={`flex items-center gap-2 rounded-md border px-3 py-1.5 text-left text-xs transition-colors shrink-0 max-w-[200px] ${
-                  isSelected
-                    ? "border-primary bg-primary/10 text-foreground"
-                    : "border-border bg-background hover:bg-muted/50 text-muted-foreground"
-                }`}
-              >
-                <Badge variant={isLatest ? "default" : "outline"} className="text-[10px] px-1.5 py-0">
-                  v{version.versionNumber}
-                </Badge>
-                <span className="truncate font-medium" title={version.fileName}>
-                  {version.fileName || `Version ${version.versionNumber}`}
-                </span>
-                {version.fileSize ? (
-                  <span className="text-[10px] opacity-70 hidden sm:inline">
-                    {formatFileSize(version.fileSize)}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
+    <div className="border border-border/50 border-t-0 rounded-b-2xl bg-muted/20 shrink-0">
+      <div className="flex items-center gap-2 px-2.5 py-1.5 min-w-0">
+        {versions.length > 1 ? (
+          <ScrollArea className="flex-1 min-w-0">
+            <div className="flex items-center gap-1 pr-2">
+              {versions.map((version, index) => {
+                const isLatest = index === 0;
+                const isSelected = version.id === selectedVersionId;
+                return (
+                  <button
+                    key={version.id}
+                    type="button"
+                    onClick={() => onSelectVersion(version)}
+                    title={version.fileName || `Version ${version.versionNumber}`}
+                    className={cn(
+                      "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                      isSelected
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background/80 text-muted-foreground hover:text-foreground hover:bg-muted",
+                    )}
+                  >
+                    v{version.versionNumber}
+                    {isLatest ? (
+                      <span className="ml-1 opacity-70 font-normal">latest</span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        ) : (
+          <span className="flex-1 text-[11px] text-muted-foreground px-1">v1</span>
+        )}
+        {onManageVersions ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 rounded-full px-2.5 text-[11px] gap-1 text-muted-foreground hover:text-foreground"
+            onClick={onManageVersions}
+          >
+            <FolderOpen className="h-3 w-3" />
+            Manage
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }

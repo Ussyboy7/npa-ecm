@@ -30,8 +30,8 @@ class Correspondence(UUIDModel, SoftDeleteModel, TimeStampedModel):
        - External: From external org (physical copy received, registered) → Office Inbox
     
     2. OUTWARD - Going OUT OF your office:
-       - Internal: To another NPA office (you minute it out) → Office Outbox
-       - External: To external org (registered, printed, mailed) → Office Outbox
+       - Internal: To another NPA office (you minute it out) → Office Sent
+       - External: To external org (registered, printed, mailed) → Office Sent
     
     Source & Direction:
     -------------------
@@ -445,7 +445,7 @@ class CorrespondenceDistribution(UUIDModel, TimeStampedModel):
     - Everything is tracked and recorded
     
     Key Points:
-    - Distribution items appear in Office Inbox/Outbox
+    - Distribution items appear in Office Inbox/Sent
     - Distribution recipients can take action (minute, forward, etc.)
     - Distribution is tracked for audit purposes
     - Distribution is separate from direct routing but still visible
@@ -560,13 +560,13 @@ class Minute(UUIDModel, TimeStampedModel):
     
     When you minute correspondence:
     - You're routing it from your office to another office/user
-    - It appears in your Office Outbox (outward)
+    - It appears in your Office Sent (outward)
     - Recipient receives it in their Office Inbox (inward)
     
     Minute Flow:
     ------------
     - Minute Inward (Received): Someone minutes to you → You receive in Office Inbox
-    - Minute Outward (Sent): You minute to others → Appears in your Office Outbox
+    - Minute Outward (Sent): You minute to others → Appears in your Office Sent
     
     Physical Concept:
     ----------------

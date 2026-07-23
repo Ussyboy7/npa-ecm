@@ -283,7 +283,7 @@ const FormsTemplatesPage = () => {
         )}
 
         <Dialog open={!!previewTemplate} onOpenChange={(open) => !open && setPreviewTemplate(null)}>
-          <DialogContent className="sm:max-w-2xl">
+          <DialogContent size="lg">
             <DialogHeader>
               <DialogTitle>{previewTemplate?.name}</DialogTitle>
               <DialogDescription>{previewTemplate?.description || "No template description provided."}</DialogDescription>

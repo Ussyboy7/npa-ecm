@@ -32,6 +32,8 @@ import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { StatStrip } from '@/components/shared/StatStrip';
 import { fetchAllPaginatedResults } from '@/lib/pagination-utils';
 import {
   correspondenceQueueBadgeClass,
@@ -244,69 +246,54 @@ function MyDocumentsForm() {
 
   return (
     <>
-      <div className="container mx-auto p-6 space-y-6">
-        {!currentUser?.id ? (
+      {!currentUser?.id ? (
+        <QueuePageShell
+          title="My Documents"
+          subtitle="Create, manage, and find your documents"
+        >
           <LoadingState message="Loading documents…" />
-        ) : (
-          <>
-        {/* Header */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold">My Documents</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Create, manage, and find your documents</p>
-          </div>
-          <div className="flex gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-2" /> Create
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => router.push('/dms/new')}>
-                  <FileText className="mr-2 h-4 w-4" />
-                  Document
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setCreateFormOpen(true)}>
-                  <FileInput className="mr-2 h-4 w-4" />
-                  Form
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <ContextualHelp
-              title="Managing your documents"
-              description="Switch scope, then narrow the list with search and filters."
-              steps={['Use tabs to switch between My Documents and Shared with Me.', 'Search by title, reference, description, file text, or tags.', 'Use Status/Type filters to find items faster.']}
+        </QueuePageShell>
+      ) : (
+        <QueuePageShell
+          title="My Documents"
+          subtitle="Create, manage, and find your documents"
+          actions={(
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-2" /> Create
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => router.push('/dms/new')}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Document
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setCreateFormOpen(true)}>
+                    <FileInput className="mr-2 h-4 w-4" />
+                    Form
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <ContextualHelp
+                title="Managing your documents"
+                description="Switch scope, then narrow the list with search and filters."
+                steps={['Use tabs to switch between My Documents and Shared with Me.', 'Search by title, reference, description, file text, or tags.', 'Use Status/Type filters to find items faster.']}
+              />
+            </>
+          )}
+          stats={(
+            <StatStrip
+              items={[
+                { key: 'total', label: 'Total', value: stats.total },
+                { key: 'draft', label: 'Draft', value: stats.draft },
+                { key: 'published', label: 'Published', value: stats.published },
+                { key: 'archived', label: 'Archived', value: stats.archived },
+              ]}
             />
-          </div>
-        </div>
-
-        {/* Stats */}
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-2">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 w-full">
-              {[
-                { label: 'Total documents', value: stats.total, icon: FileText, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-                { label: 'Draft', value: stats.draft, icon: FileText, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-                { label: 'Published', value: stats.published, icon: FileCheck, bgClass: 'bg-green-500/10', iconClass: 'text-green-600 dark:text-green-400' },
-                { label: 'Archived', value: stats.archived, icon: Clock, bgClass: 'bg-gray-500/10', iconClass: 'text-gray-600 dark:text-gray-400' },
-              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-                <Card key={label}>
-                  <CardContent className="flex items-center gap-4 p-4">
-                    <div className={cn('flex h-10 w-10 items-center justify-center rounded-lg', bgClass)}>
-                      <Icon className={cn('h-5 w-5', iconClass)} />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">{label}</p>
-                      <p className="text-xl font-bold">{value}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
+          )}
+        >
         {/* Search + filters bar */}
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-2">
@@ -399,10 +386,8 @@ function MyDocumentsForm() {
             className="border-t border-border/60 pt-4"
           />
         )}
-
-        </>
+        </QueuePageShell>
       )}
-      </div>
 
       <CreateFormDocumentDialog
         open={createFormOpen}

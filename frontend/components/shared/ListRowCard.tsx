@@ -20,7 +20,7 @@ type ListRowCardProps = {
   onRowClick?: () => void;
   /** Right column (e.g. View); not part of the main link. */
   actions?: ReactNode;
-  /** Full-width row below main content (e.g. outbox actions). */
+  /** Full-width row below main content (e.g. sent-list actions). */
   footer?: ReactNode;
   /** Padding and spacing. Defaults to compact (p-3) for consistent queue views. */
   density?: "default" | "compact";

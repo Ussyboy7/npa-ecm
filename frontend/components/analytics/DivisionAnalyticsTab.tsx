@@ -18,9 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { StatStrip } from "@/components/shared/StatStrip";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { fetchEnhancedDivisionPerformance, type EnhancedDivisionPerformance } from "@/lib/sla-client";
-import { ArrowRight, Target } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 const COMPLIANCE_COLORS = {
   good: "#22c55e",
@@ -106,43 +107,18 @@ export function DivisionAnalyticsTab() {
         </Select>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Divisions / Ports</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.summary.totalDivisions}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Workload</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.summary.totalWorkload}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Avg Completion</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.summary.avgCompletionRate}%</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Target className="h-4 w-4" /> Avg SLA Compliance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{data.summary.avgSlaCompliance}%</div>
-            <Progress value={data.summary.avgSlaCompliance} className="mt-2" />
-          </CardContent>
-        </Card>
-      </div>
+      <StatStrip
+        items={[
+          { key: "divisions", label: "Divisions / Ports", value: data.summary.totalDivisions },
+          { key: "workload", label: "Total Workload", value: data.summary.totalWorkload },
+          { key: "completion", label: "Avg Completion", value: `${data.summary.avgCompletionRate}%` },
+          {
+            key: "sla",
+            label: "Avg SLA Compliance",
+            value: `${data.summary.avgSlaCompliance}%`,
+          },
+        ]}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

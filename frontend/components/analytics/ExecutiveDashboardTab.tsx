@@ -26,16 +26,11 @@ import {
   FileDown,
   Download,
   Flame,
-  Target,
-  AlertTriangle,
   CheckCircle,
-  XCircle,
-  TrendingUp,
-  TrendingDown,
   ArrowRight,
-  FileText,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { StatStrip } from '@/components/shared/StatStrip';
 import { downloadAnalyticsExport, fetchExecutiveAnalytics, type ExecutiveAnalytics } from '@/lib/analytics-client';
 import {
   fetchEnhancedSLAAnalytics,
@@ -189,76 +184,38 @@ export const ExecutiveDashboardTab = () => {
           </Card>
         )}
 
-        {/* SLA Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Correspondence</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{slaSummary.total}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                In the last {selectedPeriod} days
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">SLA Compliance</CardTitle>
-              <Target className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl font-bold">{slaSummary.complianceRate}%</span>
-                {slaSummary.complianceRate >= 85 ? (
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                ) : (
-                  <TrendingDown className="h-4 w-4 text-red-500" />
-                )}
-              </div>
-              <Progress value={slaSummary.complianceRate} className="mt-2" />
-              <p className="text-xs text-muted-foreground mt-1">
-                {slaSummary.compliant} of {slaSummary.total} within SLA
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">At Risk</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{slaSummary.atRisk}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Approaching SLA deadline
-              </p>
-              {slaSummary.atRisk > 0 && (
-                <Badge variant="secondary" className="mt-2">Needs attention</Badge>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">SLA Breached</CardTitle>
-              <XCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{slaSummary.breached}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {slaSummary.total > 0 
+        {/* SLA Overview */}
+        <StatStrip
+          items={[
+            {
+              key: "total",
+              label: "Total Correspondence",
+              value: slaSummary.total,
+              hint: `In the last ${selectedPeriod} days`,
+            },
+            {
+              key: "compliance",
+              label: "SLA Compliance",
+              value: `${slaSummary.complianceRate}%`,
+              hint: `${slaSummary.compliant} of ${slaSummary.total} within SLA`,
+            },
+            {
+              key: "at-risk",
+              label: "At Risk",
+              value: slaSummary.atRisk,
+              hint: "Approaching SLA deadline",
+            },
+            {
+              key: "breached",
+              label: "SLA Breached",
+              value: slaSummary.breached,
+              hint:
+                slaSummary.total > 0
                   ? `${((slaSummary.breached / slaSummary.total) * 100).toFixed(1)}% of total`
-                  : 'Past deadline'}
-              </p>
-              {slaSummary.breached > 0 && (
-                <Badge variant="destructive" className="mt-2">Action required</Badge>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                  : "Past deadline",
+            },
+          ]}
+        />
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="sla" className="space-y-4">

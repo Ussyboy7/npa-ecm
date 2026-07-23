@@ -397,11 +397,11 @@ export const RoutingStep = memo(function RoutingStep({
       )}
 
       <div className="flex justify-between pt-4">
-        <Button type="button" variant="outline" onClick={onPrev}>
+        <Button type="button" variant="ghost" size="sm" onClick={onPrev}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-        <Button type="button" onClick={onNext}>
+        <Button type="button" size="compact" onClick={onNext}>
           Next: Documents
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>

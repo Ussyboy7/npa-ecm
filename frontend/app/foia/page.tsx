@@ -2,15 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Search,
-  Clock,
-  FileText,
-  AlertTriangle,
-  CheckCircle2,
-  Inbox,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,10 +16,15 @@ import {
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { QueuePageShell } from "@/components/shared/QueuePageShell";
+import { StatStrip } from "@/components/shared/StatStrip";
 import { apiFetch } from "@/lib/api-client";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 import { unwrapResults } from "@/lib/type-utils";
+import { getFoiaStatusBadge } from "@/lib/status-badge";
+import { appType } from "@/lib/app-type";
+import { cn } from "@/lib/utils";
 
 interface FOIARequestRow {
   id: string;
@@ -103,19 +100,19 @@ interface Stats {
   closed_this_month: number;
 }
 
-const STATUS_BADGE: Record<FOIAStatus, { label: string; className: string }> = {
-  submitted: { label: "Submitted", className: "bg-amber-500 hover:bg-amber-600" },
-  acknowledged: { label: "Acknowledged", className: "bg-blue-500 hover:bg-blue-600" },
-  in_processing: { label: "In Processing", className: "bg-purple-500 hover:bg-purple-600" },
-  review: { label: "Under Review", className: "bg-orange-500 hover:bg-orange-600" },
-  approved: { label: "Approved", className: "bg-green-500 hover:bg-green-600" },
-  partially_granted: { label: "Partially Granted", className: "bg-yellow-500 hover:bg-yellow-600" },
-  denied: { label: "Denied", className: "bg-red-500 hover:bg-red-600" },
-  responded: { label: "Responded", className: "bg-teal-500 hover:bg-teal-600" },
-  closed: { label: "Closed", className: "bg-gray-500 hover:bg-gray-600" },
-  awaiting_clarification: { label: "Awaiting Clarification", className: "bg-pink-500 hover:bg-pink-600" },
-  appealed: { label: "Appealed", className: "bg-violet-500 hover:bg-violet-600" },
-};
+const FOIA_STATUS_OPTIONS: FOIAStatus[] = [
+  "submitted",
+  "acknowledged",
+  "in_processing",
+  "review",
+  "approved",
+  "partially_granted",
+  "denied",
+  "responded",
+  "closed",
+  "awaiting_clarification",
+  "appealed",
+];
 
 const TABS: { value: FOIAStatus | "all" | "overdue"; label: string }[] = [
   { value: "all", label: "All" },
@@ -169,15 +166,15 @@ export default function FOIAListPage() {
         page: String(pagination.page),
         page_size: String(pagination.pageSize),
       });
-      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       const statusParam =
-        statusFilter !== 'all'
+        statusFilter !== "all"
           ? statusFilter
-          : activeTab !== 'all' && activeTab !== 'overdue'
+          : activeTab !== "all" && activeTab !== "overdue"
             ? activeTab
-            : '';
-      if (statusParam) params.set('status', statusParam);
-      if (activeTab === 'overdue') params.set('overdue', 'true');
+            : "";
+      if (statusParam) params.set("status", statusParam);
+      if (activeTab === "overdue") params.set("overdue", "true");
 
       const [listResponse, statsResponse] = await Promise.all([
         apiFetch<{ results?: FOIARequestRow[]; count?: number }>(
@@ -188,11 +185,11 @@ export default function FOIAListPage() {
       const rows = unwrapResults<FOIARequestRow>(listResponse).map(mapFoiaRequest);
       setRequests(rows);
       setCount(
-        typeof listResponse.count === 'number' ? listResponse.count : rows.length,
+        typeof listResponse.count === "number" ? listResponse.count : rows.length,
       );
       setStats(statsResponse);
     } catch (_err) {
-      setError('Failed to load FOIA requests.');
+      setError("Failed to load FOIA requests.");
     } finally {
       setLoading(false);
     }
@@ -212,77 +209,29 @@ export default function FOIAListPage() {
         && !["closed", "responded", "appealed"].includes(req.status)
       : false);
 
-  const statCards = [
-    {
-      label: "Total Requests",
-      value: stats.total,
-      icon: Inbox,
-      bgClass: "bg-primary/10",
-      iconClass: "text-primary",
-    },
-    {
-      label: "Submitted",
-      value: stats.submitted,
-      icon: FileText,
-      bgClass: "bg-amber-500/10",
-      iconClass: "text-amber-600 dark:text-amber-400",
-    },
-    {
-      label: "In Processing",
-      value: stats.in_processing,
-      icon: Clock,
-      bgClass: "bg-purple-500/10",
-      iconClass: "text-purple-600 dark:text-purple-400",
-    },
-    {
-      label: "Overdue",
-      value: stats.overdue,
-      icon: AlertTriangle,
-      bgClass: "bg-red-500/10",
-      iconClass: "text-red-600 dark:text-red-400",
-    },
-    {
-      label: "Closed This Month",
-      value: stats.closed_this_month,
-      icon: CheckCircle2,
-      bgClass: "bg-green-500/10",
-      iconClass: "text-green-600 dark:text-green-400",
-    },
-  ];
-
   return (
-    <>
-      <div className="container mx-auto p-6 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">FOIA Requests</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage Freedom of Information Act requests
-          </p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {statCards.map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${bgClass}`}>
-                  <Icon className={`h-5 w-5 ${iconClass}`} />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className="text-xl font-bold">{value}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <QueuePageShell
+      title="FOIA Requests"
+      subtitle="Manage Freedom of Information Act requests"
+      stats={
+        <StatStrip
+          items={[
+            { key: "total", label: "Total", value: stats.total },
+            { key: "submitted", label: "Submitted", value: stats.submitted },
+            { key: "processing", label: "In processing", value: stats.in_processing },
+            { key: "overdue", label: "Overdue", value: stats.overdue },
+            { key: "closed", label: "Closed this month", value: stats.closed_this_month },
+          ]}
+        />
+      }
+      tabs={
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex gap-1 flex-wrap">
             {TABS.map((tab) => (
               <Button
                 key={tab.value}
                 variant={activeTab === tab.value ? "default" : "outline"}
-                size="sm"
+                size="compact"
                 onClick={() => setActiveTab(tab.value)}
               >
                 {tab.label}
@@ -305,85 +254,86 @@ export default function FOIAListPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                {Object.entries(STATUS_BADGE).map(([value, { label }]) => (
+                {FOIA_STATUS_OPTIONS.map((value) => (
                   <SelectItem key={value} value={value}>
-                    {label}
+                    {getFoiaStatusBadge(value).label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
         </div>
+      }
+    >
+      {error && <ErrorState message={error} variant="inline" />}
 
-        {error && <ErrorState message={error} variant="inline" />}
-
-        {loading ? (
-          <LoadingState message="Loading FOIA requests..." />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon="search"
-            title="No FOIA requests found"
-            message={
-              debouncedSearch || statusFilter !== "all" || activeTab !== "all"
-                ? "Try adjusting your filters or search query."
-                : "No FOIA requests have been submitted yet."
-            }
-          />
-        ) : (
-          <>
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y divide-border">
-                  {filtered.map((req) => {
-                    const badge = STATUS_BADGE[req.status] || STATUS_BADGE.submitted;
-                    const overdue = isOverdue(req);
-                    return (
-                      <div
-                        key={req.id}
-                        className="flex items-center gap-4 p-4 hover:bg-muted/50 cursor-pointer transition-colors"
-                        onClick={() => router.push(`/foia/${req.id}`)}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {req.request_number}
-                            </span>
-                            {overdue && (
-                              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                                Overdue
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="font-medium truncate mt-0.5">{req.requester_name}</p>
-                          {req.organization && (
-                            <p className="text-xs text-muted-foreground truncate">{req.organization}</p>
-                          )}
-                        </div>
-                        <div className="hidden md:block text-sm text-muted-foreground">
-                          <p>Received: {req.received_date ? new Date(req.received_date).toLocaleDateString() : "—"}</p>
-                          <p>
-                            Deadline:{" "}
-                            {req.deadline_date
-                              ? new Date(req.deadline_date).toLocaleDateString()
-                              : "—"}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <Badge className={badge.className}>{badge.label}</Badge>
-                          {req.assigned_to_name && (
-                            <p className="text-xs text-muted-foreground mt-1">{req.assigned_to_name}</p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-            <PaginationControls pagination={pagination} />
-          </>
-        )}
-      </div>
-    </>
+      {loading ? (
+        <LoadingState message="Loading FOIA requests..." />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon="search"
+          title="No FOIA requests found"
+          message={
+            debouncedSearch || statusFilter !== "all" || activeTab !== "all"
+              ? "Try adjusting your filters or search query."
+              : "No FOIA requests have been submitted yet."
+          }
+        />
+      ) : (
+        <>
+          <div className="rounded-xl border border-border/50 bg-muted/20 divide-y divide-border/50 overflow-hidden">
+            {filtered.map((req) => {
+              const badge = getFoiaStatusBadge(req.status);
+              const overdue = isOverdue(req);
+              return (
+                <button
+                  key={req.id}
+                  type="button"
+                  className="flex w-full items-center gap-4 p-4 text-left hover:bg-muted/40 transition-colors"
+                  onClick={() => router.push(`/foia/${req.id}`)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className={cn(appType.caption, "font-mono")}>
+                        {req.request_number}
+                      </span>
+                      {overdue && (
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                          Overdue
+                        </Badge>
+                      )}
+                    </div>
+                    <p className={cn(appType.listTitle, "mt-0.5 truncate")}>
+                      {req.requester_name}
+                    </p>
+                    {req.organization ? (
+                      <p className={cn(appType.meta, "truncate")}>{req.organization}</p>
+                    ) : null}
+                  </div>
+                  <div className={cn("hidden md:block", appType.meta)}>
+                    <p>Received: {req.received_date ? new Date(req.received_date).toLocaleDateString() : "—"}</p>
+                    <p>
+                      Deadline:{" "}
+                      {req.deadline_date
+                        ? new Date(req.deadline_date).toLocaleDateString()
+                        : "—"}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <Badge variant={badge.variant} className={badge.className}>
+                      {badge.label}
+                    </Badge>
+                    {req.assigned_to_name ? (
+                      <p className={cn(appType.caption, "mt-1")}>{req.assigned_to_name}</p>
+                    ) : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <PaginationControls pagination={pagination} />
+        </>
+      )}
+    </QueuePageShell>
   );
 }

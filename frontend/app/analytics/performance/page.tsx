@@ -5,6 +5,8 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { PermissionGate } from '@/components/shared/PermissionGate';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { PerformanceAnalyticsTab } from '@/components/analytics/PerformanceAnalyticsTab';
+import { cn } from '@/lib/utils';
+import { appType } from '@/lib/app-type';
 
 export default function PerformanceAnalyticsPage() {
   return (
@@ -19,8 +21,8 @@ export default function PerformanceAnalyticsPage() {
             <div className="space-y-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <h1 className="text-3xl font-bold">Performance Analytics</h1>
-                  <p className="text-muted-foreground mt-1">
+                  <h1 className={appType.pageTitleList}>Performance Analytics</h1>
+                  <p className={cn(appType.pageSubtitle)}>
                     SLA compliance, turnaround times, and efficiency metrics powered by real-time backend analytics
                   </p>
                 </div>

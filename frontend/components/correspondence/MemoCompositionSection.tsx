@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import { TemplateManager } from './TemplateManager';
-import { QuillEditor } from '@/components/dms/QuillEditor';
+import { RichTextEditor } from '@/components/dms/RichTextEditor';
 import { MODAL_CONSTANTS } from '@/lib/modal-constants';
 import type { DocumentTemplate } from '@/lib/template-storage';
 
@@ -167,7 +167,7 @@ export const MemoCompositionSection = ({
           </Card>
         )}
 
-        <QuillEditor
+        <RichTextEditor
           value={memoContent}
           onChange={(html) => onMemoContentChange(html)}
           placeholder="Compose your response memo here..."

@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -270,11 +271,18 @@ const DocumentPreviewModalContent = ({
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) onClose();
     }}>
-      <DialogContent className="max-w-6xl w-[95vw] sm:w-full h-[92vh] max-h-[95vh] flex flex-col p-0 gap-0 overflow-hidden">
+      <DialogContent size="full" height="screen" density="flush">
         <DialogHeader className="px-4 pt-3 pb-1 flex-shrink-0 flex-row items-center justify-between gap-2 space-y-0">
-          <DialogTitle className="text-sm font-medium truncate">
-            {attachmentFileName || correspondence.referenceNumber}
-          </DialogTitle>
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="text-sm font-medium truncate">
+              {attachmentFileName || correspondence.referenceNumber}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Preview of {attachmentSource === "completion-package" ? "completion package" : "attached document"}
+              {attachmentFileName ? `: ${attachmentFileName}` : ""} for correspondence{" "}
+              {correspondence.referenceNumber || correspondence.subject || "item"}.
+            </DialogDescription>
+          </div>
           {attachmentUrl ? (
             <Button
               type="button"

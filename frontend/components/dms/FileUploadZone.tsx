@@ -15,6 +15,8 @@ interface FileUploadZoneProps {
   className?: string;
 }
 
+export type { FileUploadZoneProps };
+
 export const FileUploadZone = ({
   file,
   onFileSelect,

@@ -1,50 +1,52 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Single sizing scale for Office Inbox, Office Outbox, and case list pages
- * (list rows, stat cards, metadata lines).
+ * Sizing scale for Office Inbox, Office Sent, and case list pages
+ * (list rows, legacy stat cards, metadata lines). Prefer StatStrip for new stats.
  */
 export const registryQueueRowShellClass =
-  "rounded-lg border border-border bg-card p-5 transition-all hover:bg-muted/50 hover:shadow-soft";
+  "rounded-xl border border-border/60 bg-card p-3.5 transition-colors hover:bg-muted/40";
 
-export const registryQueueRowInnerGapClass = "gap-4";
+export const registryQueueRowInnerGapClass = "gap-3";
 
-export const registryQueueLeadingBoxClass = "rounded-lg p-3";
+export const registryQueueLeadingBoxClass = "rounded-lg p-2.5";
 
-export const registryQueueLeadingIconClass = "h-5 w-5";
+export const registryQueueLeadingIconClass = "h-4 w-4";
 
-export const registryQueueTitleClass = "truncate text-base font-semibold text-foreground";
+export const registryQueueTitleClass =
+  "truncate text-sm font-semibold tracking-tight text-foreground";
 
-export const registryQueueMetaTextClass = "space-y-1 text-sm text-muted-foreground";
+export const registryQueueMetaTextClass = "space-y-1 text-xs text-muted-foreground";
 
-export const registryQueueMetaIconClass = "h-4 w-4 shrink-0";
+export const registryQueueMetaIconClass = "h-3.5 w-3.5 shrink-0";
 
-export const registryQueueStatCardContentClass = "p-5";
+export const registryQueueStatCardContentClass = "p-3";
 
-export const registryQueueStatIconBoxClass = "rounded-lg p-3";
+export const registryQueueStatIconBoxClass = "rounded-lg p-2";
 
-export const registryQueueStatIconClass = "h-5 w-5";
+export const registryQueueStatIconClass = "h-4 w-4";
 
-export const registryQueueStatLabelClass = "text-sm text-muted-foreground";
+export const registryQueueStatLabelClass = "text-[11px] text-muted-foreground";
 
-export const registryQueueStatValueClass = "text-2xl font-semibold";
+export const registryQueueStatValueClass =
+  "text-base font-semibold tabular-nums tracking-tight";
 
 export const registryQueueBadgeRowClass = "flex flex-wrap items-center gap-2";
 
 /** Vertical gap between list rows on queue pages */
-export const registryQueueListStackClass = "space-y-4";
+export const registryQueueListStackClass = "space-y-2";
 
 export const registryQueueDateTextClass = "whitespace-nowrap text-xs text-muted-foreground";
 
 /** Title row: subject/title + date column */
 export const registryQueueTitleRowClass =
-  "mb-2 flex items-start justify-between gap-4";
+  "mb-1.5 flex items-start justify-between gap-4";
 
 /** Empty-state hero icon on queue list pages */
 export const registryQueueEmptyIconClass = "h-10 w-10 opacity-50";
 
-/** One card grouping search + summary stat grid (Records & Archives, Executive Approvals). */
-export const registryQueueSearchStatsShellContentClass = "space-y-5 p-5";
+/** One card grouping search + summary stat grid */
+export const registryQueueSearchStatsShellContentClass = "space-y-4 p-4";
 
 export const registryQueueSearchInputWrapClass = "relative max-w-xl";
 
@@ -52,9 +54,9 @@ export function cnRegistryQueueTitle(className?: string) {
   return cn(registryQueueTitleClass, className);
 }
 
-/** Office correspondence list rows (inbox / outbox): tighter padding and gaps */
+/** Office correspondence list rows (inbox / sent): tighter padding and gaps */
 export const correspondenceQueueShellClass =
-  "rounded-lg border border-border bg-card p-3 transition-all hover:bg-muted/50 hover:shadow-soft";
+  "rounded-xl border border-border/60 bg-card p-3 transition-colors hover:bg-muted/40";
 
 export const correspondenceQueueInnerGapClass = "gap-3";
 
@@ -64,7 +66,7 @@ export const correspondenceQueueLeadingIconClass = "h-4 w-4";
 
 /** Title: slightly smaller than registry queue default */
 export const correspondenceQueueSubjectClass =
-  "line-clamp-2 text-sm font-semibold leading-snug text-foreground";
+  "line-clamp-2 text-sm font-semibold leading-snug tracking-tight text-foreground";
 
 /** Badges in correspondence rows */
 export const correspondenceQueueBadgeClass =

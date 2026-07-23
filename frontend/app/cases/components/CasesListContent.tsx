@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { logError, logWarn } from "@/lib/client-logger";
 import { exportToCSV } from "@/lib/admin-export";
 import { apiFetch } from "@/lib/api-client";
-import { Search, Plus, FileText, Loader2, Briefcase, Building2, Download, ChevronRight, AlertTriangle, CheckCircle2, Clock, FolderOpen } from "lucide-react";
+import { Search, Plus, FileText, Loader2, Briefcase, Building2, Download, ChevronRight } from "lucide-react";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import {
@@ -35,6 +35,8 @@ import { ListRowCard } from "@/components/shared/ListRowCard";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingState } from "@/components/shared/LoadingState";
 import { ErrorState } from "@/components/shared/ErrorState";
+import { QueuePageShell } from "@/components/shared/QueuePageShell";
+import { StatStrip } from "@/components/shared/StatStrip";
 import { cn } from "@/lib/utils";
 import {
   correspondenceQueueBadgeClass,
@@ -47,11 +49,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
 } from "@/components/shared/registry-queue-styles";
 
 const statusOptions = [
@@ -97,15 +94,15 @@ const getPriorityBadgeVariant = (priority: Case["priority"]) => {
 const getStatusBadgeClass = (status: Case["status"]) => {
   switch (status) {
     case "open":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      return "border-sky-700/40 bg-sky-50 text-sky-900 dark:border-sky-400/40 dark:bg-sky-950 dark:text-sky-100";
     case "in_progress":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+      return "border-amber-700/40 bg-amber-50 text-amber-950 dark:border-amber-400/40 dark:bg-amber-950 dark:text-amber-100";
     case "resolved":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      return "border-emerald-700/40 bg-emerald-50 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-950 dark:text-emerald-100";
     case "closed":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
+      return "border-border bg-muted text-foreground";
     case "archived":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
+      return "border-violet-700/40 bg-violet-50 text-violet-900 dark:border-violet-400/40 dark:bg-violet-950 dark:text-violet-100";
     default:
       return "bg-muted text-foreground";
   }
@@ -371,24 +368,21 @@ export function CasesListContent({ scope, title, description }: CasesListContent
 
   if (!currentUser?.id) {
     return (
-      <div className="container mx-auto p-6">
+      <QueuePageShell title={title} subtitle={description}>
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mr-2" />
           <span className="text-muted-foreground">Loading...</span>
         </div>
-      </div>
+      </QueuePageShell>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold">{title}</h1>
-          <p className="text-muted-foreground mt-1">{description}</p>
-        </div>
-        <div className="flex gap-2">
+    <QueuePageShell
+      title={title}
+      subtitle={description}
+      actions={(
+        <>
           <Button 
             variant="outline" 
             size="sm" 
@@ -419,33 +413,19 @@ export function CasesListContent({ scope, title, description }: CasesListContent
             description="Track cases from intake to closure."
             steps={['Filter by status, type, priority, or division.', 'Open a case to link correspondence, documents, and forms.', 'Create a case for new complaints, requests, inquiries, or projects.']}
           />
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "Total Cases", value: count, icon: FolderOpen, bgClass: "bg-primary/10", iconClass: "text-primary" },
-          { label: "Open", value: cases.filter((c) => c.status === "open").length, icon: Clock, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
-          { label: "In Progress", value: cases.filter((c) => c.status === "in_progress").length, icon: AlertTriangle, bgClass: "bg-amber-500/10", iconClass: "text-amber-600" },
-          { label: "Resolved", value: cases.filter((c) => c.status === "resolved" || c.status === "closed").length, icon: CheckCircle2, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
-        ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-          <Card key={label}>
-            <CardContent className={registryQueueStatCardContentClass}>
-              <div className="flex items-center gap-4">
-                <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                  <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                </div>
-                <div>
-                  <p className={registryQueueStatLabelClass}>{label}</p>
-                  <p className={registryQueueStatValueClass}>{value}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
+        </>
+      )}
+      stats={(
+        <StatStrip
+          items={[
+            { key: 'total', label: 'Total cases', value: count },
+            { key: 'open', label: 'Open', value: cases.filter((c) => c.status === "open").length },
+            { key: 'inProgress', label: 'In progress', value: cases.filter((c) => c.status === "in_progress").length },
+            { key: 'resolved', label: 'Resolved', value: cases.filter((c) => c.status === "resolved" || c.status === "closed").length },
+          ]}
+        />
+      )}
+    >
       {/* Inline Filter Bar */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-2 p-2">
@@ -669,7 +649,7 @@ export function CasesListContent({ scope, title, description }: CasesListContent
             />
           </>
         )}
-      </div>
+    </QueuePageShell>
   );
 }
 

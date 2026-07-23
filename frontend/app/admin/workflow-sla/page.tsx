@@ -12,12 +12,6 @@ import {
   Target,
   Search,
   Plus,
-  Clock,
-  Settings,
-  AlertTriangle,
-  Bell,
-  CheckCircle,
-  Power,
 } from "lucide-react";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
 import {
@@ -28,14 +22,7 @@ import {
   EscalationRulesTab,
   type EscalationRulesTabHandle,
 } from "@/components/admin/EscalationRulesTab";
-import { cn } from "@/lib/utils";
-import {
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from "@/components/shared/registry-queue-styles";
+import { StatStrip } from "@/components/shared/StatStrip";
 import {
   fetchEscalationRules,
   fetchEscalationSummary,
@@ -105,68 +92,20 @@ function WorkflowSLAForm() {
       ? "Configure automatic escalations and notifications for SLA breaches."
       : "Configure Service Level Agreement targets and thresholds.";
 
-  const statCards = useMemo(() => {
+  const statItems = useMemo(() => {
     if (activeTab === "escalation") {
       return [
-        {
-          label: "Escalation rules",
-          value: escalationRuleCount,
-          icon: Settings,
-          bgClass: "bg-primary/10",
-          iconClass: "text-primary",
-        },
-        {
-          label: "Pending escalations",
-          value: escalationSummary?.pending ?? 0,
-          icon: AlertTriangle,
-          bgClass: "bg-warning/10",
-          iconClass: "text-warning",
-        },
-        {
-          label: "Triggered this week",
-          value: escalationSummary?.triggeredThisWeek ?? 0,
-          icon: Bell,
-          bgClass: "bg-info/10",
-          iconClass: "text-info",
-        },
-        {
-          label: "Resolved today",
-          value: escalationSummary?.resolvedToday ?? 0,
-          icon: CheckCircle,
-          bgClass: "bg-success/10",
-          iconClass: "text-success",
-        },
+        { key: "rules", label: "Escalation rules", value: escalationRuleCount },
+        { key: "pending", label: "Pending escalations", value: escalationSummary?.pending ?? 0 },
+        { key: "triggered", label: "Triggered this week", value: escalationSummary?.triggeredThisWeek ?? 0 },
+        { key: "resolved", label: "Resolved today", value: escalationSummary?.resolvedToday ?? 0 },
       ];
     }
     return [
-      {
-        label: "Advanced rules",
-        value: slaRuleCount,
-        icon: Settings,
-        bgClass: "bg-primary/10",
-        iconClass: "text-primary",
-      },
-      {
-        label: "Active rules",
-        value: slaActiveRuleCount,
-        icon: Power,
-        bgClass: "bg-success/10",
-        iconClass: "text-success",
-      },
-      {
-        label: "Urgent target",
-        value: slaTargets ? `${slaTargets.urgent}h` : "—",
-        icon: AlertTriangle,
-        bgClass: "bg-destructive/10",
-        iconClass: "text-destructive",
-      },
-      {
-        label: "Low priority target",
-        value: slaTargets ? `${slaTargets.low}h` : "—",
-        icon: Clock,
-        bgClass: "bg-blue-500/10",
-        iconClass: "text-blue-600 dark:text-blue-400",
-      },
+      { key: "advanced", label: "Advanced rules", value: slaRuleCount },
+      { key: "active", label: "Active rules", value: slaActiveRuleCount },
+      { key: "urgent", label: "Urgent target", value: slaTargets ? `${slaTargets.urgent}h` : "—" },
+      { key: "low", label: "Low priority target", value: slaTargets ? `${slaTargets.low}h` : "—" },
     ];
   }, [activeTab, slaRuleCount, slaActiveRuleCount, slaTargets, escalationRuleCount, escalationSummary]);
 
@@ -211,23 +150,7 @@ function WorkflowSLAForm() {
         icon={Target}
         actions={headerActions}
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {statCards.map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <StatStrip items={statItems} />
 
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-2">

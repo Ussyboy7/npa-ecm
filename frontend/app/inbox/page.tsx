@@ -350,13 +350,19 @@ const ExecutiveInbox = () => {
       )}
 
       <Card>
-        <CardContent className="flex flex-wrap items-center gap-2 p-2">
-          <div className="relative min-w-[200px] flex-1 max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 pl-8 text-xs" />
+        <CardContent className="flex flex-wrap items-center gap-2 p-2" role="search" aria-label="Inbox filters">
+          <div className="relative min-w-0 flex-1 basis-[12rem] max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 text-xs"
+              aria-label="Search inbox"
+            />
           </div>
           <Select value={selectedStatus || 'all'} onValueChange={(v) => { setSelectedStatus(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
-            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by status"><SelectValue placeholder="All Statuses" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
@@ -365,7 +371,7 @@ const ExecutiveInbox = () => {
             </SelectContent>
           </Select>
           <Select value={selectedPriority || 'all'} onValueChange={(v) => { setSelectedPriority(v === 'all' ? '' : v); pagination.goToFirstPage(); }}>
-            <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="All Priorities" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[130px] text-xs" aria-label="Filter by priority"><SelectValue placeholder="All Priorities" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Priorities</SelectItem>
               <SelectItem value="urgent">Urgent</SelectItem>
@@ -376,7 +382,7 @@ const ExecutiveInbox = () => {
           </Select>
           <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
           <Select value={`${sortBy}-${sortOrder}`} onValueChange={handleSortChange}>
-            <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-[150px] text-xs" aria-label="Sort inbox"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="priority-desc">Priority (Urgent First)</SelectItem>
               <SelectItem value="days_pending-desc">Days Pending (Oldest)</SelectItem>

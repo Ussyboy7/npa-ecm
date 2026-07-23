@@ -15,9 +15,6 @@ import {
 import {
   Mail,
   Search,
-  Send,
-  AlertCircle,
-  Clock,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -30,14 +27,9 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { DocumentCard } from './components/DocumentCard';
 import { SentCorrespondenceCard } from './components/SentCorrespondenceCard';
-import {
-  correspondenceQueueListStackClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from '@/components/shared/registry-queue-styles';
+import { correspondenceQueueListStackClass } from '@/components/shared/registry-queue-styles';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,7 +40,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { cn } from '@/lib/utils';
 import { logError } from '@/lib/client-logger';
 import { getDocumentsSharedByUser, type DocumentRecord } from '@/lib/dms-storage';
 import { usePagination } from '@/hooks/use-pagination';
@@ -58,7 +49,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorState } from '@/components/shared/ErrorState';
 
-const OutboxPageContent = () => {
+const MySentPageContent = () => {
   const router = useRouter();
   const {currentUser} = useCurrentUser();
   const { divisions, users: organizationUsers } = useOrganization();
@@ -129,7 +120,7 @@ const OutboxPageContent = () => {
 
     const abortController = new AbortController();
 
-    const fetchOutbox = async () => {
+    const fetchMySent = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -198,7 +189,7 @@ const OutboxPageContent = () => {
       }
     };
 
-    void fetchOutbox();
+    void fetchMySent();
     return () => { abortController.abort(); };
   }, [currentUser?.id, debouncedQuery, selectedStatus, selectedPriority, sortBy, sortOrder, dateFrom, dateTo, pagination.page, pagination.pageSize, refreshKey, dataVersion]);
 
@@ -317,45 +308,34 @@ const OutboxPageContent = () => {
 
   return (
     <>
-      <div className="container mx-auto p-6 space-y-6">
-        {!currentUser ? (
+      {!currentUser ? (
+        <QueuePageShell
+          title="My Sent"
+          subtitle="Correspondence you created and documents you've shared"
+        >
           <LoadingState message="Loading sent items…" />
-        ) : (
-          <>
-        {/* Header */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold">My Sent</h1>
-            <p className="text-muted-foreground mt-1">Correspondence you created and documents you've shared</p>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" asChild><Link href="/correspondence/register"><Mail className="h-4 w-4 mr-2" />Register New</Link></Button>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[
-            { label: 'Total items', value: summary.total + documentCount, icon: Mail, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-            { label: 'Pending action', value: summary.pending, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-            { label: 'In progress', value: summary.inProgress, icon: Send, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
+        </QueuePageShell>
+      ) : (
+        <QueuePageShell
+          title="My Sent"
+          subtitle="Correspondence you created and documents you've shared"
+          actions={(
+            <Button size="sm" asChild>
+              <Link href="/correspondence/register">
+                <Mail className="h-4 w-4 mr-2" />Register New
+              </Link>
+            </Button>
+          )}
+          stats={(
+            <StatStrip
+              items={[
+                { key: 'total', label: 'Total items', value: summary.total + documentCount },
+                { key: 'pending', label: 'Pending action', value: summary.pending },
+                { key: 'inProgress', label: 'In progress', value: summary.inProgress },
+              ]}
+            />
+          )}
+        >
         {/* Inline Filter Bar */}
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-2">
@@ -431,7 +411,7 @@ const OutboxPageContent = () => {
             className="border-t border-border/60 pt-4"
           />
         )}
-        </>
+        </QueuePageShell>
       )}
 
         {/* Cancel Draft Confirmation Dialog */}
@@ -531,15 +511,14 @@ const OutboxPageContent = () => {
             setRefreshKey((k) => k + 1);
           }}
         />
-      </div>
     </>
   );
 };
 
-const OutboxPage = () => (
+const MySentPage = () => (
   <CorrespondenceProvider>
-    <OutboxPageContent />
+    <MySentPageContent />
   </CorrespondenceProvider>
 );
 
-export default OutboxPage;
+export default MySentPage;

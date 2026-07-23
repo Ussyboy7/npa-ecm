@@ -42,7 +42,7 @@ import { fetchDrmPolicies, type DocumentRightsPolicy } from '@/lib/drm-api';
 import type { User } from '@/lib/npa-structure';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { useSignature } from '@/hooks/use-signature';
-import { QuillEditor } from './QuillEditor';
+import { RichTextEditor } from './RichTextEditor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileUploadZone } from './FileUploadZone';
 import {
@@ -865,7 +865,7 @@ export const DocumentUploadDialog = ({
 
       {composeMode ? (
         <div className="min-h-[400px] border rounded-lg overflow-hidden">
-          <QuillEditor value={editorHtml} onChange={setEditorHtml} placeholder="Start writing..." showCharacterCount signatureImageUrl={userSignature?.imageData} />
+          <RichTextEditor value={editorHtml} onChange={setEditorHtml} placeholder="Start writing..." showCharacterCount signatureImageUrl={userSignature?.imageData} />
         </div>
       ) : (
         <div className="space-y-3">
@@ -889,11 +889,11 @@ export const DocumentUploadDialog = ({
         <Progress value={uploadProgress} className="h-1.5" />
       )}
 
-      <div className="flex justify-end gap-3 pt-2 border-t">
-        <Button variant="outline" onClick={() => handleClose(false)} disabled={isSubmitting}>
+      <div className="flex justify-end gap-2 pt-2 border-t">
+        <Button variant="ghost" size="sm" onClick={() => handleClose(false)} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button onClick={handleSubmit} disabled={isSubmitting || (!composeMode && !file)}>
+        <Button size="compact" onClick={handleSubmit} disabled={isSubmitting || (!composeMode && !file)}>
           {isSubmitting ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
           ) : mode === 'create' ? (
@@ -908,8 +908,9 @@ export const DocumentUploadDialog = ({
 
   const mainDialog = (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent 
-        className="max-w-5xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[85vh] overflow-hidden p-4 sm:p-6"
+      <DialogContent
+        size="3xl"
+        height="fill"
         onPointerDownOutside={(e) => {
           if (isSubmitting) e.preventDefault();
         }}
@@ -935,7 +936,7 @@ export const DocumentUploadDialog = ({
     <>{asPage ? formContent : mainDialog}
 
     <Dialog open={!!templatePreviewId} onOpenChange={(open) => !open && setTemplatePreviewId(null)}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent size="xl" height="fill">
         <DialogHeader>
           <DialogTitle>Template Preview</DialogTitle>
           <DialogDescription>

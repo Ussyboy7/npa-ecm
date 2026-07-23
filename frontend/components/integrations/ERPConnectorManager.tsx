@@ -220,7 +220,7 @@ export function ERPConnectorManager() {
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent size="md" height="fill">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit ERP Connector" : "New ERP Connector"}</DialogTitle>
             <DialogDescription>API keys and passwords are encrypted at rest.</DialogDescription>

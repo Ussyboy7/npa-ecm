@@ -16,6 +16,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isCorrespondenceClosed } from "@/lib/correspondence-helpers";
+import {
+  DetailStatusStrip,
+  StatusStripSep,
+} from "@/components/shared/DetailStatusStrip";
+import {
+  getCorrespondenceStatusBadge,
+  getPriorityBadgeVariant,
+} from "@/lib/status-badge";
 
 interface CompactStatusStripProps {
   status: string;
@@ -32,16 +40,6 @@ interface CompactStatusStripProps {
   acknowledgedCount?: number;
   className?: string;
 }
-
-const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline"; className?: string }> = {
-  pending: { label: "Pending", variant: "secondary" },
-  "in-progress": { label: "In Progress", variant: "default" },
-  completed: { label: "Completed", variant: "outline", className: "border-green-500 text-green-600" },
-  dispatched: { label: "Dispatched", variant: "outline", className: "border-blue-500 text-blue-600" },
-  acknowledged: { label: "Acknowledged", variant: "outline", className: "border-green-500 text-green-600" },
-  archived: { label: "Archived", variant: "secondary" },
-  withdrawn: { label: "Withdrawn", variant: "destructive" },
-};
 
 const directionConfig: Record<string, { icon: typeof ArrowDown; label: string }> = {
   upward: { icon: ArrowUp, label: "Inward" },
@@ -65,10 +63,6 @@ function cleanOfficeName(name: string | undefined): string | null {
   return name.replace(/Office\s+Office/gi, "Office").trim();
 }
 
-function Sep() {
-  return <span className="text-muted-foreground/40" aria-hidden>·</span>;
-}
-
 const CompactStatusStripContent = ({
   status,
   receivedDate,
@@ -84,7 +78,7 @@ const CompactStatusStripContent = ({
   acknowledgedCount,
   className,
 }: CompactStatusStripProps) => {
-  const cfg = statusConfig[status] || statusConfig.pending;
+  const cfg = getCorrespondenceStatusBadge(status);
   const dir = direction ? directionConfig[direction] : null;
   const DirIcon = dir?.icon;
   const dateStr = formatDate(receivedDate);
@@ -97,138 +91,124 @@ const CompactStatusStripContent = ({
   const allAcknowledged = hasDispatchProgress && acknowledgedCount === dispatchedCount;
 
   return (
-    <div className={cn("w-full px-4 md:px-6 py-1.5 bg-muted/20 border-b border-border/50", className)}>
-      <div className="flex items-center gap-2.5 flex-wrap text-xs text-muted-foreground">
-        <Badge variant={cfg.variant} className={cn("text-[10px] h-5", cfg.className)}>
-          {cfg.label}
-        </Badge>
+    <DetailStatusStrip className={className}>
+      <Badge variant={cfg.variant} className={cn("text-[10px] h-5 shrink-0", cfg.className)}>
+        {cfg.label}
+      </Badge>
 
-        {priorityLabel && (
-          <>
-            <Sep />
-            <Badge
-              variant={
-                priority === "urgent"
-                  ? "destructive"
-                  : priority === "high"
-                    ? "default"
-                    : "secondary"
-              }
-              className="text-[10px] h-5"
-            >
-              {priorityLabel}
-            </Badge>
-          </>
-        )}
+      {priorityLabel ? (
+        <>
+          <StatusStripSep />
+          <Badge
+            variant={getPriorityBadgeVariant(priority)}
+            className="text-[10px] h-5 shrink-0"
+          >
+            {priorityLabel}
+          </Badge>
+        </>
+      ) : null}
 
-        {hasDispatchProgress && (
-          <>
-            <Sep />
-            <div
-              className={cn(
-                "flex items-center gap-1",
-                allAcknowledged ? "text-success" : "text-info",
-              )}
-            >
-              {allAcknowledged ? (
-                <CheckCircle2 className="h-3 w-3" />
-              ) : (
-                <Send className="h-3 w-3" />
-              )}
-              <span>
-                {acknowledgedCount}/{dispatchedCount} minutes acknowledged
-              </span>
-            </div>
-          </>
-        )}
+      {hasDispatchProgress ? (
+        <>
+          <StatusStripSep />
+          <div
+            className={cn(
+              "flex items-center gap-1 shrink-0 whitespace-nowrap",
+              allAcknowledged ? "text-success" : "text-info",
+            )}
+            title={`${acknowledgedCount}/${dispatchedCount} minutes acknowledged`}
+          >
+            {allAcknowledged ? (
+              <CheckCircle2 className="h-3 w-3" />
+            ) : (
+              <Send className="h-3 w-3" />
+            )}
+            <span>
+              {acknowledgedCount}/{dispatchedCount} ack
+            </span>
+          </div>
+        </>
+      ) : null}
 
-        {dateStr && (
-          <>
-            <Sep />
-            <span>{dateStr}</span>
-          </>
-        )}
+      {dateStr ? (
+        <>
+          <StatusStripSep />
+          <span className="shrink-0 whitespace-nowrap">{dateStr}</span>
+        </>
+      ) : null}
 
-        {DirIcon && dir && (
-          <>
-            <Sep />
-            <div className="flex items-center gap-1">
-              <DirIcon className="h-3 w-3" />
-              <span>{dir.label}</span>
-            </div>
-          </>
-        )}
+      {DirIcon && dir ? (
+        <>
+          <StatusStripSep />
+          <div className="flex items-center gap-1 shrink-0">
+            <DirIcon className="h-3 w-3" />
+            <span>{dir.label}</span>
+          </div>
+        </>
+      ) : null}
 
-        {(senderName || senderOrganization) && (
-          <>
-            <Sep />
-            <div className="flex items-center gap-1 min-w-0 max-w-[240px]">
-              <User className="h-3 w-3 flex-shrink-0" />
-              <span className="truncate">
-                {[senderName, senderOrganization].filter(Boolean).join(" · ")}
-              </span>
-            </div>
-          </>
-        )}
+      {senderName || senderOrganization ? (
+        <>
+          <StatusStripSep />
+          <div className="flex items-center gap-1 shrink-0 whitespace-nowrap">
+            <User className="h-3 w-3 flex-shrink-0" />
+            <span>{[senderName, senderOrganization].filter(Boolean).join(" · ")}</span>
+          </div>
+        </>
+      ) : null}
 
-        {officeName && (
-          <>
-            <Sep />
-            <div className="flex items-center gap-1 min-w-0">
-              <Building2 className="h-3 w-3 flex-shrink-0" />
-              <span className="truncate max-w-[220px]">
-                <span className="text-muted-foreground/70">{closed ? "Last" : "Current"} · </span>
-                {officeName}
-              </span>
-            </div>
-          </>
-        )}
+      {officeName ? (
+        <>
+          <StatusStripSep />
+          <div className="flex items-center gap-1 shrink-0 whitespace-nowrap">
+            <Building2 className="h-3 w-3 flex-shrink-0" />
+            <span>
+              <span className="text-muted-foreground/70">{closed ? "Last" : "Now"} · </span>
+              {officeName}
+            </span>
+          </div>
+        </>
+      ) : null}
 
-        {attachmentCount > 0 && (
-          <>
-            <Sep />
-            <div className="flex items-center gap-1">
-              <Paperclip className="h-3 w-3" />
-              <span>
-                {attachmentCount} attachment{attachmentCount === 1 ? "" : "s"}
-              </span>
-            </div>
-          </>
-        )}
+      {attachmentCount > 0 ? (
+        <>
+          <StatusStripSep />
+          <div className="flex items-center gap-1 shrink-0 whitespace-nowrap">
+            <Paperclip className="h-3 w-3" />
+            <span>{attachmentCount}</span>
+          </div>
+        </>
+      ) : null}
 
-        {hasPhysicalCopy && (
-          <>
-            <Sep />
-            <div className="flex items-center gap-1 text-orange-700 dark:text-orange-400">
-              <FileText className="h-3 w-3" />
-              <span>Physical</span>
-            </div>
-          </>
-        )}
+      {hasPhysicalCopy ? (
+        <>
+          <StatusStripSep />
+          <div className="flex items-center gap-1 shrink-0 text-orange-700 dark:text-orange-400">
+            <FileText className="h-3 w-3" />
+            <span>Physical</span>
+          </div>
+        </>
+      ) : null}
 
-        {daysPending !== undefined &&
-          daysPending > 0 &&
-          !closed && (
-            <>
-              <Sep />
-              <div
-                className={cn(
-                  "flex items-center gap-1",
-                  daysPending >= 7
-                    ? "text-destructive font-medium"
-                    : daysPending >= 5
-                      ? "text-amber-600"
-                      : "text-muted-foreground",
-                )}
-              >
-                <Clock className="h-3 w-3" />
-                <span>{daysPending}d</span>
-                {daysPending >= 7 && <span>⚠</span>}
-              </div>
-            </>
-          )}
-      </div>
-    </div>
+      {daysPending !== undefined && daysPending > 0 && !closed ? (
+        <>
+          <StatusStripSep />
+          <div
+            className={cn(
+              "flex items-center gap-1 shrink-0",
+              daysPending >= 7
+                ? "text-destructive font-medium"
+                : daysPending >= 5
+                  ? "text-amber-600"
+                  : "text-muted-foreground",
+            )}
+          >
+            <Clock className="h-3 w-3" />
+            <span>{daysPending}d</span>
+          </div>
+        </>
+      ) : null}
+    </DetailStatusStrip>
   );
 };
 

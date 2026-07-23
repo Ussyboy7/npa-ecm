@@ -27,8 +27,6 @@ import {
   Building2,
   Loader2,
   Download,
-  CheckCircle2,
-  Package,
 } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -42,16 +40,12 @@ import { exportToCSV } from '@/lib/admin-export';
 import { toast } from 'sonner';
 import { logError } from '@/lib/client-logger';
 import { cn } from '@/lib/utils';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
   correspondenceQueueListStackClass,
   registryQueueEmptyIconClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
 } from '@/components/shared/registry-queue-styles';
 import { FlowTypeBadge } from '@/components/correspondence/FlowTypeBadge';
 
@@ -63,7 +57,7 @@ const getStatusBadgeVariant = (status: string): 'destructive' | 'secondary' | 'd
   return 'outline';
 };
 
-const OfficeDispatchedPage = () => {
+const OfficeSentPage = () => {
   const { currentUser } = useCurrentUser();
   const systemRole = typeof currentUser?.systemRole === 'string' ? currentUser.systemRole.toLowerCase() : '';
   const { officeMemberships, offices, divisions } = useOrganization();
@@ -205,7 +199,7 @@ const OfficeDispatchedPage = () => {
 
     const controller = new AbortController();
 
-    const fetchDispatched = async () => {
+    const fetchOfficeSent = async () => {
       setLoading(true);
       setError(null);
       try {
@@ -240,7 +234,7 @@ const OfficeDispatchedPage = () => {
         setCount(response.count ?? results.length);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
-        setError('Failed to load dispatched items. Please try again.');
+        setError('Failed to load Office Sent items. Please try again.');
         setItems([]);
         setSummary({ total: 0, dispatched: 0, acknowledged: 0, internal: 0, external: 0 });
         setCount(0);
@@ -249,7 +243,7 @@ const OfficeDispatchedPage = () => {
       }
     };
 
-    void fetchDispatched();
+    void fetchOfficeSent();
     return () => controller.abort();
   }, [
     hasOfficeAccess,
@@ -278,27 +272,24 @@ const OfficeDispatchedPage = () => {
           </Card>
         </div>
       ) : !hasOfficeAccess ? (
-        <div className="container mx-auto p-6 space-y-6">
-          <div>
-            <h1 className="text-3xl font-bold">Office Dispatched</h1>
-            <p className="text-muted-foreground mt-1">
-              Correspondence dispatched from your office(s)
-            </p>
-          </div>
+        <QueuePageShell
+          title="Office Sent"
+          subtitle="Correspondence sent from your office(s)"
+        >
           <Card>
             <CardContent className="py-12 text-center">
               <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
               <p className="text-muted-foreground">
-                You are not a member of any office. Office dispatched is only available to office members.
+                You are not a member of any office. Office Sent is only available to office members.
               </p>
             </CardContent>
           </Card>
-        </div>
+        </QueuePageShell>
       ) : (
         <ErrorBoundary>
           <QueuePageShell
-            title="Office Dispatched"
-            subtitle="Correspondence dispatched from your office — with date, recipient, and delivery method."
+            title="Office Sent"
+            subtitle="Correspondence sent from your office — with date, recipient, and delivery method."
             actions={(
               <>
                 <Button
@@ -312,7 +303,7 @@ const OfficeDispatchedPage = () => {
                   {exporting ? 'Exporting...' : 'Export'}
                 </Button>
                 <ContextualHelp
-                  title="Office Dispatched"
+                  title="Office Sent"
                   description="Use this log to verify what has already left your office."
                   steps={[
                     'Filter by office, dispatch type, or date range.',
@@ -322,30 +313,17 @@ const OfficeDispatchedPage = () => {
                 />
               </>
             )}
+            stats={(
+              <StatStrip
+                items={[
+                  { key: 'total', label: 'Sent', value: summary.total },
+                  { key: 'awaiting', label: 'Awaiting ack', value: summary.dispatched },
+                  { key: 'acknowledged', label: 'Acknowledged', value: summary.acknowledged },
+                  { key: 'external', label: 'External', value: summary.external },
+                ]}
+              />
+            )}
           >
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-              {[
-                { label: 'Total dispatched', value: summary.total, icon: Package, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-                { label: 'Awaiting acknowledgment', value: summary.dispatched, icon: Send, bgClass: 'bg-warning/10', iconClass: 'text-warning' },
-                { label: 'Acknowledged', value: summary.acknowledged, icon: CheckCircle2, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
-                { label: 'External dispatch', value: summary.external, icon: Mail, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-              ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-                <Card key={label} aria-label={label}>
-                  <CardContent className={registryQueueStatCardContentClass}>
-                    <div className="flex items-center gap-4">
-                      <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                        <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                      </div>
-                      <div>
-                        <p className={registryQueueStatLabelClass}>{label}</p>
-                        <p className={registryQueueStatValueClass}>{value}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
             <Card>
               <CardContent className="p-2">
                 <div className="md:hidden mb-2">
@@ -408,13 +386,13 @@ const OfficeDispatchedPage = () => {
 
             <div aria-live="polite">
             {loading ? (
-              <LoadingState message="Loading dispatched items…" />
+              <LoadingState message="Loading Office Sent…" />
             ) : error ? (
               <ErrorState message={error} variant="inline" />
             ) : items.length === 0 ? (
               <EmptyState
                 icon={<Send className={registryQueueEmptyIconClass} />}
-                title={debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'No dispatched correspondence yet'}
+                title={debouncedQuery || activeFilterCount > 0 ? 'No items match your filters' : 'No sent correspondence yet'}
                 message={
                   debouncedQuery || activeFilterCount > 0
                     ? 'Try adjusting your search or filters.'
@@ -521,4 +499,4 @@ const OfficeDispatchedPage = () => {
   );
 };
 
-export default OfficeDispatchedPage;
+export default OfficeSentPage;

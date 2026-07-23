@@ -18,20 +18,14 @@ import {
   Mail,
   Search,
   User as UserIcon,
-  Clock,
-  AlertCircle,
   Inbox,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import {
   correspondenceQueueListStackClass,
   registryQueueEmptyIconClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
 } from '@/components/shared/registry-queue-styles';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { StatStrip } from '@/components/shared/StatStrip';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { useCurrentUser } from '@/hooks/use-current-user';
 import { useOrganization } from '@/contexts/OrganizationContext';
@@ -269,55 +263,47 @@ const CorrespondenceInboxContent = () => {
 
   return (
     <>
-      <div className="container mx-auto p-6 space-y-6">
-        {!currentUser ? (
+      {!currentUser ? (
+        <QueuePageShell
+          title="Office Inbox"
+          subtitle="Monitor work queued in your offices and prioritize urgent escalations"
+        >
           <LoadingState message="Loading office inbox…" />
-        ) : !hasCorrespondenceAccess ? (
+        </QueuePageShell>
+      ) : !hasCorrespondenceAccess ? (
+        <QueuePageShell
+          title="Office Inbox"
+          subtitle="Monitor work queued in your offices and prioritize urgent escalations"
+        >
           <Card><CardContent className="py-12 text-center"><p className="text-lg font-semibold">No office inbox available</p><p className="text-sm text-muted-foreground mt-2">This persona does not have registry or routing permissions. Redirecting you to your personal inbox…</p></CardContent></Card>
-        ) : (
-          <>
-        {/* Header */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold">Office Inbox</h1>
-            <p className="text-muted-foreground mt-1">Monitor work queued in your offices and prioritize urgent escalations</p>
-          </div>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => router.push('/correspondence/register')}>
-              <Mail className="h-4 w-4 mr-2" /> Register New
-            </Button>
-            <ContextualHelp
-              title="How to triage correspondence"
-              description="Work urgent and overdue items first, then clear the rest of the queue."
-              steps={['Select the office you are acting for.', 'Use filters/search to find priority or SLA-risk items.', 'Open a record to minute, approve, delegate, or archive.']}
+        </QueuePageShell>
+      ) : (
+        <QueuePageShell
+          title="Office Inbox"
+          subtitle="Monitor work queued in your offices and prioritize urgent escalations"
+          actions={(
+            <>
+              <Button size="sm" onClick={() => router.push('/correspondence/register')}>
+                <Mail className="h-4 w-4 mr-2" /> Register New
+              </Button>
+              <ContextualHelp
+                title="How to triage correspondence"
+                description="Work urgent and overdue items first, then clear the rest of the queue."
+                steps={['Select the office you are acting for.', 'Use filters/search to find priority or SLA-risk items.', 'Open a record to minute, approve, delegate, or archive.']}
+              />
+            </>
+          )}
+          stats={(
+            <StatStrip
+              items={[
+                { key: 'total', label: 'In queue', value: summary.total },
+                { key: 'urgent', label: 'Urgent', value: summary.urgent },
+                { key: 'overdue', label: 'SLA breach', value: summary.overdue },
+                { key: 'assigned', label: 'Assigned to you', value: summary.assigned_to_user },
+              ]}
             />
-          </div>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-          {[
-            { label: 'Total in Queue', value: summary.total, icon: Inbox, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-            { label: 'Urgent Items', value: summary.urgent, icon: AlertCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-            { label: 'SLA Breaches', value: summary.overdue, icon: Clock, bgClass: 'bg-warning/10', iconClass: 'text-warning' },
-            { label: 'Assigned to You', value: summary.assigned_to_user, icon: UserIcon, bgClass: 'bg-info/10', iconClass: 'text-info' },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label} aria-label={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
+          )}
+        >
         {/* Search + filters bar */}
         <Card>
           <CardContent className="p-2">
@@ -417,9 +403,8 @@ const CorrespondenceInboxContent = () => {
             className="border-t border-border/60 pt-4"
           />
         )}
-        </>
+        </QueuePageShell>
       )}
-      </div>
     </>
   );
 };

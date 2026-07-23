@@ -31,7 +31,7 @@
 ## Exit criteria per port
 
 - [ ] 95% registry staff completed foundation training  
-- [ ] Inbox/outbox SLA within agreed threshold for 2 weeks  
+- [ ] Inbox/Sent SLA within agreed threshold for 2 weeks  
 - [ ] Helpdesk ticket backlog &lt; 10 open after week 4  
 - [ ] Legacy priority batch imported with QA sample sign-off  
 

@@ -455,7 +455,7 @@ export const DelegateModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+      <DialogContent size="xl" height="fill">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserCheck className="h-5 w-5 text-primary" />
@@ -768,14 +768,19 @@ export const DelegateModal = ({
                 
                 {/* Custom date picker */}
                 {delegationDuration === 'custom' && (
-                  <div className="flex items-center gap-2">
-                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                  <div className="space-y-2">
+                    <Label htmlFor="delegation-custom-expiry" className="flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                      Custom expiry date
+                    </Label>
                     <Input
+                      id="delegation-custom-expiry"
                       type="date"
                       value={customExpiryDate}
                       onChange={(e) => setCustomExpiryDate(e.target.value)}
                       min={new Date().toISOString().split('T')[0]}
                       className="flex-1"
+                      aria-required="true"
                     />
                   </div>
                 )}
@@ -880,7 +885,7 @@ export const DelegateModal = ({
 
       {/* Confirmation Dialog - Using separate Dialog to avoid nesting issues */}
       <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+        <DialogContent size="xl" height="fill">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserCheck className="h-5 w-5 text-primary" />

@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAbortController } from "@/hooks/use-abort-controller";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,9 +15,17 @@ import { PRIORITY_OPTIONS } from "@/lib/constants";
 import type { Case } from "@/lib/npa-structure";
 import { logError } from "@/lib/client-logger";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Loader2, FileText } from "lucide-react";
+import { ArrowLeft, Save, Loader2, FileText, MoreHorizontal } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
+import { appType } from "@/lib/app-type";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -279,84 +286,69 @@ const NewCasePage = () => {
   return (
     <ErrorBoundary>
       <>
-        <div className="container mx-auto p-6 space-y-6">
+        <div className="container mx-auto p-4 md:p-6 space-y-5">
           {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleBack}
-                aria-label="Go back"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
-              </Button>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Create New Case</h1>
-              <p className="text-muted-foreground mt-1">
-                Create a new case to track complaints, requests, inquiries, or other matters
+          <div className="flex items-start justify-between gap-4 min-w-0">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={handleBack}
+                  aria-label="Go back"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <h1 className={appType.pageTitleList}>Create New Case</h1>
+              </div>
+              <p className={appType.pageSubtitle}>
+                Track complaints, requests, inquiries, or other matters. A case number is generated on save.
               </p>
               {autoSaveStatus === 'saved' && (
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <span className="h-2 w-2 rounded-full bg-green-500"></span>
+                <p className={`${appType.caption} flex items-center gap-1.5`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                   Draft auto-saved
                 </p>
               )}
               {autoSaveStatus === 'saving' && (
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <p className={`${appType.caption} flex items-center gap-1.5`}>
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Saving draft...
                 </p>
               )}
             </div>
-          </div>
-          <div className="flex gap-2">
-            {hasDraft && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLoadDraft}
-                  aria-label="Load saved draft"
-                >
-                  Load Draft
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon-sm" aria-label="More actions">
+                  <MoreHorizontal className="h-4 w-4" />
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearDraft}
-                  aria-label="Clear saved draft"
-                >
-                  Clear Draft
-                </Button>
-              </>
-            )}
-            <Button
-              variant="outline"
-              onClick={() => router.push('/cases/templates')}
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Use Template
-            </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {hasDraft && (
+                  <>
+                    <DropdownMenuItem onClick={handleLoadDraft}>
+                      Load Draft
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleClearDraft}>
+                      Clear Draft
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem onClick={() => router.push('/cases/templates')}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Use Template
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        </div>
-
-        {/* Help Guide */}
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Case Information</CardTitle>
-              <CardDescription>
-                Provide details about the case. A case number will be automatically generated.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <div className="rounded-xl border border-border/60 bg-muted/30 p-4 md:p-5 space-y-6">
               {/* Basic Information Section */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground">Basic Information</h3>
+                <h2 className={appType.panelTitle}>Basic Information</h2>
                 <div className="space-y-4">
                   {/* Title */}
                   <div className="space-y-2">
@@ -403,7 +395,7 @@ const NewCasePage = () => {
 
               {/* Classification Section */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground">Classification</h3>
+                <h2 className={appType.panelTitle}>Classification</h2>
                 <div className="grid gap-4 md:grid-cols-2">
                   {/* Case Type */}
                   <div className="space-y-2">
@@ -451,7 +443,7 @@ const NewCasePage = () => {
 
               {/* Organization Section */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground">Organization</h3>
+                <h2 className={appType.panelTitle}>Organization</h2>
                 <div className="grid gap-4 md:grid-cols-2">
                   {/* Division */}
                   <div className="space-y-2">
@@ -528,14 +520,15 @@ const NewCasePage = () => {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-between pt-6 border-t">
-                <div className="text-sm text-muted-foreground">
+              <div className="flex items-center justify-between pt-4 border-t border-border/60">
+                <p className={appType.caption}>
                   <span className="text-destructive">*</span> Required fields
-                </div>
-                <div className="flex items-center gap-3">
+                </p>
+                <div className="flex items-center gap-2">
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
+                    size="sm"
                     onClick={handleBack}
                     disabled={loading}
                     aria-label="Cancel case creation"
@@ -543,7 +536,8 @@ const NewCasePage = () => {
                     Cancel
                   </Button>
                   <Button 
-                    type="submit" 
+                    type="submit"
+                    size="compact"
                     aria-label="Create case"
                   >
                     {loading ? (
@@ -560,8 +554,7 @@ const NewCasePage = () => {
                   </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+          </div>
         </form>
         
         {/* Reset Confirmation Dialog */}

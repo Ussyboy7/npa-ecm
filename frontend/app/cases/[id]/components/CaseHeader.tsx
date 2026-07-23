@@ -1,214 +1,163 @@
 "use client";
 
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
   Download,
-  MoreVertical,
+  MoreHorizontal,
   Printer,
   Link as LinkIcon,
   Edit,
   Upload,
-  FileText,
-  Calendar,
-  Building2,
-  User,
-  AlertTriangle,
-  Clock,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { ContextualHelp } from '@/components/help/ContextualHelp';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatDateShort } from '@/lib/correspondence-helpers';
-import { toast } from 'sonner';
-import type { CaseDetail } from '@/lib/npa-structure';
+} from "@/components/ui/dropdown-menu";
+import { ContextualHelp } from "@/components/help/ContextualHelp";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import type { CaseDetail } from "@/lib/npa-structure";
+import { appType } from "@/lib/app-type";
+import { cn } from "@/lib/utils";
 
 interface CaseHeaderProps {
   caseData: CaseDetail;
-  slaStatus?: {
-    status: 'ok' | 'warning' | 'critical' | 'breach';
-    target_date: string;
-  } | null;
-  slaError?: string | null;
   updatingStatus: boolean;
   onStatusUpdate: (status: CaseDetail["status"]) => void;
   onGenerateCompletionPackage: () => void;
   onEdit?: () => void;
   onImport: () => void;
-  owningOffice?: { id: string; name: string } | null;
-  assignedTo?: { id: string; name: string } | null;
-  createdBy?: { id: string; name: string } | null;
 }
-
-const getStatusBadgeClass = (status: CaseDetail["status"]) => {
-  switch (status) {
-    case "open":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-    case "in_progress":
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    case "resolved":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    case "closed":
-      return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
-    case "archived":
-      return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-    default:
-      return "bg-muted text-foreground";
-  }
-};
-
-const getStatusIcon = (status: CaseDetail["status"]) => {
-  switch (status) {
-    case "open":
-      return <Clock className="h-3 w-3" />;
-    case "in_progress":
-      return <Clock className="h-3 w-3" />;
-    case "resolved":
-      return <FileText className="h-3 w-3" />;
-    case "closed":
-      return <FileText className="h-3 w-3" />;
-    case "archived":
-      return <FileText className="h-3 w-3" />;
-    default:
-      return null;
-  }
-};
 
 export const CaseHeader = ({
   caseData,
-  slaStatus,
-  slaError,
   updatingStatus,
   onStatusUpdate,
   onGenerateCompletionPackage,
   onEdit,
   onImport,
-  owningOffice,
-  assignedTo,
 }: CaseHeaderProps) => {
   const router = useRouter();
 
+  const moreMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground"
+          aria-label="More actions"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        {onEdit && (
+          <DropdownMenuItem onClick={onEdit}>
+            <Edit className="h-4 w-4 mr-2 opacity-70" />
+            Edit case
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={() => window.print()}>
+          <Printer className="h-4 w-4 mr-2 opacity-70" />
+          Print
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            void navigator.clipboard.writeText(window.location.href);
+            toast.success("Case URL copied to clipboard");
+          }}
+        >
+          <LinkIcon className="h-4 w-4 mr-2 opacity-70" />
+          Copy link
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onImport}>
+          <Upload className="h-4 w-4 mr-2 opacity-70" />
+          Import cases
+        </DropdownMenuItem>
+        {caseData.completionPackage && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <a
+                href={caseData.completionPackage.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center"
+              >
+                <Download className="h-4 w-4 mr-2 opacity-70" />
+                Download package
+              </a>
+            </DropdownMenuItem>
+          </>
+        )}
+        {caseData.status === "closed" && !caseData.completionPackage && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onGenerateCompletionPackage}>
+              <Download className="h-4 w-4 mr-2 opacity-70" />
+              Generate package
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
-    <div className="border-b border-border bg-background px-4 md:px-6 py-3 md:py-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
+    <div className="border-b border-border/60 bg-background px-4 md:px-6 py-3 md:py-4 flex-shrink-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2 md:gap-3 min-w-0 flex-1">
           <Button
             variant="ghost"
             size="icon"
-            className="flex-shrink-0"
+            className="flex-shrink-0 mt-0.5"
             onClick={() => router.back()}
+            aria-label="Back to cases"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 md:gap-2 flex-wrap min-w-0">
-              <h1 className="text-sm md:text-xl font-bold text-foreground truncate font-mono min-w-0 max-w-full">
-                {caseData.caseNumber}
-              </h1>
-              {/* Priority badge */}
-              <Badge
-                variant={
-                  caseData.priority === 'urgent'
-                    ? 'destructive'
-                    : caseData.priority === 'high'
-                    ? 'default'
-                    : 'secondary'
-                }
-                className="flex-shrink-0"
-              >
-                {caseData.priority.toUpperCase()}
-              </Badge>
-              {/* Status badge */}
-              <Badge className={`${getStatusBadgeClass(caseData.status)} flex-shrink-0 gap-1`}>
-                {getStatusIcon(caseData.status)}
-                <span className="ml-1">
-                  {caseData.status.replace("_", " ").toUpperCase()}
-                </span>
-              </Badge>
-              {/* Case Type badge */}
-              <Badge variant="outline" className="flex-shrink-0 hidden sm:flex">
-                {caseData.caseType?.toUpperCase() ?? "GENERAL"}
-              </Badge>
-              {/* SLA Status badge */}
-              {slaStatus && !slaError && (
-                <Badge
-                  variant={
-                    slaStatus.status === 'breach' ? 'destructive' :
-                    slaStatus.status === 'critical' ? 'destructive' :
-                    slaStatus.status === 'warning' ? 'default' :
-                    'secondary'
-                  }
-                  className={`flex-shrink-0 ${
-                    slaStatus.status === 'breach' ? 'bg-red-600' :
-                    slaStatus.status === 'critical' ? 'bg-orange-600' :
-                    slaStatus.status === 'warning' ? 'bg-yellow-600' :
-                    ''
-                  }`}
-                >
-                  <AlertTriangle className="h-3 w-3 mr-1" />
-                  {slaStatus.status.toUpperCase()}
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs md:text-sm text-muted-foreground truncate mt-1">
-              {caseData.title}
-            </p>
-            {/* Key metadata */}
-            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Calendar className="h-3 w-3 flex-shrink-0" />
-                <span>Opened: {formatDateShort(caseData.openedAt)}</span>
-              </span>
-              {owningOffice && (
-                <span className="flex items-center gap-1">
-                  <Building2 className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate max-w-[200px]">{owningOffice.name}</span>
-                </span>
-              )}
-              {assignedTo && (
-                <span className="flex items-center gap-1">
-                  <User className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate max-w-[150px]">Assigned: {assignedTo.name}</span>
-                </span>
-              )}
-              {slaStatus?.target_date && (
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3 flex-shrink-0" />
-                  <span>Target: {formatDateShort(slaStatus.target_date)}</span>
-                </span>
-              )}
-            </div>
+            <h1 className={cn(appType.pageTitle, "truncate font-mono")}>
+              {caseData.caseNumber}
+            </h1>
+            <p className={cn(appType.subject, "mt-1 truncate")}>{caseData.title}</p>
           </div>
         </div>
-        {/* Desktop action buttons */}
-        <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+
+        <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
           <ContextualHelp
             title="Case details"
             description="Manage this case and keep related records together."
             steps={[
-              'Use tabs to review linked records, comments, and timeline.',
-              'Use Link actions to attach correspondence, documents, or forms.',
-              'Update status as work progresses and generate a completion package at closure.',
+              "Use the case file panel for overview and counts.",
+              "Use the Links rail to attach correspondence, documents, or forms.",
+              "Comments open in a modal; activity and details stay in the rail.",
+              "Update status as work progresses and generate a completion package at closure.",
             ]}
           />
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Status:</span>
-            <Select
-              value={caseData.status}
-              onValueChange={(value) => onStatusUpdate(value as CaseDetail["status"])}
-              disabled={updatingStatus}
+          <Select
+            value={caseData.status}
+            onValueChange={(value) => onStatusUpdate(value as CaseDetail["status"])}
+            disabled={updatingStatus}
+          >
+            <SelectTrigger
+              className="w-[132px] h-8 text-xs bg-muted/30 border-dashed"
+              aria-label="Case status"
             >
-              <SelectTrigger className="w-[140px] bg-muted/30 border-dashed" aria-label="Case status">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="open">Open</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
@@ -217,115 +166,26 @@ export const CaseHeader = ({
               <SelectItem value="archived">Archived</SelectItem>
             </SelectContent>
           </Select>
-          </div>
-          {caseData.status === "closed" && !caseData.completionPackage && (
-            <Button
-              variant="outline"
-              onClick={onGenerateCompletionPackage}
-              aria-label="Generate completion package"
-            >
+          {caseData.status === "closed" && !caseData.completionPackage ? (
+            <Button size="sm" onClick={onGenerateCompletionPackage}>
               <Download className="h-4 w-4 mr-2" />
-              Generate Package
+              Package
             </Button>
-          )}
-          {caseData.completionPackage && (
-            <Button
-              variant="outline"
-              asChild
-              aria-label="Download completion package"
-            >
+          ) : caseData.completionPackage ? (
+            <Button size="sm" asChild>
               <a
                 href={caseData.completionPackage.fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download Package
+                Package
               </a>
             </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" aria-label="More options">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {onEdit && (
-                <DropdownMenuItem onClick={onEdit}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Case
-                </DropdownMenuItem>
-              )}
-              {onEdit && <DropdownMenuSeparator />}
-              <DropdownMenuItem onClick={() => window.print()}>
-                <Printer className="h-4 w-4 mr-2" />
-                Print
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  const url = window.location.href;
-                  navigator.clipboard.writeText(url);
-                  toast.success("Case URL copied to clipboard");
-                }}
-              >
-                <LinkIcon className="h-4 w-4 mr-2" />
-                Copy Link
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onImport}>
-                <Upload className="h-4 w-4 mr-2" />
-                Import Cases
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {caseData.completionPackage && (
-                <DropdownMenuItem asChild>
-                  <a
-                    href={caseData.completionPackage.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download Completion Package
-                  </a>
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        {/* Mobile action menu */}
-        <div className="md:hidden flex items-center gap-1 flex-shrink-0">
-          <ContextualHelp
-            title="Case details"
-            description="Manage this case and keep related records together."
-            steps={[
-              'Use tabs to review linked records, comments, and timeline.',
-              'Use Link actions to attach correspondence, documents, or forms.',
-              'Update status as work progresses and generate a completion package at closure.',
-            ]}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {onEdit && (
-                <DropdownMenuItem onClick={onEdit}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Case
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onClick={() => window.print()}>
-                <Printer className="h-4 w-4 mr-2" />
-                Print
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          ) : null}
+          {moreMenu}
         </div>
       </div>
     </div>
   );
 };
-

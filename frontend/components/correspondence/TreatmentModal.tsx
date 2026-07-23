@@ -998,15 +998,14 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
   const actingFor = onBehalfOf && onBehalfOf !== 'none' ? findUserById(onBehalfOf) ?? null : null;
 
   return (
+    <>
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <DialogContent 
-        className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-4 sm:p-6"
-      >
+      <DialogContent size="full" height="fill">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" aria-hidden="true" />
@@ -1487,6 +1486,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
           </Button>
         </DialogFooter>
       </DialogContent>
+    </Dialog>
 
       <ConfirmationDialog
         isOpen={showConfirmation}
@@ -1504,7 +1504,7 @@ const TreatmentModalComponent = ({ correspondence, isOpen, onClose }: TreatmentM
         }}
         disabled={isSubmitting}
       />
-    </Dialog>
+    </>
   );
 };
 

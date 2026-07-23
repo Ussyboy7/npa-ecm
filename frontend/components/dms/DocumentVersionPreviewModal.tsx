@@ -249,7 +249,7 @@ export const DocumentVersionPreviewModal = ({
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) onClose();
     }}>
-      <DialogContent className="max-w-6xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent size="full" height="fill" density="flush">
 
 
 

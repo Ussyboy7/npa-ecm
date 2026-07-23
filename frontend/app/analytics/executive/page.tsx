@@ -5,6 +5,8 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { PermissionGate } from '@/components/shared/PermissionGate';
 import { ContextualHelp } from '@/components/help/ContextualHelp';
 import { ExecutiveDashboardTab } from '@/components/analytics/ExecutiveDashboardTab';
+import { cn } from '@/lib/utils';
+import { appType } from '@/lib/app-type';
 
 export default function ExecutiveDashboardPage() {
   return (
@@ -19,8 +21,8 @@ export default function ExecutiveDashboardPage() {
             <div className="space-y-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <h1 className="text-3xl font-bold">Executive Dashboard</h1>
-                  <p className="text-muted-foreground mt-1">
+                  <h1 className={appType.pageTitleList}>Executive Dashboard</h1>
+                  <p className={cn(appType.pageSubtitle)}>
                     Real-time SLA compliance, division performance, and escalation monitoring
                   </p>
                 </div>

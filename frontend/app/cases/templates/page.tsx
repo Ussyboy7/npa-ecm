@@ -327,7 +327,7 @@ export default function CaseTemplatesPage() {
 
         {/* Create Case Dialog */}
         <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent size="lg">
             <DialogHeader>
               <DialogTitle>Create Case from Template</DialogTitle>
               <DialogDescription>

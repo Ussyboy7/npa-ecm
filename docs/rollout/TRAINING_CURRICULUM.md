@@ -7,7 +7,7 @@
 ## Module 1 — Foundation (all users, ½ day)
 
 - Login, MFA, role switcher, My Workspace navigation  
-- My Inbox / Outbox, document links, verify seal  
+- My Inbox / My Sent, document links, verify seal  
 - Help & helpdesk ticket submission (`/helpdesk`)
 
 ## Module 2 — Registry officers (1 day)

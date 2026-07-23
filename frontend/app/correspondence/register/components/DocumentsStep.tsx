@@ -181,11 +181,11 @@ export const DocumentsStep = memo(function DocumentsStep({
       </div>
 
       <div className="flex justify-between pt-4">
-        <Button type="button" variant="outline" onClick={onPrev}>
+        <Button type="button" variant="ghost" size="sm" onClick={onPrev}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-        <Button type="button" disabled={submitting} onClick={onSubmit}>
+        <Button type="button" size="compact" disabled={submitting} onClick={onSubmit}>
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />

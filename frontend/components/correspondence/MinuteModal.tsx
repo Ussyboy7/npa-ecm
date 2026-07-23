@@ -1341,15 +1341,14 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
   const relevantTemplates = signatureTemplates.filter(template => template.templateType === templateTypeForAction);
   const selectedTemplate = selectedTemplateId ? signatureTemplates.find(template => template.id === selectedTemplateId) ?? null : null;
   return (
+    <>
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
     >
-      <DialogContent 
-        className="max-w-3xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6"
-      >
+      <DialogContent size="xl" height="fill">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-primary" aria-hidden="true" />
@@ -1572,8 +1571,18 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             aria-label={actionType === 'approve' ? "Approval comments" : "Minute text"}
             aria-required="true"
             aria-invalid={!!minuteTextError}
-            aria-describedby="minute-text-help minute-text-error"
+            aria-describedby={
+              minuteTextError ? "minute-text-help minute-text-error" : "minute-text-help"
+            }
           />
+          <p id="minute-text-help" className="text-xs text-muted-foreground">
+            {MODAL_CONSTANTS.MINUTE_TEXT.MIN}–{MODAL_CONSTANTS.MINUTE_TEXT.MAX} characters.
+          </p>
+          {minuteTextError ? (
+            <p id="minute-text-error" className="text-xs text-destructive" role="alert">
+              {minuteTextError}
+            </p>
+          ) : null}
 
           {/* Minute Templates Section (document templates for minute text) */}
           {(minuteTemplates.length > 0 || minuteText.trim().length > 0) && (
@@ -1787,8 +1796,10 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
             </Button>
           </div>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-        {/* Confirmation Dialog */}
+        {/* Sibling portals — avoid nesting inside DialogContent */}
         <ConfirmationDialog
           isOpen={showConfirmation}
           onClose={() => setShowConfirmation(false)}
@@ -1835,7 +1846,6 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           }}
         />
 
-        {/* 2FA Verification Modal for Executive Approvals */}
         <TwoFactorVerificationModal
           open={show2FAModal}
           onOpenChange={setShow2FAModal}
@@ -1844,8 +1854,7 @@ const [_templateSectionOpen, _setTemplateSectionOpen] = useState(false);
           title="Verify for Digital Seal"
           description="As an executive, your approval will apply a digital seal. Please verify your identity."
         />
-      </DialogContent>
-    </Dialog>
+  </>
   );
 };
 

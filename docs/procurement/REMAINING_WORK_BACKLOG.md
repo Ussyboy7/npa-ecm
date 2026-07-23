@@ -1,8 +1,8 @@
 # NPA-ECM — Remaining Work Backlog
 
 **Document type:** Implementation addendum to the project proposal  
-**Date:** June 2026  
-**Related:** [Project Proposal](./PROJECT_PROPOSAL_AND_COST_BREAKDOWN.md) · [BOQ](./BOQ_NPA_ECM_PROJECT.csv) · [Comparison Matrix](./ECM_COMPARISON_MATRIX.md)
+**Date:** June 2026 (status notes refreshed July 2026)  
+**Related:** [Project Proposal](./PROJECT_PROPOSAL_AND_COST_BREAKDOWN.md) · [BOQ](./BOQ_NPA_ECM_PROJECT.csv) · [Comparison Matrix](./ECM_COMPARISON_MATRIX.md) · [Rich text editor](../features/rich-text-editor.md) · [WCAG checklist](../guides/WCAG_AUDIT_CHECKLIST.md)
 
 This document lists work **not yet complete** at contract start (~65–70% platform readiness). All items are **funded within the fixed ₦350M project cap** unless marked *optional / contingency*.
 
@@ -26,7 +26,7 @@ This document lists work **not yet complete** at contract start (~65–70% platf
 |-------|--------|--------|------------------------|------------|
 | **9** | Compliance & diff | 🟡 Partial | Tamper-evident audit compliance export; document version diff API + UI | Legal sign-off on bundle format; diff for non-text/binary formats |
 | **10** | Records & calendar | 🟡 Partial | eDiscovery export (legal hold ZIP); executive/PA calendar API + UI; `/dms` canonical route | Calendar rollout per PA assignment; eDiscovery legal workflow |
-| **11** | Quality & ops | 🟡 Partial | WCAG prep (skip link, focus styles, checklist); DRM **policy** + serve-time PDF watermark; legacy import command + admin; helpdesk UI + national rollout runbooks; semantic search **MVP** (no vectors); landing page copy aligned | Full WCAG 2.1 AA remediation; pgvector + Ollama |
+| **11** | Quality & ops | 🟡 Partial | WCAG prep + **July 2026 high-severity remediations** (MinuteModal, PartiesStep, DelegateModal, DocumentPreviewModal, search live region, page H1/landmarks); DRM **policy** + serve-time PDF watermark; legacy import command + admin; helpdesk UI + national rollout runbooks; semantic search **MVP** (no vectors); landing page copy aligned; **RichTextEditor hardening** (paste/sanitize/a11y) | Full WCAG 2.1 AA (mediums + remaining criteria); TipTap/Yjs live co-authoring; pgvector + Ollama |
 
 ### Infrastructure notes (June 2026 audit)
 
@@ -49,10 +49,10 @@ Items promised in the proposal, landing page, or procurement matrix that need ex
 | ICT Admin dashboard | 🟡 | System Health page shipped; full onboarding portal not built | 1.02 | P1 |
 | ICT onboarding portal | 🔵 | No admin wizard for staff onboarding | 4.01, 4.02 | P1 |
 | DRM policies | 🟡 | Policy model, admin UI, download enforcement, banner, **byte-level PDF watermark on serve** | 5.02 | P2 |
-| Live co-authoring | 🟡 | `DocumentEditorSession` = lock/session only, not real-time co-edit | 1.03 | P2 |
+| Live co-authoring | 🟡 | Session/presence scaffolding only (`DocumentEditorSession` + Channels). Compose UI is hardened `RichTextEditor` (custom). **TipTap + Yjs** required for real co-edit — deferred | 1.03 | P2 |
 | Semantic / AI search | 🟡 | MVP: synonym expansion + hash re-rank on FTS; **no** pgvector/Ollama | 1.03 | P2 |
 | AI document classification | 🔵 | Deferred with AI infrastructure | 6.02 * | P2 |
-| WCAG 2.1 accessibility | 🟡 | Prep done (skip link, checklist, focus CSS); full audit/remediation not done | 5.01 | P1 |
+| WCAG 2.1 accessibility | 🟡 | Prep + **7 high-severity fixes** (July 2026); editor toolbar a11y; **mediums** + full AA still open | 5.01 | P1 |
 | SMS gateway | ❌ | API-ready in proposal only | 1.10 | P2 |
 | Marketing copy alignment | 🟡 | Landing page aligned June 2026; verify other stakeholder PDFs | — | P0 |
 
@@ -66,7 +66,7 @@ Items promised in the proposal, landing page, or procurement matrix that need ex
 |------|--------|-----|----------|----------|
 | Content capture hub | 🟡 | `/capture` route + scan/batch dialogs; TWAIN/production scanner integration pending | 1.03, 2.05 | P1 |
 | Integrations admin UI | 🟡 | Webhooks + connector CRUD + logs viewer at `/integrations`; email IMAP ingestion and ERP sync still partial | 1.10 | P0 |
-| Outbox resend / cancel draft | ✅ | `cancel-draft` + `resend-draft` APIs; outbox UI wired | 1.05 | P0 |
+| Sent draft resend / cancel draft | ✅ | `cancel-draft` + `resend-draft` APIs; My Sent UI wired | 1.05 | P0 |
 | AI summarization | 🟡 | DMS summary UI + extractive fallback; optional OpenAI in code; **Ollama/LLM deferred** | 1.03 | P2 |
 | Celery beat schedules | 🟡 | `celery-beat` in prod compose; `setup_celery_beat` command exists; verify all envs | 2.01 | P1 |
 | Daily digest email | 🟡 | `send_daily_digest` task is a placeholder | 1.07, 1.08 | P1 |
@@ -183,7 +183,7 @@ Rollout documentation: `docs/rollout/NATIONAL_ROLLOUT_RUNBOOK.md`, `TRAINING_CUR
 2. SSO / Active Directory + login MFA
 3. Full backend-driven permissions + "why blocked?" UX
 4. Integrations admin UI (email, ERP, logs)
-5. Outbox resend / cancel draft APIs
+5. Sent draft resend / cancel draft APIs
 6. Deploy runbook: `setup_role_permissions` + environment parity checks
 7. Records retention & legal hold enforcement MVP
 8. E2E tests + load test at agreed peak concurrency
@@ -192,13 +192,15 @@ Rollout documentation: `docs/rollout/NATIONAL_ROLLOUT_RUNBOOK.md`, `TRAINING_CUR
 
 ### P1 — Enterprise requirements
 
-Retention/disposal reports, HRMS sync, IMAP ingestion, real ERP connector, Celery beat + digest, content capture TWAIN, connector encryption, monitoring in prod, port analytics, external entity data, TWAIN/pad software, **full WCAG 2.1 AA remediation**, legacy migration execution, parallel routing hardening, staging VM upgrade or workload separation.
+Retention/disposal reports, HRMS sync, IMAP ingestion, real ERP connector, Celery beat + digest, content capture TWAIN, connector encryption, monitoring in prod, port analytics, external entity data, TWAIN/pad software, **full WCAG 2.1 AA remediation** (highs done July 2026; mediums + remaining criteria open), legacy migration execution, parallel routing hardening, staging VM upgrade or workload separation.
 
 ### P2 — Polish & parity
 
-pgvector + Ollama (deferred until AI host), AI summarization via LLM, AI document classification, semantic search upgrade from MVP, BPM designer, DR automation.
+pgvector + Ollama (deferred until AI host), AI summarization via LLM, AI document classification, semantic search upgrade from MVP, BPM designer, DR automation, **TipTap (+ Yjs) editor migrate / live co-authoring**.
 
 **Completed in Phase 9–11 (no longer backlog blockers):** tamper-evident audit export, document version diff, eDiscovery export MVP, assistant calendar, `/dms` route consolidation, helpdesk UI, legacy import tooling, WCAG prep, DRM policy layer + PDF watermark on serve, semantic search MVP (non-vector).
+
+**Completed July 2026 (UI / a11y / editor — document in feature guides):** WCAG AA high-severity remediations (7); `RichTextEditor` hardening (paste, sanitize, rename, a11y toolbar, prompt→dialogs); cases detail DMS-style workspace; modal size/height/density tokens.
 
 ---
 
@@ -208,7 +210,7 @@ pgvector + Ollama (deferred until AI host), AI summarization via LLM, AI documen
 |--------|-------|---------------|
 | S1 | Stability + permissions | SSR 500s resolved; `setup_role_permissions` in CI/deploy; permission explainability |
 | S2 | Identity & RBAC | Permission matrix; backend enforcement; sidebar permission-driven |
-| S3 | Outbox + SSO staging | cancel/resend draft APIs; OIDC status; audit log RBAC |
+| S3 | Sent drafts + SSO staging | cancel/resend draft APIs; OIDC status; audit log RBAC |
 | S4 | Integrations + records | IMAP ingestion; retention hardening |
 | S5 | Capture + Celery ops | Content capture route; beat schedules; digest emails |
 | S6 | QA gate | Playwright E2E green; load test report; pen test prep |
@@ -227,7 +229,7 @@ All backlog items draw from existing sections:
 | **1.02** | My Work, ICT dashboard, onboarding UX, calendar |
 | **1.03** | Capture hub, AI summary (deferred), search polish, OCR tuning, pgvector |
 | **1.04** | Workflow rules, BPM polish, escalation |
-| **1.05** | Outbox APIs, external directory, routing hardening |
+| **1.05** | Sent draft APIs, external directory, routing hardening |
 | **1.07–1.08** | Port analytics, scheduled digest |
 | **1.09** | Retention, legal hold, compliance export, eDiscovery |
 | **1.10** | HRMS, IMAP, ERP, integration UI |

@@ -8,17 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
-import { LifeBuoy, Search, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
+import { StatStrip } from "@/components/shared/StatStrip";
+import { LifeBuoy, Search } from "lucide-react";
 import { toast } from "sonner";
 import { fetchSupportTickets, resolveSupportTicket, type SupportTicket } from "@/lib/support-api";
-import {
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from "@/components/shared/registry-queue-styles";
 
 export default function AdminHelpdeskPage() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -53,29 +46,18 @@ export default function AdminHelpdeskPage() {
   return (
     <AdminPageShell title="Support Queue" subtitle="Tier-1 ticket triage and resolution." icon={LifeBuoy}>
       <div className="space-y-6">
-        {/* Stats Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: "Total Tickets", value: tickets.length, icon: LifeBuoy, bgClass: "bg-primary/10", iconClass: "text-primary" },
-            { label: "Open", value: tickets.filter((t) => t.status === "open").length, icon: AlertTriangle, bgClass: "bg-amber-500/10", iconClass: "text-amber-600" },
-            { label: "In Progress", value: tickets.filter((t) => t.status === "in-progress").length, icon: Clock, bgClass: "bg-blue-500/10", iconClass: "text-blue-600" },
-            { label: "Resolved", value: tickets.filter((t) => t.status === "resolved" || t.status === "closed").length, icon: CheckCircle2, bgClass: "bg-green-500/10", iconClass: "text-green-600" },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <StatStrip
+          items={[
+            { key: "total", label: "Total Tickets", value: tickets.length },
+            { key: "open", label: "Open", value: tickets.filter((t) => t.status === "open").length },
+            { key: "progress", label: "In Progress", value: tickets.filter((t) => t.status === "in-progress").length },
+            {
+              key: "resolved",
+              label: "Resolved",
+              value: tickets.filter((t) => t.status === "resolved" || t.status === "closed").length,
+            },
+          ]}
+        />
 
         {/* Filter bar */}
         <Card>

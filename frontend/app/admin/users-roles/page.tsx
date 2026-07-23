@@ -16,25 +16,14 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContextualHelp } from "@/components/help/ContextualHelp";
+import { StatStrip } from "@/components/shared/StatStrip";
 import {
-  Users,
-  Shield,
-  Briefcase,
   Loader2,
   UserCog,
   Search,
-  Building2,
   Plus,
   Download,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import {
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-} from "@/components/shared/registry-queue-styles";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   UsersManagementTab,
@@ -87,49 +76,45 @@ function UsersRolesForm() {
     return "Manage users, role assignments, and organizational access context.";
   }, [activeTab]);
 
-  const statCards = useMemo(() => {
+  const statItems = useMemo(() => {
     if (activeTab === "matrix") {
       const granted = roles.reduce((sum, role) => {
         const perms = role.permissions ?? {};
         return sum + Object.values(perms).filter(Boolean).length;
       }, 0);
       return [
-        { label: "Catalog Keys", value: 36, icon: Shield, bgClass: "bg-primary/10", iconClass: "text-primary" },
-        { label: "Roles", value: roles.length, icon: Users, bgClass: "bg-emerald-500/10", iconClass: "text-emerald-600 dark:text-emerald-400" },
-        { label: "Grants (all roles)", value: granted, icon: Shield, bgClass: "bg-blue-500/10", iconClass: "text-blue-600 dark:text-blue-400" },
+        { key: "catalog", label: "Catalog Keys", value: 36 },
+        { key: "roles", label: "Roles", value: roles.length },
+        { key: "grants", label: "Grants (all roles)", value: granted },
       ];
     }
     if (activeTab === "roles") {
       const inUse = roles.filter((role) => (role.userCount ?? 0) > 0).length;
       return [
-        { label: "Total Roles", value: roles.length, icon: Shield, bgClass: "bg-primary/10", iconClass: "text-primary" },
-        { label: "Roles In Use", value: inUse, icon: Users, bgClass: "bg-emerald-500/10", iconClass: "text-emerald-600 dark:text-emerald-400" },
-        { label: "Active Roles", value: roles.filter((role) => role.isActive).length, icon: Shield, bgClass: "bg-blue-500/10", iconClass: "text-blue-600 dark:text-blue-400" },
+        { key: "total", label: "Total Roles", value: roles.length },
+        { key: "in-use", label: "Roles In Use", value: inUse },
+        { key: "active", label: "Active Roles", value: roles.filter((role) => role.isActive).length },
       ];
     }
     if (activeTab === "assistants") {
       const executivesCovered = new Set(assistantAssignments.map((a) => a.executiveId)).size;
       return [
-        { label: "Total Assignments", value: assistantAssignments.length, icon: Briefcase, bgClass: "bg-primary/10", iconClass: "text-primary" },
-        { label: "Executives Covered", value: executivesCovered, icon: Shield, bgClass: "bg-emerald-500/10", iconClass: "text-emerald-600 dark:text-emerald-400" },
-        { label: "Technical Assistants", value: assistantAssignments.filter((a) => a.type === "TA").length, icon: Users, bgClass: "bg-blue-500/10", iconClass: "text-blue-600 dark:text-blue-400" },
+        { key: "assignments", label: "Total Assignments", value: assistantAssignments.length },
+        { key: "executives", label: "Executives Covered", value: executivesCovered },
+        { key: "ta", label: "Technical Assistants", value: assistantAssignments.filter((a) => a.type === "TA").length },
       ];
     }
     return [
-      { label: "Total Users", value: usersTotalCount ?? users.length, icon: Users, bgClass: "bg-primary/10", iconClass: "text-primary" },
+      { key: "users", label: "Total Users", value: usersTotalCount ?? users.length },
       {
+        key: "mgmt",
         label: "Management Level",
         value: users.filter((user) => ["MDCS", "EDCS", "MSS1", "MSS2", "MSS3"].includes(user.gradeLevel)).length,
-        icon: Shield,
-        bgClass: "bg-emerald-500/10",
-        iconClass: "text-emerald-600 dark:text-emerald-400",
       },
       {
+        key: "divisions",
         label: "Divisions Covered",
         value: new Set(users.map((user) => user.division).filter(Boolean)).size,
-        icon: Building2,
-        bgClass: "bg-blue-500/10",
-        iconClass: "text-blue-600 dark:text-blue-400",
       },
     ];
   }, [activeTab, users, roles, assistantAssignments, usersTotalCount]);
@@ -199,23 +184,7 @@ function UsersRolesForm() {
   return (
     <ClientErrorBoundary>
       <AdminPageShell title="Users & Roles" subtitle={tabSubtitle} icon={UserCog} actions={headerActions}>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {statCards.map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <StatStrip items={statItems} />
 
         {activeTab === "users" ? (
           <div id="users-roles-filter-slot" />

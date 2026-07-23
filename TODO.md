@@ -1,6 +1,6 @@
 # NPA ECM - Updated TODO List
 
-**Last Updated:** June 2026
+**Last Updated:** July 2026
 **Status:** Active Tasks
 
 ---
@@ -14,7 +14,25 @@
 - [ ] Add security headers middleware
 - [ ] Review CORS configuration for production
 - [ ] Implement rate limiting
-- [ ] Add input validation and sanitization pass
+- [ ] Add input validation and sanitization pass (editor emit uses `sanitizeRichText`; broader API pass still open)
+
+### WCAG 2.1 AA (remaining)
+**Priority:** P1  
+**Status:** ⏳ Partial — highs + mediums closed July 2026; full AA sign-off open
+
+- [x] Prep (skip link, focus styles, checklist)
+- [x] High-severity remediations (MinuteModal, PartiesStep, DelegateModal, DocumentPreviewModal, search live region, page H1/landmarks)
+- [x] Rich text editor toolbar / textbox a11y + prompt→dialogs
+- [x] Medium issues (badge contrast, sidebar headings, nested dialogs, 320px reflow, inbox filter names, Sonner Toaster)
+- [ ] Full AA sign-off per `docs/guides/WCAG_AUDIT_CHECKLIST.md`
+
+### Rich text / co-authoring
+**Priority:** P2 for TipTap  
+**Status:** Custom editor hardened; engine migrate deferred
+
+- [x] Rename to `RichTextEditor`; paste + sanitize + focused sync + a11y toolbar
+- [ ] TipTap (+ Yjs) migration when live co-authoring is funded
+- [ ] Real multi-user co-edit UI (beyond session/presence scaffolding)
 
 ---
 
@@ -32,6 +50,12 @@
 ---
 
 ## ✅ Completed Tasks
+
+### July 2026 — UI / a11y / editor docs sync ✅
+- WCAG AA high-severity fixes documented in checklist
+- `RichTextEditor` hardening documented (`docs/features/rich-text-editor.md`)
+- Cases detail workspace documented (`docs/features/cases.md`)
+- Component reference, DESIGN, backlog, comparison matrix refreshed
 
 ### Phase 9–11 documentation sync (June 2026) ✅
 - Updated backlog, comparison matrix, setup guides, feature docs

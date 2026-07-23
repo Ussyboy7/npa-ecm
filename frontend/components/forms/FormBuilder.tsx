@@ -285,7 +285,7 @@ export function FormBuilder({ fields, onChange }: FormBuilderProps) {
       )}
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-2xl w-[95vw] sm:w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden p-4 sm:p-6">
+        <DialogContent size="lg" height="fill">
           <DialogHeader>
             <DialogTitle>{editingField ? "Edit Field" : "Add Field"}</DialogTitle>
           </DialogHeader>

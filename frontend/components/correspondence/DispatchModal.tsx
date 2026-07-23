@@ -81,7 +81,7 @@ export function DispatchModal({ correspondenceId, onSuccess }: DispatchModalProp
           Dispatch
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Dispatch Correspondence</DialogTitle>
         </DialogHeader>

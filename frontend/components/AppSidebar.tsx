@@ -34,9 +34,9 @@ import { SidebarNavItem, AdminNavItem } from "@/components/shared/SidebarNavItem
 function SidebarSubsectionLabel({ label, isCollapsed }: { label: string; isCollapsed: boolean }) {
   if (isCollapsed) return null;
   return (
-    <p className="px-2 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <h3 className="px-2 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
       {label}
-    </p>
+    </h3>
   );
 }
 
@@ -125,7 +125,9 @@ export function AppSidebar() {
       <SidebarContent className="overflow-x-hidden">
         {/* My Workspace */}
         <SidebarGroup>
-          <SidebarGroupLabel>My Workspace</SidebarGroupLabel>
+          <SidebarGroupLabel asChild>
+            <h2>My Workspace</h2>
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarNavItem href={homePath} icon={LayoutDashboard} label="Dashboard" isCollapsed={isCollapsed} isActive={pathname === homePath} />
@@ -133,7 +135,7 @@ export function AppSidebar() {
                 <SidebarNavItem href="/inbox" icon={Mail} label="My Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/inbox')} badge={counts.myInbox} badgeVariant="destructive" description="Correspondence assigned to you" />
               )}
               <SidebarNavItem href="/acting" icon={UserCheck} label="Acting Capacity" isCollapsed={isCollapsed} isActive={isActivePath('/acting')} description="Appoint or request office seat succession" />
-              {visibility.showMyOutbox && (
+              {visibility.showMySent && (
                 <SidebarNavItem href="/correspondence/my-sent" icon={Send} label="My Sent" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/my-sent')} badge={counts.mySent} badgeVariant="secondary" />
               )}
               {visibility.showDocumentsList && (
@@ -153,15 +155,17 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {/* Registry */}
-        {(visibility.showOfficeInbox || visibility.showRegisterCorrespondence || visibility.showRegisteredCorrespondence || visibility.showOfficeDispatched || visibility.showRecordsArchives || visibility.showPhysicalRecords) && (
+        {(visibility.showOfficeInbox || visibility.showRegisterCorrespondence || visibility.showRegisteredCorrespondence || visibility.showOfficeSent || visibility.showRecordsArchives || visibility.showPhysicalRecords) && (
           <SidebarGroup>
-            <SidebarGroupLabel>Registry</SidebarGroupLabel>
+            <SidebarGroupLabel asChild>
+              <h2>Registry</h2>
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {visibility.showOfficeInbox && (
                   <SidebarNavItem href="/correspondence/inbox" icon={Mail} label="Office Inbox" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/inbox')} badge={counts.unreadInboxCount} badgeVariant="destructive" />
                 )}
-                {visibility.showOfficeDispatched && (
+                {visibility.showOfficeSent && (
                   <SidebarNavItem href="/correspondence/office-sent" icon={PackageCheck} label="Office Sent" isCollapsed={isCollapsed} isActive={isActivePath('/correspondence/office-sent')} badge={counts.officeSent} badgeVariant="secondary" description="Correspondence sent from your office" />
                 )}
                 {visibility.showRegisterCorrespondence && (
@@ -187,7 +191,9 @@ export function AppSidebar() {
         {/* Cases */}
         {showCasesSection && (
           <SidebarGroup>
-            <SidebarGroupLabel>Cases</SidebarGroupLabel>
+            <SidebarGroupLabel asChild>
+              <h2>Cases</h2>
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {visibility.showMyCases && (
@@ -212,7 +218,9 @@ export function AppSidebar() {
 
         {/* Tools */}
         <SidebarGroup>
-          <SidebarGroupLabel>Tools</SidebarGroupLabel>
+          <SidebarGroupLabel asChild>
+            <h2>Tools</h2>
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarNavItem href="/search" icon={Search} label="Search" isCollapsed={isCollapsed} isActive={isActivePath('/search')} description="Find documents, correspondence, and cases" />
@@ -233,7 +241,9 @@ export function AppSidebar() {
         {/* Analytics & Reports */}
         {visibility.showAnalyticsReports && (
           <SidebarGroup>
-            <SidebarGroupLabel>Analytics & Reports</SidebarGroupLabel>
+            <SidebarGroupLabel asChild>
+              <h2>Analytics & Reports</h2>
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {visibility.showExecutiveDashboard && (
@@ -259,7 +269,7 @@ export function AppSidebar() {
             <Collapsible defaultOpen={true}>
               <SidebarGroupLabel asChild>
                 <CollapsibleTrigger className="group/collapsible">
-                  Administration
+                  <h2 className="flex-1 text-left text-sm font-medium">Administration</h2>
                   {!isCollapsed && (
                     <ChevronDown className="ml-auto transition-transform group-data-[state=open]/collapsible:rotate-180" />
                   )}
@@ -301,7 +311,9 @@ export function AppSidebar() {
 
         {/* System */}
         <SidebarGroup>
-          <SidebarGroupLabel>System</SidebarGroupLabel>
+          <SidebarGroupLabel asChild>
+            <h2>System</h2>
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>

@@ -16,8 +16,8 @@ import {
   Phone,
   CheckCircle2,
   XCircle,
+  MoreHorizontal,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,9 +30,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  DetailStatusStrip,
+  StatusStripSep,
+} from "@/components/shared/DetailStatusStrip";
 import { ErrorState } from "@/components/shared/ErrorState";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api-client";
+import { appType } from "@/lib/app-type";
+import { getFoiaStatusBadge } from "@/lib/status-badge";
+import { cn } from "@/lib/utils";
 
 type FOIAStatus =
   | "submitted"
@@ -46,20 +59,6 @@ type FOIAStatus =
   | "closed"
   | "awaiting_clarification"
   | "appealed";
-
-const STATUS_BADGE: Record<FOIAStatus, { label: string; className: string }> = {
-  submitted: { label: "Submitted", className: "bg-amber-500" },
-  acknowledged: { label: "Acknowledged", className: "bg-blue-500" },
-  in_processing: { label: "In Processing", className: "bg-purple-500" },
-  review: { label: "Under Review", className: "bg-orange-500" },
-  approved: { label: "Approved", className: "bg-green-500" },
-  partially_granted: { label: "Partially Granted", className: "bg-yellow-500" },
-  denied: { label: "Denied", className: "bg-red-500" },
-  responded: { label: "Responded", className: "bg-teal-500" },
-  closed: { label: "Closed", className: "bg-gray-500" },
-  awaiting_clarification: { label: "Awaiting Clarification", className: "bg-pink-500" },
-  appealed: { label: "Appealed", className: "bg-violet-500" },
-};
 
 interface FOIARequest {
   id: string;
@@ -98,6 +97,19 @@ interface FOIADocument {
   title: string;
   file: string;
   uploaded_at: string;
+}
+
+function formatShortDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return value;
+  }
 }
 
 export default function FOIADetailPage() {
@@ -142,7 +154,7 @@ export default function FOIADetailPage() {
   }, [params?.id]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
   const handleAcknowledge = async () => {
@@ -151,7 +163,7 @@ export default function FOIADetailPage() {
         method: "POST",
       });
       toast.success("Request acknowledged");
-      loadData();
+      void loadData();
     } catch {
       toast.error("Failed to acknowledge request");
     }
@@ -174,7 +186,7 @@ export default function FOIADetailPage() {
       toast.success("Response submitted");
       setOutcome("");
       setExemptionReason("");
-      loadData();
+      void loadData();
     } catch {
       toast.error("Failed to submit response");
     } finally {
@@ -188,7 +200,7 @@ export default function FOIADetailPage() {
         method: "POST",
       });
       toast.success("Request closed");
-      loadData();
+      void loadData();
     } catch {
       toast.error("Failed to close request");
     }
@@ -227,283 +239,336 @@ export default function FOIADetailPage() {
     request?.status === "denied" ||
     request?.status === "responded";
 
-  const daysRemaining = request?.days_remaining ?? (request?.deadline_date
-    ? Math.ceil(
-        (new Date(request.deadline_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-      )
-    : null);
+  const daysRemaining =
+    request?.days_remaining ??
+    (request?.deadline_date
+      ? Math.ceil(
+          (new Date(request.deadline_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        )
+      : null);
 
   const isPastDeadline = daysRemaining !== null && daysRemaining < 0;
-  const statusInfo = request ? STATUS_BADGE[request.status] : null;
+  const statusBadge = request ? getFoiaStatusBadge(request.status) : null;
+  const assignedName =
+    request?.assigned_to && typeof request.assigned_to === "object"
+      ? request.assigned_to.name || request.assigned_to.username || null
+      : typeof request?.assigned_to === "string"
+        ? request.assigned_to
+        : null;
 
   if (loading) {
     return (
-      <>
-        <div className="container mx-auto p-6 flex items-center justify-center min-h-[60vh]">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </>
+      <div className="flex min-h-[60vh] items-center justify-center p-6">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
     );
   }
 
   if (error || !request) {
     return (
-      <>
-        <div className="container mx-auto p-6">
-          <ErrorState message={error || "Request not found"} variant="inline" />
-          <Button variant="outline" className="mt-4" onClick={() => router.push("/foia")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to FOIA Requests
-          </Button>
-        </div>
-      </>
+      <div className="container mx-auto p-6">
+        <ErrorState message={error || "Request not found"} variant="inline" />
+        <Button variant="outline" className="mt-4" onClick={() => router.push("/foia")}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to FOIA Requests
+        </Button>
+      </div>
     );
   }
 
+  const primaryAction = canAcknowledge ? (
+    <Button size="sm" onClick={handleAcknowledge}>
+      <CheckCircle2 className="h-4 w-4 mr-2" />
+      Acknowledge
+    </Button>
+  ) : canClose ? (
+    <Button size="sm" variant="outline" onClick={handleClose}>
+      <XCircle className="h-4 w-4 mr-2" />
+      Close
+    </Button>
+  ) : null;
+
   return (
-    <>
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <Button variant="outline" size="sm" onClick={() => router.push("/foia")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          {statusInfo && <Badge className={statusInfo.className}>{statusInfo.label}</Badge>}
+    <div className="flex flex-col min-h-screen">
+      <div className="border-b border-border/60 bg-background px-4 md:px-6 py-3 md:py-4 flex-shrink-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2 md:gap-3 min-w-0 flex-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="flex-shrink-0 mt-0.5"
+              onClick={() => router.push("/foia")}
+              aria-label="Back to FOIA requests"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="min-w-0 flex-1">
+              <h1 className={cn(appType.pageTitle, "truncate font-mono")}>
+                {request.request_number}
+              </h1>
+              <p className={cn(appType.subject, "mt-1 truncate")}>
+                {request.requester_name}
+                {request.organization ? ` · ${request.organization}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+            {primaryAction}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  aria-label="More actions"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {canAcknowledge && (
+                  <DropdownMenuItem onClick={handleAcknowledge}>
+                    <CheckCircle2 className="h-4 w-4 mr-2 opacity-70" />
+                    Acknowledge
+                  </DropdownMenuItem>
+                )}
+                {canClose && (
+                  <DropdownMenuItem onClick={handleClose}>
+                    <XCircle className="h-4 w-4 mr-2 opacity-70" />
+                    Close request
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => void loadData()}>
+                  <Loader2 className="h-4 w-4 mr-2 opacity-70" />
+                  Refresh
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
+      </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Request Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Request Number</Label>
-                    <p className="font-mono text-sm">{request.request_number}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Status</Label>
-                    <div className="mt-0.5">
-                      {statusInfo && <Badge className={statusInfo.className}>{statusInfo.label}</Badge>}
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Received Date</Label>
-                    <p className="text-sm flex items-center gap-1.5 mt-0.5">
-                      <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                      {request.received_date
-                        ? new Date(request.received_date).toLocaleDateString()
-                        : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Deadline</Label>
-                    <p
-                      className={`text-sm flex items-center gap-1.5 mt-0.5 ${
-                        isPastDeadline ? "text-red-600 font-medium" : ""
-                      }`}
-                    >
-                      <Clock className="h-3.5 w-3.5" />
-                      {request.deadline_date
-                        ? new Date(request.deadline_date).toLocaleDateString()
-                        : "—"}
-                      {daysRemaining !== null && (
-                        <span className={isPastDeadline ? "text-red-600" : "text-muted-foreground"}>
-                          ({isPastDeadline ? `${Math.abs(daysRemaining)}d overdue` : `${daysRemaining}d remaining`})
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Format Preference</Label>
-                    <p className="text-sm capitalize mt-0.5">{request.format_preference || "—"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Assigned To</Label>
-                    <p className="text-sm mt-0.5">
-                      {request.assigned_to && typeof request.assigned_to === "object"
-                        ? request.assigned_to.name || request.assigned_to.username || "Unassigned"
-                        : request.assigned_to || "Unassigned"}
-                    </p>
-                  </div>
-                </div>
-                <Separator />
-                <div>
-                  <Label className="text-xs text-muted-foreground">Description</Label>
-                  <p className="text-sm mt-1 whitespace-pre-wrap">{request.description_of_documents}</p>
-                </div>
-              </CardContent>
-            </Card>
+      <DetailStatusStrip>
+        {statusBadge ? (
+          <Badge
+            variant={statusBadge.variant}
+            className={cn("text-[10px] h-5 shrink-0", statusBadge.className)}
+          >
+            {statusBadge.label}
+          </Badge>
+        ) : null}
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  Notes
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant={noteIsInternal ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setNoteIsInternal(true)}
-                    >
-                      Internal
-                    </Button>
-                    <Button
-                      variant={!noteIsInternal ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setNoteIsInternal(false)}
-                    >
-                      Public
-                    </Button>
+        {request.is_overdue || isPastDeadline ? (
+          <>
+            <StatusStripSep />
+            <Badge variant="destructive" className="text-[10px] h-5 shrink-0">
+              Overdue
+            </Badge>
+          </>
+        ) : null}
+
+        <StatusStripSep />
+        <span className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap">
+          <Calendar className="h-3 w-3" />
+          Received {formatShortDate(request.received_date)}
+        </span>
+
+        <StatusStripSep />
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 shrink-0 whitespace-nowrap",
+            isPastDeadline && "text-destructive",
+          )}
+        >
+          <Clock className="h-3 w-3" />
+          Deadline {formatShortDate(request.deadline_date)}
+          {daysRemaining !== null
+            ? isPastDeadline
+              ? ` · ${Math.abs(daysRemaining)}d overdue`
+              : ` · ${daysRemaining}d left`
+            : ""}
+        </span>
+
+        {assignedName ? (
+          <>
+            <StatusStripSep />
+            <span className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap">
+              <User className="h-3 w-3" />
+              {assignedName}
+            </span>
+          </>
+        ) : null}
+
+        {request.format_preference ? (
+          <>
+            <StatusStripSep />
+            <span className="inline-flex items-center gap-1 shrink-0 whitespace-nowrap capitalize">
+              <FileText className="h-3 w-3" />
+              {request.format_preference}
+            </span>
+          </>
+        ) : null}
+      </DetailStatusStrip>
+
+      <div className="px-4 md:px-6 py-5 space-y-5">
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-5">
+            <section className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-4">
+              <h2 className={appType.panelTitle}>Request</h2>
+              <p className={cn(appType.body, "whitespace-pre-wrap")}>
+                {request.description_of_documents}
+              </p>
+              {request.outcome ? (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <p className={appType.sectionLabel}>Outcome</p>
+                    <Badge variant={getFoiaStatusBadge(request.outcome).variant} className="capitalize">
+                      {request.outcome}
+                    </Badge>
+                    {request.exemption_reason ? (
+                      <p className={appType.meta}>{request.exemption_reason}</p>
+                    ) : null}
                   </div>
-                  <Textarea
-                    placeholder="Add a note..."
-                    value={noteContent}
-                    onChange={(e) => setNoteContent(e.target.value)}
-                    rows={3}
-                  />
+                </>
+              ) : null}
+            </section>
+
+            <section className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-4">
+              <h2 className={cn(appType.panelTitle, "flex items-center gap-2")}>
+                <MessageSquare className="h-3.5 w-3.5 opacity-70" />
+                Notes
+              </h2>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
                   <Button
-                    size="sm"
-                    onClick={handleAddNote}
-                    disabled={!noteContent.trim() || addingNote}
+                    variant={noteIsInternal ? "default" : "outline"}
+                    size="compact"
+                    onClick={() => setNoteIsInternal(true)}
                   >
-                    {addingNote ? (
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4 mr-1" />
-                    )}
-                    Add Note
+                    Internal
+                  </Button>
+                  <Button
+                    variant={!noteIsInternal ? "default" : "outline"}
+                    size="compact"
+                    onClick={() => setNoteIsInternal(false)}
+                  >
+                    Public
                   </Button>
                 </div>
-                <Separator />
-                {notes.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No notes yet.</p>
-                ) : (
-                  <div className="space-y-3 max-h-80 overflow-y-auto">
-                    {notes.map((note) => (
-                      <div
-                        key={note.id}
-                        className={`p-3 rounded-lg border ${
-                          note.is_internal
-                            ? "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800"
-                            : "bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] ${
-                              note.is_internal
-                                ? "border-amber-300 text-amber-700 dark:text-amber-300"
-                                : "border-blue-300 text-blue-700 dark:text-blue-300"
-                            }`}
-                          >
-                            {note.is_internal ? "Internal" : "Public"}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(note.created_at).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Documents
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {documents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No documents attached.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {documents.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="flex items-center justify-between p-3 rounded-lg border"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span className="text-sm truncate">{doc.title}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {new Date(doc.uploaded_at).toLocaleDateString()}
+                <Textarea
+                  placeholder="Add a note..."
+                  value={noteContent}
+                  onChange={(e) => setNoteContent(e.target.value)}
+                  rows={3}
+                />
+                <Button
+                  size="compact"
+                  onClick={handleAddNote}
+                  disabled={!noteContent.trim() || addingNote}
+                >
+                  {addingNote ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-1" />
+                  )}
+                  Add note
+                </Button>
+              </div>
+              <Separator />
+              {notes.length === 0 ? (
+                <p className={appType.meta}>No notes yet.</p>
+              ) : (
+                <div className="space-y-3 max-h-80 overflow-y-auto">
+                  {notes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="rounded-lg border border-border/50 bg-background/60 p-3"
+                    >
+                      <div className="flex items-center justify-between mb-1 gap-2">
+                        <Badge variant="outline" className="text-[10px]">
+                          {note.is_internal ? "Internal" : "Public"}
+                        </Badge>
+                        <span className={appType.caption}>
+                          {new Date(note.created_at).toLocaleString()}
                         </span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      <p className={cn(appType.body, "whitespace-pre-wrap")}>{note.content}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3">
+              <h2 className={cn(appType.panelTitle, "flex items-center gap-2")}>
+                <FileText className="h-3.5 w-3.5 opacity-70" />
+                Documents
+              </h2>
+              {documents.length === 0 ? (
+                <p className={appType.meta}>No documents attached.</p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border/40 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className={cn(appType.itemTitle, "truncate")}>{doc.title}</span>
+                      </div>
+                      <span className={cn(appType.caption, "shrink-0")}>
+                        {formatShortDate(doc.uploaded_at)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
 
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Requester Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
+          <div className="space-y-5">
+            <section className="rounded-xl border border-border/50 bg-muted/30 p-4 space-y-3">
+              <h2 className={appType.panelTitle}>Requester</h2>
+              <div className="space-y-2.5">
                 <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm">{request.requester_name}</span>
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className={appType.body}>{request.requester_name}</span>
                 </div>
-                {request.organization && (
+                {request.organization ? (
                   <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{request.organization}</span>
+                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className={appType.body}>{request.organization}</span>
                   </div>
-                )}
-                {request.requester_email && (
+                ) : null}
+                {request.requester_email ? (
                   <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{request.requester_email}</span>
+                    <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className={appType.body}>{request.requester_email}</span>
                   </div>
-                )}
-                {request.requester_phone && (
+                ) : null}
+                {request.requester_phone ? (
                   <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{request.requester_phone}</span>
+                    <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className={appType.body}>{request.requester_phone}</span>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                ) : null}
+              </div>
+            </section>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Actions
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            {(canRespond || canAcknowledge || canClose) && (
+              <section className="rounded-xl border border-border/50 bg-muted/30 p-4 space-y-4">
+                <h2 className={appType.panelTitle}>Actions</h2>
                 {canAcknowledge && (
-                  <Button className="w-full" onClick={handleAcknowledge}>
+                  <Button className="w-full" size="compact" onClick={handleAcknowledge}>
                     <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Acknowledge Request
+                    Acknowledge request
                   </Button>
                 )}
 
                 {canRespond && (
-                  <div className="space-y-3 p-3 border rounded-lg">
+                  <div className="space-y-3 rounded-lg border border-border/40 p-3">
                     <Label>Outcome</Label>
                     <Select value={outcome} onValueChange={setOutcome}>
                       <SelectTrigger>
@@ -517,7 +582,7 @@ export default function FOIADetailPage() {
                     </Select>
                     {outcome === "denied" || outcome === "partial" ? (
                       <div className="space-y-1">
-                        <Label>Exemption Reason</Label>
+                        <Label>Exemption reason</Label>
                         <Textarea
                           placeholder="Provide the legal basis for exemption..."
                           value={exemptionReason}
@@ -528,6 +593,7 @@ export default function FOIADetailPage() {
                     ) : null}
                     <Button
                       className="w-full"
+                      size="compact"
                       onClick={handleRespond}
                       disabled={!outcome || responding}
                     >
@@ -536,7 +602,7 @@ export default function FOIADetailPage() {
                       ) : (
                         <Send className="h-4 w-4 mr-2" />
                       )}
-                      Submit Response
+                      Submit response
                     </Button>
                   </div>
                 )}
@@ -545,50 +611,18 @@ export default function FOIADetailPage() {
                   <Button
                     variant="outline"
                     className="w-full"
+                    size="compact"
                     onClick={handleClose}
                   >
                     <XCircle className="h-4 w-4 mr-2" />
-                    Close Request
+                    Close request
                   </Button>
                 )}
-
-                {!canAcknowledge && !canRespond && !canClose && (
-                  <p className="text-sm text-muted-foreground text-center">
-                    No actions available for this request.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {request.outcome && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Outcome</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Badge
-                    className={
-                      request.outcome === "approved"
-                        ? "bg-green-500"
-                        : request.outcome === "partial"
-                          ? "bg-yellow-500"
-                          : "bg-red-500"
-                    }
-                  >
-                    {request.outcome.charAt(0).toUpperCase() + request.outcome.slice(1)}
-                  </Badge>
-                  {request.exemption_reason && (
-                    <div className="mt-2">
-                      <Label className="text-xs text-muted-foreground">Exemption Reason</Label>
-                      <p className="text-sm mt-1">{request.exemption_reason}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              </section>
             )}
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

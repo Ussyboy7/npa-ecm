@@ -75,10 +75,12 @@ Staging deploy (server only): `scripts/staging/env-manager.sh deploy`
 | Topic | Path |
 |-------|------|
 | Quick start / routes | `docs/guides/QUICK_START.md` |
+| UI design language | `docs/guides/DESIGN.md` |
 | Backlog & Phase 9–11 | `docs/procurement/REMAINING_WORK_BACKLOG.md` |
-| Feature areas | `docs/features/` |
+| Feature areas | `docs/features/` (incl. `rich-text-editor.md`, `cases.md`) |
 | Rollout & helpdesk | `docs/rollout/` |
 | WCAG checklist | `docs/guides/WCAG_AUDIT_CHECKLIST.md` |
+| Product UI language | `docs/guides/DESIGN.md` |
 
 ## Staging vs local
 

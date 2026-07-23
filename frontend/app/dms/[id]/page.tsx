@@ -3,9 +3,15 @@
 import { logError } from '@/lib/client-logger';
 import { useCallback, useEffect, useMemo, useState, startTransition } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
+import { toast } from 'sonner';
+import { useCurrentUser } from '@/hooks/use-current-user';
+import { useOrganization } from '@/contexts/OrganizationContext';
+import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
+import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
+import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
+import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
 import { ClientErrorBoundary } from '@/components/ClientErrorBoundary';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import {
   fetchDocumentById,
   getDocumentAccessLogs,
@@ -16,29 +22,21 @@ import {
   type DocumentAccessLog,
 } from '@/lib/dms-storage';
 import { CorrespondenceProvider } from '@/contexts/CorrespondenceContext';
-import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
-import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
-import { toast } from 'sonner';
-import { useCurrentUser } from '@/hooks/use-current-user';
-import { useOrganization } from '@/contexts/OrganizationContext';
-import { ShareDocumentDialog } from '@/components/dms/ShareDocumentDialog';
-import { DocumentVersionPreviewModal } from '@/components/dms/DocumentVersionPreviewModal';
-import { ReplaceVersionDialog } from '@/components/dms/ReplaceVersionDialog';
-import { DocumentCommentsDialog } from '@/components/dms/DocumentCommentsDialog';
-import { DocumentMobileTabBar } from '@/app/dms/[id]/components/DocumentWorkspace';
-import { DocumentPreviewPanel } from '@/app/dms/[id]/components/DocumentPreviewPanel';
-import { DocumentSidebar } from '@/app/dms/[id]/components/DocumentSidebar';
+import { DocumentMobileTabBar, DocumentWorkspace } from '@/app/dms/[id]/components/DocumentWorkspace';
 import { DocumentMobileStickyBar } from '@/app/dms/[id]/components/DocumentMobileStickyBar';
 import { LinkCaseDialog } from '@/components/correspondence/LinkCaseDialog';
 import { MinuteModal } from '@/components/correspondence/MinuteModal';
 import { unlinkDocumentFromCase } from '@/lib/api/cases';
 import { DocumentHeader } from '@/components/dms/DocumentHeader';
+import { DocumentStatusStrip } from '@/components/dms/DocumentStatusStrip';
 import { AccessActivityDetailsDialog } from '@/components/dms/AccessActivityDetailsDialog';
 import { useDocumentDetail } from '@/app/dms/[id]/hooks/use-document-detail';
 import { useDocumentOcr } from '@/app/dms/[id]/hooks/use-document-ocr';
 import { Correspondence } from '@/lib/npa-structure';
 import { ResourceAccessDenied } from '@/components/shared/ResourceAccessDenied';
 import { useAccessExplanation } from '@/hooks/use-access-explanation';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 const DocumentDetailContent = () => {
   const params = useParams<{ id: string }>();
@@ -71,6 +69,7 @@ const DocumentDetailContent = () => {
   const [selectedAccessLog, setSelectedAccessLog] = useState<DocumentAccessLog | null>(null);
   const [mobileActiveTab, setMobileActiveTab] = useState<'document' | 'details'>('document');
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [documentFocus, setDocumentFocus] = useState(false);
 
   const { currentUser, hydrated } = useCurrentUser();
   const { result: accessExplanation, loading: accessExplanationLoading } = useAccessExplanation(
@@ -183,13 +182,8 @@ const DocumentDetailContent = () => {
   return (
     <>
       {loading ? (
-        <div className="container mx-auto p-6">
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-              <p>Loading document...</p>
-            </CardContent>
-          </Card>
+        <div className="flex items-center justify-center h-full min-h-[50vh] p-6 animate-in fade-in duration-300 motion-reduce:animate-none">
+          <LoadingState message="Loading document…" size="md" />
         </div>
       ) : accessDenied ? (
         <ResourceAccessDenied
@@ -200,168 +194,149 @@ const DocumentDetailContent = () => {
           backLabel="Back to Documents"
         />
       ) : documentError || !document ? (
-        <div className="container mx-auto p-6">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-              <h2 className="text-xl font-semibold mb-2">Document Not Found</h2>
-              <p className="text-muted-foreground mb-6">
-                {documentError || 'The document you are looking for does not exist or you do not have permission to view it.'}
-              </p>
-              <div className="flex gap-2 justify-center">
-                <Button onClick={() => router.push('/dms')} variant="default">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to My Documents
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex items-center justify-center h-full min-h-[50vh] p-6 animate-in fade-in duration-300 motion-reduce:animate-none">
+          <EmptyState
+            icon="file"
+            title="Document not found"
+            message={
+              documentError ||
+              'This document may have been removed, or you may not have access.'
+            }
+            actionLabel="Back to Documents"
+            onAction={() => router.push('/dms')}
+            variant="dashed"
+          />
         </div>
       ) : (
         <ClientErrorBoundary>
           <div className="flex flex-col min-w-0 flex-1 min-h-0 overflow-hidden">
-          <div className="flex-shrink-0">
-          <DocumentHeader
-            document={document}
-            author={author}
-            currentUser={currentUser}
-            divisionLookup={divisionLookup}
-            departmentLookup={departmentLookup}
-            divisions={divisions}
-            departments={departments}
-            hasLinkedCorrespondence={relatedCorrespondence.length > 0}
-            canDownload={canDownloadDocument(document) && Boolean(selectedVersion)}
-            canFullscreen={Boolean(selectedVersion)}
-            onFullscreen={() => handleOpenFullscreen()}
-            onDownload={handleDownloadLatest}
-            onShare={openShareDialog}
-            onDocumentUpdate={(updated) => {
-              setDocument(updated);
-            }}
-            onLinkCase={() => setLinkCaseDialogOpen(true)}
-            onUnlinkCase={async (caseId: string) => {
-              try {
-                await unlinkDocumentFromCase(caseId, document.id);
-                toast.success("Document unlinked from case");
-                if (params?.id) {
-                  const updated = await fetchDocumentById(params.id);
+            <div className="flex-shrink-0">
+              <DocumentHeader
+                document={document}
+                author={author}
+                currentUser={currentUser}
+                divisionLookup={divisionLookup}
+                departmentLookup={departmentLookup}
+                divisions={divisions}
+                departments={departments}
+                hasLinkedCorrespondence={relatedCorrespondence.length > 0}
+                canDownload={canDownloadDocument(document) && Boolean(selectedVersion)}
+                canFullscreen={Boolean(selectedVersion)}
+                onFullscreen={() => handleOpenFullscreen()}
+                onDownload={handleDownloadLatest}
+                onShare={openShareDialog}
+                onDocumentUpdate={(updated) => {
                   setDocument(updated);
+                }}
+                onLinkCase={() => setLinkCaseDialogOpen(true)}
+                onUnlinkCase={async (caseId: string) => {
+                  try {
+                    await unlinkDocumentFromCase(caseId, document.id);
+                    toast.success("Document unlinked from case");
+                    if (params?.id) {
+                      const updated = await fetchDocumentById(params.id);
+                      setDocument(updated);
+                    }
+                  } catch (err) {
+                    logError("Failed to unlink document from case", err);
+                    toast.error("Failed to unlink from case");
+                  }
+                }}
+                onMinuteDocument={() => {
+                  if (!document || !currentUser) return;
+                  if (relatedCorrespondence.length === 0) {
+                    toast.error(
+                      'This document is not linked to any correspondence. Link it to a correspondence item to minute.'
+                    );
+                    return;
+                  }
+                  setMinuteDocumentCorrespondence(relatedCorrespondence[0].correspondence);
+                  setMinuteDocumentModalOpen(true);
+                }}
+              />
+
+              <DocumentStatusStrip
+                document={document}
+                authorName={author?.name}
+                versionCount={versions.length}
+                linkedCorrespondenceCount={relatedCorrespondence.length}
+                divisionName={
+                  document.divisionId ? divisionLookup.get(document.divisionId) : undefined
                 }
-              } catch (err) {
-                logError("Failed to unlink document from case", err);
-                toast.error("Failed to unlink from case");
-              }
-            }}
-            onMinuteDocument={() => {
-              if (!document || !currentUser) return;
-              if (relatedCorrespondence.length === 0) {
-                toast.error(
-                  'This document is not linked to any correspondence. Link it to a correspondence item to minute.'
-                );
-                return;
-              }
-              setMinuteDocumentCorrespondence(relatedCorrespondence[0].correspondence);
-              setMinuteDocumentModalOpen(true);
-            }}
-          />
+                departmentName={
+                  document.departmentId ? departmentLookup.get(document.departmentId) : undefined
+                }
+              />
 
-          <DocumentMobileTabBar
-            mobileActiveTab={mobileActiveTab as 'document' | 'routing'}
-            onSetMobileActiveTab={(tab) => setMobileActiveTab(tab as 'document' | 'details')}
-            minutesCount={comments.length}
-          />
-          </div>
-
-          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            <div className="hidden md:flex flex-1 min-h-0 overflow-hidden">
-              <div className="w-[58%] min-w-0 flex flex-col min-h-0 border-r border-border">
-                <DocumentPreviewPanel
-                  document={document}
-                  documentId={params.id}
-                  formDocumentId={formDocumentId}
-                  versions={versions}
-                  selectedVersion={selectedVersion}
-                  onSelectVersion={handleSelectVersion}
-                  onDownload={handleDownloadVersion}
-                  canDownload={canDownloadDocument(document)}
-                />
-              </div>
-              <div className="w-[42%] min-w-0 flex flex-col min-h-0 overflow-hidden">
-                <DocumentSidebar
-                  document={document}
-                  versions={versions}
-                  comments={comments}
-                  accessLogs={accessLogs}
-                  relatedCorrespondence={relatedCorrespondence}
-                  userLookup={userLookup}
-                  uploadUser={uploadUser}
-                  ocrState={ocrState}
-                  onQuickVersionUpload={openVersionUpload}
-                  onCreateVersion={openVersionUpload}
-                  onOpenCommentsDialog={handleOpenCommentsDialog}
-                  onViewActivityDetails={(log: DocumentAccessLog) => setSelectedAccessLog(log)}
-                  onRefreshAccessLogs={handleRefreshAccessLogs}
-                  onPreviewVersion={(version: DocumentVersion) => setPreviewVersion(version)}
-                  onDownloadVersion={handleDownloadVersion}
-                  onReplaceVersion={setReplaceVersionId}
-                  onVersionOCR={handleVersionOCR}
-                  onCancelOCR={handleCancelOCR}
-                  getUserInitials={getUserInitials}
-                />
-              </div>
+              <DocumentMobileTabBar
+                commentsCount={comments.length}
+                mobileActiveTab={mobileActiveTab}
+                onSetMobileActiveTab={setMobileActiveTab}
+              />
             </div>
 
-            {mobileActiveTab === "document" && (
-              <div className="md:hidden flex-1 min-h-0 flex flex-col overflow-hidden pb-16">
-                <DocumentPreviewPanel
-                  document={document}
-                  documentId={params.id}
-                  formDocumentId={formDocumentId}
-                  versions={versions}
-                  selectedVersion={selectedVersion}
-                  onSelectVersion={handleSelectVersion}
-                  onDownload={handleDownloadVersion}
-                  canDownload={canDownloadDocument(document)}
-                />
-              </div>
-            )}
-            {mobileActiveTab === "details" && (
-              <div className="md:hidden flex-1 min-h-0 flex flex-col overflow-hidden pb-16">
-                <DocumentSidebar
-                  document={document}
-                  versions={versions}
-                  comments={comments}
-                  accessLogs={accessLogs}
-                  relatedCorrespondence={relatedCorrespondence}
-                  userLookup={userLookup}
-                  uploadUser={uploadUser}
-                  ocrState={ocrState}
-                  onQuickVersionUpload={openVersionUpload}
-                  onCreateVersion={openVersionUpload}
-                  onOpenCommentsDialog={handleOpenCommentsDialog}
-                  onViewActivityDetails={(log: DocumentAccessLog) => setSelectedAccessLog(log)}
-                  onRefreshAccessLogs={handleRefreshAccessLogs}
-                  onPreviewVersion={(version: DocumentVersion) => setPreviewVersion(version)}
-                  onDownloadVersion={handleDownloadVersion}
-                  onReplaceVersion={setReplaceVersionId}
-                  onVersionOCR={handleVersionOCR}
-                  onCancelOCR={handleCancelOCR}
-                  getUserInitials={getUserInitials}
-                />
-              </div>
-            )}
-          </div>
-          </div>
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+              <DocumentWorkspace
+                mobileActiveTab={mobileActiveTab}
+                documentFocus={documentFocus}
+                onSetDocumentFocus={setDocumentFocus}
+                previewProps={{
+                  document,
+                  documentId: params.id,
+                  formDocumentId,
+                  versions,
+                  selectedVersion,
+                  onSelectVersion: handleSelectVersion,
+                  onDownload: handleDownloadVersion,
+                  canDownload: canDownloadDocument(document),
+                  versionsManage: {
+                    userLookup,
+                    uploadUser,
+                    ocrState,
+                    onCreateVersion: openVersionUpload,
+                    onQuickVersionUpload: openVersionUpload,
+                    onPreviewVersion: (version: DocumentVersion) => setPreviewVersion(version),
+                    onDownloadVersion: handleDownloadVersion,
+                    onReplaceVersion: setReplaceVersionId,
+                    onVersionOCR: handleVersionOCR,
+                    onCancelOCR: handleCancelOCR,
+                  },
+                }}
+                sidebarProps={{
+                  document,
+                  versions,
+                  comments,
+                  accessLogs,
+                  relatedCorrespondence,
+                  userLookup,
+                  uploadUser,
+                  ocrState,
+                  onQuickVersionUpload: openVersionUpload,
+                  onCreateVersion: openVersionUpload,
+                  onOpenCommentsDialog: handleOpenCommentsDialog,
+                  onShare: openShareDialog,
+                  onViewActivityDetails: (log: DocumentAccessLog) => setSelectedAccessLog(log),
+                  onRefreshAccessLogs: handleRefreshAccessLogs,
+                  onPreviewVersion: (version: DocumentVersion) => setPreviewVersion(version),
+                  onDownloadVersion: handleDownloadVersion,
+                  onReplaceVersion: setReplaceVersionId,
+                  onVersionOCR: handleVersionOCR,
+                  onCancelOCR: handleCancelOCR,
+                  getUserInitials,
+                  divisionNameById: divisionLookup,
+                  departmentNameById: departmentLookup,
+                }}
+              />
+            </div>
 
-          <DocumentMobileStickyBar
-            canDownload={canDownloadDocument(document) && Boolean(selectedVersion)}
-            canUpload={Boolean(uploadUser)}
-            onDownload={handleDownloadLatest}
-            onShare={openShareDialog}
-            onAddVersion={openVersionUpload}
-            onComments={handleOpenCommentsDialog}
-          />
+            <DocumentMobileStickyBar
+              canDownload={canDownloadDocument(document) && Boolean(selectedVersion)}
+              canUpload={Boolean(uploadUser)}
+              onDownload={handleDownloadLatest}
+              onShare={openShareDialog}
+              onAddVersion={openVersionUpload}
+              onComments={handleOpenCommentsDialog}
+            />
           </div>
 
           <DocumentCommentsDialog
@@ -393,6 +368,13 @@ const DocumentDetailContent = () => {
         onOpenChange={setShareDialogOpen}
         document={document}
         currentUserId={currentUser?.id}
+        onShared={(updated) => {
+          if (updated) {
+            setDocument(updated);
+            return;
+          }
+          void refreshDocument();
+        }}
         />
       )}
       {minuteDocumentCorrespondence && (
@@ -402,7 +384,6 @@ const DocumentDetailContent = () => {
           onClose={() => {
             setMinuteDocumentModalOpen(false);
             setMinuteDocumentCorrespondence(null);
-            // Refresh document to show updated correspondence links
             if (document) {
               void fetchDocumentById(document.id).then(setDocument).catch((err) => {
                 logError('Failed to refresh document', err);
@@ -420,7 +401,6 @@ const DocumentDetailContent = () => {
           documentId={document.id}
           document={document}
           onLinked={async () => {
-            // Reload document to get updated case links
             if (params?.id) {
               const updated = await fetchDocumentById(params.id);
               setDocument(updated);

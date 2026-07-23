@@ -33,6 +33,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { ListRowCard } from '@/components/shared/ListRowCard';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
 import {
   correspondenceQueueLeadingBoxClass,
   correspondenceQueueLeadingIconClass,
@@ -306,14 +307,10 @@ function PhysicalDocumentsForm() {
 
   return (
     <>
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="flex flex-col gap-2">
-          <div>
-            <h1 className="text-3xl font-bold">Physical Documents</h1>
-            <p className="text-muted-foreground mt-1">Track physical document locations, check-outs, and returns</p>
-          </div>
-        </div>
-
+      <QueuePageShell
+        title="Physical Documents"
+        subtitle="Track physical document locations, check-outs, and returns"
+      >
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-2">
             <div className="relative min-w-[200px] flex-1 max-w-sm">
@@ -596,7 +593,7 @@ function PhysicalDocumentsForm() {
 
         {/* History Dialog */}
         <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-          <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogContent size="md">
             <DialogHeader>
               <DialogTitle>Check-Out History</DialogTitle>
               <DialogDescription>
@@ -636,7 +633,7 @@ function PhysicalDocumentsForm() {
         </Dialog>
 
         {count > 0 && <PaginationControls pagination={pagination} className="mt-4" />}
-      </div>
+      </QueuePageShell>
     </>
   );
 }

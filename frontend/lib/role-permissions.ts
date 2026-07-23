@@ -13,7 +13,7 @@ export interface SidebarVisibilityConfig {
   // My Workspace
   showDashboard?: boolean;
   showMyInbox?: boolean;
-  showMyOutbox?: boolean;
+  showMySent?: boolean;
   showExecutiveApprovals?: boolean;
 
   // Offices & Registry
@@ -248,7 +248,7 @@ export const AVAILABLE_ROLE_PERMISSIONS: RolePermission[] = [
   {
     id: 'sidebar_show_offices_registry',
     label: 'Show Offices & Registry Section',
-    description: 'Show Office Inbox, Register Correspondence, Office Outbox',
+    description: 'Show Office Inbox, Register Correspondence, Office Sent',
     category: 'sidebar',
   },
   {

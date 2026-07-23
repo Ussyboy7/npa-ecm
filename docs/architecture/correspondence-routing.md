@@ -51,9 +51,9 @@ This document explains the core concepts of correspondence routing, minutes, dis
 #### ✅ **Outward - Internal** (To another NPA office)
 - **Destination**: Another NPA office/user
 - **How it's sent**: **Minute it out** (route it)
-- **Where it appears**: **Office Outbox**
+- **Where it appears**: **Office Sent**
 - **Example**: 
-  - You minute correspondence to GM → Appears in your **Office Outbox**
+  - You minute correspondence to GM → Appears in your **Office Sent**
   - GM receives it in their **Office Inbox**
 
 #### ✅ **Outward - External** (To external organization)
@@ -62,10 +62,10 @@ This document explains the core concepts of correspondence routing, minutes, dis
   1. Registered in system (digital record)
   2. **Printed as hard copy**
   3. **Physically mailed** to recipient
-- **Where it appears**: **Office Outbox**
+- **Where it appears**: **Office Sent**
 - **Example**: 
   - You register outward correspondence to external org
-  - Appears in **Office Outbox**
+  - Appears in **Office Sent**
   - Executive approves/dispatches
   - **Printed & mailed** physically
   - System maintains digital record
@@ -89,7 +89,7 @@ This document explains the core concepts of correspondence routing, minutes, dis
 
 #### **Minute Outward (Sent)**
 - You minute correspondence to another office/user
-- Appears in your **Office Outbox**
+- Appears in your **Office Sent**
 - Recipient receives it in their **Office Inbox**
 - Can be internal (NPA) or external (outside NPA)
 
@@ -104,7 +104,7 @@ This document explains the core concepts of correspondence routing, minutes, dis
 
 #### **Distribution Outward (Sent)**
 - You add correspondence to distribution list
-- Appears in your **Office Outbox**
+- Appears in your **Office Sent**
 - Recipients see it in their **Office Inbox**
 - Distribution items can be further minuted down
 
@@ -132,7 +132,7 @@ This document explains the core concepts of correspondence routing, minutes, dis
    - Physical concept: Document with MD's minutes arrives at GM office
 
 2. **GM minutes to Department** (Outward - Internal)
-   - GM's **Office Outbox** shows it
+   - GM's **Office Sent** shows it
    - Department receives in **Office Inbox**
    - Physical concept: GM adds minutes and routes to Department
 
@@ -143,7 +143,7 @@ This document explains the core concepts of correspondence routing, minutes, dis
    - Physical concept: Physical document received
 
 2. **You minute to GM** (Outward - Internal)
-   - Your **Office Outbox** shows it
+   - Your **Office Sent** shows it
    - GM receives in **Office Inbox**
    - Physical concept: You add minutes and route internally
 
@@ -154,7 +154,7 @@ This document explains the core concepts of correspondence routing, minutes, dis
 
 2. **You prepare response to external org** (Outward - External)
    - Register outward correspondence
-   - Appears in **Office Outbox**
+   - Appears in **Office Sent**
    - Executive approves
    - **Printed & mailed** to external org
    - Physical concept: Physical copy sent via mail
@@ -167,8 +167,8 @@ This document explains the core concepts of correspondence routing, minutes, dis
 |-----------|------------------|--------------|------------------|
 | **Inward - Internal** | Another NPA office | Minuted to you | **Office Inbox** |
 | **Inward - External** | External org | Physical copy received, registered | **Office Inbox** |
-| **Outward - Internal** | Another NPA office | You minute it out | **Office Outbox** |
-| **Outward - External** | External org | Registered, printed, mailed | **Office Outbox** |
+| **Outward - Internal** | Another NPA office | You minute it out | **Office Sent** |
+| **Outward - External** | External org | Registered, printed, mailed | **Office Sent** |
 | **Distribution (CC)** | Any | Your office/division/department in distribution list | **Office Inbox** (can be acted upon) |
 | **Reject** | Back to sender | Rejected correspondence routes back | **Office Inbox** (sender's office) |
 
@@ -183,10 +183,10 @@ This document explains the core concepts of correspondence routing, minutes, dis
 5. **Office Inbox**: Where you receive (inward) - both internal and external
    - Also shows **Distribution (CC)** items where your office/division/department is in distribution list
    - Distribution items can be acted upon (minuted down, forwarded, etc.)
-6. **Office Outbox**: Where you send from (outward) - both internal and external
+6. **Office Sent**: Where you send from (outward) - both internal and external
    - Also shows correspondence you've distributed (added to distribution list)
 7. **External = Physical**: External orgs receive/send physical copies, but system tracks digitally
-8. **Distribution (CC)**: Appears in Office Inbox/Outbox, can be acted upon, everything is tracked
+8. **Distribution (CC)**: Appears in Office Inbox/Sent, can be acted upon, everything is tracked
 9. **Reject**: Routes back to sender's office so they know their correspondence was rejected
 
 ---

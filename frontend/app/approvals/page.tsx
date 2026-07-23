@@ -19,6 +19,8 @@ import { ListRowCard } from '@/components/shared/ListRowCard';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorState } from '@/components/shared/ErrorState';
+import { QueuePageShell } from '@/components/shared/QueuePageShell';
+import { StatStrip } from '@/components/shared/StatStrip';
 import {
   correspondenceQueueBadgeClass,
   correspondenceQueueDateClass,
@@ -30,12 +32,6 @@ import {
   correspondenceQueueMetaRowClass,
   correspondenceQueueSubjectClass,
   registryQueueEmptyIconClass,
-  registryQueueStatCardContentClass,
-  registryQueueStatIconBoxClass,
-  registryQueueStatIconClass,
-  registryQueueStatLabelClass,
-  registryQueueStatValueClass,
-
 } from '@/components/shared/registry-queue-styles';
 import {
   Tooltip,
@@ -43,7 +39,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { Shield, Search, FileText, QrCode, ExternalLink, CheckCircle2, XCircle, TrendingUp, RefreshCw, Download, AlertCircle, MoreVertical } from "lucide-react";
+import { Shield, Search, FileText, QrCode, ExternalLink, RefreshCw, Download, AlertCircle, MoreVertical } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
 import { ensureSealImageCached } from "@/lib/seal-cache";
@@ -552,59 +548,40 @@ function ApprovalsForm() {
 
   return (
     <>
-      <div className="container mx-auto p-6 space-y-6">
-        {/* Header - Match My Inbox/Outbox style */}
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold">Executive Approvals</h1>
-            <p className="text-muted-foreground mt-1">Track and verify approvals with digital executive seals</p>
-          </div>
-          <div className="flex gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <MoreVertical className="h-4 w-4 mr-2" />
-                  More
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleRefresh} disabled={loading || refreshing}>
-                  <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || count === 0}>
-                  <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
-                  {exporting ? 'Exporting…' : 'Export CSV'}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Summary stats */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {[
-            { label: 'Total Approvals', value: statistics.total, icon: Shield, bgClass: 'bg-primary/10', iconClass: 'text-primary' },
-            { label: 'Valid (this page)', value: statistics.valid, icon: CheckCircle2, bgClass: 'bg-emerald-500/10', iconClass: 'text-emerald-600 dark:text-emerald-400' },
-            { label: 'Invalid (this page)', value: statistics.invalid, icon: XCircle, bgClass: 'bg-destructive/10', iconClass: 'text-destructive' },
-            { label: 'This month (this page)', value: statistics.thisMonth, icon: TrendingUp, bgClass: 'bg-blue-500/10', iconClass: 'text-blue-600 dark:text-blue-400' },
-          ].map(({ label, value, icon: Icon, bgClass, iconClass }) => (
-            <Card key={label}>
-              <CardContent className={registryQueueStatCardContentClass}>
-                <div className="flex items-center gap-4">
-                  <div className={cn(registryQueueStatIconBoxClass, bgClass)}>
-                    <Icon className={cn(registryQueueStatIconClass, iconClass)} />
-                  </div>
-                  <div>
-                    <p className={registryQueueStatLabelClass}>{label}</p>
-                    <p className={registryQueueStatValueClass}>{value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
+      <QueuePageShell
+        title="Executive Approvals"
+        subtitle="Track and verify approvals with digital executive seals"
+        actions={(
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <MoreVertical className="h-4 w-4 mr-2" />
+                More
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleRefresh} disabled={loading || refreshing}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExport} disabled={exporting || loading || count === 0}>
+                <Download className={`h-4 w-4 mr-2 ${exporting ? 'animate-spin' : ''}`} />
+                {exporting ? 'Exporting…' : 'Export CSV'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        stats={(
+          <StatStrip
+            items={[
+              { key: 'total', label: 'Total approvals', value: statistics.total },
+              { key: 'valid', label: 'Valid (page)', value: statistics.valid },
+              { key: 'invalid', label: 'Invalid (page)', value: statistics.invalid },
+              { key: 'thisMonth', label: 'This month (page)', value: statistics.thisMonth },
+            ]}
+          />
+        )}
+      >
         {/* Inline filter bar */}
         <Card>
           <CardContent className="flex flex-wrap items-center gap-2 p-2">
@@ -681,7 +658,7 @@ function ApprovalsForm() {
             className="border-t border-border/60 pt-4"
           />
         )}
-      </div>
+      </QueuePageShell>
     </>
   );
 }

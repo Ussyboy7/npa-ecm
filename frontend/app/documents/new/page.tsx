@@ -2,8 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { DocumentUploadDialog } from '@/components/dms/DocumentUploadDialog';
-import { Card, CardContent } from '@/components/ui/card';
 import { useCurrentUser } from '@/hooks/use-current-user';
+import { appType } from '@/lib/app-type';
 import type { DocumentRecord } from '@/lib/dms-storage';
 
 export default function CreateDocumentPage() {
@@ -17,26 +17,18 @@ export default function CreateDocumentPage() {
   return (
     <>
       {!hydrated ? (
-        <div className="container mx-auto p-6">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Loading...</p>
-            </CardContent>
-          </Card>
+        <div className="container mx-auto p-4 md:p-6">
+          <p className={appType.meta}>Loading...</p>
         </div>
       ) : !currentUser?.id ? (
-        <div className="container mx-auto p-6">
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">Please log in to create documents</p>
-            </CardContent>
-          </Card>
+        <div className="container mx-auto p-4 md:p-6">
+          <p className={appType.meta}>Please log in to create documents</p>
         </div>
       ) : (
-        <div className="container mx-auto max-w-5xl p-4 sm:p-6 flex flex-col gap-4">
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight">Create Document</h1>
-            <p className="text-sm text-muted-foreground">
+        <div className="container mx-auto max-w-5xl p-4 md:p-6 flex flex-col gap-4">
+          <div>
+            <h1 className={appType.pageTitleList}>Create Document</h1>
+            <p className={appType.pageSubtitle}>
               Compose or upload a document with metadata, templates, and content.
             </p>
           </div>
